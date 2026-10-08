@@ -1,0 +1,9 @@
+# Normalize all text files to LF in the repository and the working tree.
+# This overrides core.autocrlf on Windows.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.gif binary

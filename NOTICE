@@ -1,0 +1,30 @@
+Kumiho
+Copyright (c) 2026 Kumiho contributors
+
+Kumiho is an unofficial client for the Mozilla Firefox account VPN
+entitlement. It is not affiliated with, endorsed by, or sponsored by
+Mozilla or Fastly.
+
+Third-party attributions
+------------------------
+
+FoxyVPN (https://github.com/Vauth/FoxyVPN)
+    MIT License. Kumiho's implementation of the Firefox VPN protocol
+    (Firefox Accounts login, Guardian proxy pass, HTTP/2 CONNECT data
+    plane) is based on this project's behavior.
+
+UjuiUjuMandan/firefox-vpn-client
+    No license granted; used as a behavioral reference only. No code from
+    this project is copied, adapted, or included in Kumiho.
+
+xjasonlyu/tun2socks (https://github.com/xjasonlyu/tun2socks)
+    MIT License. Userspace TCP/IP stack engine (gVisor netstack).
+
+gVisor (https://gvisor.dev)
+    Apache License 2.0. Networking stack used by tun2socks.
+
+charmbracelet/bubbletea, lipgloss, bubbles (https://github.com/charmbracelet)
+    MIT License. TUI framework (from milestone M1).
+
+Full license texts for third-party dependencies are available in the Go
+module cache and at the respective upstream repositories.

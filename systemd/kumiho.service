@@ -1,0 +1,37 @@
+[Unit]
+Description=Kumiho daemon (unofficial Firefox-account VPN client)
+Documentation=https://github.com/benyamin-git/Kumiho
+# Autoconnect needs a usable network; late DHCP/VPN bring-up is covered by
+# the daemon's own startup retries.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/kumiho daemon
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+
+User=kumiho
+Group=kumiho
+
+# netcfg shells out to nft/ip/resolvectl: file capabilities on the daemon do
+# not propagate to children, but ambient capabilities do.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+
+RuntimeDirectory=kumiho
+RuntimeDirectoryMode=0750
+StateDirectory=kumiho
+StateDirectoryMode=0700
+
+# Read-only filesystem except the unit's own State/Runtime directories;
+# /dev/net/tun is the only device the daemon opens.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+DeviceAllow=/dev/net/tun rw
+
+[Install]
+WantedBy=multi-user.target

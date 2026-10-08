@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Test with race detector
+        run: go test -race -count=1 ./...
+
+      - name: Build (linux/amd64 + linux/arm64)
+        run: |
+          make build
+          make build-arm64
+          ./dist/kumiho-linux-amd64 version
+
+      - name: Doctor smoke test (informational)
+        run: |
+          ./dist/kumiho-linux-amd64 doctor --json > doctor.json || true
+          jq -e '.checks | length > 0' doctor.json > /dev/null
+          jq -r '.checks[] | "\(.status)\t\(.name)\t\(.detail)"' doctor.json

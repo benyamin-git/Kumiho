@@ -1,0 +1,15 @@
+// Allow the kumiho daemon to manage per-link DNS configuration through
+// systemd-resolved without an interactive polkit prompt (PLAN.md §8/§10).
+// resolvectl talks to org.freedesktop.resolve1 over D-Bus; these are the
+// actions its dns/domain/default-route/revert subcommands check.
+polkit.addRule(function (action, subject) {
+    var allowed = [
+        "org.freedesktop.resolve1.set-dns-servers",
+        "org.freedesktop.resolve1.set-domains",
+        "org.freedesktop.resolve1.set-default-route",
+        "org.freedesktop.resolve1.revert"
+    ];
+    if (allowed.indexOf(action.id) >= 0 && subject.user == "kumiho") {
+        return polkit.Result.YES;
+    }
+});

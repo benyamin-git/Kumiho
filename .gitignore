@@ -1,0 +1,7 @@
+/dist/
+*.test
+*.out
+doctor.json
+
+# Local tooling
+.tools/
