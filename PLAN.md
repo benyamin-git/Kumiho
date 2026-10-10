@@ -43,6 +43,11 @@ Kumiho is an unofficial Linux CLI/TUI client for the free Firefox-account VPN pr
 | 21 | Account | A Firefox account with the browser-VPN entitlement (eligible region) |
 | 22 | Forwarded traffic | **Host traffic only** (Docker/forwarded packets keep their normal route) |
 
+> **2026-10-10 update:** decisions #3 (daemon + Unix socket), #7 (Ubuntu-only)
+> and #16 (systemd/polkit privileges) describe the v0.1.0 Linux
+> implementation and are superseded by the multiplatform design:
+> [docs/superpowers/specs/2026-10-10-multiplatform-core-design.md](docs/superpowers/specs/2026-10-10-multiplatform-core-design.md).
+
 ---
 
 ## 2. What FoxyVPN does — verified facts this plan is built on

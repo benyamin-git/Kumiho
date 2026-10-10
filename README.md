@@ -19,8 +19,18 @@ Bubble Tea TUI plus a systemd daemon so the tunnel survives SSH logouts.
 The transport is HTTP/2 CONNECT: **TCP + DNS only**. Non-DNS UDP (QUIC/HTTP3,
 VoIP, games) is blocked on purpose so applications fall back to TCP.
 
-Target platform: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
+Current target: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
 over a Unix socket).
+
+## Platform roadmap
+
+The core is platform-pluggable behind `internal/platform` (design:
+[docs/superpowers/specs/2026-10-10-multiplatform-core-design.md](docs/superpowers/specs/2026-10-10-multiplatform-core-design.md)).
+Linux ships today; each new platform must reach full parity before release:
+
+- **Windows 11** — Windows service + Wintun, TUI client over a named pipe.
+- **Android** — VpnService app with the engine embedded in-process, simple GUI.
+- **Other Linux distros/archs** — pluggable network-configuration backends.
 
 ## Quick start
 
