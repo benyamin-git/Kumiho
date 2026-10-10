@@ -14,6 +14,10 @@ import (
 )
 
 func runDaemon(args []string, stdout, stderr io.Writer) int {
+	if code, handled := runAsServiceIfNeeded(stdout, stderr); handled {
+		return code
+	}
+
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
