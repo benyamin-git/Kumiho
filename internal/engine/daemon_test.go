@@ -44,7 +44,7 @@ func newTestController(t *testing.T, handler http.HandlerFunc) (*Controller, set
 	client := fxa.NewClient()
 	client.BaseURL = server.URL + "/v1"
 	ring := logging.NewRing(logging.Options{Capacity: 100})
-	return New(store, ring, client), paths
+	return New(store, ring, client, newFakeProvider()), paths
 }
 
 // loginOKHandler completes a login without 2FA.

@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -284,6 +286,123 @@ func TestConnectProxyOnlyFlow(t *testing.T) {
 	}
 	if !fake.closed.Load() {
 		t.Fatal("session was not closed on disconnect")
+	}
+}
+
+// TestConnectFullTunnelOverFakeProvider drives the full tunnel against the
+// fake provider and asserts the documented call and teardown order:
+//
+//	OpenDevice → NetConfig.Apply → DNS start → SOCKS start
+//	DNS stop → NetConfig.Cleanup → device Close → SOCKS stop
+func TestConnectFullTunnelOverFakeProvider(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	fp := ctrl.plat.(*fakeProvider)
+	fp.dnsAddr = net.JoinHostPort("127.0.0.1", strconv.Itoa(freePort(t)))
+	fp.dev = newFakeDevice(fp, fp.tun.Name)
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	ctrl.exitCheckURL = ""
+	ctrl.socksPortOverride = freePort(t)
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		return newFakeSession(), nil
+	}
+
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+	if err := ctrl.Connect(ctx, api.ConnectPayload{}); err != nil {
+		t.Fatalf("full-tunnel connect: %v", err)
+	}
+	defer ctrl.Shutdown()
+
+	// Start order: the provider saw OpenDevice, then NetConfig.Apply, then
+	// the DNS address request that precedes dns.Server.Start. (Snapshot also
+	// asks for the DNS address, so assert the prefix here.)
+	wantStart := []string{"device.open", "netcfg.apply", "dns.addr"}
+	if got := fp.eventList(); len(got) < len(wantStart) || !reflect.DeepEqual(got[:len(wantStart)], wantStart) {
+		t.Fatalf("provider calls = %v, want prefix %v", got, wantStart)
+	}
+
+	if st := ctrl.Snapshot(); st.State != string(StateConnected) {
+		t.Fatalf("state after connect = %s", st.State)
+	}
+	applies, _ := fp.nc.counts()
+	if applies != 1 {
+		t.Fatalf("NetConfig.Apply calls = %d, want 1", applies)
+	}
+	spec := fp.nc.lastSpec()
+	if spec.TunName != "foxy0" || spec.TunAddr != "10.8.0.2" || spec.TunMTU != 8500 || !spec.KillSwitch || !spec.AllowLAN {
+		t.Fatalf("applied spec = %+v", spec)
+	}
+
+	// DNS starts before SOCKS: both listeners log their bind into the ring.
+	dnsIdx, socksIdx := -1, -1
+	for i, e := range ctrl.log.Snapshot() {
+		switch {
+		case e.Tag == "dns" && strings.Contains(e.Msg, "resolver listening") && dnsIdx < 0:
+			dnsIdx = i
+		case e.Tag == "socks" && strings.Contains(e.Msg, "listening on") && socksIdx < 0:
+			socksIdx = i
+		}
+	}
+	if dnsIdx < 0 || socksIdx < 0 {
+		t.Fatalf("start logs missing (dns=%d, socks=%d)", dnsIdx, socksIdx)
+	}
+	if dnsIdx > socksIdx {
+		t.Fatalf("SOCKS started before DNS (dns log %d, socks log %d)", dnsIdx, socksIdx)
+	}
+
+	// Both listeners are live.
+	dnsConn, err := net.DialTimeout("tcp", fp.dnsAddr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("DNS resolver not listening on %s: %v", fp.dnsAddr, err)
+	}
+	_ = dnsConn.Close()
+	socksAddr := ctrl.socksSrv.Addr().String()
+	socksConn, err := net.DialTimeout("tcp", socksAddr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("SOCKS listener not up on %s: %v", socksAddr, err)
+	}
+	_ = socksConn.Close()
+
+	// Teardown witnesses: the DNS resolver must be stopped before Cleanup
+	// runs, Cleanup before the device closes, and the device must close while
+	// SOCKS is still listening (SOCKS stops last).
+	fp.nc.onCleanup = func() {
+		if c, err := net.DialTimeout("tcp", fp.dnsAddr, time.Second); err == nil {
+			_ = c.Close()
+			t.Error("NetConfig.Cleanup ran before the DNS resolver stopped")
+		}
+	}
+	fp.dev.onClose = func() {
+		if _, cleanups := fp.nc.counts(); cleanups == 0 {
+			t.Error("device closed before NetConfig.Cleanup ran")
+		}
+		if c, err := net.DialTimeout("tcp", socksAddr, time.Second); err != nil {
+			t.Errorf("device closed after the SOCKS listener stopped: %v", err)
+		} else {
+			_ = c.Close()
+		}
+	}
+
+	ctrl.Shutdown()
+
+	// Teardown provider calls close the sequence: Cleanup, then device Close.
+	events := fp.eventList()
+	wantTail := []string{"netcfg.cleanup", "device.close"}
+	if len(events) < len(wantTail) || !reflect.DeepEqual(events[len(events)-len(wantTail):], wantTail) {
+		t.Fatalf("teardown provider calls = %v, want suffix %v", events, wantTail)
+	}
+	if _, cleanups := fp.nc.counts(); cleanups != 1 {
+		t.Fatalf("NetConfig.Cleanup calls = %d, want 1", cleanups)
+	}
+	if c, err := net.DialTimeout("tcp", socksAddr, time.Second); err == nil {
+		_ = c.Close()
+		t.Fatal("SOCKS listener still up after shutdown")
 	}
 }
 

@@ -1,8 +1,9 @@
-//go:build linux
+//go:build linux && !android
 
-package engine
+package linux
 
 import (
+	"context"
 	"net"
 
 	"github.com/vishvananda/netlink"
@@ -19,14 +20,14 @@ type netMonitor struct {
 // C returns the coalesced event channel.
 func (m *netMonitor) C() <-chan struct{} { return m.events }
 
-// startNetMonitor subscribes to netlink events until stop is closed. The
+// WatchLinks subscribes to netlink events until ctx is done. The
 // subscriptions are best-effort: if they fail the watchdog still wakes on its
 // 2 s tick, so startup never depends on them.
-func startNetMonitor(stop <-chan struct{}) *netMonitor {
+func (p *Provider) WatchLinks(ctx context.Context) (<-chan struct{}, error) {
 	m := &netMonitor{events: make(chan struct{}, 1)}
 	done := make(chan struct{})
 	go func() {
-		<-stop
+		<-ctx.Done()
 		close(done)
 	}()
 
@@ -52,13 +53,13 @@ func startNetMonitor(stop <-chan struct{}) *netMonitor {
 			}
 		}
 	}()
-	return m
+	return m.events, nil
 }
 
-// hasDefaultRoute reports whether the physical network has a usable default
+// HasDefaultRoute reports whether the physical network has a usable default
 // route. The lookup runs against the main table; Kumiho's own routes live in
 // tables 1000/1001 behind fwmark rules and never show up here.
-func hasDefaultRoute() bool {
+func (p *Provider) HasDefaultRoute() bool {
 	if _, err := netlink.RouteGet(net.IPv4(9, 9, 9, 9)); err == nil {
 		return true
 	}

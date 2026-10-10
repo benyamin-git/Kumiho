@@ -18,11 +18,12 @@ const maxResponseBytes = 1 << 20
 
 // Client talks to the FxA auth server.
 type Client struct {
-	BaseURL string
-	HTTP    *http.Client
-	Now     func() time.Time // injectable clock for tests
-	Rand    io.Reader        // injectable nonce source for tests
-	Solver  ChallengeSolver  // optional anti-bot solver (M3)
+	BaseURL   string
+	HTTP      *http.Client
+	Now       func() time.Time // injectable clock for tests
+	Rand      io.Reader        // injectable nonce source for tests
+	Solver    ChallengeSolver  // optional anti-bot solver (M3)
+	UserAgent string           // platform UA; empty uses the package default
 }
 
 // NewClient returns a Client with production defaults.
@@ -204,7 +205,11 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", UserAgent)
+		ua := c.UserAgent
+		if ua == "" {
+			ua = UserAgent
+		}
+		req.Header.Set("User-Agent", ua)
 		req.Header.Set("Accept", "application/json")
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")

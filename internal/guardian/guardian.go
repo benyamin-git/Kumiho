@@ -75,6 +75,8 @@ func IsChallenge(err error) bool {
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
+	// UserAgent overrides the package default when set (platform provider).
+	UserAgent string
 	// OnChallenge, when set, is invoked once to solve a Fastly anti-bot
 	// challenge before the request is retried (PLAN.md §2.2).
 	OnChallenge func(ctx context.Context) error
@@ -209,7 +211,11 @@ func (c *Client) do(ctx context.Context, method, path, accessToken string) (http
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", UserAgent)
+		ua := c.UserAgent
+		if ua == "" {
+			ua = UserAgent
+		}
+		req.Header.Set("User-Agent", ua)
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+accessToken)

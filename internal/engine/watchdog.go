@@ -20,21 +20,27 @@ var (
 	defaultRedialJitterMax  = 60 * time.Second
 )
 
-// defaultRouteProbe is the physical-network probe (netlink on Linux).
-// Controller.routeProbe exists so tests can simulate outages per controller.
-var defaultRouteProbe = hasDefaultRoute
-
 // startWatchdog watches the live session for the whole connection lifetime
 // and redials when it dies (PLAN.md §4.2). Redials swap the session under the
 // running TUN/SOCKS/DNS through Controller.openStream; an unrecoverable error
 // parks the state machine in FATAL. While the physical network is down the
-// watchdog parks in WAITING_NETWORK (netlink events wake it), so an outage
-// does not burn redial attempts and edge rotations.
+// watchdog parks in WAITING_NETWORK (provider link events wake it), so an
+// outage does not burn redial attempts and edge rotations.
 func (c *Controller) startWatchdog(stop <-chan struct{}) {
 	go func() {
 		ticker := time.NewTicker(c.watchdogInterval)
 		defer ticker.Stop()
-		mon := startNetMonitor(stop)
+
+		linkCtx, cancelLinks := context.WithCancel(context.Background())
+		defer cancelLinks()
+		go func() {
+			select {
+			case <-stop:
+				cancelLinks()
+			case <-linkCtx.Done():
+			}
+		}()
+		links, _ := c.plat.WatchLinks(linkCtx)
 
 		failures := 0
 		for {
@@ -42,7 +48,7 @@ func (c *Controller) startWatchdog(stop <-chan struct{}) {
 			case <-stop:
 				return
 			case <-ticker.C:
-			case <-mon.C():
+			case <-links:
 				// A link/route change; the checks below decide what to do.
 			}
 

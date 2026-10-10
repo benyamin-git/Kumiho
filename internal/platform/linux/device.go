@@ -1,6 +1,6 @@
-//go:build linux
+//go:build linux && !android
 
-package tun
+package linux
 
 import (
 	"fmt"
@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/benyamin-git/kumiho/internal/platform"
 )
 
 // Device is a Linux TUN interface (IFF_TUN | IFF_NO_PI, non-persistent).
@@ -85,3 +87,4 @@ func (d *Device) Close() error {
 }
 
 var _ io.ReadWriteCloser = (*Device)(nil)
+var _ platform.Device = (*Device)(nil)

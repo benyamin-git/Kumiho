@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/platform/auto"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
@@ -91,6 +92,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 
 func collectChecks() []check {
 	return []check{
+		checkPlatform(),
 		checkTUNDevice(),
 		checkNetAdmin(),
 		checkNftables(),
@@ -179,6 +181,21 @@ func runCmd(timeout time.Duration, name string, args ...string) (string, error) 
 	defer cancel()
 	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
+}
+
+// checkPlatform reports the selected platform provider. OSes without a real
+// provider run proxy-only; the full tunnel says so explicitly (D14).
+func checkPlatform() check {
+	const name = "platform"
+	provider := auto.Current().Name()
+	if provider == "linux" {
+		return check{Name: name, Status: statusOK, Detail: provider}
+	}
+	return check{
+		Name:   name,
+		Status: statusWarn,
+		Detail: provider + ": full tunnel is not implemented yet (proxy-only mode works)",
+	}
 }
 
 func checkTUNDevice() check {

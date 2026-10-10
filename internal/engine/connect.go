@@ -18,7 +18,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
-	"github.com/benyamin-git/kumiho/internal/netcfg"
+	"github.com/benyamin-git/kumiho/internal/platform"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/socks"
@@ -210,9 +210,10 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 type tunnelResources struct {
 	mu        sync.Mutex
 	proxyOnly bool
-	applier   *netcfg.Applier
-	ncfg      netcfg.Config
-	dev       *tun.Device
+	nc        platform.NetConfig
+	ncfg      platform.NetConfigSpec
+	tunName   string
+	dev       platform.Device
 	engine    *tun.Engine
 	dns       *dns.Server
 	socks     *socks.Server
@@ -225,17 +226,17 @@ func (r *tunnelResources) Close() {
 	}
 	r.mu.Lock()
 	dnsSrv, engine, dev, socksSrv := r.dns, r.engine, r.dev, r.socks
-	applier, ncfg, proxyOnly := r.applier, r.ncfg, r.proxyOnly
-	r.dns, r.engine, r.dev, r.socks, r.applier = nil, nil, nil, nil, nil
+	nc, ncfg, proxyOnly := r.nc, r.ncfg, r.proxyOnly
+	r.dns, r.engine, r.dev, r.socks, r.nc = nil, nil, nil, nil, nil
 	r.mu.Unlock()
 
 	if dnsSrv != nil {
 		dnsSrv.Stop()
 	}
-	if applier != nil && !proxyOnly {
+	if nc != nil && !proxyOnly {
 		// Cleanup while the interface still exists, so `resolvectl revert`
 		// succeeds quietly instead of racing the device's removal.
-		applier.Cleanup(context.Background(), ncfg)
+		nc.Cleanup(context.Background(), ncfg)
 	}
 	if engine != nil {
 		engine.Stop() // closes the TUN device, which unblocks its reader
@@ -250,14 +251,14 @@ func (r *tunnelResources) Close() {
 
 // Reapply re-renders the network configuration (used when the kill switch
 // is toggled while connected).
-func (r *tunnelResources) Reapply(ctx context.Context, cfg netcfg.Config) error {
+func (r *tunnelResources) Reapply(ctx context.Context, cfg platform.NetConfigSpec) error {
 	r.mu.Lock()
-	applier := r.applier
+	nc := r.nc
 	r.mu.Unlock()
-	if applier == nil {
+	if nc == nil {
 		return errors.New("netcfg: tunnel is not active")
 	}
-	if err := applier.Apply(ctx, cfg); err != nil {
+	if err := nc.Apply(ctx, cfg); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -273,7 +274,7 @@ func (r *tunnelResources) devName() string {
 	if r.dev != nil {
 		return r.dev.Name()
 	}
-	return netcfg.DefaultTunName
+	return r.tunName
 }
 
 // startTunnel builds the data path: full mode adds TUN + netstack + netcfg +
@@ -292,12 +293,14 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 	}
 
 	if !proxyOnly {
-		c.log.Logf(logging.Info, "tunnel", "creating TUN %s (MTU %d)", netcfg.DefaultTunName, cfg.MTU)
-		dev, err := tun.Open(netcfg.DefaultTunName, cfg.MTU)
+		tunDef := c.plat.TunDefaults()
+		c.log.Logf(logging.Info, "tunnel", "creating TUN %s (MTU %d)", tunDef.Name, cfg.MTU)
+		dev, err := c.plat.OpenDevice(ctx, platform.DeviceSpec{Name: tunDef.Name, MTU: cfg.MTU, FD: -1})
 		if err != nil {
 			return fail(err)
 		}
 		res.dev = dev
+		res.tunName = tunDef.Name
 
 		engine, err := tun.Start(dev, cfg.MTU, c.openStream, func(format string, args ...any) {
 			c.log.Logf(logging.Debug, "tun", format, args...)
@@ -307,10 +310,10 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 		}
 		res.engine = engine
 
-		res.applier = c.applier
+		res.nc = c.nc
 		res.ncfg = c.netcfgConfig(dev.Name())
 		c.log.Logf(logging.Info, "tunnel", "applying network configuration (kill switch %v)", res.ncfg.KillSwitch)
-		if err := c.applier.Apply(ctx, res.ncfg); err != nil {
+		if err := c.nc.Apply(ctx, res.ncfg); err != nil {
 			return fail(fmt.Errorf("apply network configuration: %w", err))
 		}
 
@@ -318,7 +321,7 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 		if err != nil {
 			return fail(err)
 		}
-		dnsSrv.Addr = net.JoinHostPort(netcfg.DefaultTunAddr, "53")
+		dnsSrv.Addr = c.plat.DNSListenAddr()
 		if err := dnsSrv.Start(); err != nil {
 			return fail(fmt.Errorf("start DNS resolver: %w", err))
 		}
@@ -348,15 +351,15 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 // daemon may have left behind (PLAN.md §4.3). Called once at startup, only
 // after this daemon owns the control socket.
 func (c *Controller) CleanupStaleNetcfg() {
-	c.applier.Cleanup(context.Background(), c.netcfgConfig(netcfg.DefaultTunName))
+	c.nc.Cleanup(context.Background(), c.netcfgConfig(c.plat.TunDefaults().Name))
 }
 
 // netcfgConfig renders the current policy-routing configuration.
-func (c *Controller) netcfgConfig(tunName string) netcfg.Config {
+func (c *Controller) netcfgConfig(tunName string) platform.NetConfigSpec {
 	cfg := c.store.EffectiveConfig()
-	return netcfg.Config{
+	return platform.NetConfigSpec{
 		TunName:      tunName,
-		TunAddr:      netcfg.DefaultTunAddr,
+		TunAddr:      c.plat.TunDefaults().Addr,
 		TunMTU:       cfg.MTU,
 		KillSwitch:   c.store.EffectiveKillSwitch(),
 		AllowLAN:     cfg.AllowLAN,
@@ -378,11 +381,11 @@ func (c *Controller) ReapplyNetcfg(ctx context.Context) {
 	}
 }
 
-// UseSocketMarking tags every daemon-owned socket with SO_MARK 0x2 so the
+// UseBypassDialer tags every daemon-owned socket with SO_MARK 0x2 so the
 // policy-routing mark chain never routes control-plane traffic into the
 // tunnel (PLAN.md §3.2). Called once at daemon start.
-func (c *Controller) UseSocketMarking() {
-	dial := netcfg.MarkedDialer()
+func (c *Controller) UseBypassDialer() {
+	dial := c.plat.BypassDialer()
 	newClient := func(timeout time.Duration) *http.Client {
 		return &http.Client{
 			Timeout: timeout,
@@ -741,7 +744,7 @@ func (c *Controller) exitCheck(socksAddr, expectedCountry string) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("User-Agent", guardian.UserAgent)
+	req.Header.Set("User-Agent", c.userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		c.log.Logf(logging.Debug, "exitcheck", "exit check failed (non-fatal): %v", err)

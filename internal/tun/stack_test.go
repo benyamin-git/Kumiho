@@ -55,14 +55,6 @@ func TestAdapterRejectsBadMetadata(t *testing.T) {
 	}
 }
 
-func TestOpenFailsWithoutCapability(t *testing.T) {
-	// On non-Linux this always fails; on Linux without CAP_NET_ADMIN it
-	// fails with a clear message. Either way Open must not panic.
-	if dev, err := Open("foxy0", 8500); err == nil {
-		_ = dev.Close()
-	}
-}
-
 // blockingDevice models the TUN fd: Read parks until Close. Engine.Stop must
 // close the device first, or stack.Wait deadlocks (M4 acceptance regression).
 type blockingDevice struct {

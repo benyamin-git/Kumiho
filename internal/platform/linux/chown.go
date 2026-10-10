@@ -1,18 +1,18 @@
-//go:build linux
+//go:build linux && !android
 
-package daemon
+package linux
 
 import (
 	"os"
 	"strconv"
 )
 
-// chownControlSocket hands the control socket to the sudo-invoking user.
+// ChownControlEndpoint hands the control socket to the sudo-invoking user.
 // This is a development convenience (running the daemon under sudo gives
 // nft/ip the privileges they need): the operator's CLI then works without
 // sudo. The M5 systemd unit instead owns its RuntimeDirectory via
 // RuntimeDirectory=/User=kumiho and needs no chown.
-func chownControlSocket(path string) {
+func (p *Provider) ChownControlEndpoint(path string) {
 	if os.Geteuid() != 0 {
 		return
 	}

@@ -16,7 +16,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
-	"github.com/benyamin-git/kumiho/internal/netcfg"
+	"github.com/benyamin-git/kumiho/internal/platform"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/socks"
@@ -54,10 +54,12 @@ type Controller struct {
 
 	guardian     *guardian.Client
 	exitCheckURL string
-	applier      *netcfg.Applier
+	plat         platform.Provider
+	nc           platform.NetConfig
+	userAgent    string
 
-	// upstreamDialer is the marked dialer for edge connections (nil until
-	// UseSocketMarking runs, which is fine for tests).
+	// upstreamDialer is the bypass dialer for edge connections (nil until
+	// UseBypassDialer runs, which is fine for tests).
 	upstreamDialer *net.Dialer
 
 	// bootstrap resolves edge hostnames outside the tunnel (marked sockets);
@@ -108,16 +110,23 @@ type Controller struct {
 }
 
 // New creates a controller; call Start before serving requests.
-func New(store *settings.Store, ring *logging.Ring, client *fxa.Client) *Controller {
-	return &Controller{
+func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat platform.Provider) *Controller {
+	if plat == nil {
+		panic("engine: nil platform provider")
+	}
+	ua := plat.UserAgent()
+	client.UserAgent = ua
+	c := &Controller{
 		store:         store,
 		log:           ring,
 		fxa:           client,
+		plat:          plat,
+		nc:            plat.NetConfig(),
+		userAgent:     ua,
 		httpClient:    &http.Client{Timeout: 20 * time.Second},
 		serverListURL: serverlist.RecordsURL,
 		guardian:      guardian.NewClient(),
 		exitCheckURL:  "https://www.cloudflare.com/cdn-cgi/trace",
-		applier:       netcfg.DefaultApplier(ringLogf(ring)),
 		dialUpstream: func(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
 			return upstream.Dial(ctx, opts)
 		},
@@ -127,17 +136,10 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client) *Control
 		watchdogInterval: defaultWatchdogInterval,
 		redialJitterMin:  defaultRedialJitterMin,
 		redialJitterMax:  defaultRedialJitterMax,
-		routeProbe:       defaultRouteProbe,
+		routeProbe:       plat.HasDefaultRoute,
 	}
-}
-
-func ringLogf(ring *logging.Ring) func(format string, args ...any) {
-	if ring == nil {
-		return nil
-	}
-	return func(format string, args ...any) {
-		ring.Logf(logging.Info, "netcfg", format, args...)
-	}
+	c.guardian.UserAgent = ua
+	return c
 }
 
 func (c *Controller) setStateLocked(s State) {
@@ -429,7 +431,7 @@ func (c *Controller) Snapshot() api.Status {
 	}
 	switch {
 	case c.resources != nil && !c.resources.proxyOnly:
-		st.DNS = netcfg.DefaultTunAddr + ":53 (DoH through the tunnel)"
+		st.DNS = c.plat.DNSListenAddr() + " (DoH through the tunnel)"
 		st.IPv6 = "blackholed"
 	case c.session != nil:
 		st.DNS = "system (proxy-only mode)"

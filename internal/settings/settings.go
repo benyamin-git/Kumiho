@@ -41,25 +41,29 @@ const (
 
 // DefaultPaths returns the production paths, applying environment overrides.
 func DefaultPaths() Paths {
-	p := Paths{
+	return ApplyEnvOverrides(Paths{
 		Config:  "/etc/kumiho/config.toml",
 		State:   "/var/lib/kumiho/state.json",
 		Tokens:  "/var/lib/kumiho/tokens.json",
 		Runtime: "/run/kumiho",
-	}
+	})
+}
+
+// ApplyEnvOverrides overlays the KUMIHO_* environment variables on base.
+func ApplyEnvOverrides(base Paths) Paths {
 	if v := os.Getenv(EnvConfig); v != "" {
-		p.Config = v
+		base.Config = v
 	}
 	if v := os.Getenv(EnvState); v != "" {
-		p.State = v
+		base.State = v
 	}
 	if v := os.Getenv(EnvTokens); v != "" {
-		p.Tokens = v
+		base.Tokens = v
 	}
 	if v := os.Getenv(EnvRuntime); v != "" {
-		p.Runtime = v
+		base.Runtime = v
 	}
-	return p
+	return base
 }
 
 // SocketPath returns the daemon control socket path.

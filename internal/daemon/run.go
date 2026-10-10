@@ -18,14 +18,16 @@ import (
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
+	"github.com/benyamin-git/kumiho/internal/platform/auto"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
 
 // Run starts the daemon and serves the control socket until ctx is done.
-func Run(ctx context.Context, paths settings.Paths) error {
-	store, err := settings.Open(paths)
+func Run(ctx context.Context) error {
+	plat := auto.Current()
+	store, err := settings.Open(plat.Paths())
 	if err != nil {
 		return err
 	}
@@ -44,25 +46,24 @@ func Run(ctx context.Context, paths settings.Paths) error {
 
 	ring.Logf(logging.Info, "daemon", "kumiho %s starting", version.String())
 
-	ctrl := engine.New(store, ring, fxa.NewClient())
+	ctrl := engine.New(store, ring, fxa.NewClient(), plat)
 	if err := ctrl.Start(ctx); err != nil {
 		return fmt.Errorf("start session: %w", err)
 	}
 
-	srv, err := ipc.Listen(paths.SocketPath())
+	endpoint := plat.ControlEndpoint()
+	srv, err := ipc.Listen(endpoint)
 	if err != nil {
 		return err
 	}
 	defer srv.Close()
-	defer os.Remove(paths.SocketPath())
-	chownControlSocket(paths.SocketPath())
+	defer os.Remove(endpoint)
+	plat.ChownControlEndpoint(endpoint)
 
 	// We own the socket now: crash-recovery cleanup must not wipe a live
 	// daemon's configuration.
-	if runtime.GOOS == "linux" {
-		ctrl.CleanupStaleNetcfg()
-	}
-	ctrl.UseSocketMarking()
+	ctrl.CleanupStaleNetcfg()
+	ctrl.UseBypassDialer()
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

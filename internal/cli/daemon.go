@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	"github.com/benyamin-git/kumiho/internal/daemon"
-	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
 func runDaemon(args []string, stdout, stderr io.Writer) int {
@@ -31,7 +30,7 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := daemon.Run(ctx, settings.DefaultPaths()); err != nil {
+	if err := daemon.Run(ctx); err != nil {
 		fmt.Fprintf(stderr, "kumiho daemon: %v\n", err)
 		return 1
 	}
