@@ -160,13 +160,14 @@ func (s *Server) Start() error {
 	mux.HandleFunc(".", s.serve)
 	s.udpSrv = &mdns.Server{PacketConn: pc, Handler: mux}
 	s.tcpSrv = &mdns.Server{Listener: ln, Handler: mux}
+	udpSrv, tcpSrv := s.udpSrv, s.tcpSrv
 	go func() {
-		if err := s.udpSrv.ActivateAndServe(); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := udpSrv.ActivateAndServe(); err != nil && !errors.Is(err, net.ErrClosed) {
 			s.logf(logging.Warn, "udp server stopped: %v", err)
 		}
 	}()
 	go func() {
-		if err := s.tcpSrv.ActivateAndServe(); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := tcpSrv.ActivateAndServe(); err != nil && !errors.Is(err, net.ErrClosed) {
 			s.logf(logging.Warn, "tcp server stopped: %v", err)
 		}
 	}()

@@ -150,6 +150,22 @@ func TestServerFailureWithoutProvider(t *testing.T) {
 	}
 }
 
+func TestStartStopRace(t *testing.T) {
+	s := &Server{
+		Addr:  "127.0.0.1:0",
+		cache: newCache(10),
+		Resolve: func(_ context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+			return aResponse(t, req.Question[0].Name, 60, 0), nil
+		},
+	}
+	for i := 0; i < 50; i++ {
+		if err := s.Start(); err != nil {
+			t.Fatal(err)
+		}
+		s.Stop()
+	}
+}
+
 func TestStartStopServesRealUDP(t *testing.T) {
 	s := &Server{
 		Addr:  "127.0.0.1:0",
