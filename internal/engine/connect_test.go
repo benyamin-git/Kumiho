@@ -125,7 +125,12 @@ func TestResolveCandidatePrecedence(t *testing.T) {
 }
 
 func TestConnectValidation(t *testing.T) {
-	ctrl, _ := newTestController(t, loginOKHandler(t))
+	// The full-tunnel branch below must run its assertions on every host, so
+	// OpenDevice is wired to fail deterministically instead of depending on
+	// the host's ability to create TUN devices.
+	fp := newFakeProvider()
+	fp.openErr = errors.New("test: device open refused")
+	ctrl, _ := newTestControllerWithProvider(t, loginOKHandler(t), fp)
 	ctx := context.Background()
 
 	// Not signed in yet.
@@ -142,8 +147,9 @@ func TestConnectValidation(t *testing.T) {
 		t.Fatalf("login = %+v", st)
 	}
 
-	// Full-tunnel mode runs the whole chain; on a host without
-	// CAP_NET_ADMIN (or non-Linux) it must fail cleanly and return to IDLE.
+	// Full-tunnel mode runs the whole chain and must surface the provider's
+	// OpenDevice failure (the M3-era "full tunnel arrives in M4" guard must be
+	// gone), then return the state machine to IDLE.
 	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
 	ctrl.serverListURL = serverListServer(t).URL
 	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
@@ -152,12 +158,9 @@ func TestConnectValidation(t *testing.T) {
 	ctrl.exitCheckURL = ""
 	if err := ctrl.Connect(ctx, api.ConnectPayload{}); err == nil {
 		defer ctrl.stopTunnel("test cleanup")
-		t.Skip("host can create TUN devices; full-tunnel connect actually succeeded")
-	} else {
-		// The M3-era "full tunnel arrives in M4" guard must be gone.
-		if errors.As(err, &re) && re.Code == api.CodeNotImplemented {
-			t.Fatalf("full-tunnel connect short-circuited: %v", err)
-		}
+		t.Fatal("full-tunnel connect succeeded despite a failing OpenDevice")
+	} else if errors.As(err, &re) && re.Code == api.CodeNotImplemented {
+		t.Fatalf("full-tunnel connect short-circuited: %v", err)
 	}
 	if st := ctrl.Snapshot(); st.State != string(StateIdle) {
 		t.Fatalf("state after failed full-tunnel connect = %s", st.State)

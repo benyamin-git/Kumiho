@@ -109,6 +109,12 @@ type Controller struct {
 	routeProbe       func() bool
 }
 
+// netcfgLogfSetter is the optional capability a platform NetConfig implements
+// to receive the engine-wired logger.
+type netcfgLogfSetter interface {
+	SetLogf(func(format string, args ...any))
+}
+
 // New creates a controller; call Start before serving requests.
 func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat platform.Provider) *Controller {
 	if plat == nil {
@@ -139,9 +145,7 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		routeProbe:       plat.HasDefaultRoute,
 	}
 	c.guardian.UserAgent = ua
-	if ls, ok := c.nc.(interface {
-		SetLogf(func(format string, args ...any))
-	}); ok {
+	if ls, ok := c.nc.(netcfgLogfSetter); ok {
 		ls.SetLogf(ringLogf(ring))
 	}
 	return c

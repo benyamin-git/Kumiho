@@ -59,3 +59,5 @@ func (p *Provider) Paths() settings.Paths { return settings.DefaultPaths() }
 func (p *Provider) ControlEndpoint() string {
 	return filepath.Join(p.Paths().Runtime, "control.sock")
 }
+
+var _ platform.Provider = (*Provider)(nil)

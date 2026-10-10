@@ -744,7 +744,11 @@ func (c *Controller) exitCheck(socksAddr, expectedCountry string) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("User-Agent", c.userAgent)
+	ua := c.userAgent
+	if ua == "" {
+		ua = fxa.UserAgent
+	}
+	req.Header.Set("User-Agent", ua)
 	resp, err := client.Do(req)
 	if err != nil {
 		c.log.Logf(logging.Debug, "exitcheck", "exit check failed (non-fatal): %v", err)

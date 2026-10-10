@@ -23,6 +23,7 @@ type fakeProvider struct {
 	dnsAddr string
 	routeUp bool
 	links   chan struct{}
+	openErr error
 
 	dev *fakeDevice
 	nc  *fakeNetConfig
@@ -76,6 +77,9 @@ func (p *fakeProvider) WatchLinks(context.Context) (<-chan struct{}, error) {
 
 func (p *fakeProvider) OpenDevice(_ context.Context, spec platform.DeviceSpec) (platform.Device, error) {
 	p.record("device.open")
+	if p.openErr != nil {
+		return nil, p.openErr
+	}
 	if p.dev == nil {
 		p.dev = newFakeDevice(p, spec.Name)
 	}

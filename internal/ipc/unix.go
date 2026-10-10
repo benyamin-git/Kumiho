@@ -67,3 +67,5 @@ func (UnixTransport) PeerUID(nc net.Conn) (uint32, bool) {
 	}
 	return uid, true
 }
+
+var _ Transport = UnixTransport{}

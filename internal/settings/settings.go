@@ -66,11 +66,6 @@ func ApplyEnvOverrides(base Paths) Paths {
 	return base
 }
 
-// SocketPath returns the daemon control socket path.
-func (p Paths) SocketPath() string {
-	return filepath.Join(p.Runtime, "control.sock")
-}
-
 // Config mirrors /etc/kumiho/config.toml (PLAN.md §8).
 type Config struct {
 	SocksBind        string   `toml:"socks_bind"`

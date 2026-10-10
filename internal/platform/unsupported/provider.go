@@ -53,7 +53,7 @@ func (p *Provider) TunDefaults() platform.TunDefaults { return platform.TunDefau
 
 // DNSListenAddr returns the loopback placeholder; the full tunnel never
 // reaches it because OpenDevice fails first.
-func (p *Provider) DNSListenAddr() string { return net.JoinHostPort("127.0.0.1", "53") }
+func (p *Provider) DNSListenAddr() string { return net.JoinHostPort("127.0.0.1", "0") }
 
 // OpenDevice is not implemented yet.
 func (p *Provider) OpenDevice(context.Context, platform.DeviceSpec) (platform.Device, error) {

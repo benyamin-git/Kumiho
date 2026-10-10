@@ -17,9 +17,6 @@ type netMonitor struct {
 	events chan struct{}
 }
 
-// C returns the coalesced event channel.
-func (m *netMonitor) C() <-chan struct{} { return m.events }
-
 // WatchLinks subscribes to netlink events until ctx is done. The
 // subscriptions are best-effort: if they fail the watchdog still wakes on its
 // 2 s tick, so startup never depends on them.

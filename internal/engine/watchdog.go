@@ -40,7 +40,10 @@ func (c *Controller) startWatchdog(stop <-chan struct{}) {
 			case <-linkCtx.Done():
 			}
 		}()
-		links, _ := c.plat.WatchLinks(linkCtx)
+		links, err := c.plat.WatchLinks(linkCtx)
+		if err != nil {
+			c.log.Logf(logging.Warn, "watchdog", "link watch unavailable, falling back to polling: %v", err)
+		}
 
 		failures := 0
 		for {
