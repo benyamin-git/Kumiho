@@ -14,9 +14,13 @@ A screen opens. That's the whole app.
 
 ## First-time setup (only once)
 
-    sudo systemctl start kumiho     # start the background service
+    sudo systemctl start kumiho     # Linux: start the background service
     kumiho login                    # enter your Firefox email + password (2FA too)
     kumiho doctor                   # checks everything and says what to fix
+
+On Windows, install first with `.\install.ps1` in an Administrator PowerShell
+(see [install.md](install.md)); the installer starts the service for you, and
+the other two commands are the same.
 
 Done. From then on it starts by itself, even after a reboot.
 
@@ -45,18 +49,30 @@ you've been connected, and how much data you have left.
 
 ## Starting / stopping the background service
 
+Linux:
+
     sudo systemctl stop kumiho      # stop it (tunnel comes down)
     sudo systemctl start kumiho     # start it (reconnects automatically)
+
+Windows:
+
+    Stop-Service kumiho
+    Start-Service kumiho
 
 ## Something wrong?
 
     kumiho doctor                   # finds the problem, prints the fix
-    journalctl -u kumiho -n 50      # recent messages
+    journalctl -u kumiho -n 50      # Linux: recent messages
+    Get-Service kumiho              # Windows: is the service running?
 
-- **"cannot reach the daemon"** → `sudo systemctl start kumiho`
+On Windows the log file is `%ProgramData%\kumiho\logs\kumiho.log`.
+
+- **"cannot reach the daemon"** → `sudo systemctl start kumiho` (Linux) or
+  `Start-Service kumiho` (Windows).
 - **Internet seems dead while connected** → wait ~10 seconds; it reconnects
   by itself. Still stuck: `kumiho disconnect`, then `kumiho connect`.
-- **Weird leftover blocking after a crash** → `sudo kumiho cleanup`
+- **Weird leftover blocking after a crash** → `sudo kumiho cleanup` (on
+  Windows run `kumiho cleanup` from an Administrator PowerShell).
 
 ## Three things to know
 
@@ -65,4 +81,5 @@ you've been connected, and how much data you have left.
    connections.
 2. **Kill switch is ON by default**: if the VPN drops, nothing leaks out —
    traffic just stops until it reconnects.
-3. **SSH and Tailscale never get interrupted** by connecting or disconnecting.
+3. **On Linux, SSH and Tailscale never get interrupted** by connecting or
+   disconnecting. On Windows, connecting may reset existing sessions first.

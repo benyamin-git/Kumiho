@@ -54,7 +54,8 @@ func (s *Server) Close() error {
 	return err
 }
 
-// Path returns the socket path.
+// Path returns the control endpoint path (a Unix socket path on Linux, a
+// named-pipe path on Windows).
 func (s *Server) Path() string {
 	return s.path
 }

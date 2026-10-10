@@ -1,8 +1,9 @@
 # Using Kumiho
 
-Everything talks to the daemon over `/run/kumiho/control.sock`; start it with
-`sudo systemctl start kumiho` (installed) or `scripts/dev-daemon.sh start`
-(development).
+Everything talks to the daemon over local IPC: `/run/kumiho/control.sock` on
+Linux and the named pipe `\\.\pipe\kumiho\control` on Windows. Start it with
+`sudo systemctl start kumiho` (installed Linux), `Start-Service kumiho`
+(installed Windows) or `scripts/dev-daemon.sh start` (Linux development).
 
 ## CLI
 
@@ -16,7 +17,7 @@ Everything talks to the daemon over `/run/kumiho/control.sock`; start it with
     kumiho locations [--ping] [--json] [--refresh]
     kumiho logs [-f] [--level debug|info|warn|error]
     kumiho doctor [--json]      # preflight diagnostics + remediation
-    kumiho cleanup              # remove stale routes/rules/nft/DNS artifacts
+    kumiho cleanup              # remove stale routes/rules/DNS artifacts
     kumiho version
 
 `--proxy-only` keeps system routing untouched and only starts the SOCKS5
@@ -42,7 +43,8 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   connection-scoped settings (DNS, MTU, CIDRs, …) apply on the next connect.
 - **Logs** — the daemon's in-memory ring plus live streaming; `v` cycles the
   level filter, `/` searches, `c` clears, `f` toggles follow, `e` exports the
-  visible entries to `~/.local/state/kumiho/kumiho-logs-<timestamp>.log`.
+  visible entries to `~/.local/state/kumiho/kumiho-logs-<timestamp>.log`
+  (`%LOCALAPPDATA%\kumiho\logs` on Windows).
 - **Account** — live Guardian lookup: email, uid, subscription, quota,
   limited-bandwidth flag, token expiry; `x` signs out (with confirmation).
 
@@ -56,11 +58,29 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
 | `/run/kumiho/control.sock` | IPC socket (0660, group `kumiho`) |
 | `~/.config/kumiho/tui.toml` | per-user TUI prefs (`theme = "dark"` or `"mono"`) |
 
+On Windows the machine-wide state lives under `%ProgramData%\kumiho` (ACL:
+LocalSystem and Administrators) and the control endpoint is a named pipe:
+
+| Path | Contents |
+|---|---|
+| `%ProgramData%\kumiho\config.toml` | admin defaults (all keys optional) |
+| `%ProgramData%\kumiho\tokens.json` | Firefox Accounts tokens |
+| `%ProgramData%\kumiho\state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides |
+| `%ProgramData%\kumiho\logs\kumiho.log` | daemon log; at each service start a file larger than 5 MiB rotates to `kumiho.log.1` |
+| `\\.\pipe\kumiho\control` | named-pipe control endpoint (LocalSystem, Administrators, local group `kumiho`) |
+| `%APPDATA%\kumiho\tui.toml` | per-user TUI prefs (`theme = "dark"` or `"mono"`) |
+
+The installer puts `kumiho.exe` in `%ProgramFiles%\Kumiho` and adds that
+directory to the machine `PATH`, so `kumiho` works in new shells. The
+`KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS` and `KUMIHO_RUNTIME_DIR`
+overrides work the same as on Linux.
+
 ## Transport notes
 
 Kumiho is **not WireGuard**. Traffic is TCP + DNS only, tunneled as HTTP/2
 CONNECT streams to Mozilla's Fastly edge. Non-DNS UDP (including QUIC/HTTP3)
 is dropped inside the tunnel on purpose, so applications fall back to TCP.
-While connected, DNS is served through the tunnel by the daemon's resolver,
-with systemd-resolved pointing `foxy0` at it and Tailscale's MagicDNS split
-domains left intact.
+While connected, DNS is served through the tunnel by the daemon's resolver:
+systemd-resolved points `foxy0` at it on Linux (Tailscale's MagicDNS split
+domains left intact), and Windows sets the adapter-scoped DNS server to
+`10.8.0.2` without touching system-wide settings.

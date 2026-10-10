@@ -47,6 +47,11 @@ Kumiho is an unofficial Linux CLI/TUI client for the free Firefox-account VPN pr
 > and #16 (systemd/polkit privileges) describe the v0.1.0 Linux
 > implementation and are superseded by the multiplatform design:
 > [docs/superpowers/specs/2026-10-10-multiplatform-core-design.md](docs/superpowers/specs/2026-10-10-multiplatform-core-design.md).
+>
+> **2026-10-10 (v0.2.0) platform update:** the multiplatform core's first
+> non-Linux release is Windows 11 amd64 — a LocalSystem Windows service,
+> Wintun TUN, WFP kill switch and named-pipe IPC. See
+> [docs/superpowers/specs/2026-10-10-v0.2.0-windows-release-design.md](docs/superpowers/specs/2026-10-10-v0.2.0-windows-release-design.md).
 
 ---
 

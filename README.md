@@ -1,38 +1,45 @@
 # Kumiho
 
-**Status:** v0.1.0 — a working Linux client: daemon + TUI/CLI over a Unix
-socket, Firefox Accounts login (2FA aware), server list with ping, HTTP/2
-CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
-kill switch, watchdog with edge rotation, runtime settings, log viewer,
-account screen, and a systemd install (`install.sh`).
+**Status:** v0.2.0 — working Linux and Windows 11 clients: daemon + TUI/CLI
+over a Unix socket (Linux) or named pipe (Windows), Firefox Accounts login
+(2FA aware), server list with ping, HTTP/2 CONNECT tunnel through Mozilla's
+Fastly edge, full-tunnel routing with a kill switch, watchdog with edge
+rotation, runtime settings, log viewer, account screen, and a systemd
+(`install.sh`) or Windows service (`install.ps1`) install.
 
-Kumiho is an unofficial Linux CLI/TUI client for the free Firefox-account VPN
-proxy — the same entitlement FoxyVPN for Android uses. It signs into Firefox
-Accounts, mints a Guardian proxy pass, resolves the Mozilla server list, and
-tunnels system traffic over **HTTP/2 CONNECT** streams to a Fastly edge, with a
-local SOCKS5 server in front. On Linux it adds a TUN device + userspace
-TCP/IP stack (gVisor via `xjasonlyu/tun2socks`), policy routing that cannot
-kill an existing SSH/Tailscale session, an optional nftables kill switch, and a
-Bubble Tea TUI plus a systemd daemon so the tunnel survives SSH logouts.
+Kumiho is an unofficial Linux and Windows CLI/TUI client for the free
+Firefox-account VPN proxy — the same entitlement FoxyVPN for Android uses. It
+signs into Firefox Accounts, mints a Guardian proxy pass, resolves the Mozilla
+server list, and tunnels system traffic over **HTTP/2 CONNECT** streams to a
+Fastly edge, with a local SOCKS5 server in front. On Linux it adds a TUN
+device + userspace TCP/IP stack (gVisor via `xjasonlyu/tun2socks`), policy
+routing that cannot kill an existing SSH/Tailscale session, an optional
+nftables kill switch, and a Bubble Tea TUI plus a systemd daemon so the tunnel
+survives SSH logouts. On Windows it uses a Wintun adapter, a WFP kill switch
+and a LocalSystem service.
 
 **It is not WireGuard.** No WireGuard config exists for this entitlement.
 The transport is HTTP/2 CONNECT: **TCP + DNS only**. Non-DNS UDP (QUIC/HTTP3,
 VoIP, games) is blocked on purpose so applications fall back to TCP.
 
-Current target: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
-over a Unix socket).
+Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
+over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun,
+TUI/CLI over a named pipe).
 
 ## Platform roadmap
 
 The core is platform-pluggable behind `internal/platform` (design:
 [docs/superpowers/specs/2026-10-10-multiplatform-core-design.md](docs/superpowers/specs/2026-10-10-multiplatform-core-design.md)).
-Linux ships today; each new platform must reach full parity before release:
+Linux and Windows 11 ship today; each new platform must reach full parity
+before release:
 
-- **Windows 11** — Windows service + Wintun, TUI client over a named pipe.
-- **Android** — VpnService app with the engine embedded in-process, simple GUI.
-- **Other Linux distros/archs** — pluggable network-configuration backends.
+- **Windows 11 amd64** — Windows service + Wintun, TUI client over a named pipe.
+- **Android** — planned: VpnService app with the engine embedded in-process, simple GUI.
+- **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
 ## Quick start
+
+Linux (Ubuntu 24.04):
 
     make build                  # dist/kumiho-linux-amd64 (vendored deps)
     sudo ./install.sh           # binary, systemd unit, polkit rule, config
@@ -40,6 +47,19 @@ Linux ships today; each new platform must reach full parity before release:
     kumiho login                # Firefox Accounts (2FA aware)
     kumiho doctor               # preflight diagnostics
     kumiho                      # TUI
+
+Windows 11, from a release zip in an Administrator PowerShell:
+
+    .\install.ps1               # kumiho.exe + wintun.dll, service, PATH
+
+Then, in a new shell:
+
+    kumiho login                # Firefox Accounts (2FA aware)
+    kumiho doctor               # preflight diagnostics
+    kumiho                      # TUI
+
+From a checkout, run `make build-windows` first: the installer finds the
+binary in `dist\` and `wintun.dll` under `third_party\wintun\amd64\`.
 
 See [docs/manual.md](docs/manual.md) for a plain-language usage manual,
 [docs/install.md](docs/install.md) for the details, [docs/usage.md](docs/usage.md)
@@ -51,6 +71,12 @@ for common issues.
 - No anti-bot challenge solver yet; a `406` from Mozilla surfaces as a clear
   error (retry later).
 - Non-DNS UDP is intentionally blocked inside the tunnel.
+- On Windows, connecting may reset existing sessions: there is no per-socket
+  bypass equivalent to Linux `fwmark` policy routing, so connections opened
+  before the tunnel comes up can be dropped. LAN and exclude-CIDR traffic
+  bypasses the tunnel as on Linux.
+- The Windows binary is unsigned: SmartScreen warns on first run (More
+  info → Run anyway), and `install.ps1` needs an Administrator shell.
 - Using an unofficial client is a ToS gray area (see PLAN.md §13); Kumiho
   never sees or stores your Firefox password, only the resulting tokens.
 
@@ -60,11 +86,14 @@ Cross-compile from any OS with Go >= 1.27:
 
     make build          # dist/kumiho-linux-amd64
     make build-arm64    # dist/kumiho-linux-arm64
+    make build-windows  # dist/kumiho-windows-amd64.exe (Windows 11 amd64)
     make test           # unit tests (run on any OS)
     make vet
 
 Module dependencies are vendored in `vendor/`, so no network access is
-needed to build or test.
+needed to build or test. The Windows build needs the signed `wintun.dll`
+committed under `third_party/wintun/amd64/` beside the binary at run time;
+the release zip and `install.ps1` place it in `%ProgramFiles%\Kumiho`.
 
 ## Usage
 
@@ -77,11 +106,13 @@ needed to build or test.
     kumiho version
 
 The full command surface (connect/disconnect flags, locations, logs, cleanup)
-is documented in [docs/usage.md](docs/usage.md). The daemon reads its
+is documented in [docs/usage.md](docs/usage.md). On Linux the daemon reads its
 config/state from `/etc/kumiho` and `/var/lib/kumiho` and listens on
-`/run/kumiho/control.sock` (see PLAN.md §8). For development runs without
-systemd, override the locations with `KUMIHO_CONFIG`, `KUMIHO_STATE`,
-`KUMIHO_TOKENS`, and `KUMIHO_RUNTIME_DIR` (see `scripts/dev-env.sh`).
+`/run/kumiho/control.sock`; on Windows it reads `%ProgramData%\kumiho` and
+listens on the named pipe `\\.\pipe\kumiho\control` (see PLAN.md §8). For
+development or alternative locations on either OS, override with
+`KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS`, and `KUMIHO_RUNTIME_DIR`
+(see `scripts/dev-env.sh` and `scripts/dev-env.ps1`).
 
 ## Plan and docs
 
