@@ -143,7 +143,7 @@ func (c *Client) fail(err error) {
 	})
 }
 
-// DecodePayload is a convenience wrapper erroring with context on failure.
+// decodeStatus is a convenience wrapper erroring with context on failure.
 func decodeStatus(env *Envelope) (api.Status, error) {
 	var st api.Status
 	if err := env.DecodePayload(&st); err != nil {

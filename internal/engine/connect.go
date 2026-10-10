@@ -348,8 +348,8 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 }
 
 // CleanupStaleNetcfg removes routes/rules/nft/resolved artifacts a crashed
-// daemon may have left behind (PLAN.md §4.3). Called once at startup, only
-// after this daemon owns the control socket.
+// engine may have left behind (PLAN.md §4.3). Called once at startup, only
+// after the engine owns the control socket.
 func (c *Controller) CleanupStaleNetcfg() {
 	c.nc.Cleanup(context.Background(), c.netcfgConfig(c.plat.TunDefaults().Name))
 }
@@ -381,9 +381,9 @@ func (c *Controller) ReapplyNetcfg(ctx context.Context) {
 	}
 }
 
-// UseBypassDialer tags every daemon-owned socket with SO_MARK 0x2 so the
+// UseBypassDialer tags every engine-owned socket with SO_MARK 0x2 so the
 // policy-routing mark chain never routes control-plane traffic into the
-// tunnel (PLAN.md §3.2). Called once at daemon start.
+// tunnel (PLAN.md §3.2). Called once at engine start.
 func (c *Controller) UseBypassDialer() {
 	dial := c.plat.BypassDialer()
 	newClient := func(timeout time.Duration) *http.Client {
@@ -490,11 +490,11 @@ func (c *Controller) Disconnect() error {
 	return nil
 }
 
-// Shutdown tears the data path down on daemon exit (PLAN.md §4.3): stop the
+// Shutdown tears the data path down on engine exit (PLAN.md §4.3): stop the
 // tunnel, delete its rules/nft table, revert DNS and stop the SOCKS listener.
 // Unlike Disconnect it is silent when nothing is up, so Run can always call
 // it; a stopped service must leave no residue behind (the kill-switch rules
-// would otherwise outlive the daemon).
+// would otherwise outlive the engine).
 func (c *Controller) Shutdown() {
 	c.stopTunnel("daemon shutdown")
 }
