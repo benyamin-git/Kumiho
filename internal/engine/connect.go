@@ -26,7 +26,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
-// upstreamSession is the data-plane surface the daemon uses; the concrete
+// upstreamSession is the data-plane surface the engine uses; the concrete
 // *upstream.Session implements it (and tests substitute fakes).
 type upstreamSession interface {
 	OpenStream(ctx context.Context, host string, port int) (net.Conn, error)
