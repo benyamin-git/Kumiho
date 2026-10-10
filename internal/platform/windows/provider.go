@@ -13,9 +13,8 @@ import (
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
-// Provider implements platform.Provider with the Windows mechanisms. The
-// device, network configuration and link monitoring still carry interim
-// behavior until T9/T10/T12 land.
+// Provider implements platform.Provider with the Windows mechanisms. Link
+// monitoring still carries interim behavior until T12 lands.
 type Provider struct{}
 
 // New returns the Windows provider.
@@ -46,9 +45,8 @@ func (p *Provider) OpenDevice(_ context.Context, spec platform.DeviceSpec) (plat
 	return openDevice(spec.Name, spec.MTU)
 }
 
-// NetConfig returns the interim not-implemented network configuration
-// (replaced in T10).
-func (p *Provider) NetConfig() platform.NetConfig { return netConfig{} }
+// NetConfig returns the real route/DNS network configuration.
+func (p *Provider) NetConfig() platform.NetConfig { return &netConfig{} }
 
 // WatchLinks returns a channel that never fires (replaced in T12).
 func (p *Provider) WatchLinks(context.Context) (<-chan struct{}, error) {
@@ -70,15 +68,5 @@ func (p *Provider) ControlEndpoint() string { return `\\.\pipe\kumiho\control` }
 // ChownControlEndpoint is a no-op: the pipe ACL is applied by the server when
 // it creates the pipe.
 func (p *Provider) ChownControlEndpoint(string) {}
-
-type netConfig struct{}
-
-// Apply is the interim not-implemented stub (replaced in T10).
-func (netConfig) Apply(context.Context, platform.NetConfigSpec) error {
-	return errors.New("windows: not implemented yet")
-}
-
-// Cleanup is a no-op so proxy-only mode still works.
-func (netConfig) Cleanup(context.Context, platform.NetConfigSpec) {}
 
 var _ platform.Provider = (*Provider)(nil)

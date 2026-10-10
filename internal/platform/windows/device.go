@@ -37,11 +37,13 @@ type device struct {
 	rw sync.RWMutex
 }
 
-// openDevice creates the Wintun adapter and starts its packet session. mtu is
-// recorded, not applied: as on Linux, netcfg owns the interface configuration
-// (T10 sets the MTU via setIPInterfaceEntry).
+// openDevice creates the Wintun adapter and starts its packet session. The
+// adapter is created with the fixed netcfg GUID so restarts reuse the same
+// adapter identity (deterministic NLA generation). mtu is recorded, not
+// applied: as on Linux, netcfg owns the interface configuration and applies
+// the MTU via setIPInterfaceEntry.
 func openDevice(name string, mtu int) (*device, error) {
-	adapter, err := wintun.CreateAdapter(name, "Kumiho", nil)
+	adapter, err := wintun.CreateAdapter(name, "Kumiho", &fixedAdapterGUID)
 	if err != nil {
 		return nil, fmt.Errorf("wintun: create adapter %q: %w", name, err)
 	}
