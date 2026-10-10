@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -227,11 +228,10 @@ func (m *Model) handleLogsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 // exportLogs writes the currently visible (filtered) entries to a local file.
 func (m *Model) exportLogs() (string, error) {
 	rows := m.lg.filtered()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	dir := defaultExportDir()
+	if dir == "" {
+		return "", errors.New("cannot determine the log export directory")
 	}
-	dir := filepath.Join(home, ".local", "state", "kumiho")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

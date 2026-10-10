@@ -2,7 +2,6 @@ package tui
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 	"github.com/charmbracelet/lipgloss"
@@ -21,11 +20,10 @@ func loadPrefs() prefs {
 	p := prefs{Theme: "dark"}
 	path := os.Getenv("KUMIHO_TUI_CONFIG")
 	if path == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return p
-		}
-		path = filepath.Join(home, ".config", "kumiho", "tui.toml")
+		path = defaultPrefsPath()
+	}
+	if path == "" {
+		return p
 	}
 	if _, err := os.Stat(path); err != nil {
 		return p
