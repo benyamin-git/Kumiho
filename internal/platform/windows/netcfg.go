@@ -220,6 +220,88 @@ func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
 	n.closeKillSwitch()
 }
 
+// CleanupStale removes what a crashed run can leave behind beyond what
+// Cleanup already clears with a live config: the default routes through the
+// foxy0 adapter and the adapter device itself. `kumiho cleanup` calls it
+// after the normal Cleanup path; like Cleanup it never fails and only logs.
+func (n *netConfig) CleanupStale(_ context.Context) {
+	spec := normalizeSpec(platform.NetConfigSpec{})
+	wn := n.win()
+	if luid, err := wn.aliasToLUID(spec.TunName); err == nil && luid != 0 {
+		if routes, err := wn.routes(); err != nil {
+			n.log("stale cleanup: enumerate routes: %v", err)
+		} else {
+			for i := range routes {
+				row := &routes[i]
+				if row.InterfaceLuid != luid || row.DestinationPrefix.PrefixLength != 0 {
+					continue
+				}
+				if err := wn.deleteRoute(row); err != nil && !isNotFound(err) {
+					n.log("stale cleanup: delete default route %s: %v", routeString(row), err)
+				}
+			}
+		}
+	}
+	if err := wn.removeAdapter(spec.TunName); err != nil && !isNotFound(err) {
+		n.log("stale cleanup: remove adapter %s: %v", spec.TunName, err)
+	}
+}
+
+// guidDevClassNet is GUID_DEVCLASS_NET, the network adapter setup class.
+var guidDevClassNet = windows.GUID{
+	Data1: 0x4d36e972,
+	Data2: 0xe325,
+	Data3: 0x11ce,
+	Data4: [8]byte{0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18},
+}
+
+// removeAdapter deletes the named Wintun adapter device if it is present.
+// Only a network adapter whose friendly name matches and whose driver service
+// is wintun is removed, so a same-named non-Wintun device is never touched.
+// A missing adapter is not an error.
+func removeAdapter(alias string) error {
+	set, err := windows.SetupDiGetClassDevsEx(&guidDevClassNet, "", 0, windows.DIGCF_PRESENT, 0, "")
+	if err != nil {
+		return fmt.Errorf("enumerate network adapters: %w", err)
+	}
+	defer set.Close()
+
+	for i := 0; ; i++ {
+		data, err := windows.SetupDiEnumDeviceInfo(set, i)
+		if errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("enumerate network adapters: %w", err)
+		}
+		friendly, err := deviceProperty(set, data, windows.SPDRP_FRIENDLYNAME)
+		if err != nil || !strings.EqualFold(friendly, alias) {
+			continue
+		}
+		service, err := deviceProperty(set, data, windows.SPDRP_SERVICE)
+		if err != nil || !strings.EqualFold(service, "wintun") {
+			continue
+		}
+		if err := set.CallClassInstaller(windows.DIF_REMOVE, data); err != nil {
+			return fmt.Errorf("remove adapter %s: %w", alias, err)
+		}
+		return nil
+	}
+}
+
+// deviceProperty reads one string device registry property.
+func deviceProperty(set windows.DevInfo, data *windows.DevInfoData, property windows.SPDRP) (string, error) {
+	value, err := windows.SetupDiGetDeviceRegistryProperty(set, data, property)
+	if err != nil {
+		return "", err
+	}
+	s, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("device property %d is not a string", property)
+	}
+	return s, nil
+}
+
 // lanPermits returns the destination prefixes of the LAN bypass routes: the
 // WFP kill-switch permits and the routing table must agree on what bypasses
 // the tunnel (spec.AllowLAN=false therefore also blocks LAN at the firewall).
@@ -647,6 +729,7 @@ type winNet interface {
 	createRoute(row *windows.MibIpForwardRow2) error
 	deleteRoute(row *windows.MibIpForwardRow2) error
 	setDNS(guid windows.GUID, servers []string) error
+	removeAdapter(name string) error
 }
 
 // win32Net is the real IP Helper implementation of winNet.
@@ -699,5 +782,7 @@ func (win32Net) setDNS(guid windows.GUID, servers []string) error {
 	}
 	return setInterfaceDNSSettings(guid, req)
 }
+
+func (win32Net) removeAdapter(name string) error { return removeAdapter(name) }
 
 var _ platform.NetConfig = (*netConfig)(nil)

@@ -90,7 +90,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 }
 
 func collectChecks() []check {
-	return []check{
+	checks := []check{
 		checkPlatform(),
 		checkTUNDevice(),
 		checkNetAdmin(),
@@ -105,6 +105,7 @@ func collectChecks() []check {
 		checkClockSkew(),
 		checkReachability(),
 	}
+	return append(checks, platformChecks()...)
 }
 
 func skipped(name, detail string) check {
@@ -187,8 +188,8 @@ func runCmd(timeout time.Duration, name string, args ...string) (string, error) 
 func checkPlatform() check {
 	const name = "platform"
 	provider := auto.Current().Name()
-	if provider == "linux" {
-		return check{Name: name, Status: statusOK, Detail: provider}
+	if detail, ok := fullTunnelPlatform(provider); ok {
+		return check{Name: name, Status: statusOK, Detail: detail}
 	}
 	return check{
 		Name:   name,

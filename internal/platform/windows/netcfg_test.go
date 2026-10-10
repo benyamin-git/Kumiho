@@ -42,6 +42,7 @@ type fakeWinNet struct {
 	createdRoutes []windows.MibIpForwardRow2
 	deletedRoutes []windows.MibIpForwardRow2
 	dnsCalls      []dnsCall
+	removedAds    []string
 }
 
 type mtuCall struct {
@@ -82,6 +83,10 @@ func (f *fakeWinNet) deleteRoute(row *windows.MibIpForwardRow2) error {
 }
 func (f *fakeWinNet) setDNS(guid windows.GUID, servers []string) error {
 	f.dnsCalls = append(f.dnsCalls, dnsCall{guid: guid, servers: servers})
+	return nil
+}
+func (f *fakeWinNet) removeAdapter(name string) error {
+	f.removedAds = append(f.removedAds, name)
 	return nil
 }
 
@@ -405,6 +410,45 @@ func TestCleanupWithoutAdapterStillDeletesBypassResidue(t *testing.T) {
 	}
 	if len(f.deletedAddrs) != 0 {
 		t.Fatalf("address deletions = %d, want 0 without an adapter", len(f.deletedAddrs))
+	}
+}
+
+func TestCleanupStaleRemovesAdapterAndDefaultRoutes(t *testing.T) {
+	f := &fakeWinNet{
+		luid: 7,
+		routelist: []windows.MibIpForwardRow2{
+			routeRow(7, net.IPv4zero, 0, net.IPv4zero, tunnelRouteMetric),
+			defaultRouteRow(7, windows.AF_INET6, tunnelRouteMetric),
+			routeRow(22, net.IPv4(100, 64, 0, 0), 10, net.IPv4(192, 168, 1, 1), bypassRouteMetric),
+			routeRow(22, net.IPv4zero, 0, net.IPv4(192, 168, 1, 1), 0),
+		},
+	}
+	nc := &netConfig{wn: f}
+	nc.CleanupStale(context.Background())
+
+	if len(f.deletedRoutes) != 2 {
+		t.Fatalf("stale cleanup deleted %d routes, want the 2 tunnel defaults: %v", len(f.deletedRoutes), f.deletedRoutes)
+	}
+	for _, r := range f.deletedRoutes {
+		if r.InterfaceLuid != 7 || r.DestinationPrefix.PrefixLength != 0 {
+			t.Fatalf("stale cleanup deleted a non-tunnel route: %v", r)
+		}
+	}
+	if len(f.removedAds) != 1 || f.removedAds[0] != "foxy0" {
+		t.Fatalf("stale cleanup removed adapters %v, want [foxy0]", f.removedAds)
+	}
+}
+
+func TestCleanupStaleWithoutAdapterStillAttemptsRemoval(t *testing.T) {
+	f := &fakeWinNet{luidErr: windows.ERROR_NOT_FOUND}
+	nc := &netConfig{wn: f}
+	nc.CleanupStale(context.Background())
+
+	if len(f.deletedRoutes) != 0 {
+		t.Fatalf("stale cleanup deleted routes without an adapter: %v", f.deletedRoutes)
+	}
+	if len(f.removedAds) != 1 || f.removedAds[0] != "foxy0" {
+		t.Fatalf("stale cleanup removed adapters %v, want [foxy0]", f.removedAds)
 	}
 }
 
