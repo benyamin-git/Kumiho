@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/platform/auto"
-	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
 
@@ -456,7 +455,7 @@ func checkSocksPort() check {
 		_ = ln.Close()
 		return check{Name: name, Status: statusOK, Detail: "127.0.0.1:1080 is free"}
 	}
-	if _, serr := os.Stat(settings.DefaultPaths().SocketPath()); serr == nil {
+	if _, serr := os.Stat(auto.Current().ControlEndpoint()); serr == nil {
 		return check{Name: name, Status: statusWarn, Detail: "127.0.0.1:1080 is in use (kumiho daemon appears to be running)"}
 	}
 	return check{
@@ -472,7 +471,7 @@ func checkControlSocket() check {
 	if runtime.GOOS != "linux" {
 		return skipped(name, "control socket is Linux-only")
 	}
-	fi, err := os.Stat(settings.DefaultPaths().SocketPath())
+	fi, err := os.Stat(auto.Current().ControlEndpoint())
 	if err != nil {
 		return skipped(name, "daemon not running")
 	}
@@ -480,11 +479,11 @@ func checkControlSocket() check {
 		return check{
 			Name:        name,
 			Status:      statusWarn,
-			Detail:      fmt.Sprintf("%s has mode %o, want 660", settings.DefaultPaths().SocketPath(), perm),
+			Detail:      fmt.Sprintf("%s has mode %o, want 660", auto.Current().ControlEndpoint(), perm),
 			Remediation: "Restart the daemon; if the mode persists, report a bug.",
 		}
 	}
-	return check{Name: name, Status: statusOK, Detail: settings.DefaultPaths().SocketPath() + " mode 660"}
+	return check{Name: name, Status: statusOK, Detail: auto.Current().ControlEndpoint() + " mode 660"}
 }
 
 func checkClockSkew() check {

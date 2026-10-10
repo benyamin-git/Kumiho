@@ -3,45 +3,16 @@ package ipc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"sync"
-	"time"
 )
 
 // Server accepts control connections on a Unix socket.
 type Server struct {
-	path string
-	ln   net.Listener
-}
-
-// Listen creates the control socket with mode 0660, removing stale sockets
-// left by a crashed daemon and refusing to steal a live daemon's socket.
-func Listen(path string) (*Server, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(path); err == nil {
-		d := net.Dialer{Timeout: 500 * time.Millisecond}
-		if conn, err := d.Dial("unix", path); err == nil {
-			conn.Close()
-			return nil, fmt.Errorf("%s: another kumiho daemon is already listening", path)
-		}
-		if err := os.Remove(path); err != nil {
-			return nil, err
-		}
-	}
-	ln, err := net.Listen("unix", path)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(path, 0o660); err != nil {
-		ln.Close()
-		return nil, err
-	}
-	return &Server{path: path, ln: ln}, nil
+	path    string
+	ln      net.Listener
+	peerUID func(net.Conn) (uint32, bool)
 }
 
 // Serve accepts connections until ctx is done or the listener closes. Each
@@ -66,16 +37,18 @@ func (s *Server) Serve(ctx context.Context, handler func(context.Context, *Conn)
 			return err
 		}
 		go func(nc net.Conn) {
-			conn := newConn(nc)
+			conn := newConn(nc, s.peerUID)
 			defer conn.Close()
 			_ = handler(ctx, conn)
 		}(nc)
 	}
 }
 
-// Close stops the listener.
+// Close stops the listener and removes the socket file (best effort).
 func (s *Server) Close() error {
-	return s.ln.Close()
+	err := s.ln.Close()
+	_ = os.Remove(s.path)
+	return err
 }
 
 // Path returns the socket path.
@@ -85,21 +58,23 @@ func (s *Server) Path() string {
 
 // Conn is one server-side client connection.
 type Conn struct {
-	nc  net.Conn
-	enc *json.Encoder
-	dec *json.Decoder
+	nc      net.Conn
+	enc     *json.Encoder
+	dec     *json.Decoder
+	peerUID func(net.Conn) (uint32, bool)
 
 	mu        sync.Mutex
 	done      chan struct{}
 	closeOnce sync.Once
 }
 
-func newConn(nc net.Conn) *Conn {
+func newConn(nc net.Conn, peerUID func(net.Conn) (uint32, bool)) *Conn {
 	return &Conn{
-		nc:   nc,
-		enc:  json.NewEncoder(nc),
-		dec:  json.NewDecoder(nc),
-		done: make(chan struct{}),
+		nc:      nc,
+		enc:     json.NewEncoder(nc),
+		dec:     json.NewDecoder(nc),
+		peerUID: peerUID,
+		done:    make(chan struct{}),
 	}
 }
 
@@ -141,13 +116,13 @@ func (c *Conn) Close() error {
 	return c.nc.Close()
 }
 
-// PeerUID returns the effective UID of the connecting process (Linux only).
+// PeerUID returns the effective UID of the connecting process. It reports
+// false when the transport carries no peer-credential support.
 func (c *Conn) PeerUID() (uint32, bool) {
-	uid, err := peerUID(c.nc)
-	if err != nil {
+	if c.peerUID == nil {
 		return 0, false
 	}
-	return uid, true
+	return c.peerUID(c.nc)
 }
 
 func (c *Conn) write(env *Envelope) error {

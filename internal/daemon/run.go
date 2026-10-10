@@ -52,12 +52,11 @@ func Run(ctx context.Context) error {
 	}
 
 	endpoint := plat.ControlEndpoint()
-	srv, err := ipc.Listen(endpoint)
+	srv, err := (ipc.UnixTransport{}).Listen(endpoint)
 	if err != nil {
 		return err
 	}
 	defer srv.Close()
-	defer os.Remove(endpoint)
 	plat.ChownControlEndpoint(endpoint)
 
 	// We own the socket now: crash-recovery cleanup must not wipe a live

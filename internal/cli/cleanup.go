@@ -9,6 +9,7 @@ import (
 	"runtime"
 
 	"github.com/benyamin-git/kumiho/internal/netcfg"
+	"github.com/benyamin-git/kumiho/internal/platform/auto"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
@@ -32,7 +33,7 @@ func runCleanup(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	store, err := settings.Open(settings.DefaultPaths())
+	store, err := settings.Open(auto.Current().Paths())
 	if err != nil {
 		fmt.Fprintf(stderr, "kumiho cleanup: %v\n", err)
 		return 1

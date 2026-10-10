@@ -49,7 +49,7 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 func testServer(t *testing.T, handler func(context.Context, *Conn) error) (*Server, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "control.sock")
-	srv, err := Listen(path)
+	srv, err := UnixTransport{}.Listen(path)
 	if err != nil {
 		if runtime.GOOS != "linux" {
 			t.Skipf("unix sockets unavailable on this platform: %v", err)
@@ -84,7 +84,7 @@ func TestClientServerExchange(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cl, err := Dial(ctx, path)
+	cl, err := UnixTransport{}.Dial(ctx, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestClientServerExchange(t *testing.T) {
 
 func TestListenRefusesLiveDaemon(t *testing.T) {
 	_, path := testServer(t, func(ctx context.Context, c *Conn) error { return nil })
-	if _, err := Listen(path); err == nil {
+	if _, err := (UnixTransport{}).Listen(path); err == nil {
 		t.Fatal("expected error when a live daemon owns the socket")
 	}
 }

@@ -30,24 +30,6 @@ type Client struct {
 	closeOnce sync.Once
 }
 
-// Dial connects to the daemon control socket.
-func Dial(ctx context.Context, path string) (*Client, error) {
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "unix", path)
-	if err != nil {
-		return nil, err
-	}
-	c := &Client{
-		conn:    conn,
-		enc:     json.NewEncoder(conn),
-		dec:     json.NewDecoder(conn),
-		pending: make(map[string]chan *Envelope),
-		events:  make(chan *Envelope, 256),
-	}
-	go c.readLoop()
-	return c, nil
-}
-
 // Close terminates the connection.
 func (c *Client) Close() error {
 	err := c.conn.Close()

@@ -7,17 +7,17 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/ipc"
-	"github.com/benyamin-git/kumiho/internal/settings"
+	"github.com/benyamin-git/kumiho/internal/platform/auto"
 )
 
 // dialDaemon connects to the local daemon or prints how to start it.
 func dialDaemon(stderr io.Writer) (*ipc.Client, int) {
-	paths := settings.DefaultPaths()
+	endpoint := auto.Current().ControlEndpoint()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := ipc.Dial(ctx, paths.SocketPath())
+	client, err := (ipc.UnixTransport{}).Dial(ctx, endpoint)
 	if err != nil {
-		fmt.Fprintf(stderr, "kumiho: cannot reach the daemon at %s\n", paths.SocketPath())
+		fmt.Fprintf(stderr, "kumiho: cannot reach the daemon at %s\n", endpoint)
 		fmt.Fprintln(stderr, "start it with: sudo systemctl start kumiho  (or run: kumiho daemon)")
 		return nil, 1
 	}
