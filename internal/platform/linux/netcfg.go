@@ -15,13 +15,20 @@ type netConfig struct {
 	applier *netcfg.Applier
 }
 
+// SetLogf routes the applier's informational logs to logf. It is an additive
+// capability: the engine opts in via an interface assertion, so the frozen
+// platform.NetConfig method set stays untouched.
+func (n *netConfig) SetLogf(logf func(format string, args ...any)) {
+	n.applier.Logf = logf
+}
+
 // Apply installs the network configuration, starting from a clean slate.
-func (n netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) error {
+func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) error {
 	return n.applier.Apply(ctx, netcfgConfig(spec))
 }
 
 // Cleanup removes the network configuration; it never fails.
-func (n netConfig) Cleanup(ctx context.Context, spec platform.NetConfigSpec) {
+func (n *netConfig) Cleanup(ctx context.Context, spec platform.NetConfigSpec) {
 	n.applier.Cleanup(ctx, netcfgConfig(spec))
 }
 

@@ -139,7 +139,21 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		routeProbe:       plat.HasDefaultRoute,
 	}
 	c.guardian.UserAgent = ua
+	if ls, ok := c.nc.(interface {
+		SetLogf(func(format string, args ...any))
+	}); ok {
+		ls.SetLogf(ringLogf(ring))
+	}
 	return c
+}
+
+func ringLogf(ring *logging.Ring) func(format string, args ...any) {
+	if ring == nil {
+		return nil
+	}
+	return func(format string, args ...any) {
+		ring.Logf(logging.Info, "netcfg", format, args...)
+	}
 }
 
 func (c *Controller) setStateLocked(s State) {

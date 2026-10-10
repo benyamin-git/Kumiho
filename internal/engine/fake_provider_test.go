@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"testing"
 
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/platform"
@@ -136,8 +137,22 @@ type fakeNetConfig struct {
 	applies   int
 	cleanups  int
 	last      platform.NetConfigSpec
+	logFn     func(format string, args ...any)
 	onApply   func(platform.NetConfigSpec)
 	onCleanup func()
+}
+
+// SetLogf records the engine-wired applier logger (optional capability).
+func (n *fakeNetConfig) SetLogf(logf func(format string, args ...any)) {
+	n.mu.Lock()
+	n.logFn = logf
+	n.mu.Unlock()
+}
+
+func (n *fakeNetConfig) logFunc() func(format string, args ...any) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.logFn
 }
 
 func (n *fakeNetConfig) Apply(_ context.Context, spec platform.NetConfigSpec) error {
@@ -176,6 +191,43 @@ func (n *fakeNetConfig) lastSpec() platform.NetConfigSpec {
 	defer n.mu.Unlock()
 	return n.last
 }
+
+// New must route the applier logf into the ring when the provider's NetConfig
+// supports the additive SetLogf capability, and must not require it.
+func TestNewWiresNetConfigLogf(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	fp := ctrl.plat.(*fakeProvider)
+	logf := fp.nc.logFunc()
+	if logf == nil {
+		t.Fatal("New did not wire a logf into the provider's NetConfig")
+	}
+	logf("wired %s", "ok")
+	found := false
+	for _, e := range ctrl.log.Snapshot() {
+		if e.Tag == "netcfg" && e.Msg == "wired ok" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the wired logf did not reach the engine ring under the netcfg tag")
+	}
+
+	// A NetConfig without the optional method still constructs fine.
+	ctrl2, _ := newTestControllerWithProvider(t, loginOKHandler(t), noLogProvider{newFakeProvider()})
+	if ctrl2.nc == nil {
+		t.Fatal("controller without the SetLogf capability has no NetConfig")
+	}
+}
+
+// noLogProvider serves a NetConfig without the optional SetLogf capability.
+type noLogProvider struct{ *fakeProvider }
+
+func (noLogProvider) NetConfig() platform.NetConfig { return noLogNetConfig{} }
+
+type noLogNetConfig struct{}
+
+func (noLogNetConfig) Apply(context.Context, platform.NetConfigSpec) error { return nil }
+func (noLogNetConfig) Cleanup(context.Context, platform.NetConfigSpec)     {}
 
 var (
 	_ platform.Provider  = (*fakeProvider)(nil)

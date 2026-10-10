@@ -46,7 +46,7 @@ func (p *Provider) OpenDevice(_ context.Context, spec platform.DeviceSpec) (plat
 
 // NetConfig returns the adapter over the v0.1.0 netcfg applier.
 func (p *Provider) NetConfig() platform.NetConfig {
-	return netConfig{applier: netcfg.DefaultApplier(nil)}
+	return &netConfig{applier: netcfg.DefaultApplier(nil)}
 }
 
 // BypassDialer returns the SO_MARK 0x2 dialer for control-plane sockets.

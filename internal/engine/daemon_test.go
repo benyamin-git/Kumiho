@@ -18,6 +18,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
+	"github.com/benyamin-git/kumiho/internal/platform"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
@@ -27,6 +28,10 @@ func testSessionHex() string {
 }
 
 func newTestController(t *testing.T, handler http.HandlerFunc) (*Controller, settings.Paths) {
+	return newTestControllerWithProvider(t, handler, newFakeProvider())
+}
+
+func newTestControllerWithProvider(t *testing.T, handler http.HandlerFunc, plat platform.Provider) (*Controller, settings.Paths) {
 	t.Helper()
 	dir := t.TempDir()
 	paths := settings.Paths{
@@ -44,7 +49,7 @@ func newTestController(t *testing.T, handler http.HandlerFunc) (*Controller, set
 	client := fxa.NewClient()
 	client.BaseURL = server.URL + "/v1"
 	ring := logging.NewRing(logging.Options{Capacity: 100})
-	return New(store, ring, client, newFakeProvider()), paths
+	return New(store, ring, client, plat), paths
 }
 
 // loginOKHandler completes a login without 2FA.
