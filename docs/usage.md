@@ -74,7 +74,10 @@ LocalSystem and Administrators) and the control endpoint is a named pipe:
 The installer puts `kumiho.exe` in `%ProgramFiles%\Kumiho` and adds that
 directory to the machine `PATH`, so `kumiho` works in new shells. The
 `KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS` and `KUMIHO_RUNTIME_DIR`
-overrides work the same as on Linux.
+overrides work the same as on Linux, except that on Windows
+`KUMIHO_RUNTIME_DIR` relocates only the daemon log directory (default
+`%ProgramData%\kumiho\logs`); the control endpoint stays the fixed
+`\\.\pipe\kumiho\control` named pipe.
 
 ## Transport notes
 

@@ -67,7 +67,7 @@ gate green:
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
-  kill switch, IP Helper link watch + `GetBestRoute2`), `android/` and
+  kill switch, IP Helper link watch + `GetIpForwardTable2`), `android/` and
   `unsupported/` stubs. Prefer additive interface methods over breaking the
   seam.
 - **IPC**: `internal/ipc` is control protocol v1 (newline-delimited JSON) and
@@ -76,7 +76,8 @@ gate green:
   `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is
   administrators-only (Linux root parity).
 - **Deliberate OS branches outside the seam** (all small and paired):
-  `internal/cli/doctor_{linux,windows,other}.go` (doctor checks),
+  `internal/cli/doctor.go` (`runtime.GOOS` branches) plus
+  `doctor_{windows,other}.go` (doctor checks),
   `internal/cli/service_{windows,other}.go` (SCM host vs foreground),
   `internal/daemon/sink_{unix,windows}.go` (log sink),
   `internal/tui/export_*.go` and `prefs_*.go` (per-user paths), and

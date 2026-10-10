@@ -371,9 +371,10 @@ Criterion coverage and the sign-off table are at the end. Background reading:
       (Get-NetRoute -InterfaceAlias foxy0 -DestinationPrefix 0.0.0.0/0).Count   # 1
 
 - [ ] Deterministic `kumiho cleanup` path (disable recovery temporarily so
-      the crash residue survives). Windows PowerShell 5.1 drops empty-string
-      arguments to native commands, so clear the actions through `cmd.exe`
-      (the documented `actions= ""` form) and verify the clear before killing:
+      the crash is not healed before `kumiho cleanup` runs). Windows
+      PowerShell 5.1 drops empty-string arguments to native commands, so
+      clear the actions through `cmd.exe` (the documented `actions= ""` form)
+      and verify the clear before killing:
 
       cmd.exe /c 'sc failure kumiho reset= 0 actions= ""'
       sc.exe qfailure kumiho
@@ -390,11 +391,13 @@ Criterion coverage and the sign-off table are at the end. Background reading:
   `RESET_PERIOD (in seconds) : 0` and `FAILURE_ACTIONS` with no entries
   (no `RESTART -- Delay` lines). If any `RESTART` lines are still listed, the
   clear did not take effect — repeat the `cmd.exe` line and re-check before
-  killing the process. The killed run then leaves `0.0.0.0/0` behind (the
-  service stays down); `kumiho cleanup` prints `Stale kumiho routing, nftables
-  and DNS state were removed (best effort).` and removes the route and the
-  `foxy0` adapter; after the restore command, `sc.exe qfailure kumiho` lists
-  the three `RESTART -- Delay` entries again (5000, 30000, 60000 ms) and
+  killing the process. Record whether the killed run's `0.0.0.0/0` route and
+  `foxy0` adapter survive the kill: Wintun ends the adapter session when the
+  process dies, so they can disappear on their own, and either outcome is
+  valid. If either is still present, `kumiho cleanup` must remove it. Cleanup
+  prints `Stale kumiho routing, firewall and DNS state were removed (best
+  effort).` either way. After the restore command, `sc.exe qfailure kumiho`
+  lists the three `RESTART -- Delay` entries again (5000, 30000, 60000 ms) and
   `Start-Service kumiho` brings the service back.
 
 ## 12. Reboot autoconnect (criterion 2, 3)

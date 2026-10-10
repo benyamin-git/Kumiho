@@ -173,9 +173,11 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 // Cleanup removes exactly what Apply created — the tunnel default routes, the
 // bypass routes, the TUN address and the adapter DNS — and never fails. The
 // adapter device itself is deliberately not deleted here: Wintun removes
-// create-created adapters when device.Close ends the session, and the fixed
-// GUID lets a crashed run's adapter be reused instead of accumulating; this
-// only clears the adapter's configuration residue.
+// create-created adapters when the session ends (device.Close, or the forced
+// close when the process dies), so a crashed run may already have taken its
+// adapter and routes with it; the fixed GUID lets an adapter that does survive
+// be reused instead of accumulating. This only clears configuration residue,
+// and it is safe whether or not the session teardown already ran.
 func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
 	spec = normalizeSpec(spec)
 	wn := n.win()

@@ -32,7 +32,7 @@ passes on real hardware (spec criterion 10).
   DNS/LAN/exclude-CIDR permits, cleanup on start and stop, and the crash
   caveat documented and mitigated by service recovery.
 - Windows link watching (IP Helper notifications with polling fallback) and
-  default-route probing (`GetBestRoute2`).
+  default-route probing (`GetIpForwardTable2`).
 - Windows doctor/cleanup checks: service, `wintun.dll`, Base Filtering
   Engine, control pipe, `foxy0` adapter, adapter DNS, physical default route,
   elevation; `kumiho cleanup` also removes a crashed run's adapter and
