@@ -70,3 +70,6 @@ jobs:
 
       - name: Version smoke test
         run: ./dist/kumiho-windows-amd64.exe version
+
+      - name: Parse install.ps1
+        run: pwsh -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('install.ps1',[ref]`$null,[ref]`$null)"
