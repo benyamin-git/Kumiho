@@ -2,7 +2,6 @@ package ipc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -47,15 +46,7 @@ func (UnixTransport) Dial(ctx context.Context, endpoint string) (*Client, error)
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{
-		conn:    conn,
-		enc:     json.NewEncoder(conn),
-		dec:     json.NewDecoder(conn),
-		pending: make(map[string]chan *Envelope),
-		events:  make(chan *Envelope, 256),
-	}
-	go c.readLoop()
-	return c, nil
+	return newClient(conn), nil
 }
 
 // PeerUID returns the effective UID of the peer process. It reports false

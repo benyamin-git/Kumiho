@@ -8,7 +8,8 @@ import (
 	"sync"
 )
 
-// Server accepts control connections on a Unix socket.
+// Server accepts control connections from a transport listener: a Unix
+// socket on Linux, a named pipe on Windows.
 type Server struct {
 	path      string
 	ln        net.Listener
@@ -45,7 +46,8 @@ func (s *Server) Serve(ctx context.Context, handler func(context.Context, *Conn)
 	}
 }
 
-// Close stops the listener and removes the socket file (best effort).
+// Close stops the listener and removes the socket file it created, if any
+// (best effort; a named pipe disappears with its listener).
 func (s *Server) Close() error {
 	err := s.ln.Close()
 	_ = os.Remove(s.path)

@@ -30,6 +30,20 @@ type Client struct {
 	closeOnce sync.Once
 }
 
+// newClient wraps an established transport connection in a control client
+// and starts its read loop.
+func newClient(conn net.Conn) *Client {
+	c := &Client{
+		conn:    conn,
+		enc:     json.NewEncoder(conn),
+		dec:     json.NewDecoder(conn),
+		pending: make(map[string]chan *Envelope),
+		events:  make(chan *Envelope, 256),
+	}
+	go c.readLoop()
+	return c
+}
+
 // Close terminates the connection.
 func (c *Client) Close() error {
 	err := c.conn.Close()
