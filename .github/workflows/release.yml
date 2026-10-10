@@ -34,16 +34,15 @@ jobs:
         run: |
           package_linux() {
             arch="$1"
-            binary="$2"
             staging="$(mktemp -d)"
-            mkdir -p "$staging/systemd"
-            cp "dist/kumiho-linux-${arch}" "$staging/$binary"
+            mkdir -p "$staging/dist" "$staging/systemd"
+            cp "dist/kumiho-linux-${arch}" "$staging/dist/kumiho-linux-${arch}"
             cp install.sh LICENSE NOTICE "$staging/"
             cp systemd/kumiho.service systemd/50-kumiho-resolved.rules "$staging/systemd/"
-            (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-linux-${arch}.zip" "$binary" install.sh LICENSE NOTICE systemd/kumiho.service systemd/50-kumiho-resolved.rules)
+            (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-linux-${arch}.zip" "dist/kumiho-linux-${arch}" install.sh LICENSE NOTICE systemd/kumiho.service systemd/50-kumiho-resolved.rules)
           }
-          package_linux amd64 kumiho
-          package_linux arm64 kumiho-linux-arm64
+          package_linux amd64
+          package_linux arm64
 
           staging="$(mktemp -d)"
           mkdir -p "$staging/third_party/wintun"
