@@ -13,8 +13,8 @@ import (
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
-// Provider implements platform.Provider with the Windows mechanisms. Link
-// monitoring still carries interim behavior until T12 lands.
+// Provider implements platform.Provider with the Windows mechanisms.
+// Interface configuration lives in netcfg.go, link monitoring in netmon.go.
 type Provider struct{}
 
 // New returns the Windows provider.
@@ -47,14 +47,6 @@ func (p *Provider) OpenDevice(_ context.Context, spec platform.DeviceSpec) (plat
 
 // NetConfig returns the real route/DNS network configuration.
 func (p *Provider) NetConfig() platform.NetConfig { return &netConfig{} }
-
-// WatchLinks returns a channel that never fires (replaced in T12).
-func (p *Provider) WatchLinks(context.Context) (<-chan struct{}, error) {
-	return make(chan struct{}), nil
-}
-
-// HasDefaultRoute always reports the network as up (replaced in T12).
-func (p *Provider) HasDefaultRoute() bool { return true }
 
 // BypassDialer returns a plain dialer: Windows has no SO_MARK equivalent.
 func (p *Provider) BypassDialer() *net.Dialer { return &net.Dialer{} }

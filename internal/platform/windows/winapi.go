@@ -19,6 +19,7 @@ var (
 	iphlpapi = windows.NewLazySystemDLL("iphlpapi.dll")
 
 	procConvertInterfaceAliasToLuid = iphlpapi.NewProc("ConvertInterfaceAliasToLuid")
+	procConvertInterfaceGuidToLuid  = iphlpapi.NewProc("ConvertInterfaceGuidToLuid")
 	procCreateUnicastIPAddressEntry = iphlpapi.NewProc("CreateUnicastIpAddressEntry")
 	procDeleteUnicastIPAddressEntry = iphlpapi.NewProc("DeleteUnicastIpAddressEntry")
 	procInitializeIPInterfaceEntry  = iphlpapi.NewProc("InitializeIpInterfaceEntry")
@@ -38,6 +39,19 @@ func convertInterfaceAliasToLUID(alias string) (uint64, error) {
 	var luid uint64
 	r, _, _ := procConvertInterfaceAliasToLuid.Call(
 		uintptr(unsafe.Pointer(alias16)), uintptr(unsafe.Pointer(&luid)))
+	if r != 0 {
+		return 0, windows.Errno(r)
+	}
+	return luid, nil
+}
+
+// convertInterfaceGUIDToLUID maps a network-interface GUID to its interface
+// LUID, the identity route table rows carry. It fails when no adapter with
+// that GUID exists.
+func convertInterfaceGUIDToLUID(guid windows.GUID) (uint64, error) {
+	var luid uint64
+	r, _, _ := procConvertInterfaceGuidToLuid.Call(
+		uintptr(unsafe.Pointer(&guid)), uintptr(unsafe.Pointer(&luid)))
 	if r != 0 {
 		return 0, windows.Errno(r)
 	}
@@ -165,8 +179,8 @@ func setInterfaceDNSSettings(guid windows.GUID, settings *dnsInterfaceSettings) 
 }
 
 // notifyIPInterfaceChange registers for interface-change notifications and
-// returns the handle used to cancel the registration. Callers are expected in
-// T12 (link monitoring).
+// returns the handle used to cancel the registration. netmon.go is the caller
+// (link monitoring).
 func notifyIPInterfaceChange(family uint16, callback uintptr, callerContext unsafe.Pointer, initialNotification bool) (windows.Handle, error) {
 	var handle windows.Handle
 	if err := windows.NotifyIpInterfaceChange(family, callback, callerContext, initialNotification, &handle); err != nil {
