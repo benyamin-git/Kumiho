@@ -157,8 +157,8 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 	}
 
 	// The kill switch is (re)programmed last, once every bypass destination is
-	// known: turning it on clears any previous program and applies the new
-	// one, turning it off only clears.
+	// known: turning it on transactionally replaces any previous program,
+	// turning it off only clears.
 	if spec.KillSwitch {
 		if err := n.applyKillSwitch(spec, luid, lanPermitTargets); err != nil {
 			return fmt.Errorf("windows netcfg: %w", err)
@@ -322,9 +322,12 @@ func lanPermits(rows []windows.MibIpForwardRow2) []net.IPNet {
 
 // applyKillSwitch opens the dynamic WFP session on first use and installs the
 // permit filters plus the catch-all block. It is called on every Apply with
-// KillSwitch true, so it atomically replaces the previous program (clear then
-// apply): repeated applications are idempotent. A failure fails the connect —
-// a requested kill switch that cannot be enforced must not pass traffic.
+// KillSwitch true, so repeated applications are idempotent. There is
+// deliberately no pre-clear: wfpBlocker.apply replaces the program in one
+// transaction (new filters added, old keys deleted), so a failed apply leaves
+// any prior protective program intact instead of removing it first and then
+// failing to install its replacement. A failure fails the connect — a
+// requested kill switch that cannot be enforced must not pass traffic.
 func (n *netConfig) applyKillSwitch(spec platform.NetConfigSpec, luid uint64, lanTargets []net.IPNet) error {
 	appPath, err := os.Executable()
 	if err != nil {
@@ -340,9 +343,6 @@ func (n *netConfig) applyKillSwitch(spec platform.NetConfigSpec, luid uint64, la
 			return fmt.Errorf("kill switch: %w", err)
 		}
 		n.wfp = blocker
-	}
-	if err := n.wfp.clear(); err != nil {
-		return fmt.Errorf("kill switch: clear: %w", err)
 	}
 	if err := n.wfp.apply(permits, true); err != nil {
 		return fmt.Errorf("kill switch: apply: %w", err)

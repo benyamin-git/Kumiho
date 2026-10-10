@@ -547,8 +547,10 @@ func TestApply(t *testing.T) {
 		t.Fatalf("DNS set = %+v, want fixed GUID + [10.8.0.2]", set)
 	}
 
-	if wfp.clears == 0 || wfp.applies != 1 || !wfp.blockAll {
-		t.Fatalf("kill switch calls = %d clears / %d applies (blockAll %v), want >=1 / 1 / true",
+	// Toggle-on must not pre-clear: apply replaces the program in one
+	// transaction, so a failed apply leaves any prior program intact.
+	if wfp.clears != 0 || wfp.applies != 1 || !wfp.blockAll {
+		t.Fatalf("kill switch calls = %d clears / %d applies (blockAll %v), want 0 / 1 / true",
 			wfp.clears, wfp.applies, wfp.blockAll)
 	}
 	wantKinds := []wfpPermitKind{permitLoopback, permitApp, permitInterface, permitDHCP, permitDNS, permitDestinations}
@@ -634,6 +636,9 @@ func TestApplyKillSwitchFailureFailsConnect(t *testing.T) {
 	err := nc.Apply(context.Background(), spec)
 	if err == nil || !strings.Contains(err.Error(), "kill switch: apply") {
 		t.Fatalf("Apply with a failing kill switch = %v, want a kill-switch apply error", err)
+	}
+	if wfp.clears != 0 {
+		t.Fatalf("failed apply pre-cleared %d times, want 0 so any prior program survives", wfp.clears)
 	}
 }
 
