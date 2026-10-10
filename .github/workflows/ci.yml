@@ -72,4 +72,4 @@ jobs:
         run: ./dist/kumiho-windows-amd64.exe version
 
       - name: Parse install.ps1
-        run: pwsh -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('install.ps1',[ref]`$null,[ref]`$null)"
+        run: pwsh -NoProfile -Command '$t=$null; $e=$null; $null = [System.Management.Automation.Language.Parser]::ParseFile(''install.ps1'',[ref]$t,[ref]$e); if ($e) { $e | ForEach-Object { Write-Host $_ }; exit 1 }'
