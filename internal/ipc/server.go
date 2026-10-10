@@ -10,9 +10,10 @@ import (
 
 // Server accepts control connections on a Unix socket.
 type Server struct {
-	path    string
-	ln      net.Listener
-	peerUID func(net.Conn) (uint32, bool)
+	path      string
+	ln        net.Listener
+	peerUID   func(net.Conn) (uint32, bool)
+	peerAdmin func(net.Conn) bool
 }
 
 // Serve accepts connections until ctx is done or the listener closes. Each
@@ -37,7 +38,7 @@ func (s *Server) Serve(ctx context.Context, handler func(context.Context, *Conn)
 			return err
 		}
 		go func(nc net.Conn) {
-			conn := newConn(nc, s.peerUID)
+			conn := newConn(nc, s.peerUID, s.peerAdmin)
 			defer conn.Close()
 			_ = handler(ctx, conn)
 		}(nc)
@@ -58,23 +59,25 @@ func (s *Server) Path() string {
 
 // Conn is one server-side client connection.
 type Conn struct {
-	nc      net.Conn
-	enc     *json.Encoder
-	dec     *json.Decoder
-	peerUID func(net.Conn) (uint32, bool)
+	nc        net.Conn
+	enc       *json.Encoder
+	dec       *json.Decoder
+	peerUID   func(net.Conn) (uint32, bool)
+	peerAdmin func(net.Conn) bool
 
 	mu        sync.Mutex
 	done      chan struct{}
 	closeOnce sync.Once
 }
 
-func newConn(nc net.Conn, peerUID func(net.Conn) (uint32, bool)) *Conn {
+func newConn(nc net.Conn, peerUID func(net.Conn) (uint32, bool), peerAdmin func(net.Conn) bool) *Conn {
 	return &Conn{
-		nc:      nc,
-		enc:     json.NewEncoder(nc),
-		dec:     json.NewDecoder(nc),
-		peerUID: peerUID,
-		done:    make(chan struct{}),
+		nc:        nc,
+		enc:       json.NewEncoder(nc),
+		dec:       json.NewDecoder(nc),
+		peerUID:   peerUID,
+		peerAdmin: peerAdmin,
+		done:      make(chan struct{}),
 	}
 }
 
@@ -123,6 +126,16 @@ func (c *Conn) PeerUID() (uint32, bool) {
 		return 0, false
 	}
 	return c.peerUID(c.nc)
+}
+
+// IsAdmin reports whether the connecting process may perform administrative
+// requests such as shutdown. It reports false when the transport carries no
+// admin check.
+func (c *Conn) IsAdmin() bool {
+	if c.peerAdmin == nil {
+		return false
+	}
+	return c.peerAdmin(c.nc)
 }
 
 func (c *Conn) write(env *Envelope) error {

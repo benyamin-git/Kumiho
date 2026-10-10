@@ -32,3 +32,8 @@ func peerUID(nc net.Conn) (uint32, error) {
 	}
 	return cred.Uid, nil
 }
+
+func peerIsAdmin(nc net.Conn) bool {
+	uid, err := peerUID(nc)
+	return err == nil && uid == 0
+}

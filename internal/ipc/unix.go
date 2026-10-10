@@ -37,7 +37,7 @@ func (UnixTransport) Listen(endpoint string) (*Server, error) {
 		ln.Close()
 		return nil, err
 	}
-	return &Server{path: endpoint, ln: ln, peerUID: UnixTransport{}.PeerUID}, nil
+	return &Server{path: endpoint, ln: ln, peerUID: UnixTransport{}.PeerUID, peerAdmin: peerIsAdmin}, nil
 }
 
 // Dial connects to the daemon control socket.

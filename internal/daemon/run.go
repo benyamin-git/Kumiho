@@ -52,7 +52,7 @@ func Run(ctx context.Context) error {
 	}
 
 	endpoint := plat.ControlEndpoint()
-	srv, err := (ipc.UnixTransport{}).Listen(endpoint)
+	srv, err := ipc.DefaultTransport().Listen(endpoint)
 	if err != nil {
 		return err
 	}
@@ -335,9 +335,8 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		_ = conn.Reply(env.ID, ipc.TypeAccountInfo, h.ctrl.Account(actx))
 
 	case ipc.TypeShutdown:
-		uid, ok := conn.PeerUID()
-		if !ok || uid != 0 {
-			replyErr(api.CodeForbidden, "only root may shut down the daemon")
+		if !conn.IsAdmin() {
+			replyErr(api.CodeForbidden, ipc.ShutdownForbiddenMessage())
 			return
 		}
 		_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true, Note: "shutting down"})
