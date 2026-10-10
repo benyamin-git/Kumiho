@@ -38,7 +38,8 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   redaction, exit check, DoH provider, custom DNS, pinned edge, upstream
   proxy, excluded CIDRs, allow-LAN, MTU, SOCKS port, quota poll. `d` resets a
   row to the config default; `*` marks values changed from `config.toml`.
-  Changes are persisted as overrides in `/var/lib/kumiho/state.json`.
+  Changes are persisted as overrides in `/var/lib/kumiho/state.json`
+  (`%ProgramData%\kumiho\state.json` on Windows).
   `kill_switch`, `log_level` and `redact_targets` apply immediately;
   connection-scoped settings (DNS, MTU, CIDRs, …) apply on the next connect.
 - **Logs** — the daemon's in-memory ring plus live streaming; `v` cycles the
