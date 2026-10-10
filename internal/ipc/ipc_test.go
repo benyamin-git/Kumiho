@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -133,7 +134,70 @@ func TestClientServerExchange(t *testing.T) {
 
 func TestListenRefusesLiveDaemon(t *testing.T) {
 	_, path := testServer(t, func(ctx context.Context, c *Conn) error { return nil })
-	if _, err := (UnixTransport{}).Listen(path); err == nil {
+	_, err := (UnixTransport{}).Listen(path)
+	if err == nil {
 		t.Fatal("expected error when a live daemon owns the socket")
+	}
+	if want := path + ": another kumiho daemon is already listening"; err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+// A nil peer-credential hook must report no credentials rather than guess.
+func TestServerNilPeerUID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.sock")
+	srv, err := UnixTransport{}.Listen(path)
+	if err != nil {
+		if runtime.GOOS != "linux" {
+			t.Skipf("unix sockets unavailable on this platform: %v", err)
+		}
+		t.Fatalf("Listen: %v", err)
+	}
+	srv.peerUID = nil // set before Serve starts, so there is no concurrent read
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		srv.Close()
+	})
+
+	type creds struct {
+		uid uint32
+		ok  bool
+	}
+	reported := make(chan creds, 1)
+	go srv.Serve(ctx, func(ctx context.Context, c *Conn) error {
+		uid, ok := c.PeerUID()
+		reported <- creds{uid, ok}
+		return nil
+	})
+
+	cl, err := (UnixTransport{}).Dial(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+
+	select {
+	case got := <-reported:
+		if got.uid != 0 || got.ok {
+			t.Fatalf("PeerUID() = (%d, %v), want (0, false)", got.uid, got.ok)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("server never reported peer credentials")
+	}
+}
+
+// Server.Close must remove the socket file it created.
+func TestServerCloseRemovesSocket(t *testing.T) {
+	srv, path := testServer(t, func(context.Context, *Conn) error { return nil })
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("socket missing before Close: %v", err)
+	}
+	if err := srv.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("socket still present after Close: stat err = %v", err)
 	}
 }
