@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          LDFLAGS="-s -w -X github.com/benyamin-git/kumiho/internal/version.Version=${GITHUB_REF_NAME}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-linux-amd64 ./cmd/kumiho
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-linux-arm64 ./cmd/kumiho
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-windows-amd64.exe ./cmd/kumiho
+
+      - name: Package zips and checksums
+        run: |
+          staging="$(mktemp -d)"
+          mkdir -p "$staging/linux" "$staging/windows/third_party/wintun"
+          cp dist/kumiho-linux-amd64 "$staging/linux/kumiho"
+          cp install.sh LICENSE NOTICE "$staging/linux/"
+          cp dist/kumiho-windows-amd64.exe "$staging/windows/kumiho.exe"
+          cp third_party/wintun/amd64/wintun.dll "$staging/windows/wintun.dll"
+          cp install.ps1 LICENSE NOTICE "$staging/windows/"
+          cp third_party/wintun/LICENSE.txt "$staging/windows/third_party/wintun/LICENSE.txt"
+          (cd "$staging/linux" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" kumiho install.sh LICENSE NOTICE)
+          (cd "$staging/windows" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe wintun.dll install.ps1 LICENSE NOTICE third_party/wintun/LICENSE.txt)
+          sha256sum "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Kumiho $GITHUB_REF_NAME" \
+            --generate-notes \
+            "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" \
+            "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" \
+            SHA256SUMS
