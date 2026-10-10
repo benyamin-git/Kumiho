@@ -1,0 +1,4 @@
+# Wintun 0.14.1. The upstream wintun-0.14.1.zip archive (wintun.net) has
+# SHA-256 07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51;
+# amd64/wintun.dll is the extracted, committed artifact.
+e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce  amd64/wintun.dll

@@ -137,6 +137,9 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.15.0
 ## explicit; go 1.25.0
 golang.org/x/time/rate
+# golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
+## explicit; go 1.17
+golang.zx2c4.com/wintun
 # gvisor.dev/gvisor v0.0.0-20260701204157-69c2d17aea96
 ## explicit; go 1.26.3
 gvisor.dev/gvisor/pkg/atomicbitops

@@ -37,9 +37,13 @@ func (p *Provider) DNSListenAddr() string {
 	return net.JoinHostPort(netcfg.DefaultTunAddr, "53")
 }
 
-// OpenDevice returns the interim not-implemented error (replaced in T9).
-func (p *Provider) OpenDevice(context.Context, platform.DeviceSpec) (platform.Device, error) {
-	return nil, errors.New("windows: not implemented yet")
+// OpenDevice creates the Wintun adapter. FD adoption is not a Windows
+// capability; the engine always passes -1 (Linux parity).
+func (p *Provider) OpenDevice(_ context.Context, spec platform.DeviceSpec) (platform.Device, error) {
+	if spec.FD >= 0 {
+		return nil, errors.New("windows: cannot adopt an existing fd")
+	}
+	return openDevice(spec.Name, spec.MTU)
 }
 
 // NetConfig returns the interim not-implemented network configuration
