@@ -18,7 +18,7 @@ func dialDaemon(stderr io.Writer) (*ipc.Client, int) {
 	client, err := ipc.DefaultTransport().Dial(ctx, endpoint)
 	if err != nil {
 		fmt.Fprintf(stderr, "kumiho: cannot reach the daemon at %s\n", endpoint)
-		fmt.Fprintln(stderr, "start it with: sudo systemctl start kumiho  (or run: kumiho daemon)")
+		fmt.Fprintln(stderr, daemonStartHint())
 		return nil, 1
 	}
 	return client, 0

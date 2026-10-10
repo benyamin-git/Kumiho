@@ -65,6 +65,6 @@ func runCleanup(args []string, stdout, stderr io.Writer) int {
 	if stale, ok := nc.(staleCleaner); ok {
 		stale.CleanupStale(context.Background())
 	}
-	fmt.Fprintln(stdout, "Stale kumiho routing, nftables and DNS state were removed (best effort).")
+	fmt.Fprintln(stdout, cleanupSuccessMessage())
 	return 0
 }
