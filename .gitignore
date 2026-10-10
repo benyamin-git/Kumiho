@@ -6,3 +6,4 @@ doctor.json
 # Local tooling
 .tools/
 .ai-state
+.superpowers/
