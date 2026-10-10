@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -46,3 +46,27 @@ jobs:
           ./dist/kumiho-linux-amd64 doctor --json > doctor.json || true
           jq -e '.checks | length > 0' doctor.json > /dev/null
           jq -r '.checks[] | "\(.status)\t\(.name)\t\(.detail)"' doctor.json
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build (windows/amd64)
+        run: go build -o dist/kumiho-windows-amd64.exe ./cmd/kumiho
+
+      - name: Version smoke test
+        run: ./dist/kumiho-windows-amd64.exe version
