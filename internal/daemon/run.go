@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"runtime"
 	"strconv"
 	"sync"
@@ -36,10 +35,16 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		level = logging.Info
 	}
+	sink, closeSink, err := openLogSink(plat)
+	if err != nil {
+		return err
+	}
+	defer closeSink()
+
 	ring := logging.NewRing(logging.Options{
 		Capacity: 2000,
 		Sanitize: logging.Sanitizer(cfg.RedactTargets),
-		Sink:     os.Stderr,
+		Sink:     sink,
 		MinLevel: level,
 	})
 	defer ring.Close()
