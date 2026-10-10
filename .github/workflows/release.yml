@@ -32,17 +32,28 @@ jobs:
 
       - name: Package zips and checksums
         run: |
+          package_linux() {
+            arch="$1"
+            binary="$2"
+            staging="$(mktemp -d)"
+            mkdir -p "$staging/systemd"
+            cp "dist/kumiho-linux-${arch}" "$staging/$binary"
+            cp install.sh LICENSE NOTICE "$staging/"
+            cp systemd/kumiho.service systemd/50-kumiho-resolved.rules "$staging/systemd/"
+            (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-linux-${arch}.zip" "$binary" install.sh LICENSE NOTICE systemd/kumiho.service systemd/50-kumiho-resolved.rules)
+          }
+          package_linux amd64 kumiho
+          package_linux arm64 kumiho-linux-arm64
+
           staging="$(mktemp -d)"
-          mkdir -p "$staging/linux" "$staging/windows/third_party/wintun"
-          cp dist/kumiho-linux-amd64 "$staging/linux/kumiho"
-          cp install.sh LICENSE NOTICE "$staging/linux/"
-          cp dist/kumiho-windows-amd64.exe "$staging/windows/kumiho.exe"
-          cp third_party/wintun/amd64/wintun.dll "$staging/windows/wintun.dll"
-          cp install.ps1 LICENSE NOTICE "$staging/windows/"
-          cp third_party/wintun/LICENSE.txt "$staging/windows/third_party/wintun/LICENSE.txt"
-          (cd "$staging/linux" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" kumiho install.sh LICENSE NOTICE)
-          (cd "$staging/windows" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe wintun.dll install.ps1 LICENSE NOTICE third_party/wintun/LICENSE.txt)
-          sha256sum "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" > SHA256SUMS
+          mkdir -p "$staging/third_party/wintun"
+          cp dist/kumiho-windows-amd64.exe "$staging/kumiho.exe"
+          cp third_party/wintun/amd64/wintun.dll "$staging/wintun.dll"
+          cp install.ps1 LICENSE NOTICE "$staging/"
+          cp third_party/wintun/LICENSE.txt "$staging/third_party/wintun/LICENSE.txt"
+          (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe wintun.dll install.ps1 LICENSE NOTICE third_party/wintun/LICENSE.txt)
+
+          sha256sum "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Create release
@@ -53,5 +64,6 @@ jobs:
             --title "Kumiho $GITHUB_REF_NAME" \
             --generate-notes \
             "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" \
+            "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" \
             "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" \
             SHA256SUMS
