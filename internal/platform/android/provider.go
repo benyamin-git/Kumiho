@@ -20,7 +20,10 @@ func New() *unsupported.Provider {
 // the temp dir; the Android cycle replaces them with app-private dirs.
 // KUMIHO_* overrides apply.
 func androidPaths() settings.Paths {
-	configDir, _ := os.UserConfigDir()
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		configDir = os.TempDir()
+	}
 	return settings.ApplyEnvOverrides(settings.Paths{
 		Config:  filepath.Join(configDir, "kumiho", "config.toml"),
 		State:   filepath.Join(configDir, "kumiho", "state.json"),

@@ -31,7 +31,10 @@ func New(name string, paths settings.Paths) *Provider {
 // config under the user config dir, state/tokens under the cache dir and the
 // runtime dir in the system temp dir. KUMIHO_* overrides apply.
 func DefaultPaths() settings.Paths {
-	configDir, _ := os.UserConfigDir()
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		configDir = os.TempDir()
+	}
 	cacheDir, _ := os.UserCacheDir()
 	return settings.ApplyEnvOverrides(settings.Paths{
 		Config:  filepath.Join(configDir, "kumiho", "config.toml"),
