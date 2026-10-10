@@ -4,8 +4,8 @@
 // a live Firefox account and run manually:
 //
 //	KUMIHO_TEST_EMAIL=you@example.com KUMIHO_TEST_PASSWORD=... \
-//	  go test -tags integration -run Integration -v ./internal/daemon
-package daemon
+//	  go test -tags integration -run Integration -v ./internal/engine
+package engine
 
 import (
 	"context"

@@ -1,6 +1,6 @@
-// Package daemon implements the kumiho background service: session state
-// machine, token persistence, and the IPC control surface (PLAN.md §4-5).
-package daemon
+// Package engine implements the embeddable kumiho core: the session state
+// machine, token persistence, and connection control (PLAN.md §4-5).
+package engine
 
 import (
 	"context"

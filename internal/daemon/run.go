@@ -1,3 +1,5 @@
+// Package daemon is the kumiho process host: it starts the engine, serves
+// the IPC control socket, and owns process lifecycle (startup and teardown).
 package daemon
 
 import (
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
+	"github.com/benyamin-git/kumiho/internal/engine"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
@@ -41,7 +44,7 @@ func Run(ctx context.Context, paths settings.Paths) error {
 
 	ring.Logf(logging.Info, "daemon", "kumiho %s starting", version.String())
 
-	ctrl := New(store, ring, fxa.NewClient())
+	ctrl := engine.New(store, ring, fxa.NewClient())
 	if err := ctrl.Start(ctx); err != nil {
 		return fmt.Errorf("start session: %w", err)
 	}
@@ -100,7 +103,7 @@ func Run(ctx context.Context, paths settings.Paths) error {
 }
 
 type control struct {
-	ctrl     *Controller
+	ctrl     *engine.Controller
 	ring     *logging.Ring
 	shutdown func()
 

@@ -1,6 +1,6 @@
 //go:build !linux
 
-package daemon
+package engine
 
 // The daemon only runs on Linux; the stubs keep the package (and its tests)
 // building elsewhere. No events are ever delivered and the network is always
