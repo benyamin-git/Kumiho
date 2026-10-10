@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 )
 
@@ -66,7 +67,7 @@ var settingItems = []settingItem{
 // settingsState is the Settings screen state (PLAN.md §6).
 type settingsState struct {
 	loaded  bool
-	view    ipc.SettingsView
+	view    api.SettingsView
 	pinned  map[string]bool
 	cursor  int
 	editing bool
@@ -76,7 +77,7 @@ type settingsState struct {
 }
 
 type settingsMsg struct {
-	view ipc.SettingsView
+	view api.SettingsView
 	err  error
 }
 
@@ -94,7 +95,7 @@ func fetchSettings(c *ipc.Client) tea.Cmd {
 		if err != nil {
 			return settingsMsg{err: err}
 		}
-		var view ipc.SettingsView
+		var view api.SettingsView
 		if err := env.DecodePayload(&view); err != nil {
 			return settingsMsg{err: err}
 		}
@@ -106,7 +107,7 @@ func applySetting(c *ipc.Client, key, value string, reset bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, err := c.Call(ctx, ipc.TypeSettingsSet, ipc.SettingsSetPayload{Key: key, Value: value, Reset: reset})
+		_, err := c.Call(ctx, ipc.TypeSettingsSet, api.SettingsSetPayload{Key: key, Value: value, Reset: reset})
 		return settingDoneMsg{key: key, reset: reset, err: err}
 	}
 }

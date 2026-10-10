@@ -9,6 +9,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
@@ -37,12 +38,12 @@ func runLocations(args []string, stdout, stderr io.Writer) int {
 
 	ctx, cancel := callCtx()
 	defer cancel()
-	env, err := client.Call(ctx, ipc.TypeLocations, ipc.LocationsPayload{Refresh: *refresh})
+	env, err := client.Call(ctx, ipc.TypeLocations, api.LocationsPayload{Refresh: *refresh})
 	if err != nil {
 		fmt.Fprintf(stderr, "kumiho locations: %v\n", err)
 		return 1
 	}
-	var res ipc.LocationsResult
+	var res api.LocationsResult
 	if err := env.DecodePayload(&res); err != nil {
 		fmt.Fprintf(stderr, "kumiho locations: %v\n", err)
 		return 1
@@ -99,7 +100,7 @@ func pingLocations(ctx context.Context, client *ipc.Client, countries []serverli
 		hosts = append(hosts, t.addr)
 	}
 
-	if _, err := client.Call(ctx, ipc.TypePing, ipc.PingPayload{Hosts: hosts}); err != nil {
+	if _, err := client.Call(ctx, ipc.TypePing, api.PingPayload{Hosts: hosts}); err != nil {
 		fmt.Fprintf(stderr, "kumiho locations: ping: %v\n", err)
 		return 1
 	}
@@ -118,7 +119,7 @@ collect:
 			if env.Type != ipc.TypePingResult {
 				continue
 			}
-			var pr ipc.PingResult
+			var pr api.PingResult
 			if err := env.DecodePayload(&pr); err == nil {
 				rtts[pr.Host] = pr.RTTMS
 			}

@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 )
@@ -41,12 +42,12 @@ func runLogs(args []string, stdout, stderr io.Writer) int {
 
 	ctx, cancel := callCtx()
 	defer cancel()
-	env, err := client.Call(ctx, ipc.TypeLogsSnapshot, ipc.LogsSnapshotPayload{Level: *level})
+	env, err := client.Call(ctx, ipc.TypeLogsSnapshot, api.LogsSnapshotPayload{Level: *level})
 	if err != nil {
 		fmt.Fprintf(stderr, "kumiho logs: %v\n", err)
 		return 1
 	}
-	var snap ipc.LogSnapshot
+	var snap api.LogSnapshot
 	if err := env.DecodePayload(&snap); err != nil {
 		fmt.Fprintf(stderr, "kumiho logs: %v\n", err)
 		return 1
@@ -59,7 +60,7 @@ func runLogs(args []string, stdout, stderr io.Writer) int {
 	}
 
 	subCtx, cancelSub := context.WithTimeout(context.Background(), 10*time.Second)
-	_, err = client.Call(subCtx, ipc.TypeLogsSubscribe, ipc.LogsSubscribePayload{Level: *level})
+	_, err = client.Call(subCtx, ipc.TypeLogsSubscribe, api.LogsSubscribePayload{Level: *level})
 	cancelSub()
 	if err != nil {
 		fmt.Fprintf(stderr, "kumiho logs: %v\n", err)

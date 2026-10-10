@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/benyamin-git/kumiho/internal/ipc"
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
@@ -30,7 +30,7 @@ func TestShutdownTearsDownTunnel(t *testing.T) {
 	ctrl.exitCheckURL = ""
 	ctrl.socksPortOverride = freePort(t)
 
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true}); err != nil {
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); err != nil {
 		t.Fatal(err)
 	}
 	if st := ctrl.Snapshot(); st.State != string(StateProxyOnly) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"golang.org/x/term"
 )
@@ -46,7 +47,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	ls := loginCall(ctx, client, ipc.TypeLoginEmail, ipc.LoginEmailPayload{Email: email}, stderr)
+	ls := loginCall(ctx, client, ipc.TypeLoginEmail, api.LoginEmailPayload{Email: email}, stderr)
 	if ls == nil {
 		return 1
 	}
@@ -62,7 +63,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "kumiho login: %v\n", err)
 				return 1
 			}
-			ls = loginCall(ctx, client, ipc.TypeLoginPassword, ipc.LoginPasswordPayload{Password: password}, stderr)
+			ls = loginCall(ctx, client, ipc.TypeLoginPassword, api.LoginPasswordPayload{Password: password}, stderr)
 
 		case "2fa":
 			if ls.VerificationMethod == "email" {
@@ -76,7 +77,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "kumiho login: %v\n", err)
 				return 1
 			}
-			ls = loginCall(ctx, client, ipc.TypeLogin2FA, ipc.Login2FAPayload{Code: line}, stderr)
+			ls = loginCall(ctx, client, ipc.TypeLogin2FA, api.Login2FAPayload{Code: line}, stderr)
 
 		case "email":
 			tty.SetPrompt("Email: ")
@@ -85,7 +86,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "kumiho login: %v\n", err)
 				return 1
 			}
-			ls = loginCall(ctx, client, ipc.TypeLoginEmail, ipc.LoginEmailPayload{Email: addr}, stderr)
+			ls = loginCall(ctx, client, ipc.TypeLoginEmail, api.LoginEmailPayload{Email: addr}, stderr)
 
 		case "done":
 			fmt.Fprintf(stdout, "Signed in as %s.\n", ls.Email)
@@ -103,13 +104,13 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	return 1
 }
 
-func loginCall(ctx context.Context, client *ipc.Client, typ string, payload any, stderr io.Writer) *ipc.LoginState {
+func loginCall(ctx context.Context, client *ipc.Client, typ string, payload any, stderr io.Writer) *api.LoginState {
 	env, err := client.Call(ctx, typ, payload)
 	if err != nil {
 		fmt.Fprintf(stderr, "kumiho login: %v\n", err)
 		return nil
 	}
-	var ls ipc.LoginState
+	var ls api.LoginState
 	if err := env.DecodePayload(&ls); err != nil {
 		fmt.Fprintf(stderr, "kumiho login: %v\n", err)
 		return nil

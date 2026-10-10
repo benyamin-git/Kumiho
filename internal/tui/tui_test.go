@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/benyamin-git/kumiho/internal/ipc"
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
@@ -18,7 +18,7 @@ func TestDashboardShowsState(t *testing.T) {
 	m := &Model{
 		screen:   screenDashboard,
 		haveStat: true,
-		status: ipc.Status{
+		status: api.Status{
 			State:         "IDLE",
 			Authenticated: true,
 			Email:         "user@example.com",
@@ -47,7 +47,7 @@ func TestLoginPasswordIsMasked(t *testing.T) {
 
 func TestLoginDoneSwitchesToDashboard(t *testing.T) {
 	m := &Model{screen: screenLogin, step: "2fa"}
-	_, cmd := m.handleLoginState(loginStateMsg{state: ipc.LoginState{Step: "done", Email: "user@example.com"}})
+	_, cmd := m.handleLoginState(loginStateMsg{state: api.LoginState{Step: "done", Email: "user@example.com"}})
 	if m.screen != screenDashboard {
 		t.Fatalf("screen = %v, want dashboard", m.screen)
 	}
@@ -101,7 +101,7 @@ func testSettingsModel() *Model {
 		screen: screenDashboard,
 		st: settingsState{
 			loaded: true,
-			view: ipc.SettingsView{
+			view: api.SettingsView{
 				SocksPort: 1080, MTU: 8500, ExitCheck: true, DoHProvider: "automatic",
 				LogLevel: "info", RedactTargets: true, KillSwitch: "last", Autoconnect: "last",
 				KillSwitchEffective: true, AutoconnectEffective: true,
@@ -244,7 +244,7 @@ func TestAccountView(t *testing.T) {
 		screen: screenAccount,
 		ac: accountState{
 			loaded: true,
-			info: ipc.AccountInfo{
+			info: api.AccountInfo{
 				Email: "user@example.com", UID: "uid-1", Subscribed: true,
 				MaxBytes: &quota, TokenExpires: 1790000000,
 			},
@@ -259,7 +259,7 @@ func TestAccountView(t *testing.T) {
 }
 
 func TestAccountLogoutConfirm(t *testing.T) {
-	m := &Model{screen: screenAccount, ac: accountState{loaded: true, info: ipc.AccountInfo{Email: "x@y"}}}
+	m := &Model{screen: screenAccount, ac: accountState{loaded: true, info: api.AccountInfo{Email: "x@y"}}}
 	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	if !m.ac.confirmLogout {
 		t.Fatal("x should ask for confirmation")
@@ -280,7 +280,7 @@ func TestDashboardOpensNewScreens(t *testing.T) {
 		{'g', screenLogs},
 	}
 	for _, tc := range cases {
-		m := &Model{screen: screenDashboard, status: ipc.Status{Authenticated: true}}
+		m := &Model{screen: screenDashboard, status: api.Status{Authenticated: true}}
 		_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.key}})
 		if m.screen != tc.screen {
 			t.Errorf("%q: screen = %v, want %v", tc.key, m.screen, tc.screen)
@@ -334,10 +334,10 @@ func TestQuotaBar(t *testing.T) {
 
 func TestDashboardShowsUptimeAndQuotaReset(t *testing.T) {
 	limit, remaining, reset := int64(100<<30), int64(50<<30), int64(1794000000)
-	m := &Model{screen: screenDashboard, haveStat: true, status: ipc.Status{
+	m := &Model{screen: screenDashboard, haveStat: true, status: api.Status{
 		State: "CONNECTED", Authenticated: true,
 		Since: time.Now().Add(-90 * time.Second).Unix(),
-		Quota: &ipc.Quota{Limit: &limit, Remaining: &remaining, Reset: &reset},
+		Quota: &api.Quota{Limit: &limit, Remaining: &remaining, Reset: &reset},
 	}}
 	view := m.View()
 	for _, want := range []string{"uptime:", "quota reset:", "["} {

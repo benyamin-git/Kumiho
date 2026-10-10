@@ -8,10 +8,12 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/benyamin-git/kumiho/internal/api"
 )
 
 func TestEnvelopeRoundTrip(t *testing.T) {
-	env, err := NewEnvelope("42", TypeSettingsSet, SettingsSetPayload{Key: "kill_switch", Value: "off"})
+	env, err := NewEnvelope("42", TypeSettingsSet, api.SettingsSetPayload{Key: "kill_switch", Value: "off"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +28,7 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	var p SettingsSetPayload
+	var p api.SettingsSetPayload
 	if err := got.DecodePayload(&p); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +36,7 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 		t.Fatalf("payload = %+v", p)
 	}
 
-	var empty SettingsSetPayload
+	var empty api.SettingsSetPayload
 	if err := (&Envelope{Type: "x"}).DecodePayload(&empty); err != nil {
 		t.Fatal(err)
 	}
@@ -72,10 +74,10 @@ func TestClientServerExchange(t *testing.T) {
 			}
 			switch env.Type {
 			case "ping":
-				_ = c.Reply(env.ID, "pong", Result{OK: true, Note: "hi"})
-				_ = c.Event(TypeStatus, Status{State: "IDLE", Authenticated: true})
+				_ = c.Reply(env.ID, "pong", api.Result{OK: true, Note: "hi"})
+				_ = c.Event(TypeStatus, api.Status{State: "IDLE", Authenticated: true})
 			case "boom":
-				_ = c.Reply(env.ID, TypeError, ErrorPayload{Code: CodeBadRequest, Message: "nope"})
+				_ = c.Reply(env.ID, TypeError, api.RemoteError{Code: api.CodeBadRequest, Message: "nope"})
 			}
 		}
 	})
@@ -95,7 +97,7 @@ func TestClientServerExchange(t *testing.T) {
 	if resp.Type != "pong" {
 		t.Fatalf("response type = %q", resp.Type)
 	}
-	var r Result
+	var r api.Result
 	if err := resp.DecodePayload(&r); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +110,7 @@ func TestClientServerExchange(t *testing.T) {
 		if ev.Type != TypeStatus {
 			t.Fatalf("event type = %q", ev.Type)
 		}
-		var st Status
+		var st api.Status
 		if err := ev.DecodePayload(&st); err != nil {
 			t.Fatal(err)
 		}
@@ -120,11 +122,11 @@ func TestClientServerExchange(t *testing.T) {
 	}
 
 	_, err = cl.Call(ctx, "boom", nil)
-	var re *RemoteError
+	var re *api.RemoteError
 	if !errors.As(err, &re) {
 		t.Fatalf("error = %v, want *RemoteError", err)
 	}
-	if re.Code != CodeBadRequest || re.Message != "nope" {
+	if re.Code != api.CodeBadRequest || re.Message != "nope" {
 		t.Fatalf("remote error = %+v", re)
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
@@ -36,11 +37,11 @@ func fetchLocations(c *ipc.Client, refresh bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		env, err := c.Call(ctx, ipc.TypeLocations, ipc.LocationsPayload{Refresh: refresh})
+		env, err := c.Call(ctx, ipc.TypeLocations, api.LocationsPayload{Refresh: refresh})
 		if err != nil {
 			return locationsMsg{err: err}
 		}
-		var res ipc.LocationsResult
+		var res api.LocationsResult
 		if err := env.DecodePayload(&res); err != nil {
 			return locationsMsg{err: err}
 		}
@@ -55,7 +56,7 @@ func pingHosts(c *ipc.Client, hosts []string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, _ = c.Call(ctx, ipc.TypePing, ipc.PingPayload{Hosts: hosts})
+		_, _ = c.Call(ctx, ipc.TypePing, api.PingPayload{Hosts: hosts})
 		return nil
 	}
 }
@@ -64,7 +65,7 @@ func selectLocation(c *ipc.Client, countryCode, cityCode, server string) tea.Cmd
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, err := c.Call(ctx, ipc.TypeSelectLocation, ipc.SelectLocationPayload{
+		_, err := c.Call(ctx, ipc.TypeSelectLocation, api.SelectLocationPayload{
 			CountryCode: countryCode,
 			CityCode:    cityCode,
 			Server:      server,

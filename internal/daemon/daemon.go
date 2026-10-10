@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
-	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/netcfg"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -86,7 +86,7 @@ type Controller struct {
 	socksSrv     *socks.Server
 	resources    *tunnelResources
 	pass         *guardian.Pass
-	quota        *ipc.Quota
+	quota        *api.Quota
 	exitIP       string
 	exitCountry  string
 	totalsUp     int64
@@ -263,45 +263,45 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 }
 
 // LoginEmail starts the login state machine.
-func (c *Controller) LoginEmail(email string) ipc.LoginState {
+func (c *Controller) LoginEmail(email string) api.LoginState {
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return ipc.LoginState{Step: "email", Error: "email is required"}
+		return api.LoginState{Step: "email", Error: "email is required"}
 	}
 	c.mu.Lock()
 	if c.tokens != nil {
 		c.mu.Unlock()
-		return ipc.LoginState{Step: "done", Email: c.email, Error: "already signed in; log out first to switch accounts"}
+		return api.LoginState{Step: "done", Email: c.email, Error: "already signed in; log out first to switch accounts"}
 	}
 	c.pending = &pendingLogin{email: email}
 	c.mu.Unlock()
-	return ipc.LoginState{Step: "password", Email: email}
+	return api.LoginState{Step: "password", Email: email}
 }
 
 // LoginPassword performs the FxA login and either completes it or moves to
 // the 2FA step.
-func (c *Controller) LoginPassword(ctx context.Context, password string) ipc.LoginState {
+func (c *Controller) LoginPassword(ctx context.Context, password string) api.LoginState {
 	c.mu.Lock()
 	pending := c.pending
 	c.mu.Unlock()
 	if pending == nil || pending.email == "" {
-		return ipc.LoginState{Step: "email", Error: "enter your email first"}
+		return api.LoginState{Step: "email", Error: "enter your email first"}
 	}
 	if password == "" {
-		return ipc.LoginState{Step: "password", Email: pending.email, Error: "password is required"}
+		return api.LoginState{Step: "password", Email: pending.email, Error: "password is required"}
 	}
 
 	res, err := c.fxa.Login(ctx, pending.email, password)
 	if err != nil {
 		c.log.Logf(logging.Warn, "auth", "login failed for %s: %v", pending.email, err)
-		return ipc.LoginState{Step: "password", Email: pending.email, Error: friendlyLoginError(err)}
+		return api.LoginState{Step: "password", Email: pending.email, Error: friendlyLoginError(err)}
 	}
 	if !res.Verified {
 		c.mu.Lock()
 		c.pending.sessionToken = res.SessionToken
 		c.mu.Unlock()
 		c.log.Logf(logging.Info, "auth", "verification required (%s) for %s", res.VerificationMethod, pending.email)
-		return ipc.LoginState{
+		return api.LoginState{
 			Step:               "2fa",
 			Email:              pending.email,
 			VerificationMethod: res.VerificationMethod,
@@ -313,39 +313,39 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) ipc.Log
 
 // Login2FA verifies the emailed code, or with an empty code re-checks the
 // email-link flow via GET /session/status.
-func (c *Controller) Login2FA(ctx context.Context, code string) ipc.LoginState {
+func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
 	c.mu.Lock()
 	pending := c.pending
 	c.mu.Unlock()
 	if pending == nil || pending.sessionToken == "" {
-		return ipc.LoginState{Step: "email", Error: "sign-in was interrupted; start again"}
+		return api.LoginState{Step: "email", Error: "sign-in was interrupted; start again"}
 	}
 
 	if strings.TrimSpace(code) == "" {
 		state, err := c.fxa.SessionStatus(ctx, pending.sessionToken)
 		if err != nil {
-			return ipc.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
+			return api.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
 		}
 		if state != "verified" {
-			return ipc.LoginState{
+			return api.LoginState{
 				Step:  "2fa",
 				Email: pending.email,
 				Error: "email link not confirmed yet; click the link in the email, then press Enter",
 			}
 		}
 	} else if err := c.fxa.VerifyCode(ctx, pending.sessionToken, strings.TrimSpace(code)); err != nil {
-		return ipc.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
+		return api.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
 	}
 	return c.completeLogin(ctx, pending.email, pending.sessionToken)
 }
 
-func (c *Controller) completeLogin(ctx context.Context, email, sessionToken string) ipc.LoginState {
+func (c *Controller) completeLogin(ctx context.Context, email, sessionToken string) api.LoginState {
 	tokens, err := c.fxa.OAuthToken(ctx, sessionToken)
 	if err != nil {
-		return ipc.LoginState{Step: "2fa", Email: email, Error: "could not fetch OAuth tokens: " + friendlyLoginError(err)}
+		return api.LoginState{Step: "2fa", Email: email, Error: "could not fetch OAuth tokens: " + friendlyLoginError(err)}
 	}
 	if err := saveTokens(c.store.Paths().Tokens, tokens); err != nil {
-		return ipc.LoginState{Step: "done", Email: email, Error: "signed in, but persisting tokens failed: " + err.Error()}
+		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting tokens failed: " + err.Error()}
 	}
 
 	c.mu.Lock()
@@ -361,7 +361,7 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	}
 	c.log.Logf(logging.Info, "auth", "signed in as %s", email)
 	c.notify()
-	return ipc.LoginState{Step: "done", Email: email}
+	return api.LoginState{Step: "done", Email: email}
 }
 
 // Logout clears tokens and returns to UNAUTHENTICATED.
@@ -390,11 +390,11 @@ func (c *Controller) clearSession(reason string) {
 }
 
 // Snapshot returns the current status for TUI/CLI clients.
-func (c *Controller) Snapshot() ipc.Status {
+func (c *Controller) Snapshot() api.Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	persisted := c.store.State()
-	st := ipc.Status{
+	st := api.Status{
 		State:         string(c.state),
 		Authenticated: c.tokens != nil,
 		Email:         c.email,
@@ -420,12 +420,12 @@ func (c *Controller) Snapshot() ipc.Status {
 		if up == 0 && down == 0 {
 			up, down = c.totalsUp, c.totalsDown
 		}
-		st.Totals = &ipc.ByteCounters{Up: up, Down: down}
-		st.Rates = &ipc.ByteRates{Up: c.ratesUp, Down: c.ratesDown}
+		st.Totals = &api.ByteCounters{Up: up, Down: down}
+		st.Rates = &api.ByteRates{Up: c.ratesUp, Down: c.ratesDown}
 	} else if c.totalsUp > 0 || c.totalsDown > 0 {
 		// Keep the last session's totals visible after disconnect.
-		st.Totals = &ipc.ByteCounters{Up: c.totalsUp, Down: c.totalsDown}
-		st.Rates = &ipc.ByteRates{}
+		st.Totals = &api.ByteCounters{Up: c.totalsUp, Down: c.totalsDown}
+		st.Rates = &api.ByteRates{}
 	}
 	switch {
 	case c.resources != nil && !c.resources.proxyOnly:
@@ -440,9 +440,9 @@ func (c *Controller) Snapshot() ipc.Status {
 
 // Settings returns the runtime settings snapshot (effective values plus the
 // list of keys currently overridden from the admin config).
-func (c *Controller) Settings() ipc.SettingsView {
+func (c *Controller) Settings() api.SettingsView {
 	cfg := c.store.EffectiveConfig()
-	return ipc.SettingsView{
+	return api.SettingsView{
 		SocksPort:            cfg.SocksPort,
 		MTU:                  cfg.MTU,
 		ExitCheck:            cfg.ExitCheck,
@@ -465,14 +465,14 @@ func (c *Controller) Settings() ipc.SettingsView {
 
 // SetSetting changes one runtime setting (no override reset).
 func (c *Controller) SetSetting(key, value string) error {
-	return c.ApplySetting(ipc.SettingsSetPayload{Key: key, Value: value})
+	return c.ApplySetting(api.SettingsSetPayload{Key: key, Value: value})
 }
 
 // ApplySetting validates and persists one runtime setting change and pushes
 // it to its live consumers. Connection-scoped settings are picked up on the
 // next connect; log_level and redact_targets apply immediately. Reset drops
 // the override so the admin config applies again.
-func (c *Controller) ApplySetting(p ipc.SettingsSetPayload) error {
+func (c *Controller) ApplySetting(p api.SettingsSetPayload) error {
 	key := strings.TrimSpace(p.Key)
 	var err error
 	if p.Reset {
@@ -482,12 +482,12 @@ func (c *Controller) ApplySetting(p ipc.SettingsSetPayload) error {
 	}
 	switch {
 	case errors.Is(err, settings.ErrUnknownSetting):
-		return &ipc.RemoteError{
-			Code:    ipc.CodeUnsupportedSetting,
+		return &api.RemoteError{
+			Code:    api.CodeUnsupportedSetting,
 			Message: fmt.Sprintf("setting %q is not runtime-changeable yet", key),
 		}
 	case err != nil:
-		return &ipc.RemoteError{Code: ipc.CodeBadRequest, Message: err.Error()}
+		return &api.RemoteError{Code: api.CodeBadRequest, Message: err.Error()}
 	}
 
 	switch key {
@@ -513,10 +513,10 @@ func (c *Controller) applyLoggingSettings() {
 // Account returns the Account screen snapshot: local session facts plus a
 // best-effort Guardian entitlement lookup (PLAN.md §6). Failures of the
 // online lookup are reported in Error without hiding the local fields.
-func (c *Controller) Account(ctx context.Context) ipc.AccountInfo {
+func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 	tokens := c.currentTokens()
 	c.mu.Lock()
-	info := ipc.AccountInfo{Email: c.email}
+	info := api.AccountInfo{Email: c.email}
 	c.mu.Unlock()
 	if tokens == nil {
 		info.Error = "not signed in"

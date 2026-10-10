@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benyamin-git/kumiho/internal/ipc"
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
@@ -50,7 +50,7 @@ func loginProxyOnly(t *testing.T, ctrl *Controller) {
 	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
 		t.Fatalf("login = %+v", st)
 	}
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true}); err != nil {
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); err != nil {
 		t.Fatal(err)
 	}
 }

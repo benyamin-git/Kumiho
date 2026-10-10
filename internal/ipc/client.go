@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+
+	"github.com/benyamin-git/kumiho/internal/api"
 )
 
 // Client is a control connection to the daemon.
@@ -100,7 +102,7 @@ func (c *Client) Call(ctx context.Context, typ string, payload any) (*Envelope, 
 			return nil, err
 		}
 		if resp.Type == TypeError {
-			var e ErrorPayload
+			var e api.RemoteError
 			if err := resp.DecodePayload(&e); err != nil {
 				return nil, err
 			}
@@ -160,8 +162,8 @@ func (c *Client) fail(err error) {
 }
 
 // DecodePayload is a convenience wrapper erroring with context on failure.
-func decodeStatus(env *Envelope) (Status, error) {
-	var st Status
+func decodeStatus(env *Envelope) (api.Status, error) {
+	var st api.Status
 	if err := env.DecodePayload(&st); err != nil {
 		return st, fmt.Errorf("status response: %w", err)
 	}
@@ -169,10 +171,10 @@ func decodeStatus(env *Envelope) (Status, error) {
 }
 
 // Status performs a status request and decodes the snapshot.
-func (c *Client) Status(ctx context.Context) (Status, error) {
+func (c *Client) Status(ctx context.Context) (api.Status, error) {
 	env, err := c.Call(ctx, TypeStatus, nil)
 	if err != nil {
-		return Status{}, err
+		return api.Status{}, err
 	}
 	return decodeStatus(env)
 }

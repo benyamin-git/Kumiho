@@ -8,20 +8,21 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 )
 
 // accountState is the Account screen state (PLAN.md §6).
 type accountState struct {
 	loaded        bool
-	info          ipc.AccountInfo
+	info          api.AccountInfo
 	err           string
 	notice        string
 	confirmLogout bool
 }
 
 type accountMsg struct {
-	info ipc.AccountInfo
+	info api.AccountInfo
 	err  error
 }
 
@@ -35,7 +36,7 @@ func fetchAccount(c *ipc.Client) tea.Cmd {
 		if err != nil {
 			return accountMsg{err: err}
 		}
-		var info ipc.AccountInfo
+		var info api.AccountInfo
 		if err := env.DecodePayload(&info); err != nil {
 			return accountMsg{err: err}
 		}

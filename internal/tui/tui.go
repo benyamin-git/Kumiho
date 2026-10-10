@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 )
@@ -27,7 +28,7 @@ const (
 )
 
 type statusMsg struct {
-	status ipc.Status
+	status api.Status
 	err    error
 }
 
@@ -38,7 +39,7 @@ type eventMsg struct {
 type eventsClosedMsg struct{}
 
 type loginStateMsg struct {
-	state ipc.LoginState
+	state api.LoginState
 	err   error
 }
 
@@ -66,7 +67,7 @@ type Model struct {
 	client *ipc.Client
 
 	screen   screen
-	status   ipc.Status
+	status   api.Status
 	haveStat bool
 	notice   string
 
@@ -123,7 +124,7 @@ func toggleConnection(c *ipc.Client, disconnect bool) tea.Cmd {
 		if disconnect {
 			_, err = c.Call(ctx, ipc.TypeDisconnect, nil)
 		} else {
-			_, err = c.Call(ctx, ipc.TypeConnect, ipc.ConnectPayload{})
+			_, err = c.Call(ctx, ipc.TypeConnect, api.ConnectPayload{})
 		}
 		return tunnelDoneMsg{disconnected: disconnect, err: err}
 	}
@@ -137,7 +138,7 @@ func callLogin(c *ipc.Client, typ string, payload any) tea.Cmd {
 		if err != nil {
 			return loginStateMsg{err: err}
 		}
-		var ls ipc.LoginState
+		var ls api.LoginState
 		if err := env.DecodePayload(&ls); err != nil {
 			return loginStateMsg{err: err}
 		}
@@ -164,13 +165,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventMsg:
 		switch msg.env.Type {
 		case ipc.TypeStatus:
-			var st ipc.Status
+			var st api.Status
 			if err := msg.env.DecodePayload(&st); err == nil {
 				m.status = st
 				m.haveStat = true
 			}
 		case ipc.TypePingResult:
-			var pr ipc.PingResult
+			var pr api.PingResult
 			if err := msg.env.DecodePayload(&pr); err == nil {
 				if m.loc.rtts == nil {
 					m.loc.rtts = map[string]*float64{}
@@ -425,17 +426,17 @@ func (m *Model) advanceLogin() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.busy = true
-		return m, callLogin(m.client, ipc.TypeLoginEmail, ipc.LoginEmailPayload{Email: m.email})
+		return m, callLogin(m.client, ipc.TypeLoginEmail, api.LoginEmailPayload{Email: m.email})
 	case "password":
 		if m.password == "" {
 			m.loginErr = "password is required"
 			return m, nil
 		}
 		m.busy = true
-		return m, callLogin(m.client, ipc.TypeLoginPassword, ipc.LoginPasswordPayload{Password: m.password})
+		return m, callLogin(m.client, ipc.TypeLoginPassword, api.LoginPasswordPayload{Password: m.password})
 	case "2fa":
 		m.busy = true
-		return m, callLogin(m.client, ipc.TypeLogin2FA, ipc.Login2FAPayload{Code: m.code})
+		return m, callLogin(m.client, ipc.TypeLogin2FA, api.Login2FAPayload{Code: m.code})
 	}
 	return m, nil
 }

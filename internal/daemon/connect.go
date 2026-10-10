@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/dns"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
-	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/netcfg"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -50,15 +50,15 @@ var (
 // Connect brings up the tunnel (PLAN.md §12): access token → Guardian pass →
 // HTTP/2 session; full mode adds TUN + netstack + netcfg + DNS, proxy-only
 // mode starts just the local SOCKS5 listener.
-func (c *Controller) Connect(ctx context.Context, req ipc.ConnectPayload) error {
+func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error {
 	c.mu.Lock()
 	if c.session != nil || c.state == StateConnecting {
 		c.mu.Unlock()
-		return &ipc.RemoteError{Code: ipc.CodeBadRequest, Message: "already connected; disconnect first"}
+		return &api.RemoteError{Code: api.CodeBadRequest, Message: "already connected; disconnect first"}
 	}
 	if c.tokens == nil {
 		c.mu.Unlock()
-		return &ipc.RemoteError{Code: ipc.CodeNotAuthenticated, Message: "sign in first (kumiho login)"}
+		return &api.RemoteError{Code: api.CodeNotAuthenticated, Message: "sign in first (kumiho login)"}
 	}
 	c.setStateLocked(StateConnecting)
 	c.mu.Unlock()
@@ -481,7 +481,7 @@ func (c *Controller) Disconnect() error {
 	active := c.session != nil || c.socksSrv != nil || c.state == StateConnecting || c.state == StateFatal
 	c.mu.Unlock()
 	if !active {
-		return &ipc.RemoteError{Code: ipc.CodeBadRequest, Message: "not connected"}
+		return &api.RemoteError{Code: api.CodeBadRequest, Message: "not connected"}
 	}
 	c.stopTunnel("user disconnect")
 	return nil
@@ -552,7 +552,7 @@ func (c *Controller) connectFailed(err error) {
 func (c *Controller) acquirePass(ctx context.Context) (*guardian.Pass, error) {
 	tokens := c.currentTokens()
 	if tokens == nil {
-		return nil, &ipc.RemoteError{Code: ipc.CodeNotAuthenticated, Message: "sign in first (kumiho login)"}
+		return nil, &api.RemoteError{Code: api.CodeNotAuthenticated, Message: "sign in first (kumiho login)"}
 	}
 
 	pass, err := c.guardian.FetchPass(ctx, tokens.AccessToken)
@@ -627,23 +627,23 @@ func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candid
 
 // resolveCandidate picks the connect target from the request, the persisted
 // selection, or the recommended location (PLAN.md §2.4).
-func resolveCandidate(countries []serverlist.Country, req ipc.ConnectPayload, persisted settings.State) (serverlist.Candidate, error) {
+func resolveCandidate(countries []serverlist.Country, req api.ConnectPayload, persisted settings.State) (serverlist.Candidate, error) {
 	if req.Server != "" {
 		for _, cand := range serverlist.Candidates(countries, req.LocationCode, req.CityCode) {
 			if cand.Address() == req.Server || cand.Host == req.Server {
 				return cand, nil
 			}
 		}
-		return serverlist.Candidate{}, &ipc.RemoteError{
-			Code:    ipc.CodeBadRequest,
+		return serverlist.Candidate{}, &api.RemoteError{
+			Code:    api.CodeBadRequest,
 			Message: fmt.Sprintf("server %q is not in the server list; refresh with: kumiho locations --refresh", req.Server),
 		}
 	}
 	if req.LocationCode != "" {
 		cands := serverlist.Candidates(countries, req.LocationCode, req.CityCode)
 		if len(cands) == 0 {
-			return serverlist.Candidate{}, &ipc.RemoteError{
-				Code:    ipc.CodeBadRequest,
+			return serverlist.Candidate{}, &api.RemoteError{
+				Code:    api.CodeBadRequest,
 				Message: fmt.Sprintf("no servers for location %q", req.LocationCode),
 			}
 		}
@@ -674,17 +674,17 @@ func resolveCandidate(countries []serverlist.Country, req ipc.ConnectPayload, pe
 			return cands[0], nil
 		}
 	}
-	return serverlist.Candidate{}, &ipc.RemoteError{Code: ipc.CodeInternal, Message: "the server list has no usable servers"}
+	return serverlist.Candidate{}, &api.RemoteError{Code: api.CodeInternal, Message: "the server list has no usable servers"}
 }
 
-func quotaFromPass(pass *guardian.Pass) *ipc.Quota {
+func quotaFromPass(pass *guardian.Pass) *api.Quota {
 	if pass == nil {
 		return nil
 	}
 	if pass.QuotaLimit == nil && pass.QuotaRemaining == nil && pass.QuotaReset == nil {
 		return nil
 	}
-	return &ipc.Quota{
+	return &api.Quota{
 		Limit:     pass.QuotaLimit,
 		Remaining: pass.QuotaRemaining,
 		Reset:     pass.QuotaReset,

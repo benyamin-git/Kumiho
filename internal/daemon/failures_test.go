@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benyamin-git/kumiho/internal/ipc"
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
@@ -60,7 +60,7 @@ func TestConnectNotesDialFailures(t *testing.T) {
 	dialRetryBackoffMin, dialRetryBackoffMax = time.Millisecond, 2*time.Millisecond
 	defer func() { dialRetryBackoffMin, dialRetryBackoffMax = oldMin, oldMax }()
 
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{}); err == nil {
+	if err := ctrl.Connect(ctx, api.ConnectPayload{}); err == nil {
 		t.Fatal("expected the connect to fail")
 	}
 	st := ctrl.store.State()

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
@@ -158,15 +159,15 @@ func (h *control) handle(ctx context.Context, conn *ipc.Conn) error {
 
 func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, env *ipc.Envelope) {
 	replyErr := func(code, msg string) {
-		_ = conn.Reply(env.ID, ipc.TypeError, ipc.ErrorPayload{Code: code, Message: msg})
+		_ = conn.Reply(env.ID, ipc.TypeError, api.RemoteError{Code: code, Message: msg})
 	}
 	replyOK := func() {
-		_ = conn.Reply(env.ID, ipc.TypeResult, ipc.Result{OK: true})
+		_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
 	}
 
 	switch env.Type {
 	case ipc.TypeHello:
-		_ = conn.Reply(env.ID, ipc.TypeHello, ipc.HelloResult{
+		_ = conn.Reply(env.ID, ipc.TypeHello, api.HelloResult{
 			Version:  version.String(),
 			Protocol: ipc.ProtocolVersion,
 			OS:       runtime.GOOS,
@@ -177,30 +178,30 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		_ = conn.Reply(env.ID, ipc.TypeStatus, h.ctrl.Snapshot())
 
 	case ipc.TypeLocations:
-		var p ipc.LocationsPayload
+		var p api.LocationsPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		countries, err := h.ctrl.Locations(ctx, p.Refresh)
 		if err != nil {
-			replyErr(ipc.CodeInternal, err.Error())
+			replyErr(api.CodeInternal, err.Error())
 			return
 		}
-		_ = conn.Reply(env.ID, ipc.TypeLocations, ipc.LocationsResult{Countries: countries})
+		_ = conn.Reply(env.ID, ipc.TypeLocations, api.LocationsResult{Countries: countries})
 
 	case ipc.TypeSelectLocation:
-		var p ipc.SelectLocationPayload
+		var p api.SelectLocationPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		if err := h.ctrl.SelectLocation(p.CountryCode, p.CityCode, p.Server); err != nil {
-			var re *ipc.RemoteError
+			var re *api.RemoteError
 			if errors.As(err, &re) {
 				replyErr(re.Code, re.Message)
 			} else {
-				replyErr(ipc.CodeInternal, err.Error())
+				replyErr(api.CodeInternal, err.Error())
 			}
 			return
 		}
@@ -208,36 +209,36 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		h.broadcastStatus()
 
 	case ipc.TypePing:
-		var p ipc.PingPayload
+		var p api.PingPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		replyOK()
 		h.pingHosts(ctx, conn, p.Hosts)
 
 	case ipc.TypeLoginEmail:
-		var p ipc.LoginEmailPayload
+		var p api.LoginEmailPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.LoginEmail(p.Email))
 		h.broadcastStatus()
 
 	case ipc.TypeLoginPassword:
-		var p ipc.LoginPasswordPayload
+		var p api.LoginPasswordPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.LoginPassword(ctx, p.Password))
 		h.broadcastStatus()
 
 	case ipc.TypeLogin2FA:
-		var p ipc.Login2FAPayload
+		var p api.Login2FAPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.Login2FA(ctx, p.Code))
@@ -245,7 +246,7 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 
 	case ipc.TypeLogout:
 		if err := h.ctrl.Logout(); err != nil {
-			replyErr(ipc.CodeInternal, err.Error())
+			replyErr(api.CodeInternal, err.Error())
 			return
 		}
 		replyOK()
@@ -255,17 +256,17 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		_ = conn.Reply(env.ID, ipc.TypeSettings, h.ctrl.Settings())
 
 	case ipc.TypeSettingsSet:
-		var p ipc.SettingsSetPayload
+		var p api.SettingsSetPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		if err := h.ctrl.ApplySetting(p); err != nil {
-			var re *ipc.RemoteError
+			var re *api.RemoteError
 			if errors.As(err, &re) {
 				replyErr(re.Code, re.Message)
 			} else {
-				replyErr(ipc.CodeInternal, err.Error())
+				replyErr(api.CodeInternal, err.Error())
 			}
 			return
 		}
@@ -273,16 +274,16 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		h.broadcastStatus()
 
 	case ipc.TypeLogsSubscribe:
-		var p ipc.LogsSubscribePayload
+		var p api.LogsSubscribePayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		level := logging.Info
 		if p.Level != "" {
 			parsed, err := logging.ParseLevel(p.Level)
 			if err != nil {
-				replyErr(ipc.CodeBadRequest, err.Error())
+				replyErr(api.CodeBadRequest, err.Error())
 				return
 			}
 			level = parsed
@@ -307,21 +308,21 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		replyOK()
 
 	case ipc.TypeLogsSnapshot:
-		var p ipc.LogsSnapshotPayload
+		var p api.LogsSnapshotPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		min := logging.Debug
 		if p.Level != "" {
 			parsed, err := logging.ParseLevel(p.Level)
 			if err != nil {
-				replyErr(ipc.CodeBadRequest, err.Error())
+				replyErr(api.CodeBadRequest, err.Error())
 				return
 			}
 			min = parsed
 		}
-		_ = conn.Reply(env.ID, ipc.TypeLogSnapshot, ipc.LogSnapshot{
+		_ = conn.Reply(env.ID, ipc.TypeLogSnapshot, api.LogSnapshot{
 			Entries: filterLogs(h.ring.Snapshot(), min),
 		})
 
@@ -333,26 +334,26 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 	case ipc.TypeShutdown:
 		uid, ok := conn.PeerUID()
 		if !ok || uid != 0 {
-			replyErr(ipc.CodeForbidden, "only root may shut down the daemon")
+			replyErr(api.CodeForbidden, "only root may shut down the daemon")
 			return
 		}
-		_ = conn.Reply(env.ID, ipc.TypeResult, ipc.Result{OK: true, Note: "shutting down"})
+		_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true, Note: "shutting down"})
 		if h.shutdown != nil {
 			h.shutdown()
 		}
 
 	case ipc.TypeConnect:
-		var p ipc.ConnectPayload
+		var p api.ConnectPayload
 		if err := env.DecodePayload(&p); err != nil {
-			replyErr(ipc.CodeBadRequest, err.Error())
+			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
 		if err := h.ctrl.Connect(ctx, p); err != nil {
-			var re *ipc.RemoteError
+			var re *api.RemoteError
 			if errors.As(err, &re) {
 				replyErr(re.Code, re.Message)
 			} else {
-				replyErr(ipc.CodeInternal, err.Error())
+				replyErr(api.CodeInternal, err.Error())
 			}
 			return
 		}
@@ -361,11 +362,11 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 
 	case ipc.TypeDisconnect:
 		if err := h.ctrl.Disconnect(); err != nil {
-			var re *ipc.RemoteError
+			var re *api.RemoteError
 			if errors.As(err, &re) {
 				replyErr(re.Code, re.Message)
 			} else {
-				replyErr(ipc.CodeInternal, err.Error())
+				replyErr(api.CodeInternal, err.Error())
 			}
 			return
 		}
@@ -373,7 +374,7 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		h.broadcastStatus()
 
 	default:
-		replyErr(ipc.CodeBadRequest, fmt.Sprintf("unknown request type %q", env.Type))
+		replyErr(api.CodeBadRequest, fmt.Sprintf("unknown request type %q", env.Type))
 	}
 }
 
@@ -419,7 +420,7 @@ func (h *control) pingHosts(ctx context.Context, conn *ipc.Conn, hosts []string)
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			result := ipc.PingResult{Host: addr}
+			result := api.PingResult{Host: addr}
 			if host, portStr, err := net.SplitHostPort(addr); err == nil {
 				if port, perr := strconv.Atoi(portStr); perr == nil {
 					if d, derr := serverlist.PingTCP(ctx, host, port, 0); derr == nil {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
@@ -40,20 +41,20 @@ func runConnect(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	if *killSwitch != "" {
-		if _, err := client.Call(ctx, ipc.TypeSettingsSet, ipc.SettingsSetPayload{Key: "kill_switch", Value: *killSwitch}); err != nil {
+		if _, err := client.Call(ctx, ipc.TypeSettingsSet, api.SettingsSetPayload{Key: "kill_switch", Value: *killSwitch}); err != nil {
 			fmt.Fprintf(stderr, "kumiho connect: kill-switch: %v\n", err)
 			return 1
 		}
 	}
 
-	payload := ipc.ConnectPayload{ProxyOnly: *proxyOnly}
+	payload := api.ConnectPayload{ProxyOnly: *proxyOnly}
 	if *to != "" {
-		env, err := client.Call(ctx, ipc.TypeLocations, ipc.LocationsPayload{})
+		env, err := client.Call(ctx, ipc.TypeLocations, api.LocationsPayload{})
 		if err != nil {
 			fmt.Fprintf(stderr, "kumiho connect: %v\n", err)
 			return 1
 		}
-		var res ipc.LocationsResult
+		var res api.LocationsResult
 		if err := env.DecodePayload(&res); err != nil {
 			fmt.Fprintf(stderr, "kumiho connect: %v\n", err)
 			return 1
@@ -112,23 +113,23 @@ func runDisconnect(args []string, stdout, stderr io.Writer) int {
 }
 
 // resolveTo turns --to into a connect payload using the server list.
-func resolveTo(countries []serverlist.Country, to string) (ipc.ConnectPayload, error) {
+func resolveTo(countries []serverlist.Country, to string) (api.ConnectPayload, error) {
 	to = strings.TrimSpace(to)
 	for _, c := range countries {
 		if strings.EqualFold(c.Code, to) {
-			return ipc.ConnectPayload{LocationCode: c.Code}, nil
+			return api.ConnectPayload{LocationCode: c.Code}, nil
 		}
 	}
 	for _, c := range countries {
 		for _, city := range c.Cities {
 			if strings.EqualFold(city.Code, to) {
-				return ipc.ConnectPayload{LocationCode: c.Code, CityCode: city.Code}, nil
+				return api.ConnectPayload{LocationCode: c.Code, CityCode: city.Code}, nil
 			}
 		}
 	}
 	for _, cand := range serverlist.Candidates(countries, "", "") {
 		if cand.Address() == to || cand.Host == to || strings.HasPrefix(cand.Host, to) {
-			return ipc.ConnectPayload{
+			return api.ConnectPayload{
 				LocationCode: cand.CountryCode,
 				CityCode:     cand.CityCode,
 				Server:       cand.Address(),
@@ -144,10 +145,10 @@ func resolveTo(countries []serverlist.Country, to string) (ipc.ConnectPayload, e
 	}
 	switch len(matches) {
 	case 1:
-		return ipc.ConnectPayload{LocationCode: matches[0]}, nil
+		return api.ConnectPayload{LocationCode: matches[0]}, nil
 	case 0:
-		return ipc.ConnectPayload{}, fmt.Errorf("no location or server matches %q", to)
+		return api.ConnectPayload{}, fmt.Errorf("no location or server matches %q", to)
 	default:
-		return ipc.ConnectPayload{}, fmt.Errorf("%q matches %s; use one country code", to, strings.Join(matches, ", "))
+		return api.ConnectPayload{}, fmt.Errorf("%q matches %s; use one country code", to, strings.Join(matches, ", "))
 	}
 }

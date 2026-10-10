@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/benyamin-git/kumiho/internal/ipc"
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/logging"
 )
 
@@ -37,7 +37,7 @@ func (c *Controller) Autoconnect(ctx context.Context) {
 			return
 		}
 
-		err := c.Connect(ctx, ipc.ConnectPayload{})
+		err := c.Connect(ctx, api.ConnectPayload{})
 		if err == nil {
 			c.log.Logf(logging.Info, "daemon", "autoconnect: tunnel is up")
 			return
@@ -46,7 +46,7 @@ func (c *Controller) Autoconnect(ctx context.Context) {
 			return
 		}
 
-		var rerr *ipc.RemoteError
+		var rerr *api.RemoteError
 		var ferr *fatalError
 		if errors.As(err, &rerr) || errors.As(err, &ferr) || attempt >= len(autoconnectDelays) {
 			c.log.Logf(logging.Warn, "daemon", "autoconnect failed: %v", err)

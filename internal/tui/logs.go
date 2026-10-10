@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 )
@@ -43,11 +44,11 @@ func logsSnapshot(c *ipc.Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		env, err := c.Call(ctx, ipc.TypeLogsSnapshot, ipc.LogsSnapshotPayload{Level: "debug"})
+		env, err := c.Call(ctx, ipc.TypeLogsSnapshot, api.LogsSnapshotPayload{Level: "debug"})
 		if err != nil {
 			return logsSnapshotMsg{err: err}
 		}
-		var snap ipc.LogSnapshot
+		var snap api.LogSnapshot
 		if err := env.DecodePayload(&snap); err != nil {
 			return logsSnapshotMsg{err: err}
 		}
@@ -59,7 +60,7 @@ func logsSubscribe(c *ipc.Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, err := c.Call(ctx, ipc.TypeLogsSubscribe, ipc.LogsSubscribePayload{Level: "debug"})
+		_, err := c.Call(ctx, ipc.TypeLogsSubscribe, api.LogsSubscribePayload{Level: "debug"})
 		return logsSubscribedMsg{err: err}
 	}
 }

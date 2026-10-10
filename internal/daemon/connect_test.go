@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/guardian"
-	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/upstream"
@@ -89,35 +89,35 @@ func testCountries() []serverlist.Country {
 func TestResolveCandidatePrecedence(t *testing.T) {
 	countries := testCountries()
 
-	cand, err := resolveCandidate(countries, ipc.ConnectPayload{LocationCode: "DE", CityCode: "FRA", Server: "fra1.example.net:2499"}, settings.State{})
+	cand, err := resolveCandidate(countries, api.ConnectPayload{LocationCode: "DE", CityCode: "FRA", Server: "fra1.example.net:2499"}, settings.State{})
 	if err != nil || cand.Host != "fra1.example.net" || cand.CountryCode != "DE" {
 		t.Fatalf("explicit server: %+v, %v", cand, err)
 	}
 
-	cand, err = resolveCandidate(countries, ipc.ConnectPayload{LocationCode: "AR"}, settings.State{})
+	cand, err = resolveCandidate(countries, api.ConnectPayload{LocationCode: "AR"}, settings.State{})
 	if err != nil || cand.CountryCode != "AR" || cand.CityCode != "EZE" {
 		t.Fatalf("explicit location: %+v, %v", cand, err)
 	}
 
-	cand, err = resolveCandidate(countries, ipc.ConnectPayload{}, settings.State{SelectedLocation: "DE", SelectedCity: "FRA", SelectedServer: "fra1.example.net:2499"})
+	cand, err = resolveCandidate(countries, api.ConnectPayload{}, settings.State{SelectedLocation: "DE", SelectedCity: "FRA", SelectedServer: "fra1.example.net:2499"})
 	if err != nil || cand.Host != "fra1.example.net" {
 		t.Fatalf("persisted server: %+v, %v", cand, err)
 	}
 
-	cand, err = resolveCandidate(countries, ipc.ConnectPayload{}, settings.State{SelectedLocation: "AR", SelectedCity: "EZE"})
+	cand, err = resolveCandidate(countries, api.ConnectPayload{}, settings.State{SelectedLocation: "AR", SelectedCity: "EZE"})
 	if err != nil || cand.CountryCode != "AR" {
 		t.Fatalf("persisted location: %+v, %v", cand, err)
 	}
 
-	cand, err = resolveCandidate(countries, ipc.ConnectPayload{}, settings.State{})
+	cand, err = resolveCandidate(countries, api.ConnectPayload{}, settings.State{})
 	if err != nil || cand.CountryCode != "REC" {
 		t.Fatalf("default should be REC: %+v, %v", cand, err)
 	}
 
-	if _, err := resolveCandidate(countries, ipc.ConnectPayload{Server: "nope.example.net:1"}, settings.State{}); err == nil {
+	if _, err := resolveCandidate(countries, api.ConnectPayload{Server: "nope.example.net:1"}, settings.State{}); err == nil {
 		t.Fatal("unknown server should fail")
 	}
-	if _, err := resolveCandidate(countries, ipc.ConnectPayload{LocationCode: "FR"}, settings.State{}); err == nil {
+	if _, err := resolveCandidate(countries, api.ConnectPayload{LocationCode: "FR"}, settings.State{}); err == nil {
 		t.Fatal("unknown location should fail")
 	}
 }
@@ -127,9 +127,9 @@ func TestConnectValidation(t *testing.T) {
 	ctx := context.Background()
 
 	// Not signed in yet.
-	err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true})
-	var re *ipc.RemoteError
-	if !errors.As(err, &re) || re.Code != ipc.CodeNotAuthenticated {
+	err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true})
+	var re *api.RemoteError
+	if !errors.As(err, &re) || re.Code != api.CodeNotAuthenticated {
 		t.Fatalf("unauthenticated connect = %v", err)
 	}
 
@@ -148,12 +148,12 @@ func TestConnectValidation(t *testing.T) {
 		return newFakeSession(), nil
 	}
 	ctrl.exitCheckURL = ""
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{}); err == nil {
+	if err := ctrl.Connect(ctx, api.ConnectPayload{}); err == nil {
 		defer ctrl.stopTunnel("test cleanup")
 		t.Skip("host can create TUN devices; full-tunnel connect actually succeeded")
 	} else {
 		// The M3-era "full tunnel arrives in M4" guard must be gone.
-		if errors.As(err, &re) && re.Code == ipc.CodeNotImplemented {
+		if errors.As(err, &re) && re.Code == api.CodeNotImplemented {
 			t.Fatalf("full-tunnel connect short-circuited: %v", err)
 		}
 	}
@@ -162,7 +162,7 @@ func TestConnectValidation(t *testing.T) {
 	}
 
 	// Not connected yet: disconnect is an error.
-	if err := ctrl.Disconnect(); !errors.As(err, &re) || re.Code != ipc.CodeBadRequest {
+	if err := ctrl.Disconnect(); !errors.As(err, &re) || re.Code != api.CodeBadRequest {
 		t.Fatalf("disconnect while idle = %v", err)
 	}
 }
@@ -213,7 +213,7 @@ func TestConnectProxyOnlyFlow(t *testing.T) {
 	ctrl.exitCheckURL = ""
 	ctrl.socksPortOverride = freePort(t)
 
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true}); err != nil {
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); err != nil {
 		t.Fatal(err)
 	}
 	defer ctrl.stopTunnel("test cleanup")
@@ -233,8 +233,8 @@ func TestConnectProxyOnlyFlow(t *testing.T) {
 	}
 
 	// Connect again: refused.
-	var re *ipc.RemoteError
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true}); !errors.As(err, &re) || re.Code != ipc.CodeBadRequest {
+	var re *api.RemoteError
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); !errors.As(err, &re) || re.Code != api.CodeBadRequest {
 		t.Fatalf("second connect = %v", err)
 	}
 
@@ -305,7 +305,7 @@ func TestConnectQuotaFatal(t *testing.T) {
 	ctrl.serverListURL = serverListServer(t).URL
 	ctrl.exitCheckURL = ""
 
-	err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true})
+	err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true})
 	if err == nil {
 		t.Fatal("expected quota error")
 	}
@@ -355,7 +355,7 @@ func TestConnectRefreshesOnGuardianRejection(t *testing.T) {
 	ctrl.exitCheckURL = ""
 	ctrl.socksPortOverride = freePort(t)
 
-	if err := ctrl.Connect(ctx, ipc.ConnectPayload{ProxyOnly: true}); err != nil {
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); err != nil {
 		t.Fatalf("connect after refresh: %v", err)
 	}
 	defer ctrl.stopTunnel("test cleanup")

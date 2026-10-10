@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
-	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
@@ -391,7 +391,7 @@ func TestSetSetting(t *testing.T) {
 		t.Fatalf("failed set changed the value: %q", got)
 	}
 
-	if err := ctrl.ApplySetting(ipc.SettingsSetPayload{Key: "dns_upstream", Reset: true}); err != nil {
+	if err := ctrl.ApplySetting(api.SettingsSetPayload{Key: "dns_upstream", Reset: true}); err != nil {
 		t.Fatal(err)
 	}
 	if got := ctrl.Settings().DNSUpstream; got != "" {
@@ -399,8 +399,8 @@ func TestSetSetting(t *testing.T) {
 	}
 
 	err = ctrl.SetSetting("bogus", "1")
-	var re *ipc.RemoteError
-	if !errors.As(err, &re) || re.Code != ipc.CodeUnsupportedSetting {
+	var re *api.RemoteError
+	if !errors.As(err, &re) || re.Code != api.CodeUnsupportedSetting {
 		t.Fatalf("unsupported setting error = %v", err)
 	}
 }

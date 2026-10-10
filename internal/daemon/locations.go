@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/benyamin-git/kumiho/internal/ipc"
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
@@ -50,7 +50,7 @@ func (c *Controller) Locations(ctx context.Context, refresh bool) ([]serverlist.
 // arrives in M3; reconnect/auto-pick logic lives there too).
 func (c *Controller) SelectLocation(countryCode, cityCode, server string) error {
 	if countryCode == "" || server == "" {
-		return &ipc.RemoteError{Code: ipc.CodeBadRequest, Message: "country_code and server are required"}
+		return &api.RemoteError{Code: api.CodeBadRequest, Message: "country_code and server are required"}
 	}
 	if err := c.store.UpdateState(func(s *settings.State) {
 		s.SelectedLocation = countryCode

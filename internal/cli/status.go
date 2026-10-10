@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 )
 
@@ -54,7 +55,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 }
 
 // printStatus renders the human-readable status snapshot.
-func printStatus(w io.Writer, st ipc.Status) {
+func printStatus(w io.Writer, st api.Status) {
 	fmt.Fprintf(w, "state:         %s\n", st.State)
 	if st.Email != "" {
 		fmt.Fprintf(w, "account:       %s\n", st.Email)
