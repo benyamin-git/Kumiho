@@ -85,6 +85,30 @@ func (f *fakeWinNet) setDNS(guid windows.GUID, servers []string) error {
 	return nil
 }
 
+// fakeWFPBlocker records kill-switch programs without touching the WFP engine.
+type fakeWFPBlocker struct {
+	clears   int
+	applies  int
+	last     []wfpPermit
+	blockAll bool
+	closed   bool
+	applyErr error
+}
+
+func (f *fakeWFPBlocker) apply(permit []wfpPermit, blockAll bool) error {
+	f.applies++
+	f.last = append([]wfpPermit(nil), permit...)
+	f.blockAll = blockAll
+	return f.applyErr
+}
+
+func (f *fakeWFPBlocker) clear() error {
+	f.clears++
+	return nil
+}
+
+func (f *fakeWFPBlocker) close() { f.closed = true }
+
 // --- pure builders ----------------------------------------------------------
 
 func TestAdapterGUIDStable(t *testing.T) {
@@ -404,6 +428,8 @@ func TestApply(t *testing.T) {
 	nc := &netConfig{wn: f}
 	var logs []string
 	nc.SetLogf(func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) })
+	wfp := &fakeWFPBlocker{}
+	nc.openWFP = func() (wfpBlockerAPI, error) { return wfp, nil }
 
 	spec := platform.NetConfigSpec{
 		TunName:    "foxy0",
@@ -477,14 +503,93 @@ func TestApply(t *testing.T) {
 		t.Fatalf("DNS set = %+v, want fixed GUID + [10.8.0.2]", set)
 	}
 
+	if wfp.clears == 0 || wfp.applies != 1 || !wfp.blockAll {
+		t.Fatalf("kill switch calls = %d clears / %d applies (blockAll %v), want >=1 / 1 / true",
+			wfp.clears, wfp.applies, wfp.blockAll)
+	}
+	wantKinds := []wfpPermitKind{permitLoopback, permitApp, permitInterface, permitDHCP, permitDNS, permitDestinations}
+	if len(wfp.last) != len(wantKinds) {
+		t.Fatalf("permit classes = %d, want %d: %+v", len(wfp.last), len(wantKinds), wfp.last)
+	}
+	for i, kind := range wantKinds {
+		if wfp.last[i].kind != kind {
+			t.Fatalf("permit[%d] = %v, want %v", i, wfp.last[i].kind, kind)
+		}
+	}
+	if wfp.last[1].appPath == "" {
+		t.Fatal("service-process permit has no app path")
+	}
+	if wfp.last[2].luid != 7 {
+		t.Fatalf("interface permit luid = %#x, want 7", wfp.last[2].luid)
+	}
+	if got := fmtNetworks(wfp.last[4].addresses); got != "10.8.0.2/32" {
+		t.Fatalf("DNS permits = %s, want 10.8.0.2/32", got)
+	}
+	targets := map[string]bool{}
+	for _, n := range wfp.last[5].addresses {
+		targets[n.String()] = true
+	}
+	for _, want := range []string{"100.64.0.0/10", "fd7a:115c:a1e0::/48", "192.168.1.0/24"} {
+		if !targets[want] {
+			t.Fatalf("destination permits %v missing %s", targets, want)
+		}
+	}
 	foundKillSwitch := false
 	for _, line := range logs {
-		if line == "kill switch not yet implemented on windows" {
+		if line == "kill switch engaged (6 permit groups, block-all active)" {
 			foundKillSwitch = true
 		}
 	}
 	if !foundKillSwitch {
 		t.Fatalf("kill-switch log missing from %q", logs)
+	}
+}
+
+// TestApplyKillSwitchOff only clears: a tunnel without the kill switch must
+// never install WFP filters.
+func TestApplyKillSwitchOff(t *testing.T) {
+	f := &fakeWinNet{
+		luid: 7,
+		routelist: []windows.MibIpForwardRow2{
+			routeRow(22, net.IPv4zero, 0, net.IPv4(192, 168, 1, 1), 0),
+		},
+	}
+	wfp := &fakeWFPBlocker{}
+	nc := &netConfig{wn: f, wfp: wfp}
+	nc.openWFP = func() (wfpBlockerAPI, error) {
+		t.Fatal("kill switch off must not open a WFP session")
+		return nil, nil
+	}
+	spec := platform.NetConfigSpec{TunName: "foxy0", TunAddr: "10.8.0.2", TunMTU: 8500}
+	if err := nc.Apply(context.Background(), spec); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	// Apply's crash-recovery Cleanup clears and closes the seeded blocker.
+	if wfp.applies != 0 {
+		t.Fatalf("kill switch off applied %d times, want 0", wfp.applies)
+	}
+	if wfp.clears != 1 || !wfp.closed {
+		t.Fatalf("kill switch off clear/close = %d/%v, want 1/true", wfp.clears, wfp.closed)
+	}
+}
+
+// TestApplyKillSwitchFailureFailsConnect locks in the fail-closed rule: a
+// requested kill switch that cannot be programmed must fail the Apply so
+// traffic never flows unprotected.
+func TestApplyKillSwitchFailureFailsConnect(t *testing.T) {
+	f := &fakeWinNet{
+		luid: 7,
+		routelist: []windows.MibIpForwardRow2{
+			routeRow(22, net.IPv4zero, 0, net.IPv4(192, 168, 1, 1), 0),
+		},
+	}
+	wfp := &fakeWFPBlocker{applyErr: errors.New("access denied")}
+	nc := &netConfig{wn: f}
+	nc.openWFP = func() (wfpBlockerAPI, error) { return wfp, nil }
+	spec := platform.NetConfigSpec{TunName: "foxy0", TunAddr: "10.8.0.2", TunMTU: 8500, KillSwitch: true}
+	err := nc.Apply(context.Background(), spec)
+	if err == nil || !strings.Contains(err.Error(), "kill switch: apply") {
+		t.Fatalf("Apply with a failing kill switch = %v, want a kill-switch apply error", err)
 	}
 }
 

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -50,6 +52,16 @@ type netConfig struct {
 	logf func(format string, args ...any)
 	// wn is the win32 seam; nil means the real IP Helper implementation.
 	wn winNet
+
+	// wfpMu guards wfp and the whole open/apply/clear/close sequence: the
+	// engine's settings path can re-apply while a connect or teardown runs.
+	wfpMu sync.Mutex
+	// wfp is the open dynamic kill-switch session, or nil when the kill
+	// switch has never been engaged (or was torn down with the tunnel).
+	wfp wfpBlockerAPI
+	// openWFP opens the kill-switch blocker; nil means openWFPBlocker. Tests
+	// inject a fake so Apply runs without a WFP engine.
+	openWFP func() (wfpBlockerAPI, error)
 }
 
 // SetLogf routes netcfg's informational logs to logf. It is an additive
@@ -114,8 +126,11 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 		return fmt.Errorf("windows netcfg: enumerate routes: %w", err)
 	}
 	bypass, skipped := physicalBypass(staticTargets(spec), routes, adapters, luid)
+	var lanPermitTargets []net.IPNet
 	if spec.AllowLAN {
-		bypass = append(bypass, lanBypass(adapters, luid)...)
+		lanRoutes := lanBypass(adapters, luid)
+		bypass = append(bypass, lanRoutes...)
+		lanPermitTargets = lanPermits(lanRoutes)
 	}
 	for i := range skipped {
 		n.log("bypass route %s skipped: no physical default route for its family", skipped[i].String())
@@ -141,8 +156,15 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 		n.log("set adapter DNS failed (DNS may leak): %v", err)
 	}
 
+	// The kill switch is (re)programmed last, once every bypass destination is
+	// known: turning it on clears any previous program and applies the new
+	// one, turning it off only clears.
 	if spec.KillSwitch {
-		n.log("kill switch not yet implemented on windows")
+		if err := n.applyKillSwitch(spec, luid, lanPermitTargets); err != nil {
+			return fmt.Errorf("windows netcfg: %w", err)
+		}
+	} else {
+		n.clearKillSwitch()
 	}
 	n.log("network configuration applied (%s, kill switch %v)", spec.TunName, spec.KillSwitch)
 	return nil
@@ -190,6 +212,94 @@ func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
 	if err := wn.setDNS(fixedAdapterGUID, nil); err != nil && !isNotFound(err) {
 		n.log("cleanup: clear adapter DNS: %v", err)
 	}
+
+	// The kill switch is dynamic WFP state: clear it (surfacing an engine
+	// problem in the log) and close the session, which removes every object
+	// even if the clear failed. Cleanup never fails.
+	n.clearKillSwitch()
+	n.closeKillSwitch()
+}
+
+// lanPermits returns the destination prefixes of the LAN bypass routes: the
+// WFP kill-switch permits and the routing table must agree on what bypasses
+// the tunnel (spec.AllowLAN=false therefore also blocks LAN at the firewall).
+func lanPermits(rows []windows.MibIpForwardRow2) []net.IPNet {
+	out := make([]net.IPNet, 0, len(rows))
+	for i := range rows {
+		ip := sockaddrIP(&rows[i].DestinationPrefix.Prefix)
+		if ip == nil || ip.To4() == nil {
+			continue
+		}
+		out = append(out, net.IPNet{
+			IP:   append(net.IP(nil), ip...),
+			Mask: net.CIDRMask(int(rows[i].DestinationPrefix.PrefixLength), 32),
+		})
+	}
+	return out
+}
+
+// applyKillSwitch opens the dynamic WFP session on first use and installs the
+// permit filters plus the catch-all block. It is called on every Apply with
+// KillSwitch true, so it atomically replaces the previous program (clear then
+// apply): repeated applications are idempotent. A failure fails the connect —
+// a requested kill switch that cannot be enforced must not pass traffic.
+func (n *netConfig) applyKillSwitch(spec platform.NetConfigSpec, luid uint64, lanTargets []net.IPNet) error {
+	appPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("kill switch: locate current executable: %w", err)
+	}
+	permits := buildPermitFilters(spec, luid, appPath, lanTargets)
+
+	n.wfpMu.Lock()
+	defer n.wfpMu.Unlock()
+	if n.wfp == nil {
+		blocker, err := n.openBlocker()
+		if err != nil {
+			return fmt.Errorf("kill switch: %w", err)
+		}
+		n.wfp = blocker
+	}
+	if err := n.wfp.clear(); err != nil {
+		return fmt.Errorf("kill switch: clear: %w", err)
+	}
+	if err := n.wfp.apply(permits, true); err != nil {
+		return fmt.Errorf("kill switch: apply: %w", err)
+	}
+	n.log("kill switch engaged (%d permit groups, block-all active)", len(permits))
+	return nil
+}
+
+// openBlocker returns the injected blocker factory or the real WFP engine.
+func (n *netConfig) openBlocker() (wfpBlockerAPI, error) {
+	if n.openWFP != nil {
+		return n.openWFP()
+	}
+	return openWFPBlocker()
+}
+
+// clearKillSwitch removes every kill-switch filter without tearing the session
+// down. It never fails: callers only log.
+func (n *netConfig) clearKillSwitch() {
+	n.wfpMu.Lock()
+	defer n.wfpMu.Unlock()
+	if n.wfp == nil {
+		return
+	}
+	if err := n.wfp.clear(); err != nil {
+		n.log("kill switch: clear: %v", err)
+	}
+}
+
+// closeKillSwitch ends the dynamic WFP session. Dynamic objects vanish with
+// the session, so this is also the strongest possible clear.
+func (n *netConfig) closeKillSwitch() {
+	n.wfpMu.Lock()
+	defer n.wfpMu.Unlock()
+	if n.wfp == nil {
+		return
+	}
+	n.wfp.close()
+	n.wfp = nil
 }
 
 // ownedRoute reports whether a route table row was created by Apply: the
