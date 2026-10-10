@@ -113,8 +113,13 @@ func TestUnicastRow(t *testing.T) {
 	if row.Address.Family != windows.AF_INET {
 		t.Fatalf("Address.Family = %d, want AF_INET", row.Address.Family)
 	}
-	if got := [4]byte(row.Address.Addr[:4]); got != [4]byte{10, 8, 0, 2} {
-		t.Fatalf("Address = %v, want 10.8.0.2", got)
+	// Address is the SOCKADDR_INET union: the IPv4 arm keeps sin_addr at byte
+	// offset 4, not at the IPv6 arm's offset 8. The typed view is the layout
+	// assertion — a regression that writes row.Address.Addr[:4] would leave
+	// this field 0.0.0.0.
+	v4 := (*windows.RawSockaddrInet4)(unsafe.Pointer(&row.Address))
+	if v4.Addr != [4]byte{10, 8, 0, 2} {
+		t.Fatalf("sin_addr = %v, want 10.8.0.2 at the AF_INET union offset", v4.Addr)
 	}
 	if row.DadState != windows.IpDadStatePreferred {
 		t.Fatalf("DadState = %d, want preferred", row.DadState)

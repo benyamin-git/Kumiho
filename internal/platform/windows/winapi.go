@@ -142,18 +142,19 @@ const (
 // by value, which the Windows ABI words differently per architecture: by
 // reference on amd64, in two registers on arm64, and as four words on
 // 386/arm. Only amd64 ships, but the branches keep cross-builds meaningful.
+// The unsafe.Pointer conversions are inlined in the Call arguments (WireGuard
+// style) so settings stays reachable for the duration of the call.
 func setInterfaceDNSSettings(guid windows.GUID, settings *dnsInterfaceSettings) error {
-	settingsPtr := uintptr(unsafe.Pointer(settings))
 	var r uintptr
 	switch runtime.GOARCH {
 	case "amd64":
-		r, _, _ = procSetInterfaceDNSSettings.Call(uintptr(unsafe.Pointer(&guid)), settingsPtr)
+		r, _, _ = procSetInterfaceDNSSettings.Call(uintptr(unsafe.Pointer(&guid)), uintptr(unsafe.Pointer(settings)))
 	case "arm64":
 		words := (*[2]uintptr)(unsafe.Pointer(&guid))
-		r, _, _ = procSetInterfaceDNSSettings.Call(words[0], words[1], settingsPtr)
+		r, _, _ = procSetInterfaceDNSSettings.Call(words[0], words[1], uintptr(unsafe.Pointer(settings)))
 	case "arm", "386":
 		words := (*[4]uintptr)(unsafe.Pointer(&guid))
-		r, _, _ = procSetInterfaceDNSSettings.Call(words[0], words[1], words[2], words[3], settingsPtr)
+		r, _, _ = procSetInterfaceDNSSettings.Call(words[0], words[1], words[2], words[3], uintptr(unsafe.Pointer(settings)))
 	default:
 		return fmt.Errorf("windows netcfg: SetInterfaceDnsSettings is unsupported on GOARCH %s", runtime.GOARCH)
 	}

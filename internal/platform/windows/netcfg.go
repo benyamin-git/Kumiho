@@ -149,7 +149,11 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 }
 
 // Cleanup removes exactly what Apply created — the tunnel default routes, the
-// bypass routes, the TUN address and the adapter DNS — and never fails.
+// bypass routes, the TUN address and the adapter DNS — and never fails. The
+// adapter device itself is deliberately not deleted here: Wintun removes
+// create-created adapters when device.Close ends the session, and the fixed
+// GUID lets a crashed run's adapter be reused instead of accumulating; this
+// only clears the adapter's configuration residue.
 func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
 	spec = normalizeSpec(spec)
 	wn := n.win()
@@ -231,9 +235,15 @@ func unicastRow(luid uint64, ip net.IP, prefixLen uint8) windows.MibUnicastIpAdd
 		OnLinkPrefixLength: prefixLen,
 		DadState:           windows.IpDadStatePreferred,
 	}
+	// Address is a SOCKADDR_INET union. Its IPv4 arm puts sin_addr at byte
+	// offset 4 while the IPv6 arm puts sin6_addr at offset 8, so an IPv4
+	// address must be written through the RawSockaddrInet4 view — writing
+	// row.Address.Addr[:4] would leave sin_addr at 0.0.0.0 and
+	// CreateUnicastIpAddressEntry would fail.
 	if v4 := ip.To4(); v4 != nil {
-		row.Address.Family = windows.AF_INET
-		copy(row.Address.Addr[:], v4)
+		sa := (*windows.RawSockaddrInet4)(unsafe.Pointer(&row.Address))
+		sa.Family = windows.AF_INET
+		copy(sa.Addr[:], v4)
 	} else if v6 := ip.To16(); v6 != nil {
 		row.Address.Family = windows.AF_INET6
 		copy(row.Address.Addr[:], v6)
