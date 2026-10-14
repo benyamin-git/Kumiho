@@ -6,11 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v0.2.0
+## [0.2.0] - 2026-10-14
 
-Windows 11 client, multiplatform core and hygiene fixes. Tagged once the
-manual E2E checklist ([docs/windows-testing.md](docs/windows-testing.md))
-passes on real hardware (spec criterion 10).
+Windows 11 client, multiplatform core and hygiene fixes. Verified on real
+Windows 11 amd64 hardware (install, Windows service, doctor, `kumiho version`
+and the TUI full tunnel); see
+[docs/windows-testing.md](docs/windows-testing.md) for the checklist.
 
 ### Added
 
@@ -87,5 +88,6 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.1.0

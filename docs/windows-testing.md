@@ -548,8 +548,15 @@ Criterion coverage and the sign-off table are at the end. Background reading:
 
 Sign-off (fill before tagging):
 
-- Date:
-- Machine / Windows build:
-- Commit / tag SHA under test:
-- Result: PASS / FAIL
-- Notes (failed steps, screenshots, log excerpts):
+- Date: 2026-10-14
+- Machine / Windows build: DESKTOP-16KGA46 / Windows 11 amd64
+- Commit / tag SHA under test: v0.2.0-rc.2 (c277aa2)
+- Result: PASS (partial - see notes)
+- Notes: verified on real hardware: `install.ps1` upgrade, the Windows service
+  (auto-start, LocalSystem), `kumiho doctor`, `kumiho version`, and the TUI
+  full tunnel with geo-blocked sites reaching the selected edge. The checklist
+  was not run top-to-bottom before the `v0.2.0` tag (owner's call). The test
+  network intermittently filters DNS for Mozilla control-plane hosts
+  (`vpn.mozilla.org`, `firefox.settings.services.mozilla.com`), which surfaces
+  as `endpoints`/`connect` "no such host" failures; this is environmental, not
+  a client defect.
