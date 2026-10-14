@@ -1,6 +1,6 @@
 //go:build windows
 
-package cli
+package doctor
 
 import (
 	"context"
@@ -32,8 +32,8 @@ func fullTunnelPlatform(provider string) (string, bool) {
 
 // platformChecks returns the Windows-specific doctor checks appended to the
 // common list. Order matters: it is the order they appear in the report.
-func platformChecks() []check {
-	return []check{
+func platformChecks() []Check {
+	return []Check{
 		checkWindowsService(),
 		checkWintunDLL(),
 		checkWFPService(),
@@ -48,11 +48,11 @@ func platformChecks() []check {
 // checkWindowsService reports whether the kumiho service is installed, its
 // state and its start type. A foreground daemon is a valid setup, so absence
 // or a stopped service only warns.
-func checkWindowsService() check {
+func checkWindowsService() Check {
 	const name = "windows-service"
 	mgr, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot open the service manager: %v", err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot open the service manager: %v", err)}
 	}
 	defer windows.CloseServiceHandle(mgr)
 
@@ -60,31 +60,31 @@ func checkWindowsService() check {
 		windows.SERVICE_QUERY_STATUS|windows.SERVICE_QUERY_CONFIG)
 	if err != nil {
 		if errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST) {
-			return check{
+			return Check{
 				Name:        name,
-				Status:      statusWarn,
+				Status:      Warn,
 				Detail:      "kumiho service is not installed",
 				Remediation: "Install it with install.ps1 from an elevated PowerShell, or run 'kumiho daemon' in the foreground.",
 			}
 		}
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot open the kumiho service: %v", err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot open the kumiho service: %v", err)}
 	}
 	defer windows.CloseServiceHandle(h)
 
 	state, err := serviceState(h)
 	if err != nil {
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot query the service state: %v", err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot query the service state: %v", err)}
 	}
 	detail := "kumiho service is " + serviceStateName(state)
 	if start, err := serviceStartType(h); err == nil {
 		detail += "; start type " + serviceStartTypeName(start)
 	}
 	if state == windows.SERVICE_RUNNING {
-		return check{Name: name, Status: statusOK, Detail: detail}
+		return Check{Name: name, Status: OK, Detail: detail}
 	}
-	return check{
+	return Check{
 		Name:        name,
-		Status:      statusWarn,
+		Status:      Warn,
 		Detail:      detail,
 		Remediation: "Start it: sc start kumiho (daemon output goes to %ProgramData%\\kumiho\\logs\\kumiho.log).",
 	}
@@ -159,50 +159,50 @@ func serviceStartTypeName(start uint32) string {
 
 // checkWintunDLL verifies the Wintun userspace driver ships beside the
 // executable (D11) and reports the DLL version.
-func checkWintunDLL() check {
+func checkWintunDLL() Check {
 	const name = "wintun-dll"
 	exe, err := os.Executable()
 	if err != nil {
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot locate the executable: %v", err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot locate the executable: %v", err)}
 	}
 	dll := filepath.Join(filepath.Dir(exe), "wintun.dll")
 	if _, err := os.Stat(dll); err != nil {
-		return check{
+		return Check{
 			Name:        name,
-			Status:      statusFail,
+			Status:      Fail,
 			Detail:      fmt.Sprintf("%s not found", dll),
 			Remediation: "Deploy wintun.dll (0.14.1) next to kumiho.exe; the release zip and install.ps1 do this for you.",
 		}
 	}
 	version := wintun.Version()
 	if version == "unknown" {
-		return check{Name: name, Status: statusWarn, Detail: "wintun.dll is present beside the executable; its version could not be read"}
+		return Check{Name: name, Status: Warn, Detail: "wintun.dll is present beside the executable; its version could not be read"}
 	}
-	return check{Name: name, Status: statusOK, Detail: fmt.Sprintf("wintun.dll %s beside the executable", version)}
+	return Check{Name: name, Status: OK, Detail: fmt.Sprintf("wintun.dll %s beside the executable", version)}
 }
 
 // checkWFPService verifies the Base Filtering Engine, which hosts the WFP
 // engine the dynamic kill switch programs.
-func checkWFPService() check {
+func checkWFPService() Check {
 	const name = "wfp-service"
 	state, err := queryServiceState("BFE")
 	if err != nil {
 		if errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST) {
-			return check{
+			return Check{
 				Name:        name,
-				Status:      statusFail,
+				Status:      Fail,
 				Detail:      "Base Filtering Engine (BFE) service not found",
 				Remediation: "The WFP kill switch needs the Windows Filtering Platform; restore the built-in BFE service.",
 			}
 		}
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot query the Base Filtering Engine: %v", err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot query the Base Filtering Engine: %v", err)}
 	}
 	if state == windows.SERVICE_RUNNING {
-		return check{Name: name, Status: statusOK, Detail: "Base Filtering Engine (BFE) is running"}
+		return Check{Name: name, Status: OK, Detail: "Base Filtering Engine (BFE) is running"}
 	}
-	return check{
+	return Check{
 		Name:        name,
-		Status:      statusFail,
+		Status:      Fail,
 		Detail:      "Base Filtering Engine (BFE) is " + serviceStateName(state) + "; the WFP kill switch cannot be enforced",
 		Remediation: "Start it: sc start BFE (BFE is an automatic service by default).",
 	}
@@ -225,7 +225,7 @@ func queryServiceState(name string) (uint32, error) {
 
 // checkControlPipe dials the daemon's named pipe. A successful dial proves
 // the daemon is accepting clients; a missing pipe means it is not running.
-func checkControlPipe() check {
+func checkControlPipe() Check {
 	const name = "control-pipe"
 	endpoint := auto.Current().ControlEndpoint()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -234,65 +234,65 @@ func checkControlPipe() check {
 	conn, err := winio.DialPipeContext(ctx, endpoint)
 	if err == nil {
 		_ = conn.Close()
-		return check{Name: name, Status: statusOK, Detail: endpoint + " is reachable"}
+		return Check{Name: name, Status: OK, Detail: endpoint + " is reachable"}
 	}
 	switch {
 	case errors.Is(err, windows.ERROR_FILE_NOT_FOUND):
 		return skipped(name, "daemon not running")
 	case errors.Is(err, windows.ERROR_ACCESS_DENIED):
-		return check{
+		return Check{
 			Name:        name,
-			Status:      statusWarn,
+			Status:      Warn,
 			Detail:      fmt.Sprintf("daemon pipe exists but this user cannot connect: %v", err),
 			Remediation: "Run elevated, or add this user to the local 'kumiho' group and sign in again.",
 		}
 	case errors.Is(err, context.DeadlineExceeded):
-		return check{
+		return Check{
 			Name:        name,
-			Status:      statusWarn,
+			Status:      Warn,
 			Detail:      "control pipe is reachable but busy (all instances in use)",
 			Remediation: "Another client may be mid-request; retry in a moment.",
 		}
 	default:
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot dial %s: %v", endpoint, err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot dial %s: %v", endpoint, err)}
 	}
 }
 
 // checkTunAdapter reports the Wintun adapter. The tunnel creates it on
 // connect and removes it on disconnect, so absence is normal.
-func checkTunAdapter() check {
+func checkTunAdapter() Check {
 	const name = "tun-adapter"
 	iface, err := net.InterfaceByName(netcfg.DefaultTunName)
 	if err != nil {
 		return skipped(name, netcfg.DefaultTunName+" adapter not present (the tunnel creates it on connect)")
 	}
-	return check{Name: name, Status: statusOK,
+	return Check{Name: name, Status: OK,
 		Detail: fmt.Sprintf("%s adapter present (up %v)", iface.Name, iface.Flags&net.FlagUp != 0)}
 }
 
 // checkAdapterDNS verifies the tunnel adapter resolves through the in-tunnel
 // resolver (SetInterfaceDnsSettings parity with Linux resolvectl).
-func checkAdapterDNS() check {
+func checkAdapterDNS() Check {
 	const name = "adapter-dns"
 	servers, present, err := adapterDNSServers(netcfg.DefaultTunName)
 	switch {
 	case err != nil:
-		return check{Name: name, Status: statusWarn, Detail: fmt.Sprintf("cannot enumerate adapters: %v", err)}
+		return Check{Name: name, Status: Warn, Detail: fmt.Sprintf("cannot enumerate adapters: %v", err)}
 	case !present:
 		return skipped(name, netcfg.DefaultTunName+" adapter not present (the tunnel creates it on connect)")
 	case len(servers) == 1 && servers[0] == netcfg.DefaultTunAddr:
-		return check{Name: name, Status: statusOK, Detail: fmt.Sprintf("%s DNS -> %s", netcfg.DefaultTunName, netcfg.DefaultTunAddr)}
+		return Check{Name: name, Status: OK, Detail: fmt.Sprintf("%s DNS -> %s", netcfg.DefaultTunName, netcfg.DefaultTunAddr)}
 	case len(servers) == 0:
-		return check{
+		return Check{
 			Name:        name,
-			Status:      statusWarn,
+			Status:      Warn,
 			Detail:      netcfg.DefaultTunName + " has no DNS servers configured; DNS may leak",
 			Remediation: "Reconnect the tunnel; if it persists, run 'kumiho cleanup' and reconnect.",
 		}
 	default:
-		return check{
+		return Check{
 			Name:        name,
-			Status:      statusWarn,
+			Status:      Warn,
 			Detail:      fmt.Sprintf("%s DNS -> %s, want %s", netcfg.DefaultTunName, strings.Join(servers, ", "), netcfg.DefaultTunAddr),
 			Remediation: "Reconnect the tunnel; if it persists, run 'kumiho cleanup' and reconnect.",
 		}
@@ -333,14 +333,14 @@ func adapterDNSServers(alias string) (servers []string, present bool, err error)
 
 // checkPhysicalDefaultRoute reports whether a non-tunnel default route exists
 // (the engine's bootstrap path).
-func checkPhysicalDefaultRoute() check {
+func checkPhysicalDefaultRoute() Check {
 	const name = "physical-default-route"
 	if auto.Current().HasDefaultRoute() {
-		return check{Name: name, Status: statusOK, Detail: "a physical default route is present"}
+		return Check{Name: name, Status: OK, Detail: "a physical default route is present"}
 	}
-	return check{
+	return Check{
 		Name:        name,
-		Status:      statusWarn,
+		Status:      Warn,
 		Detail:      "no physical IPv4 or IPv6 default route",
 		Remediation: "Bring the host online first; kumiho needs a route for bootstrap DNS and the edge.",
 	}
@@ -348,14 +348,14 @@ func checkPhysicalDefaultRoute() check {
 
 // checkElevation notes the shell's privilege level: repair commands need an
 // Administrator, read-only checks work anywhere.
-func checkElevation() check {
+func checkElevation() Check {
 	const name = "elevation"
 	if windows.GetCurrentProcessToken().IsElevated() {
-		return check{Name: name, Status: statusOK, Detail: "running elevated; service and adapter repairs are available"}
+		return Check{Name: name, Status: OK, Detail: "running elevated; service and adapter repairs are available"}
 	}
-	return check{
+	return Check{
 		Name:        name,
-		Status:      statusWarn,
+		Status:      Warn,
 		Detail:      "not elevated; service and adapter checks are read-only",
 		Remediation: "Re-run from an elevated PowerShell for repair-level checks (install, cleanup).",
 	}

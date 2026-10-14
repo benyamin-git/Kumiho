@@ -1,6 +1,6 @@
 //go:build !windows
 
-package cli
+package doctor
 
 // fullTunnelPlatform reports the full-tunnel provider on this OS and the
 // detail the platform check prints for it. Linux is the only full-tunnel
@@ -15,4 +15,4 @@ func fullTunnelPlatform(provider string) (string, bool) {
 
 // platformChecks returns the OS-specific doctor checks appended to the common
 // list. Non-Windows builds have none, so Linux output is unchanged.
-func platformChecks() []check { return nil }
+func platformChecks() []Check { return nil }

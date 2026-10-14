@@ -1,6 +1,6 @@
 //go:build windows
 
-package cli
+package doctor
 
 import (
 	"reflect"
@@ -33,7 +33,7 @@ func TestPlatformChecksSmoke(t *testing.T) {
 			t.Errorf("platformChecks[%d] (%s) has an empty detail", i, c.Name)
 		}
 		switch c.Status {
-		case statusOK, statusWarn, statusFail, statusSkip:
+		case OK, Warn, Fail, Skip:
 		default:
 			t.Errorf("platformChecks[%d] (%s) has unknown status %q", i, c.Name, c.Status)
 		}
@@ -68,7 +68,7 @@ func TestPlatformChecksAppended(t *testing.T) {
 
 func TestCheckPlatformWindows(t *testing.T) {
 	c := checkPlatform()
-	if c.Status != statusOK || c.Detail != "windows (full tunnel supported)" {
+	if c.Status != OK || c.Detail != "windows (full tunnel supported)" {
 		t.Fatalf("checkPlatform() = %+v, want ok/windows (full tunnel supported)", c)
 	}
 }
