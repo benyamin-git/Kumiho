@@ -141,9 +141,17 @@ type fakeNetConfig struct {
 	applies   int
 	cleanups  int
 	last      platform.NetConfigSpec
+	applyErr  error
 	logFn     func(format string, args ...any)
 	onApply   func(platform.NetConfigSpec)
 	onCleanup func()
+}
+
+// setApplyErr makes the next Apply calls fail with err (nil clears it).
+func (n *fakeNetConfig) setApplyErr(err error) {
+	n.mu.Lock()
+	n.applyErr = err
+	n.mu.Unlock()
 }
 
 // SetLogf records the engine-wired applier logger (optional capability).
@@ -164,12 +172,13 @@ func (n *fakeNetConfig) Apply(_ context.Context, spec platform.NetConfigSpec) er
 	n.applies++
 	n.last = spec
 	hook := n.onApply
+	err := n.applyErr
 	n.mu.Unlock()
 	n.p.record("netcfg.apply")
 	if hook != nil {
 		hook(spec)
 	}
-	return nil
+	return err
 }
 
 func (n *fakeNetConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {

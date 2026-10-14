@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Toggling `kill_switch` on a live tunnel no longer reports success when the
+  network policy re-apply fails: the change returns an error and the persisted
+  override is rolled back, so the UI never shows a kill switch that is not
+  actually enforced.
+
 ## [0.2.0] - 2026-10-14
 
 Windows 11 client, multiplatform core and hygiene fixes. Verified on real

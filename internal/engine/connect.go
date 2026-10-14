@@ -368,17 +368,21 @@ func (c *Controller) netcfgConfig(tunName string) platform.NetConfigSpec {
 }
 
 // ReapplyNetcfg re-renders the nftables/routing configuration for the active
-// full tunnel (kill-switch toggle). No-op in proxy-only or idle states.
-func (c *Controller) ReapplyNetcfg(ctx context.Context) {
+// full tunnel (kill-switch toggle). It returns the applier's error so a caller
+// can refuse to report a setting change it could not enforce; it is a nil
+// no-op in proxy-only or idle states.
+func (c *Controller) ReapplyNetcfg(ctx context.Context) error {
 	c.mu.Lock()
 	res := c.resources
 	c.mu.Unlock()
 	if res == nil || res.proxyOnly {
-		return
+		return nil
 	}
 	if err := res.Reapply(ctx, c.netcfgConfig(res.devName())); err != nil {
 		c.log.Logf(logging.Warn, "netcfg", "re-apply failed: %v", err)
+		return err
 	}
+	return nil
 }
 
 // UseBypassDialer tags every engine-owned socket with SO_MARK 0x2 so the

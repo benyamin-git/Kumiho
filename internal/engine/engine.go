@@ -494,6 +494,14 @@ func (c *Controller) SetSetting(key, value string) error {
 // the override so the admin config applies again.
 func (c *Controller) ApplySetting(p api.SettingsSetPayload) error {
 	key := strings.TrimSpace(p.Key)
+	// Snapshot the prior kill_switch override before it is mutated, so a failed
+	// live re-apply can be rolled back instead of leaving the persisted setting
+	// describing a policy the running tunnel never adopted.
+	var prevKillSwitch *bool
+	if st := c.store.State(); st.KillSwitch != nil {
+		v := *st.KillSwitch
+		prevKillSwitch = &v
+	}
 	var err error
 	if p.Reset {
 		err = c.store.ClearOverride(key)
@@ -512,12 +520,36 @@ func (c *Controller) ApplySetting(p api.SettingsSetPayload) error {
 
 	switch key {
 	case "kill_switch":
-		c.ReapplyNetcfg(context.Background())
+		if rerr := c.ReapplyNetcfg(context.Background()); rerr != nil {
+			c.revertKillSwitchOverride(prevKillSwitch)
+			c.notify()
+			return &api.RemoteError{
+				Code:    api.CodeInternal,
+				Message: fmt.Sprintf("kill_switch not applied: %v", rerr),
+			}
+		}
 	case "log_level", "redact_targets":
 		c.applyLoggingSettings()
 	}
 	c.notify()
 	return nil
+}
+
+// revertKillSwitchOverride restores the kill_switch override captured before a
+// failed live re-apply. It is best effort: a revert failure is logged, not
+// returned, because the caller is already reporting the apply failure.
+func (c *Controller) revertKillSwitchOverride(prev *bool) {
+	var err error
+	if prev == nil {
+		err = c.store.ClearOverride("kill_switch")
+	} else if *prev {
+		err = c.store.SetOverride("kill_switch", "on")
+	} else {
+		err = c.store.SetOverride("kill_switch", "off")
+	}
+	if err != nil {
+		c.log.Logf(logging.Warn, "settings", "revert kill_switch override: %v", err)
+	}
 }
 
 // applyLoggingSettings pushes the effective log level and sanitizer into the

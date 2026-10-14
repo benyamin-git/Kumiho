@@ -526,6 +526,79 @@ func socksConnect(t *testing.T, addr, host string, port int) net.Conn {
 	return conn
 }
 
+// TestKillSwitchReapplyFailureIsReportedAndReverts is the regression guard for
+// the silent-failure path: toggling kill_switch on a live full tunnel when the
+// netcfg re-apply fails must (a) surface an error instead of reporting success
+// and (b) leave the persisted override at its previous value, so the UI never
+// shows a protection that is not actually enforced.
+func TestKillSwitchReapplyFailureIsReportedAndReverts(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	fp := ctrl.plat.(*fakeProvider)
+	fp.dnsAddr = net.JoinHostPort("127.0.0.1", strconv.Itoa(freePort(t)))
+	fp.dev = newFakeDevice(fp, fp.tun.Name)
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	ctrl.exitCheckURL = ""
+	ctrl.socksPortOverride = freePort(t)
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		return newFakeSession(), nil
+	}
+
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+	if err := ctrl.Connect(ctx, api.ConnectPayload{}); err != nil {
+		t.Fatalf("full-tunnel connect: %v", err)
+	}
+	defer ctrl.Shutdown()
+
+	on, off := true, false
+	cases := []struct {
+		name          string
+		prior         *bool  // override before the failed set; nil = admin config applies
+		priorSet      string // value written to establish prior ("" => Reset)
+		flip          string // value whose apply fails; must not be adopted
+		wantEffective bool
+	}{
+		{"no prior override", nil, "", "off", true},
+		{"prior on", &on, "on", "off", true},
+		{"prior off", &off, "off", "on", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fp.nc.setApplyErr(nil)
+			if tc.prior == nil {
+				if err := ctrl.ApplySetting(api.SettingsSetPayload{Key: "kill_switch", Reset: true}); err != nil {
+					t.Fatalf("reset override: %v", err)
+				}
+			} else if err := ctrl.SetSetting("kill_switch", tc.priorSet); err != nil {
+				t.Fatalf("establish prior override: %v", err)
+			}
+
+			fp.nc.setApplyErr(errors.New("test: kill switch engine unavailable"))
+			err := ctrl.SetSetting("kill_switch", tc.flip)
+			var re *api.RemoteError
+			if !errors.As(err, &re) || re.Code != api.CodeInternal {
+				t.Fatalf("failed re-apply error = %v, want RemoteError code %q", err, api.CodeInternal)
+			}
+			if got := ctrl.Settings().KillSwitchEffective; got != tc.wantEffective {
+				t.Fatalf("kill switch effective = %v, want %v (override not reverted)", got, tc.wantEffective)
+			}
+			st := ctrl.store.State()
+			switch {
+			case tc.prior == nil && st.KillSwitch != nil:
+				t.Fatalf("override = %v, want nil", *st.KillSwitch)
+			case tc.prior != nil && (st.KillSwitch == nil || *st.KillSwitch != *tc.prior):
+				t.Fatalf("override = %v, want %v", st.KillSwitch, *tc.prior)
+			}
+		})
+	}
+}
+
 func TestRenewalDelay(t *testing.T) {
 	now := time.Now()
 	cases := []struct {

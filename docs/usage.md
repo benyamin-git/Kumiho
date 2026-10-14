@@ -42,6 +42,9 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   (`%ProgramData%\kumiho\state.json` on Windows).
   `kill_switch`, `log_level` and `redact_targets` apply immediately;
   connection-scoped settings (DNS, MTU, CIDRs, …) apply on the next connect.
+  Toggling `kill_switch` on a connected tunnel re-applies the live policy; if
+  that re-apply fails the change is rejected with an error and the previous
+  value is kept.
 - **Logs** — the daemon's in-memory ring plus live streaming; `v` cycles the
   level filter, `/` searches, `c` clears, `f` toggles follow, `e` exports the
   visible entries to `~/.local/state/kumiho/kumiho-logs-<timestamp>.log`
