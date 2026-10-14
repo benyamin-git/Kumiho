@@ -40,13 +40,19 @@ func TestPlatformChecksSmoke(t *testing.T) {
 	}
 }
 
-// TestPlatformChecksAppended verifies collectChecks keeps the common checks
-// first and appends the platform checks, with no duplicate names.
+// TestPlatformChecksAppended verifies collectChecks keeps only the
+// cross-platform checks first (Linux-only checks are dropped on Windows) and
+// appends the platform checks, with no duplicate names.
 func TestPlatformChecksAppended(t *testing.T) {
 	all := collectChecks()
 	platform := platformChecks()
 	if len(all) < len(platform) {
 		t.Fatalf("collectChecks returned %d checks, want at least %d", len(all), len(platform))
+	}
+	common := all[:len(all)-len(platform)]
+	wantCommon := []string{"platform", "socks-port", "clock-skew", "endpoints"}
+	if got := names(common); !reflect.DeepEqual(got, wantCommon) {
+		t.Fatalf("common checks = %v, want %v (Linux-only checks must be dropped on Windows)", got, wantCommon)
 	}
 	if got := all[len(all)-len(platform):]; !reflect.DeepEqual(got, platform) {
 		t.Fatalf("collectChecks tail = %+v, want platformChecks %+v", got, platform)

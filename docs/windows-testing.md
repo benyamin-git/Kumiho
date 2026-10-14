@@ -139,9 +139,12 @@ Criterion coverage and the sign-off table are at the end. Background reading:
 
       kumiho doctor
 
-  Expect (Windows checks; order matters): `OK platform: windows (full tunnel
-  supported)`, `OK windows-service: kumiho service is running; start type
-  auto`, `OK wintun-dll: wintun.dll 0.14.1 beside the executable`,
+  Expect (order matters; Linux-only checks are not listed on Windows):
+  `OK platform: windows (full tunnel supported)`, `OK socks-port`,
+  `OK clock-skew`, `OK endpoints` (fails if any of FxA, Guardian or Remote
+  Settings is unreachable — retry if your DNS is flaky), then
+  `OK windows-service: kumiho service is running; start type auto`,
+  `OK wintun-dll: wintun.dll 0.14.1 beside the executable`,
   `OK wfp-service: Base Filtering Engine (BFE) is running`,
   `OK control-pipe: \\.\pipe\kumiho\control is reachable`,
   `SKIP tun-adapter` (adapter appears on connect), `SKIP adapter-dns`,

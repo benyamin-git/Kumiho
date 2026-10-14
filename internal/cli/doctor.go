@@ -105,11 +105,42 @@ func collectChecks() []check {
 		checkClockSkew(),
 		checkReachability(),
 	}
-	return append(checks, platformChecks()...)
+	checks = append(checks, platformChecks()...)
+	if runtime.GOOS != "linux" {
+		checks = withoutLinuxOnly(checks)
+	}
+	return checks
+}
+
+// linuxOnlyCheckNames are the checks that only make sense on a Linux host.
+// Off Linux they are dropped from the report entirely rather than shown as
+// skips, so the Windows report lists only cross-platform and Windows checks.
+var linuxOnlyCheckNames = map[string]bool{
+	"tun-device":       true,
+	"cap-net-admin":    true,
+	"nftables":         true,
+	"systemd-resolved": true,
+	"dns-manager":      true,
+	"tailscale":        true,
+	"ipv6":             true,
+	"default-route":    true,
+	"control-socket":   true,
 }
 
 func skipped(name, detail string) check {
 	return check{Name: name, Status: statusSkip, Detail: detail}
+}
+
+// withoutLinuxOnly returns the checks with the Linux-only entries removed,
+// preserving report order.
+func withoutLinuxOnly(checks []check) []check {
+	kept := make([]check, 0, len(checks))
+	for _, c := range checks {
+		if !linuxOnlyCheckNames[c.Name] {
+			kept = append(kept, c)
+		}
+	}
+	return kept
 }
 
 func summarize(checks []check) (failed, warned, skipped int) {

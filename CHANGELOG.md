@@ -58,6 +58,8 @@ passes on real hardware (spec criterion 10).
 ### Fixed
 
 - `internal/dns`: data race between server Start and Stop.
+- `kumiho doctor` on Windows no longer lists the nine Linux-only checks as
+  `SKIP`; they are dropped from the report off Linux.
 - Android/unsupported providers: fall back to the temp directory when
   `os.UserConfigDir` fails; platform `doc.go` files stay untagged so
   `go build ./...` sees them.

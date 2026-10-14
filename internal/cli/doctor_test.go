@@ -75,6 +75,45 @@ func TestDoctorJSONRoundTrip(t *testing.T) {
 	}
 }
 
+// names extracts the check names in report order; shared by the per-OS tests.
+func names(checks []check) []string {
+	out := make([]string, len(checks))
+	for i, c := range checks {
+		out[i] = c.Name
+	}
+	return out
+}
+
+// TestWithoutLinuxOnlyDropsLinuxChecks pins which checks are Linux-only and
+// that filtering them preserves the report order of the rest.
+func TestWithoutLinuxOnlyDropsLinuxChecks(t *testing.T) {
+	in := []check{
+		{Name: "platform"},
+		{Name: "tun-device"},
+		{Name: "cap-net-admin"},
+		{Name: "nftables"},
+		{Name: "systemd-resolved"},
+		{Name: "dns-manager"},
+		{Name: "tailscale"},
+		{Name: "ipv6"},
+		{Name: "default-route"},
+		{Name: "socks-port"},
+		{Name: "control-socket"},
+		{Name: "clock-skew"},
+		{Name: "endpoints"},
+	}
+	want := []string{"platform", "socks-port", "clock-skew", "endpoints"}
+	got := names(withoutLinuxOnly(in))
+	if len(got) != len(want) {
+		t.Fatalf("withoutLinuxOnly kept %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("withoutLinuxOnly kept %v, want %v", got, want)
+		}
+	}
+}
+
 func TestRenderReport(t *testing.T) {
 	var buf bytes.Buffer
 	renderReport(&buf, doctorReport{
