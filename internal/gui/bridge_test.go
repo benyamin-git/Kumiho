@@ -1,0 +1,159 @@
+package gui
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// frozenActions is the plan's frozen action vocabulary, written out
+// independently of the code-side list so drift on either side fails.
+var frozenActions = []string{
+	"connect",
+	"disconnect",
+	"select_location",
+	"ping",
+	"settings_get",
+	"settings_set",
+	"login_email",
+	"login_password",
+	"login_2fa",
+	"logout",
+	"logs_snapshot",
+	"logs_subscribe",
+	"logs_unsubscribe",
+	"logs_clear",
+	"logs_export",
+	"open_logs_folder",
+	"cleanup",
+	"service_start",
+	"service_stop",
+	"update_check",
+	"open_external",
+	"quit",
+	"window_show",
+}
+
+// TestEncodeStateEnvelopeShape pins the host → UI wire shape.
+func TestEncodeStateEnvelopeShape(t *testing.T) {
+	raw, err := EncodeState(State{})
+	if err != nil {
+		t.Fatalf("EncodeState: %v", err)
+	}
+	const want = `{"type":"state","state":{}}`
+	if string(raw) != want {
+		t.Fatalf("EncodeState() = %s, want %s", raw, want)
+	}
+}
+
+// TestDecodeActionRoundTrip pins that names survive decoding and that the
+// payload is handed on as the original raw JSON bytes.
+func TestDecodeActionRoundTrip(t *testing.T) {
+	tests := []struct {
+		name        string
+		raw         string
+		wantName    string
+		wantPayload string
+	}{
+		{
+			name:        "payload object",
+			raw:         `{"type":"action","name":"settings_set","payload":{"key":"kill_switch","value":"off"}}`,
+			wantName:    ActionSettingsSet,
+			wantPayload: `{"key":"kill_switch","value":"off"}`,
+		},
+		{
+			name:        "empty payload object",
+			raw:         `{"type":"action","name":"ping","payload":{}}`,
+			wantName:    ActionPing,
+			wantPayload: `{}`,
+		},
+		{
+			name:        "payload with escapes",
+			raw:         `{"type":"action","name":"logs_export","payload":{"path":"C:\\Users\\me\\kumiho.log"}}`,
+			wantName:    ActionLogsExport,
+			wantPayload: `{"path":"C:\\Users\\me\\kumiho.log"}`,
+		},
+		{
+			name:     "payload omitted",
+			raw:      `{"type":"action","name":"quit"}`,
+			wantName: ActionQuit,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DecodeAction([]byte(tt.raw))
+			if err != nil {
+				t.Fatalf("DecodeAction(%s): %v", tt.raw, err)
+			}
+			if got.Name != tt.wantName {
+				t.Fatalf("Name = %q, want %q", got.Name, tt.wantName)
+			}
+			if string(got.Payload) != tt.wantPayload {
+				t.Fatalf("Payload = %s, want %s", got.Payload, tt.wantPayload)
+			}
+		})
+	}
+}
+
+// TestDecodeActionRejects pins every rejected input class; each error must
+// name the offending value.
+func TestDecodeActionRejects(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{"malformed json", `{"type":`, "decode action envelope"},
+		{"not an object", `"action"`, "decode action envelope"},
+		{"empty input", ``, "decode action envelope"},
+		{"missing type", `{"name":"quit"}`, "type"},
+		{"wrong type", `{"type":"state","state":{}}`, `"state"`},
+		{"empty name", `{"type":"action","name":""}`, "empty name"},
+		{"missing name", `{"type":"action"}`, "empty name"},
+		{"unknown name", `{"type":"action","name":"reboot"}`, `"reboot"`},
+		{"unknown envelope field", `{"type":"action","name":"quit","extra":1}`, "unknown field"},
+		{"trailing data", `{"type":"action","name":"quit"}{"type":"action","name":"quit"}`, "trailing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := DecodeAction([]byte(tt.raw))
+			if err == nil {
+				t.Fatalf("DecodeAction(%s) succeeded, want error", tt.raw)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("DecodeAction(%s) error = %q, want substring %q", tt.raw, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestFrozenActionVocabulary pins the list to the plan's 23 names: same
+// members, same count, and every one decodes.
+func TestFrozenActionVocabulary(t *testing.T) {
+	if len(frozenActions) != 23 {
+		t.Fatalf("frozenActions has %d entries, want 23", len(frozenActions))
+	}
+	if len(actionNames) != len(frozenActions) {
+		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))
+	}
+
+	got := make(map[string]bool, len(actionNames))
+	for _, name := range actionNames {
+		got[name] = true
+	}
+	for _, name := range frozenActions {
+		if !got[name] {
+			t.Errorf("action %q missing from actionNames", name)
+			continue
+		}
+		raw := fmt.Sprintf(`{"type":"action","name":%q}`, name)
+		action, err := DecodeAction([]byte(raw))
+		if err != nil {
+			t.Errorf("DecodeAction(%s): %v", raw, err)
+			continue
+		}
+		if action.Name != name {
+			t.Errorf("DecodeAction(%s).Name = %q, want %q", raw, action.Name, name)
+		}
+	}
+}
