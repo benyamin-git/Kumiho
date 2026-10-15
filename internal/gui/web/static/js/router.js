@@ -44,6 +44,9 @@ export function registerScreen(id, load) {
   loaders.set(id, load);
 }
 
+// The screen table: one line per screen as its task lands.
+registerScreen("dashboard", () => import("./screens/dashboard.js"));
+
 /** Parse a location hash into {id, hint}, tolerating anything malformed. */
 export function parseHash(hash) {
   const raw = String(hash || "").replace(/^#\/?/, "");

@@ -1,0 +1,207 @@
+/* Dashboard screen (T2.2). Consumes the shell's primitives (button, chip,
+ * card, field/input) and the injected colour roles; geometry, type and
+ * spacing come from tokens.css. No literal colours (ban 9), logical
+ * properties only (ban 10), no shadows (ban 7). */
+
+.dash {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* The walk-era content width (the old 960px window minus rail and margins);
+     the card reads better constrained than stretched across a wide window. */
+  max-inline-size: 720px;
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.dash__header {
+  display: flex;
+  align-items: center;
+}
+
+/* The inventory's 170x28 state chip; the primitive supplies the tone fills. */
+.dash__chip {
+  min-inline-size: 170px;
+  min-block-size: 28px;
+  justify-content: center;
+}
+
+.dash__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dash__primary {
+  inline-size: 200px;
+}
+
+.dash__refresh {
+  min-inline-size: 110px;
+  /* 16px from the connect group; 8px inside it. */
+  margin-inline-start: var(--space-2);
+}
+
+/* -------------------------------------------------- Connect options popover */
+
+.dash__menu {
+  position: relative;
+}
+
+.dash__options {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline-start: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  inline-size: 320px;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-container-3);
+  color: var(--on-surface);
+}
+
+/* Beats the display:flex above while the disclosure is closed. */
+.dash__options[hidden] {
+  display: none;
+}
+
+.dash__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-h);
+}
+
+.dash__check label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dash__check input,
+.dash__radio input {
+  inline-size: 16px;
+  block-size: 16px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.dash__hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.dash__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.dash__radios {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.dash__radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-h);
+}
+
+/* ------------------------------------------------------------ status card */
+
+.dash__card {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+}
+
+/* The `hidden` attribute must beat the author display rules on the elements
+   that carry one (.button is inline-flex; the card cells are flex), so each
+   gets its explicit [hidden] twin. Elements without a display rule
+   (.dash__notice, .dash__bar) keep the user-agent rule. */
+.dash__card dt[hidden],
+.dash__card dd[hidden],
+.dash__retry[hidden] {
+  display: none;
+}
+
+.dash__card dt {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row-h);
+  color: var(--text-muted);
+}
+
+.dash__card dd {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--row-h);
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Tone is enhancement only; the value text carries the meaning. */
+.dash__value[data-tone="good"] {
+  color: var(--profit);
+}
+
+.dash__value[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.dash__bar {
+  block-size: 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-container-4);
+  overflow: hidden;
+}
+
+.dash__bar-fill {
+  block-size: 100%;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+}
+
+/* ---------------------------------------------------------- notice row */
+
+.dash__notice-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.dash__notice {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+
+.dash__notice[data-tone="good"] {
+  color: var(--profit);
+}
+
+.dash__notice[data-tone="bad"] {
+  color: var(--loss);
+}
+
+.dash__notice[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.dash__retry {
+  min-inline-size: 110px;
+}
