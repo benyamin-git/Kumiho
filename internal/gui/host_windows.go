@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -14,16 +15,19 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jchv/go-webview2"
 	"github.com/jchv/go-webview2/webviewloader"
 	"golang.org/x/sys/windows"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/gui/prefs"
 	"github.com/benyamin-git/kumiho/internal/gui/theme"
 	"github.com/benyamin-git/kumiho/internal/gui/web"
 	"github.com/benyamin-git/kumiho/internal/platform/auto"
+	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
 
@@ -201,10 +205,15 @@ type host struct {
 	chrome  *windowChrome
 	client  *DaemonClient
 	ctrl    *Controller
+	tray    *Tray
 
 	// mu guards prefs (geometry saves on the window thread, prefs_set on the
 	// bridge thread).
 	mu sync.Mutex
+
+	// trayBusy guards re-entry on the tray's action entry (T1.8); it is
+	// touched from the shell thread (menu popups) and action goroutines.
+	trayBusy atomic.Bool
 
 	cancel        context.CancelFunc
 	terminateOnce sync.Once
@@ -293,6 +302,7 @@ func (h *host) run() error {
 	h.cancel = cancel
 	go h.ctrl.Poll(ctx)
 	go h.pushLoop(ctx)
+	h.installTray()
 
 	if h.opts.trayStart {
 		showWindow(hwnd, windows.SW_HIDE)
@@ -311,10 +321,14 @@ func (h *host) run() error {
 	return nil
 }
 
-// shutdown tears the shell down exactly once, on every exit path: geometry,
+// shutdown tears the shell down exactly once, on every exit path: the tray
+// (removed before the control connection, the inventory's order), geometry,
 // the controller pump and the control connection, then the asset server.
 func (h *host) shutdown() {
 	h.shutdownOnce.Do(func() {
+		if h.tray != nil {
+			h.tray.Remove()
+		}
 		if h.chrome != nil {
 			h.chrome.save()
 		}
@@ -404,6 +418,128 @@ func (h *host) requestQuit() {
 		}
 		h.webview.Dispatch(func() { h.webview.Terminate() })
 	})
+}
+
+// installTray creates the notification-area icon (T1.8). The window, the
+// icon handle and the menu's modal loop are thread-affine, so the install
+// itself is dispatched onto the pump (the probe's pattern); the shell thread
+// callback runs before Run processes any click. The providers read the
+// controller's snapshot when they are called — at creation and at every menu
+// popup — and the actions reuse the shell's existing exit and dispatch
+// paths. A failure is logged: the shell runs on without an icon.
+func (h *host) installTray() {
+	h.tray = NewTray(TrayProviders{
+		Tooltip:          h.trayStateWord,
+		Connected:        h.trayConnected,
+		Busy:             h.trayBusy.Load,
+		Locations:        h.trayLocations,
+		OnShow:           h.showFromTray,
+		OnDiagnostics:    h.showFromTray, // T3.3/T4.1 add the screen switch
+		OnQuit:           h.requestQuit,
+		OnConnect:        func() { h.trayAction(Action{Name: ActionConnect}) },
+		OnDisconnect:     func() { h.trayAction(Action{Name: ActionDisconnect}) },
+		OnSelectLocation: h.traySelectLocation,
+	}, h.log)
+	h.webview.Dispatch(func() {
+		if err := h.tray.Install(); err != nil {
+			h.log.logf("tray: install: %v", err)
+		}
+	})
+}
+
+// trayStateWord is the tray tooltip's state word: the exact header wording
+// (the inventory's rule), derived from the controller snapshot the way the
+// header's status model reads it — unreachable first because every screen
+// depends on reachability, then the live state label, then the first-load
+// failure, then the loading placeholder.
+func (h *host) trayStateWord() string {
+	snap := h.ctrl.Snapshot()
+	switch {
+	case !snap.Reachable:
+		return "Daemon unreachable"
+	case snap.Status != nil:
+		return snap.Status.Label
+	case snap.StatusError != "":
+		return "Status unavailable"
+	default:
+		return "Loading..."
+	}
+}
+
+// trayConnected reports whether the tray's action entry disconnects instead
+// of connects: the Dashboard button's rule (the inventory's "same rule as
+// the Dashboard button"), which the status label carries.
+func (h *host) trayConnected() bool {
+	snap := h.ctrl.Snapshot()
+	if snap.Status == nil {
+		return false
+	}
+	switch snap.Status.Label {
+	case "Connected", "Proxy only", "Connecting", "Reconnecting", "Waiting for network":
+		return true
+	}
+	return false
+}
+
+// trayLocations is the menu's location list: the controller's server list
+// (the engine sorts it REC first). The tray copies and re-sorts before
+// displaying, so this slice is only ever read.
+func (h *host) trayLocations() []serverlist.Country {
+	return h.ctrl.Snapshot().Locations
+}
+
+// showFromTray is the tray's Show Kumiho / left-click behavior: restore and
+// focus the window on the pump thread, the same call the bridge's
+// window_show action makes.
+func (h *host) showFromTray() {
+	h.webview.Dispatch(func() { h.chrome.show() })
+}
+
+// trayAction runs one tray menu action: the busy flag disables the entry at
+// the next popup and makes a second click a no-op, and the controller call
+// itself runs on its own goroutine — connect and disconnect take up to 90 s
+// and the pump must stay free (the T2.1 transport contract).
+func (h *host) trayAction(act Action) {
+	if !h.trayBusy.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer h.trayBusy.Store(false)
+		if err := h.ctrl.Dispatch(act); err != nil {
+			h.logDispatchError(act, err)
+		}
+	}()
+}
+
+// traySelectLocation persists one menu location pick. select_location wants a
+// concrete server (the engine validates it), so the country's first
+// connectable candidate rides along; a country with no usable server is a
+// logged no-op.
+func (h *host) traySelectLocation(code string) {
+	snap := h.ctrl.Snapshot()
+	var server string
+	for _, c := range snap.Locations {
+		if c.Code != code {
+			continue
+		}
+		if cands := serverlist.Candidates([]serverlist.Country{c}, code, ""); len(cands) > 0 {
+			server = cands[0].Address()
+		}
+		break
+	}
+	if server == "" {
+		h.log.logf("tray: location %q has no connectable server", code)
+		return
+	}
+	raw, err := json.Marshal(api.SelectLocationPayload{CountryCode: code, Server: server})
+	if err != nil {
+		h.log.logf("tray: location %q: %v", code, err)
+		return
+	}
+	// The busy guard covers the connect/disconnect entry only (the
+	// inventory's rule), so a location pick runs through the regular async
+	// dispatch instead of trayAction.
+	h.dispatchAsync(Action{Name: ActionSelectLocation, Payload: raw})
 }
 
 // pushLoop is the host→UI half of the bridge: every pushInterval it encodes
