@@ -100,6 +100,16 @@ const STATES = [
     screen: "logs",
     emitLog: "dev: capture live entry",
   },
+  {
+    // The locations screen with Test-speed labels on its auto-revealed
+    // selection (DE/Berlin): the mock's 42 ms / timeout pair.
+    name: "speed-test",
+    screen: "locations",
+    action: {
+      name: "ping",
+      payload: { hosts: ["de1.edge.example:443", "de2.edge.example:443"] },
+    },
+  },
   { name: "welcome", screen: "onboarding", hint: "welcome" },
   { name: "login", screen: "onboarding", hint: "login" },
   { name: "health-check", screen: "onboarding", hint: "health-check" },

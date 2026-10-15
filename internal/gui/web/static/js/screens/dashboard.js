@@ -18,10 +18,10 @@
  * this screen-side guard is the closest the data allows (reported as a
  * projection gap, T2.2).
  *
- * The screen owns its stylesheet (css/screens/dashboard.css): linked on mount
- * relative to the document so the shell's per-run token path stays intact
- * (CSP default-src 'self' allows the same-origin link), and kept across
- * mounts — the classes are screen-prefixed, so a second mount reuses it.
+ * The router links the screen's stylesheet (css/screens/dashboard.css, from
+ * the registry entry) on mount relative to the document — the shell's
+ * per-run token path stays intact and CSP default-src 'self' allows the
+ * same-origin link.
  *
  * Wording authority: the state word and its tones, the button label rule,
  * the Retry rule, and the row order come from inventory §Dashboard;
@@ -30,9 +30,6 @@
  */
 
 import { connectionStatus } from "../store.js";
-
-const STYLESHEET_ID = "kumiho-screens-dashboard";
-const STYLESHEET_HREF = "css/screens/dashboard.css";
 
 // The busy guard's settle: an action whose signals repeat byte-for-byte (an
 // identical repeat failure) stops blocking after this long (see the file
@@ -87,16 +84,6 @@ function el(tag, className, text) {
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-/** Link the screen stylesheet once (kept across mounts; see file header). */
-function ensureStylesheet() {
-  if (document.getElementById(STYLESHEET_ID)) return;
-  const link = document.createElement("link");
-  link.id = STYLESHEET_ID;
-  link.rel = "stylesheet";
-  link.href = STYLESHEET_HREF;
-  document.head.append(link);
 }
 
 /** Build the screen's DOM and return its element references. */
@@ -250,7 +237,6 @@ function locationsSignature(locations) {
 
 export default {
   mount(host, ctx) {
-    ensureStylesheet();
     const ui = build(host);
 
     // Per-mount view state. The store hands parsed snapshots (a fresh object

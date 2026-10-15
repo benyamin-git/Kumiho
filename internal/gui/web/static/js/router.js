@@ -21,12 +21,20 @@
  * with ctx = { store, send, hint, navigate, title }. Register each module in
  * the table below as its task lands — one line, for example:
  *
- *   registerScreen("dashboard", () => import("./screens/dashboard.js"));
+ *   registerScreen("dashboard", () => import("./screens/dashboard.js"),
+ *     "css/screens/dashboard.css");
  *
  * The table is static on purpose: probing `./screens/<id>.js` by import would
  * 404 for every unbuilt screen (console noise the capture run treats as an
  * error). A screen registered but failing to load falls back to the
  * scaffold.
+ *
+ * The registry entry's third argument is the screen's stylesheet path
+ * (relative to the document, so the shell's per-run token segment stays
+ * intact): the router links it when the screen mounts and removes it when
+ * the screen unmounts, so screens never manage stylesheet elements
+ * themselves and a mounted screen is exactly its own module plus its own
+ * stylesheet.
  */
 
 import { store } from "./store.js";
@@ -35,17 +43,18 @@ const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_ID = 32;
 const DEFAULT_SCREEN = "dashboard";
 
-/** id -> () => Promise<module>; filled by registerScreen. */
+/** id -> { load: () => Promise<module>, css: string }; filled by registerScreen. */
 const loaders = new Map();
 
-/** Register a screen module loader under its route id. */
-export function registerScreen(id, load) {
+/** Register a screen module loader and its stylesheet under a route id. */
+export function registerScreen(id, load, css) {
   if (!ID_RE.test(id)) throw new Error("kumiho: bad screen id " + JSON.stringify(id));
-  loaders.set(id, load);
+  loaders.set(id, { load: load, css: css || "" });
 }
 
 // The screen table: one line per screen as its task lands.
-registerScreen("dashboard", () => import("./screens/dashboard.js"));
+registerScreen("dashboard", () => import("./screens/dashboard.js"), "css/screens/dashboard.css");
+registerScreen("locations", () => import("./screens/locations.js"), "css/screens/locations.css");
 
 /** Parse a location hash into {id, hint}, tolerating anything malformed. */
 export function parseHash(hash) {
@@ -100,6 +109,22 @@ export function initRouter(opts) {
 
   let generation = 0;
   let current = null;
+  let currentCSS = null; // the mounted screen's <link>, linked by the router
+
+  function linkScreenCSS(id, href) {
+    const link = document.createElement("link");
+    link.id = "kumiho-screen-" + id;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.append(link);
+    currentCSS = link;
+  }
+
+  function unlinkScreenCSS() {
+    if (!currentCSS) return;
+    currentCSS.remove();
+    currentCSS = null;
+  }
 
   async function show(route, moveFocus) {
     const gen = ++generation;
@@ -119,10 +144,11 @@ export function initRouter(opts) {
       }
     }
     current = null;
+    unlinkScreenCSS();
     host.replaceChildren();
 
-    const load = loaders.get(route.id);
-    if (!load) {
+    const entry = loaders.get(route.id);
+    if (!entry) {
       renderScaffold(host, title);
       if (moveFocus) host.focus({ preventScroll: true });
       return;
@@ -130,7 +156,7 @@ export function initRouter(opts) {
 
     let screen = null;
     try {
-      const mod = await load();
+      const mod = await entry.load();
       if (gen !== generation) return; // a newer route won the race
       screen = mod && mod.default ? mod.default : mod;
     } catch (err) {
@@ -139,11 +165,13 @@ export function initRouter(opts) {
     }
 
     if (screen && typeof screen.mount === "function") {
+      if (entry.css) linkScreenCSS(route.id, entry.css);
       try {
         screen.mount(host, { store: store, send: send, hint: route.hint, navigate: navigate, title: title });
         current = screen;
       } catch (err) {
         console.error("kumiho: screen " + route.id + " failed to mount", err);
+        unlinkScreenCSS();
         host.replaceChildren();
         renderScaffold(host, title);
       }

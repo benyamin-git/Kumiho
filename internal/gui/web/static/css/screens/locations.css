@@ -1,0 +1,124 @@
+/* Locations screen (T2.3). Consumes the shell's primitives (button, card,
+ * field/input) and the injected colour roles; geometry, type and spacing
+ * come from tokens.css. No literal colours (ban 9), logical properties only
+ * (ban 10), no shadows (ban 7). The list card's metrics follow the walk-era
+ * widget (8 px padding, indent 8/28/48 per level) with 40 px rows (the house
+ * floor's desktop target size). */
+
+.loc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Match the dashboard's data column so the two screens read as one app. */
+  max-inline-size: 720px;
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.loc__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.loc__refresh {
+  min-inline-size: 110px;
+}
+
+.loc__test {
+  min-inline-size: 140px;
+}
+
+/* ----------------------------------------------------------------- filter */
+
+/* The house field (label above the input); the inventory's 260-wide input. */
+.loc__field {
+  inline-size: 260px;
+}
+
+/* ------------------------------------------------------------------- tree */
+
+.loc__tree {
+  /* The inventory's minimum list height and the input cue's scroll cap. */
+  min-block-size: 200px;
+  max-block-size: 480px;
+  overflow-y: auto;
+  /* The walk list's 8 px content padding (the .card primitive's 16 is
+     overridden here). */
+  padding: var(--space-2);
+}
+
+/* The card primitive sets no display rule, so [hidden] wins; keep the
+   explicit rule for safety if that changes. */
+.loc__tree[hidden] {
+  display: none;
+}
+
+.loc__row {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-h); /* 40 px desktop target (house floor) */
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-button);
+  cursor: pointer;
+}
+
+/* The walk indents: country 8, city 28, server 48 units. */
+.loc__row[aria-level="2"] {
+  padding-inline-start: 28px;
+}
+
+.loc__row[aria-level="3"] {
+  padding-inline-start: 48px;
+}
+
+/* The hovered row on the lower container step, the current row (keyboard
+   cursor) on the upper one; both theme-derived. */
+.loc__row:hover {
+  background: var(--surface-container-2);
+}
+
+.loc__row[data-current="true"] {
+  background: var(--surface-container-3);
+}
+
+.loc__caret {
+  flex: none;
+  margin-inline-end: var(--space-1);
+  color: var(--on-surface);
+}
+
+.loc__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- empty/status */
+
+/* The quiet placeholder line in place of the card while the list has
+   nothing to draw. */
+.loc__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 200px;
+  color: var(--text-muted);
+}
+
+/* Beats the display:flex above while the placeholder is hidden. */
+.loc__empty[hidden] {
+  display: none;
+}
+
+.loc__status {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tone is enhancement only; every status line carries its word. */
+.loc__status[data-tone="bad"] {
+  color: var(--loss);
+}

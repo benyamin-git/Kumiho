@@ -109,6 +109,7 @@ States, all driven through the harness (dark theme, blue accent):
 | `signout-confirm` | route hint `#/account?state=signout-confirm` |
 | `cleanup-confirm` | route hint `#/diagnostics?state=cleanup-confirm` |
 | `live-entry` | `/dev/log`, then capture the logs screen |
+| `speed-test` | `ping` action for the locations screen's auto-revealed servers (`42 ms` / `timeout` labels) |
 | `welcome`, `login`, `health-check`, `autoconnect`, `finish` | wizard-step hints on `#/onboarding?state=…` |
 | `latency-3s` | `/dev/latency 3000` + `connect` action in flight |
 | `injected-failure` | `/dev/fail` armed, then `connect` fails through it |
