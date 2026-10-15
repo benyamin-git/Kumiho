@@ -34,13 +34,61 @@ var frozenActions = []string{
 	"window_show",
 }
 
-// TestEncodeStateEnvelopeShape pins the host → UI wire shape.
+// TestEncodeStateEnvelopeShape pins the host → UI wire shape for the zero
+// state: every optional field is omitted, and only the always-present GUI
+// extras (Service, Update) appear as empty objects.
 func TestEncodeStateEnvelopeShape(t *testing.T) {
 	raw, err := EncodeState(State{})
 	if err != nil {
 		t.Fatalf("EncodeState: %v", err)
 	}
-	const want = `{"type":"state","state":{}}`
+	const want = `{"type":"state","state":{"service":{},"update":{}}}`
+	if string(raw) != want {
+		t.Fatalf("EncodeState() = %s, want %s", raw, want)
+	}
+}
+
+// TestEncodeStatePopulatedShape pins the populated host → UI wire shape:
+// field names, JSON types and order for the richer state the controller
+// produces.
+func TestEncodeStatePopulatedShape(t *testing.T) {
+	st := State{
+		Reachable:   true,
+		StatusError: "",
+		Status: &StatusView{
+			Label:         "Connected",
+			Connected:     true,
+			Authenticated: true,
+			Email:         "user@example.com",
+			Uptime:        "1m23s",
+			Location:      "DE",
+			Server:        "de1.example:443",
+			KillSwitch:    true,
+			ExitIP:        "192.0.2.1",
+		},
+		Login:   &LoginView{Step: "done"},
+		RTTs:    map[string]string{"de1.example:443": "42 ms"},
+		Notice:  &Notice{Message: "Connected", Tone: "info"},
+		Theme:   "dark",
+		Accent:  "blue",
+		Service: ServiceState{State: "running"},
+		Update:  UpdateInfo{Checked: true, Latest: "v0.3.1", URL: "https://example.com/v0.3.1"},
+	}
+	raw, err := EncodeState(st)
+	if err != nil {
+		t.Fatalf("EncodeState: %v", err)
+	}
+	const want = `{"type":"state","state":{` +
+		`"reachable":true,` +
+		`"status":{"label":"Connected","connected":true,"authenticated":true,"email":"user@example.com","uptime":"1m23s","location":"DE","server":"de1.example:443","kill_switch":true,"exit_ip":"192.0.2.1"},` +
+		`"login":{"step":"done"},` +
+		`"rtts":{"de1.example:443":"42 ms"},` +
+		`"notice":{"message":"Connected","tone":"info"},` +
+		`"theme":"dark",` +
+		`"accent":"blue",` +
+		`"service":{"state":"running"},` +
+		`"update":{"checked":true,"latest":"v0.3.1","url":"https://example.com/v0.3.1"}` +
+		`}}`
 	if string(raw) != want {
 		t.Fatalf("EncodeState() = %s, want %s", raw, want)
 	}

@@ -11,6 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/benyamin-git/kumiho/internal/api"
+	"github.com/benyamin-git/kumiho/internal/logging"
+	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
 
 // Envelope types carried by the bridge.
@@ -82,9 +86,66 @@ var knownActions = func() map[string]struct{} {
 	return set
 }()
 
-// State is the payload of a host → UI state envelope. It is deliberately
-// empty in this task; the controller snapshot fields arrive with T1.2.
-type State struct{}
+// State is the payload of a host → UI state envelope: the controller's
+// projection of the daemon (status, login, settings, account, server list,
+// RTTs, logs) plus GUI-local extras (notices, theme, service, update). Every
+// field is optional, so the zero State is an empty object; the projection
+// types live in controller.go.
+type State struct {
+	// Reachable reports the control pipe's reachability: it flips false on a
+	// dial failure (the shell shows the Set up Kumiho gate) and true on the
+	// next successful request (inventory §behavioral).
+	Reachable bool `json:"reachable,omitempty"`
+
+	// StatusError is the failed first status load's error. Until the first
+	// status arrives the header reads "Loading..."; once this is set, and
+	// the daemon is reachable, it reads "Status unavailable" (inventory
+	// §Shell).
+	StatusError string `json:"status_error,omitempty"`
+
+	// Status is the daemon status projection; nil until the first snapshot.
+	Status *StatusView `json:"status,omitempty"`
+
+	// Login is the daemon-driven sign-in projection; nil until the first
+	// login reply.
+	Login *LoginView `json:"login,omitempty"`
+
+	// Settings is the runtime settings snapshot; nil until loaded.
+	Settings *api.SettingsView `json:"settings,omitempty"`
+
+	// Account is the account snapshot; nil until loaded.
+	Account *api.AccountInfo `json:"account,omitempty"`
+
+	// Locations is the server list; nil until loaded.
+	Locations []serverlist.Country `json:"locations,omitempty"`
+
+	// RTTs maps host:port to its test-speed label ("42 ms" or "timeout").
+	RTTs map[string]string `json:"rtts,omitempty"`
+
+	// Logs is the retained log buffer (the daemon snapshot merged with live
+	// entries, capped at 2000).
+	Logs []logging.Entry `json:"logs,omitempty"`
+
+	// Notice is the shared view-model notice (Dashboard, Locations,
+	// Onboarding): it persists until another action replaces it.
+	Notice *Notice `json:"notice,omitempty"`
+
+	// Screen-local notices per the inventory's status-line rules: 10-second
+	// successes (good) or persistent errors (bad).
+	LocationsNotice *Notice `json:"locations_notice,omitempty"`
+	SettingsNotice  *Notice `json:"settings_notice,omitempty"`
+	LogsNotice      *Notice `json:"logs_notice,omitempty"`
+	AccountNotice   *Notice `json:"account_notice,omitempty"`
+
+	// Theme and Accent carry the active house appearance for the webview.
+	Theme  string `json:"theme,omitempty"`
+	Accent string `json:"accent,omitempty"`
+
+	// Service and Update are GUI-side projections filled by later tasks
+	// (service control, update check); they are not protocol types.
+	Service ServiceState `json:"service"`
+	Update  UpdateInfo   `json:"update"`
+}
 
 // Action is a decoded UI → host message: a frozen action name plus the
 // still-encoded, action-specific JSON payload. A nil Payload means the
