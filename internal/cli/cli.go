@@ -16,6 +16,7 @@ Usage:
 
 Commands:
   (no command)  Open the TUI (requires a running daemon)
+  gui           Open the Windows desktop app (Windows only)
   version       Print version information
   doctor        Run preflight diagnostics (--json for machine output)
   daemon        Run the daemon in the foreground (systemd runs this)
@@ -43,6 +44,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	cmd, rest := args[0], args[1:]
 	switch cmd {
+	case "gui":
+		return runGUI(stderr)
 	case "version", "--version", "-v":
 		return runVersion(stdout)
 	case "doctor":
