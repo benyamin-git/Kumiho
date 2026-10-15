@@ -7,13 +7,16 @@
  * projection); actions go through the transport and the screen re-renders
  * from the next envelope — "" means accepted, never completed (T1.7). The
  * primary button's busy guard therefore holds from the click until the
- * controller's completion signals arrive — the shared notice, the projected
- * state word, the reachability gate or the first-status error — and, as the
- * safety net for an action that changes nothing at all (an identical repeat
- * failure: the notice repeats byte-for-byte, the state word does not move),
- * until a short settle after the click. The controller exposes no busy flag
- * and the State carries none; this screen-side guard is the closest the data
- * allows (reported as a projection gap, T2.2).
+ * controller's completion signals arrive — the shared notice, the
+ * reachability gate or the first-status error — and, as the safety net for
+ * an action that changes nothing at all (an identical repeat failure: the
+ * notice repeats byte-for-byte), until a short settle after the click. The
+ * daemon's transitional state word (CONNECTING, RECONNECTING, …) is
+ * deliberately NOT a release signal: it arrives while the action is still in
+ * flight, and the inventory keeps the primary disabled until the action
+ * settles. The controller exposes no busy flag and the State carries none;
+ * this screen-side guard is the closest the data allows (reported as a
+ * projection gap, T2.2).
  *
  * The screen owns its stylesheet (css/screens/dashboard.css): linked on mount
  * relative to the document so the shell's per-run token path stays intact
@@ -271,17 +274,18 @@ export default {
     };
 
     // The controller's connect/disconnect completion signals: the shared
-    // notice, the projected state word, the reachability gate and the
-    // first-status error. Everything else on this screen ticks (uptime) or is
-    // the action itself, so one of these bytes changing is what ends the busy
-    // guard early; the settle timer covers an action that moves none of them.
+    // notice, the reachability gate and the first-status error. Everything
+    // else on this screen ticks (uptime) or is the action itself, so one of
+    // these bytes changing is what ends the busy guard early; the settle
+    // timer covers an action that moves none of them. The daemon's
+    // transitional state word is deliberately excluded — it moves while the
+    // action is still in flight (inventory §Dashboard keeps the primary
+    // disabled until the action settles).
     function fingerprint(snapshot) {
       const notice = snapshot.notice || {};
-      const status = snapshot.status || {};
       return [
         notice.message || "",
         notice.tone || "",
-        status.label || "",
         snapshot.reachable === true,
         snapshot.status_error || "",
       ].join("\u0000");
