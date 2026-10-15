@@ -69,9 +69,11 @@ const (
 	dwmwaUseImmersiveDarkMode       = 20
 	dwmwaUseImmersiveDarkModeLegacy = 19
 
-	// resourceIDIcon is the icon group's resource ID in rsrc_windows.syso
-	// (rsrc assigns the first icon group ID 1).
-	resourceIDIcon = 1
+	// resourceIDIcon is the icon group's (RT_GROUP_ICON) resource ID in
+	// rsrc_windows.syso: the recovered asset carries the group under ID 2
+	// (its RT_ICON images 3-6 are the 16/32/48/256 entries; ID 1 is
+	// RT_VERSION). Both the window chrome and the tray load it.
+	resourceIDIcon = 2
 )
 
 // rect mirrors RECT (windef.h).
