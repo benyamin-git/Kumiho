@@ -5,9 +5,9 @@ import (
 	"io/fs"
 )
 
-// staticFiles holds the GUI assets. T2.1 replaces the placeholder under
-// static/ with the real UI; keep the tree self-contained (no network) until
-// then.
+// staticFiles holds the GUI assets (the T2.1 foundation: shell, tokens and
+// primitives). Keep the tree self-contained (no network): the UI is
+// hand-written HTML/CSS/JS served by this package.
 //
 //go:embed static
 var staticFiles embed.FS

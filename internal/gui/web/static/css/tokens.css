@@ -1,0 +1,58 @@
+/* Kumiho design tokens (non-colour).
+ *
+ * Colour roles are NOT defined here. internal/gui/theme injects the role
+ * variables (--primary, --on-primary, --surface-container-1, --profit, …)
+ * as an inline <style> block at the `<!--kumiho:theme-css-->` marker before
+ * first paint; app.css consumes those variables directly. No literal colour
+ * value may appear anywhere in this tree (house ban 9) — the only keywords
+ * used are `transparent` and color-mix() over injected roles.
+ *
+ * This file carries only the non-colour scale: type, spacing, radii, control
+ * sizes and focus geometry. Screens add their own CSS files and consume
+ * these tokens plus the injected colour roles.
+ */
+:root {
+  /* Type: one family (ban 12); closed scale 12/14/16/20/24/32 (D21). */
+  --font-sans: system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+
+  /* Spacing: the 4px grid, nothing improvised. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii: 6 inputs/chips, 8 buttons, 12 cards, 16 dialogs, full pills. */
+  --radius-input: 6px;
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --radius-full: 999px;
+
+  /* Control and shell metrics (desktop density: 40px controls). */
+  --control-h: 40px;
+  --row-h: 36px;
+  --header-h: 64px;
+  --rail-w: 200px;
+
+  /* Desktop-only app (D24): the shell is laid out for >= 900px. */
+  --min-width: 900px;
+
+  /* Prose measure stays under ~80ch (house rule). */
+  --content-measure: 72ch;
+
+  /* Focus ring geometry (colour is the injected --primary). */
+  --focus-ring-w: 2px;
+  --focus-ring-offset: 2px;
+
+  /* Motion: state feedback only, neutralised by prefers-reduced-motion. */
+  --motion-fast: 120ms;
+  --motion-ease: ease;
+}

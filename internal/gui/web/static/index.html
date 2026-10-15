@@ -2,15 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Kumiho asset placeholder: T2.1 replaces this file with the real UI. The
-     server substitutes the marker below with the theme <style> block; keep it
-     inside <head>, before any stylesheet, link or script, so the first paint
-     is already themed. -->
+<!-- Kumiho GUI shell. The asset server substitutes the marker below with the
+     theme <style> block before first paint; keep it inside <head> and before
+     every stylesheet, link and script. All scripts are same-origin files
+     (CSP `default-src 'self'`; never add inline script or style attributes). -->
 <!--kumiho:theme-css-->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kumiho</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/app.css">
+<script src="js/transport.js"></script>
 </head>
 <body>
-<p>Kumiho UI asset placeholder.</p>
+<div class="app">
+<header class="app-header">
+<h1 class="app-header__title" id="screen-title">Dashboard</h1>
+<p class="app-header__status" id="conn-status" data-tone="muted" role="status">Loading...</p>
+</header>
+<div class="app-body">
+<nav class="rail" aria-label="Primary">
+<ul class="rail__list">
+<li><a class="rail__item" href="#/dashboard" data-screen="dashboard">Dashboard</a></li>
+<li><a class="rail__item" href="#/locations" data-screen="locations">Locations</a></li>
+<li><a class="rail__item" href="#/settings" data-screen="settings">Settings</a></li>
+<li><a class="rail__item" href="#/account" data-screen="account">Account</a></li>
+<li><a class="rail__item" href="#/logs" data-screen="logs">Logs</a></li>
+<li><a class="rail__item" href="#/diagnostics" data-screen="diagnostics">Diagnostics</a></li>
+</ul>
+</nav>
+<main class="content" id="screen-host" tabindex="-1"></main>
+</div>
+</div>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

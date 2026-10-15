@@ -100,8 +100,8 @@ func TestURLAndRootWithoutToken(t *testing.T) {
 	if got.status != http.StatusOK {
 		t.Fatalf("GET %s = %d; want 200", u, got.status)
 	}
-	if !strings.Contains(got.body, "asset placeholder") {
-		t.Errorf("root body does not contain the placeholder text")
+	if !strings.Contains(got.body, `id="screen-host"`) {
+		t.Errorf("root body does not contain the UI shell")
 	}
 }
 
@@ -453,21 +453,30 @@ func TestContentTypes(t *testing.T) {
 	}
 }
 
-func TestPlaceholderIndex(t *testing.T) {
+// TestIndexAsset pins the shipped index.html: the theme marker sits inside
+// <head> before every stylesheet and script (the injected block must land
+// before first paint), and every script is a same-origin file — the response
+// CSP is default-src 'self', so an inline script would be blocked.
+func TestIndexAsset(t *testing.T) {
 	data, err := fs.ReadFile(StaticFS(), "index.html")
 	if err != nil {
 		t.Fatalf("read embedded index.html: %v", err)
 	}
 	page := string(data)
-	if !strings.Contains(page, "asset placeholder") {
-		t.Error("placeholder body text missing")
-	}
-	if strings.Contains(page, "<script") {
-		t.Error("placeholder index must not contain scripts")
-	}
 	marker := strings.Index(page, themeMarker)
 	head := strings.Index(page, "</head>")
 	if marker < 0 || head < 0 || marker > head {
 		t.Errorf("theme marker at %d must be inside <head> (ends at %d)", marker, head)
+	}
+	for _, tag := range []string{"<link", "<script"} {
+		if i := strings.Index(page, tag); i >= 0 && i < marker {
+			t.Errorf("%s at %d precedes the theme marker at %d", tag, i, marker)
+		}
+	}
+	for i, part := range strings.Split(page, "<script")[1:] {
+		attrs, _, ok := strings.Cut(part, ">")
+		if !ok || !strings.Contains(attrs, "src=") {
+			t.Errorf("<script #%d is inline; the CSP allows only same-origin script files", i+1)
+		}
 	}
 }
