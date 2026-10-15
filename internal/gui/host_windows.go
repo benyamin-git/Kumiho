@@ -332,10 +332,18 @@ func (h *host) shutdown() {
 }
 
 // handleAction is the UI→host half of the bridge: the page calls
-// kumihoAction(<envelope string>) with a {"type":"action",...} envelope. It
-// returns "" on success or the error message. window_show, quit,
-// open_external and prefs_set are the shell's own actions (D34); everything
-// else routes to the controller.
+// kumihoAction(<envelope string>) with a {"type":"action",...} envelope.
+// window_show, quit, open_external and prefs_set are the shell's own fast
+// actions (D34): they run synchronously, and their result is "" on success or
+// the error message. Controller actions are accepted only: the binding's
+// synchronous callback thread must never block on a daemon call (connect and
+// disconnect take up to 90 s, login 60 s), so Dispatch runs on its own
+// goroutine — the controller's documented contract for callers that must stay
+// responsive — and the page gets "" immediately. Controller failures reach
+// the UI through the controller's own state notices; the host only logs
+// them. Consequently two rapid UI actions may run concurrently, which the
+// mutex-guarded controller supports, and "kumihoAction returned \"\"" means
+// accepted, not completed (the T2.1 transport contract).
 func (h *host) handleAction(envelope string) string {
 	act, err := DecodeAction([]byte(envelope))
 	if err != nil {
@@ -352,17 +360,36 @@ func (h *host) handleAction(envelope string) string {
 	case ActionPrefsSet:
 		err = h.applyPrefs(act)
 	default:
-		err = h.ctrl.Dispatch(act)
+		h.dispatchAsync(act)
+		return ""
 	}
 	if err != nil {
-		if errors.Is(err, ErrDaemonUnreachable) {
-			h.log.logf("ipc: %s: %v", act.Name, err)
-		} else {
-			h.log.logf("action %s: %v", act.Name, err)
-		}
+		h.logDispatchError(act, err)
 		return err.Error()
 	}
 	return ""
+}
+
+// dispatchAsync runs one controller action in the background; Dispatch may
+// block for the action's full daemon timeout, and the binding's callback
+// thread owns the window's message processing, so it must stay free. The
+// controller is mutex-guarded and serialises its state itself.
+func (h *host) dispatchAsync(act Action) {
+	go func() {
+		if err := h.ctrl.Dispatch(act); err != nil {
+			h.logDispatchError(act, err)
+		}
+	}()
+}
+
+// logDispatchError records one action failure; a dial failure is logged as
+// the control-pipe failure it is (the same wording the push loop uses).
+func (h *host) logDispatchError(act Action, err error) {
+	if errors.Is(err, ErrDaemonUnreachable) {
+		h.log.logf("ipc: %s: %v", act.Name, err)
+	} else {
+		h.log.logf("action %s: %v", act.Name, err)
+	}
 }
 
 // requestQuit is the clean exit path (the UI's quit action; T1.8's tray Quit
