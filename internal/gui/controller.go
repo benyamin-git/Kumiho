@@ -83,8 +83,9 @@ type Daemon interface {
 	LoginPassword(context.Context, api.LoginPasswordPayload) (api.LoginState, error)
 	Login2FA(context.Context, api.Login2FAPayload) (api.LoginState, error)
 	Logout(context.Context) (api.Result, error)
-	// Events yields the daemon's unsolicited events (status snapshots, ping
-	// results, live log entries). The channel never closes.
+	// Events yields the daemon's unsolicited, pushed events (status
+	// snapshots, ping results, live log entries) that drive live refreshes.
+	// The channel never closes.
 	Events() <-chan *ipc.Envelope
 }
 
@@ -266,6 +267,7 @@ func (c *Controller) Snapshot() State {
 		Login:           copyLogin(c.login),
 		Settings:        copySettings(c.settings),
 		Account:         copyAccount(c.account),
+		LocationsLoaded: c.locationsLoaded,
 		Locations:       c.locations,
 		RTTs:            copyRTTs(c.rtts),
 		Logs:            c.logs,
@@ -289,12 +291,12 @@ func (c *Controller) Snapshot() State {
 //
 // Handled here: connect, disconnect, select_location, ping, settings_get,
 // settings_set, login_email, login_password, login_2fa, logout,
-// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear. window_show,
-// quit and open_external are recognized no-ops: the shell owns window
-// visibility, process exit and opening links (D34). Actions whose handlers
-// arrive with later tasks (logs_export, open_logs_folder, cleanup,
-// service_start, service_stop, update_check) return an "unsupported action"
-// error instead of panicking.
+// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, refresh.
+// window_show, quit and open_external are recognized no-ops: the shell owns
+// window visibility, process exit and opening links (D34). Actions whose
+// handlers arrive with later tasks (logs_export, open_logs_folder, cleanup,
+// service_start, service_stop, update_check, prefs_set, doctor_run) return
+// an "unsupported action" error instead of panicking.
 func (c *Controller) Dispatch(act Action) error {
 	switch act.Name {
 	case ActionConnect:
@@ -321,6 +323,12 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchLogsUnsubscribe()
 	case ActionLogsClear:
 		return c.dispatchLogsClear()
+	case ActionRefresh:
+		return c.dispatchRefresh()
+	case ActionPrefsSet, ActionDoctorRun:
+		// Deferred: prefs_set is host-side (T1.7/T1.10/T4.2) and doctor_run
+		// arrives with the diagnostics screen (T3.3).
+		return fmt.Errorf("unsupported action %q", act.Name)
 	case ActionWindowShow, ActionQuit, ActionOpenExternal:
 		return nil
 	default:
@@ -582,6 +590,25 @@ func (c *Controller) dispatchLogsClear() error {
 	c.logs = nil
 	c.mu.Unlock()
 	c.setNotice(slotLogs, "Logs cleared", toneGood, c.opts.NoticeTTL)
+	return nil
+}
+
+// dispatchRefresh re-runs the controller's autonomous loads, reusing the
+// same paths Poll uses: the status snapshot reloads synchronously (a failure
+// becomes the shared "could not refresh the status" notice — the Dashboard's
+// Refresh/Retry wording), and the account and server-list loads re-run when
+// the controller considers them absent or stale. A failed status refresh
+// short-circuits, exactly like Poll's tick. Settings stay behind
+// settings_get. Safe to call while Poll runs: the loading guards and the
+// state mutex serialise every fetch.
+func (c *Controller) dispatchRefresh() error {
+	err := c.refreshStatus(context.Background())
+	if err != nil {
+		c.setNotice(slotShared, "could not refresh the status: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.ensureAccount(context.Background())
+	c.ensureLocations(context.Background())
 	return nil
 }
 

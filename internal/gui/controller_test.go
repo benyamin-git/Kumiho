@@ -751,6 +751,7 @@ func TestDispatchUnsupportedAndNoOpActions(t *testing.T) {
 	for _, name := range []string{
 		ActionLogsExport, ActionOpenLogsFolder, ActionCleanup,
 		ActionServiceStart, ActionServiceStop, ActionUpdateCheck,
+		ActionPrefsSet, ActionDoctorRun,
 	} {
 		err := ctrl.Dispatch(Action{Name: name})
 		if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("unsupported action %q", name)) {
@@ -881,7 +882,86 @@ func TestPollAutoLoadsAccountAndLocations(t *testing.T) {
 	waitFor(t, "account and locations loads", func() bool {
 		s := ctrl.Snapshot()
 		return s.Account != nil && s.Account.Email == "user@example.com" &&
-			len(s.Locations) == 1 && s.Locations[0].Code == "DE"
+			s.LocationsLoaded && len(s.Locations) == 1 && s.Locations[0].Code == "DE"
+	})
+}
+
+func TestLocationsLoadedState(t *testing.T) {
+	f := newFakeDaemon() // an empty server list: a settled, loaded state
+	ctrl := NewController(f, quietOptions())
+
+	if s := ctrl.Snapshot(); s.LocationsLoaded {
+		t.Fatal("locations reported as loaded before the pump started")
+	}
+	startPoll(t, ctrl)
+	waitFor(t, "empty locations load", func() bool { return ctrl.Snapshot().LocationsLoaded })
+
+	s := ctrl.Snapshot()
+	if len(s.Locations) != 0 {
+		t.Fatalf("locations = %+v, want an empty list", s.Locations)
+	}
+}
+
+func TestDispatchRefresh(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.account = api.AccountInfo{Email: "user@example.com"}
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh}); err != nil {
+		t.Fatalf("Dispatch(refresh) = %v", err)
+	}
+	// The status snapshot reloads synchronously; the account and server-list
+	// loads re-run through the same paths Poll uses.
+	if s := ctrl.Snapshot().Status; s == nil {
+		t.Fatal("status not loaded by the refresh")
+	}
+	waitFor(t, "refresh loads", func() bool {
+		s := ctrl.Snapshot()
+		return s.Account != nil && s.LocationsLoaded && len(s.Locations) == 1
+	})
+}
+
+func TestDispatchRefreshFailureNotice(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh}); err != nil {
+		t.Fatalf("Dispatch(refresh) = %v", err)
+	}
+
+	f.set(func(d *fakeDaemon) { d.statusErr = errors.New("boom") })
+	err := ctrl.Dispatch(Action{Name: ActionRefresh})
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("Dispatch(refresh) = %v, want the status error", err)
+	}
+	if n := ctrl.Snapshot().Notice; n == nil || n.Message != "could not refresh the status: boom" || n.Tone != toneBad {
+		t.Fatalf("notice = %+v", n)
+	}
+}
+
+func TestDispatchRefreshConcurrentWithPoll(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.account = api.AccountInfo{Email: "user@example.com"}
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	ctrl := NewController(f, Options{
+		PumpInterval:     time.Millisecond,
+		StatusInterval:   time.Millisecond,
+		SettingsInterval: time.Hour,
+	})
+	startPoll(t, ctrl)
+
+	for i := 0; i < 20; i++ {
+		if err := ctrl.Dispatch(Action{Name: ActionRefresh}); err != nil {
+			t.Fatalf("Dispatch(refresh) #%d = %v", i, err)
+		}
+	}
+	waitFor(t, "concurrent refresh state", func() bool {
+		s := ctrl.Snapshot()
+		return s.Status != nil && s.Account != nil && s.LocationsLoaded
 	})
 }
 

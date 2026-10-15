@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
 
-// frozenActions is the plan's frozen action vocabulary, written out
-// independently of the code-side list so drift on either side fails.
+// frozenActions is the plan's frozen action vocabulary plus the three
+// controller-ruled additions of 2026-10-15, written out independently of the
+// code-side list so drift on either side fails.
 var frozenActions = []string{
 	"connect",
 	"disconnect",
@@ -32,17 +35,22 @@ var frozenActions = []string{
 	"open_external",
 	"quit",
 	"window_show",
+	// Controller-ruled extension, 2026-10-15.
+	"refresh",
+	"prefs_set",
+	"doctor_run",
 }
 
 // TestEncodeStateEnvelopeShape pins the host → UI wire shape for the zero
-// state: every optional field is omitted, and only the always-present GUI
-// extras (Service, Update) appear as empty objects.
+// state: every optional field is omitted; LocationsLoaded is always present
+// (its false must be visible to the UI); the GUI extras Service and Update
+// appear as empty objects.
 func TestEncodeStateEnvelopeShape(t *testing.T) {
 	raw, err := EncodeState(State{})
 	if err != nil {
 		t.Fatalf("EncodeState: %v", err)
 	}
-	const want = `{"type":"state","state":{"service":{},"update":{}}}`
+	const want = `{"type":"state","state":{"locations_loaded":false,"service":{},"update":{}}}`
 	if string(raw) != want {
 		t.Fatalf("EncodeState() = %s, want %s", raw, want)
 	}
@@ -66,13 +74,15 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 			KillSwitch:    true,
 			ExitIP:        "192.0.2.1",
 		},
-		Login:   &LoginView{Step: "done"},
-		RTTs:    map[string]string{"de1.example:443": "42 ms"},
-		Notice:  &Notice{Message: "Connected", Tone: "info"},
-		Theme:   "dark",
-		Accent:  "blue",
-		Service: ServiceState{State: "running"},
-		Update:  UpdateInfo{Checked: true, Latest: "v0.3.1", URL: "https://example.com/v0.3.1"},
+		Login:           &LoginView{Step: "done"},
+		LocationsLoaded: true,
+		Locations:       []serverlist.Country{{Code: "DE", Name: "Germany"}},
+		RTTs:            map[string]string{"de1.example:443": "42 ms"},
+		Notice:          &Notice{Message: "Connected", Tone: "info"},
+		Theme:           "dark",
+		Accent:          "blue",
+		Service:         ServiceState{State: "running"},
+		Update:          UpdateInfo{Checked: true, Latest: "v0.3.1", URL: "https://example.com/v0.3.1"},
 	}
 	raw, err := EncodeState(st)
 	if err != nil {
@@ -82,6 +92,8 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		`"reachable":true,` +
 		`"status":{"label":"Connected","connected":true,"authenticated":true,"email":"user@example.com","uptime":"1m23s","location":"DE","server":"de1.example:443","kill_switch":true,"exit_ip":"192.0.2.1"},` +
 		`"login":{"step":"done"},` +
+		`"locations_loaded":true,` +
+		`"locations":[{"code":"DE","name":"Germany","cities":null}],` +
 		`"rtts":{"de1.example:443":"42 ms"},` +
 		`"notice":{"message":"Connected","tone":"info"},` +
 		`"theme":"dark",` +
@@ -175,11 +187,12 @@ func TestDecodeActionRejects(t *testing.T) {
 	}
 }
 
-// TestFrozenActionVocabulary pins the list to the plan's 23 names: same
-// members, same count, and every one decodes.
+// TestFrozenActionVocabulary pins the list to the plan's 23 names plus the
+// three controller-ruled additions: same members, same count, and every one
+// decodes.
 func TestFrozenActionVocabulary(t *testing.T) {
-	if len(frozenActions) != 23 {
-		t.Fatalf("frozenActions has %d entries, want 23", len(frozenActions))
+	if len(frozenActions) != 26 {
+		t.Fatalf("frozenActions has %d entries, want 26", len(frozenActions))
 	}
 	if len(actionNames) != len(frozenActions) {
 		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))

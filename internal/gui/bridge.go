@@ -50,6 +50,17 @@ const (
 	ActionWindowShow      = "window_show"
 )
 
+// Action names added by a controller ruling on 2026-10-15, appended after
+// the original frozen 23 (whose names and order are untouched): refresh
+// re-runs the controller's autonomous loads; prefs_set writes the GUI
+// preferences (host handlers land with T1.7/T1.10/T4.2); doctor_run runs the
+// diagnostics suite (T3.3).
+const (
+	ActionRefresh   = "refresh"
+	ActionPrefsSet  = "prefs_set"
+	ActionDoctorRun = "doctor_run"
+)
+
 // actionNames lists every action the bridge accepts, in plan order.
 var actionNames = []string{
 	ActionConnect,
@@ -75,6 +86,9 @@ var actionNames = []string{
 	ActionOpenExternal,
 	ActionQuit,
 	ActionWindowShow,
+	ActionRefresh,
+	ActionPrefsSet,
+	ActionDoctorRun,
 }
 
 // knownActions is the set of accepted names, built from actionNames.
@@ -115,6 +129,13 @@ type State struct {
 
 	// Account is the account snapshot; nil until loaded.
 	Account *api.AccountInfo `json:"account,omitempty"`
+
+	// LocationsLoaded reports whether the server list has been loaded at
+	// all. The Locations screen must distinguish "Loading locations…" from a
+	// settled empty list ("No locations loaded", inventory §Locations), and
+	// an omitted slice cannot say which; the flag is always present in the
+	// envelope.
+	LocationsLoaded bool `json:"locations_loaded"`
 
 	// Locations is the server list; nil until loaded.
 	Locations []serverlist.Country `json:"locations,omitempty"`
