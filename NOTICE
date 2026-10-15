@@ -30,6 +30,15 @@ Wintun (https://www.wintun.net/)
     not used or distributed. The Go binding (golang.zx2c4.com/wintun) is
     MIT-licensed and vendored.
 
+jchv/go-webview2 (https://github.com/jchv/go-webview2)
+    MIT License. WebView2 binding for the Windows GUI. Embeds Microsoft's
+    WebView2Loader DLLs (webviewloader/sdk/, 3-Clause BSD License,
+    Copyright (C) Microsoft Corporation).
+
+jchv/go-winloader (https://github.com/jchv/go-winloader)
+    ISC License. In-memory PE loader used by go-webview2 to load the
+    embedded WebView2Loader.
+
 charmbracelet/bubbletea, lipgloss, bubbles (https://github.com/charmbracelet)
     MIT License. TUI framework (from milestone M1).
 

@@ -7,6 +7,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.3
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/miekg/dns v1.1.73
 	github.com/vishvananda/netlink v1.3.1
 	github.com/xjasonlyu/tun2socks/v2 v2.7.0
@@ -26,6 +27,7 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
