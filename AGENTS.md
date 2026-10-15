@@ -40,6 +40,10 @@ gate green:
   before running a foreground daemon from `dist/`.
 - `scripts/dev-daemon.sh start|stop|log` — Linux dev daemon as root with a
   file log (production capabilities live in the systemd unit).
+- `scripts/dev-gui-web.sh start|stop|log` — Linux GUI web harness
+  (`make build-web`) on `0.0.0.0:7407` (dashboard-registered; override with
+  `KUMIHO_GUI_WEB_PORT`), serving the real UI assets in a browser against the
+  mock daemon; the `/dev` panel drives scenarios, latency and failures.
 - `scripts/watchdog-retest.sh` — live watchdog heal check against a real edge
   (`ss -K`, needs root).
 

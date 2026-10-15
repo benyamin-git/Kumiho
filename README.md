@@ -87,6 +87,7 @@ Cross-compile from any OS with Go >= 1.27:
     make build          # dist/kumiho-linux-amd64
     make build-arm64    # dist/kumiho-linux-arm64
     make build-windows  # dist/kumiho-windows-amd64.exe (Windows 11 amd64)
+    make build-web      # dist/kumiho-gui-web-linux-amd64 (GUI dev harness)
     make test           # unit tests (run on any OS)
     make vet
 
@@ -104,6 +105,11 @@ the release zip and `install.ps1` place it in `%ProgramFiles%\Kumiho`.
     kumiho status [--json]
     kumiho doctor [--json]
     kumiho version
+
+The v0.3.0 web GUI is developed in a browser on this machine, against the
+mock daemon: `make build-web && scripts/dev-gui-web.sh start` serves the real
+UI assets on `http://<host>:7407/` (a `/dev` panel drives mock scenarios,
+latency and failures); `scripts/dev-gui-web.sh stop` stops it.
 
 The full command surface (connect/disconnect flags, locations, logs, cleanup)
 is documented in [docs/usage.md](docs/usage.md). On Linux the daemon reads its

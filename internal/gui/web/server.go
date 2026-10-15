@@ -78,7 +78,22 @@ type Server struct {
 	ln       net.Listener
 	http     *http.Server
 	themeCSS string
+	route    routeHandler // optional dynamic route hook (the dev harness)
 }
+
+// routeHandler is the server's optional dynamic route hook. It is the dev
+// harness's entry point into the same listener (bridge.go), so package web
+// serves both the static assets and the harness's SSE/action/dev endpoints.
+//
+// A hook is consulted with the token-stripped request path after the token
+// gate and before the static file handling. Reporting true means the hook
+// owned the request and wrote its response; the static GET/HEAD-only policy
+// never applies to it. Reporting false leaves the request to the unchanged
+// static path, so a hook can only claim paths it knows — it cannot weaken the
+// token or method rules for assets. The zero value (no hook) keeps the server
+// static-only, exactly as before. The harness's route is the only
+// implementation.
+type routeHandler func(w http.ResponseWriter, r *http.Request, path string) bool
 
 // New returns a Server serving files from fsys (StaticFS in production,
 // another fs.FS in tests). It does not bind until Start.
@@ -146,6 +161,21 @@ func (s *Server) SetThemeCSS(css string) {
 	s.mu.Unlock()
 }
 
+// setRouteHandler installs the dynamic route hook. It is unexported so the
+// exported surface stays New/Start/URL/SetThemeCSS/Close; its only caller is
+// the harness in this package (NewHarness). Installing a second hook is an
+// error — one dynamic route owner per server, so routes can never be
+// silently clobbered.
+func (s *Server) setRouteHandler(h routeHandler) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.route != nil {
+		return errors.New("web: server already has a route handler")
+	}
+	s.route = h
+	return nil
+}
+
 // Close stops the server: the listener is closed, active connections are
 // dropped and the serving goroutine returns. It is idempotent and safe to
 // call before Start; both report nil. Start may be called again afterwards.
@@ -177,6 +207,15 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.stripToken(r.URL.Path)
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+
+	// The dynamic hook (the dev harness) may claim the request; unclaimed
+	// requests fall through to the static rules below unchanged.
+	s.mu.Lock()
+	route := s.route
+	s.mu.Unlock()
+	if route != nil && route(w, r, p) {
 		return
 	}
 
