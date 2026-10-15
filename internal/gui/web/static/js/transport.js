@@ -12,7 +12,10 @@
  *
  * Shell mode (window.kumihoAction exists): send() calls the WebView2 binding
  * `kumihoAction(<envelope JSON string>)`; the host pushes state by evaluating
- * `window.kumihoReceive(<envelope JSON string>)`.
+ * `window.kumihoReceive(<envelope object>)` — the envelope is interpolated
+ * into the eval as a JS object literal (host_windows.go), so receive() must
+ * accept objects; the harness SSE carrier passes the same envelope as a
+ * string.
  *
  * Harness mode (no binding; the Linux dev harness): send() POSTs the same
  * envelope to `action` ({"ok":true} = accepted, {"error":…} = refused) and
@@ -32,14 +35,24 @@
   var listeners = new Set();
   var lastState = null;
 
-  // receive(json) parses one host -> UI frame and fans it out; a state that
-  // arrives before the first subscriber is buffered (see above).
-  function receive(json) {
+  // receive(frame) takes one host -> UI frame from either carrier and fans it
+  // out; a state that arrives before the first subscriber is buffered (see
+  // above). The shell (host_windows.go) evaluates the envelope as a JS object
+  // literal, so an object is used as-is; the harness SSE data is a string and
+  // is parsed. Anything else keeps the malformed-frame path.
+  function receive(frame) {
     var envelope;
-    try {
-      envelope = JSON.parse(json);
-    } catch (err) {
-      console.error("kumiho: malformed state frame", err);
+    if (typeof frame === "string") {
+      try {
+        envelope = JSON.parse(frame);
+      } catch (err) {
+        console.error("kumiho: malformed state frame", err);
+        return;
+      }
+    } else if (frame !== null && typeof frame === "object") {
+      envelope = frame;
+    } else {
+      console.error("kumiho: malformed state frame", frame);
       return;
     }
     if (!envelope || envelope.type !== "state" || typeof envelope.state !== "object" || envelope.state === null) {
