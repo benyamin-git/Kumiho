@@ -21,6 +21,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -89,6 +90,7 @@ func run(port int) error {
 		LogsExport:     devLogsExport,
 		OpenLogsFolder: devOpenLogsFolder,
 	})
+	svc := newDevService(ctrl)
 
 	server := web.New(web.StaticFS(), web.Options{
 		Addr: fmt.Sprintf("0.0.0.0:%d", port),
@@ -107,6 +109,12 @@ func run(port int) error {
 			return web.Action{Name: a.Name, Payload: a.Payload}, nil
 		},
 		Dispatch: func(a web.Action) error {
+			// The shell intercepts the elevated service/cleanup actions
+			// (T3.3); the harness mirrors that with its dev service.
+			if svc.handles(a.Name) {
+				svc.run(a.Name)
+				return nil
+			}
 			return ctrl.Dispatch(gui.Action{Name: a.Name, Payload: a.Payload})
 		},
 		Prefs: p,
@@ -198,6 +206,77 @@ func devOpenLogsFolder() (string, error) {
 	}
 	log.Printf("open_logs_folder: %s", dir)
 	return dir, nil
+}
+
+// devService is the harness's stand-in for the Windows shell's elevated
+// service/cleanup actions (T3.3): no elevation and no SCM — it drives
+// State.Service and the diagnostics notices the same way the shell does, so
+// the browser harness and its captures can exercise the whole screen.
+// The dev service starts out running (the plausible dev state).
+type devService struct {
+	ctrl *gui.Controller
+
+	mu   sync.Mutex
+	busy bool
+}
+
+// newDevService returns the dev service and publishes its initial state.
+func newDevService(ctrl *gui.Controller) *devService {
+	d := &devService{ctrl: ctrl}
+	ctrl.SetServiceState(gui.ServiceState{Installed: true, State: "running"})
+	return d
+}
+
+// handles reports whether one action belongs to the dev service (the same
+// three the shell intercepts).
+func (d *devService) handles(name string) bool {
+	switch name {
+	case gui.ActionCleanup, gui.ActionServiceStart, gui.ActionServiceStop:
+		return true
+	}
+	return false
+}
+
+// run performs one dev action synchronously (the harness already runs
+// Dispatch on its own goroutine): one action at a time, the pending state
+// first, then the settled state and the inventory-shaped notice, with short
+// delays so the pending states are real.
+func (d *devService) run(name string) {
+	d.mu.Lock()
+	if d.busy {
+		d.mu.Unlock()
+		log.Printf("dev service: %s ignored: an action is already in flight", name)
+		return
+	}
+	d.busy = true
+	d.mu.Unlock()
+	defer func() {
+		d.mu.Lock()
+		d.busy = false
+		d.mu.Unlock()
+	}()
+
+	switch name {
+	case gui.ActionServiceStart:
+		d.publish(gui.ServiceState{Installed: true, State: "start pending", Busy: true})
+		time.Sleep(700 * time.Millisecond)
+		d.publish(gui.ServiceState{Installed: true, State: "running"})
+		d.ctrl.SetDiagnosticsNotice("Service started", "good")
+	case gui.ActionServiceStop:
+		d.publish(gui.ServiceState{Installed: true, State: "stop pending", Busy: true})
+		time.Sleep(700 * time.Millisecond)
+		d.publish(gui.ServiceState{Installed: true, State: "stopped"})
+		d.ctrl.SetDiagnosticsNotice("Service stopped", "good")
+	default: // cleanup
+		time.Sleep(900 * time.Millisecond)
+		d.ctrl.SetDiagnosticsNotice("Cleanup finished", "good")
+	}
+	log.Printf("dev service: %s done", name)
+}
+
+// publish pushes one dev service snapshot into the controller's state.
+func (d *devService) publish(s gui.ServiceState) {
+	d.ctrl.SetServiceState(s)
 }
 
 // prefsPath names the preferences file for the startup log: the

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
+	"github.com/benyamin-git/kumiho/internal/doctor"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -1015,6 +1016,189 @@ func TestDispatchOpenLogsFolder(t *testing.T) {
 	}
 }
 
+// TestDispatchOpenLogsFolderNoticeRouting pins the open_logs_folder payload's
+// notice surface: the default and "logs" land on the Logs notice, and
+// "diagnostics" (the Diagnostics screen's request, T3.3) lands on the
+// diagnostics notice with the same wording; an unknown surface is refused.
+func TestDispatchOpenLogsFolderNoticeRouting(t *testing.T) {
+	f := newFakeDaemon()
+	dir := filepath.Join(t.TempDir(), "kumiho", "logs")
+	ctrl := NewController(f, Options{
+		OpenLogsFolder: func() (string, error) { return dir, nil },
+	})
+
+	if err := ctrl.Dispatch(Action{
+		Name:    ActionOpenLogsFolder,
+		Payload: []byte(`{"notice":"diagnostics"}`),
+	}); err != nil {
+		t.Fatalf("Dispatch(open_logs_folder, diagnostics) = %v", err)
+	}
+	snap := ctrl.Snapshot()
+	if n := snap.DiagnosticsNotice; n == nil || n.Message != "Opened "+dir || n.Tone != toneGood {
+		t.Fatalf("diagnostics notice = %+v, want the opened folder", n)
+	}
+	if n := snap.LogsNotice; n != nil {
+		t.Fatalf("logs notice = %+v, want the diagnostics routing to leave it alone", n)
+	}
+
+	if err := ctrl.Dispatch(Action{
+		Name:    ActionOpenLogsFolder,
+		Payload: []byte(`{"notice":"logs"}`),
+	}); err != nil {
+		t.Fatalf("Dispatch(open_logs_folder, logs) = %v", err)
+	}
+	if n := ctrl.Snapshot().LogsNotice; n == nil || n.Message != "Opened "+dir {
+		t.Fatalf("logs notice = %+v, want the opened folder", n)
+	}
+
+	if err := ctrl.Dispatch(Action{
+		Name:    ActionOpenLogsFolder,
+		Payload: []byte(`{"notice":"account"}`),
+	}); err == nil || !strings.Contains(err.Error(), `unknown notice surface "account"`) {
+		t.Fatalf("Dispatch(open_logs_folder, account) = %v, want a refusal", err)
+	}
+}
+
+// testDoctorReport is a canned two-check doctor report: a mapped OK check
+// and an unmapped failure.
+func testDoctorReport() doctor.Report {
+	return doctor.Report{
+		Version: "kumiho test",
+		Host:    "test-host",
+		OS:      "linux/amd64",
+		Time:    "2026-10-16T00:00:00Z",
+		Checks: []doctor.Check{
+			{Name: "platform", Status: doctor.OK, Detail: "linux (full tunnel supported)"},
+			{Name: "brand-new-check", Status: doctor.Fail, Detail: "something happened", Remediation: "do the thing"},
+		},
+		Failed: 1,
+	}
+}
+
+// TestDispatchDoctorRunProjectsReport pins the doctor_run projection into
+// State.Doctor: the friendly title mapping, the raw passthrough, the chip
+// words/tones, the details payload and the finished (not running) flag.
+func TestDispatchDoctorRunProjectsReport(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{DoctorRun: testDoctorReport})
+
+	if d := ctrl.Snapshot().Doctor; d != nil {
+		t.Fatalf("doctor = %+v before any run, want nil", d)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionDoctorRun}); err != nil {
+		t.Fatalf("Dispatch(doctor_run) = %v", err)
+	}
+	d := ctrl.Snapshot().Doctor
+	if d == nil || d.Running || len(d.Checks) != 2 {
+		t.Fatalf("doctor = %+v, want a finished two-check projection", d)
+	}
+	first := d.Checks[0]
+	if first.Name != "platform" || first.Title != "Platform" || first.Explanation == "" {
+		t.Fatalf("check[0] = %+v, want the friendly Platform mapping", first)
+	}
+	if first.Status != "ok" || first.StatusWord != "OK" || first.Tone != toneGood {
+		t.Fatalf("check[0] chip = (%s, %s, %s), want (ok, OK, good)", first.Status, first.StatusWord, first.Tone)
+	}
+	second := d.Checks[1]
+	if second.Title != "brand-new-check" || second.Explanation != "" {
+		t.Fatalf("check[1] = %+v, want the raw name passed through", second)
+	}
+	if second.StatusWord != "Failed" || second.Tone != toneBad || second.Remediation != "do the thing" {
+		t.Fatalf("check[1] chip = %+v, want (Failed, bad) with remediation", second)
+	}
+	if !strings.HasPrefix(d.Details, "Kumiho "+version.Version+" diagnostics\n\n") || !strings.HasSuffix(d.Details, "\n") {
+		t.Fatalf("details = %q, want the versioned header and trailing newline", d.Details)
+	}
+	if !strings.Contains(d.Details, `"brand-new-check"`) {
+		t.Fatalf("details = %q, want the full report JSON", d.Details)
+	}
+	if got := f.callLog(); len(got) != 0 {
+		t.Fatalf("doctor_run called the daemon: %v", got)
+	}
+}
+
+// TestDispatchDoctorRunNeverInterrupts pins the re-run guard: while a run is
+// in flight the screen reads running=true and a second doctor_run is a no-op
+// that never starts a second suite (inventory §Diagnostics).
+func TestDispatchDoctorRunNeverInterrupts(t *testing.T) {
+	f := newFakeDaemon()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var runs atomic.Int32
+	ctrl := NewController(f, Options{DoctorRun: func() doctor.Report {
+		if runs.Add(1) == 1 {
+			close(started)
+		}
+		<-release
+		return testDoctorReport()
+	}})
+
+	done := make(chan error, 1)
+	go func() { done <- ctrl.Dispatch(Action{Name: ActionDoctorRun}) }()
+	<-started
+
+	d := ctrl.Snapshot().Doctor
+	if d == nil || !d.Running || len(d.Checks) != 0 {
+		t.Fatalf("doctor = %+v while running, want running with no checks", d)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionDoctorRun}); err != nil {
+		t.Fatalf("second Dispatch(doctor_run) = %v, want a no-op", err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("Dispatch(doctor_run) = %v", err)
+	}
+	if got := runs.Load(); got != 1 {
+		t.Fatalf("doctor suite ran %d times, want 1 (the second request must not interrupt)", got)
+	}
+	if d := ctrl.Snapshot().Doctor; d == nil || d.Running || len(d.Checks) != 2 {
+		t.Fatalf("doctor = %+v after the run, want the finished projection", d)
+	}
+}
+
+// TestDispatchDoctorRunClearsDiagnosticsNotice pins the run-start reset: a
+// fresh run clears the previous report and any cleanup/service error, so the
+// screen shows `Checking…` and the new summary is never masked.
+func TestDispatchDoctorRunClearsDiagnosticsNotice(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{DoctorRun: testDoctorReport})
+	ctrl.SetDiagnosticsNotice("could not clean up: boom", toneBad)
+	if n := ctrl.Snapshot().DiagnosticsNotice; n == nil {
+		t.Fatal("diagnostics notice missing after SetDiagnosticsNotice")
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionDoctorRun}); err != nil {
+		t.Fatalf("Dispatch(doctor_run) = %v", err)
+	}
+	if n := ctrl.Snapshot().DiagnosticsNotice; n != nil {
+		t.Fatalf("diagnostics notice = %+v, want it cleared by the run", n)
+	}
+}
+
+// TestSetServiceStateAndDiagnosticsNotice pins the minimal host API (T3.3):
+// SetServiceState lands in State.Service; SetDiagnosticsNotice applies the
+// screen-local lifetime rules (bad persists, good expires at NoticeTTL).
+func TestSetServiceStateAndDiagnosticsNotice(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{DoctorRun: testDoctorReport})
+
+	ctrl.SetServiceState(ServiceState{Installed: true, State: "running"})
+	if got := ctrl.Snapshot().Service; got != (ServiceState{Installed: true, State: "running"}) {
+		t.Fatalf("service = %+v, want the published snapshot", got)
+	}
+
+	ctrl.SetDiagnosticsNotice("Cleanup finished", toneGood)
+	n := ctrl.Snapshot().DiagnosticsNotice
+	if n == nil || n.Message != "Cleanup finished" || n.Tone != toneGood || n.Expires == nil {
+		t.Fatalf("diagnostics notice = %+v, want a 10 s success", n)
+	}
+
+	ctrl.SetDiagnosticsNotice("could not clean up: boom", toneBad)
+	n = ctrl.Snapshot().DiagnosticsNotice
+	if n == nil || n.Message != "could not clean up: boom" || n.Tone != toneBad || n.Expires != nil {
+		t.Fatalf("diagnostics notice = %+v, want a persistent failure", n)
+	}
+}
+
 // TestDispatchLogsLoadedProjection pins the logs_loaded flag the screen's
 // "Loading logs..." state reads: false until the first successful snapshot,
 // true afterwards including after a clear (the ring is settled-empty, not
@@ -1094,9 +1278,10 @@ func TestDispatchUnsupportedAndNoOpActions(t *testing.T) {
 	f := newFakeDaemon()
 	ctrl := NewController(f, Options{})
 
+	// The host-side actions are intercepted by the shell (or the harness)
+	// before Dispatch; a miswired caller gets a refusal, not silence.
 	for _, name := range []string{
-		ActionCleanup, ActionServiceStart, ActionServiceStop,
-		ActionPrefsSet, ActionDoctorRun,
+		ActionCleanup, ActionServiceStart, ActionServiceStop, ActionPrefsSet,
 	} {
 		err := ctrl.Dispatch(Action{Name: name})
 		if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("unsupported action %q", name)) {

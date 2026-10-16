@@ -58,7 +58,8 @@ func TestEncodeStateEnvelopeShape(t *testing.T) {
 
 // TestEncodeStatePopulatedShape pins the populated host → UI wire shape:
 // field names, JSON types and order for the richer state the controller
-// produces.
+// produces. The T3.3 additions (doctor projection, diagnostics notice,
+// service card fields) are pinned deliberately, like every earlier field.
 func TestEncodeStatePopulatedShape(t *testing.T) {
 	st := State{
 		Reachable:   true,
@@ -74,15 +75,31 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 			KillSwitch:    true,
 			ExitIP:        "192.0.2.1",
 		},
-		Login:           &LoginView{Step: "done"},
+		Login: &LoginView{Step: "done"},
+		Doctor: &DoctorView{
+			Checks: []DoctorCheck{{
+				Name:        "platform",
+				Title:       "Platform",
+				Explanation: "Tells you which tunnel implementation this PC uses.",
+				Status:      "ok",
+				StatusWord:  "OK",
+				Tone:        "good",
+				Detail:      "linux (full tunnel supported)",
+			}},
+			Details: "Kumiho v0.3.0 diagnostics\n\n{}\n",
+		},
 		LocationsLoaded: true,
 		Locations:       []serverlist.Country{{Code: "DE", Name: "Germany"}},
 		RTTs:            map[string]string{"de1.example:443": "42 ms"},
 		Notice:          &Notice{Message: "Connected", Tone: "info"},
-		Theme:           "dark",
-		Accent:          "blue",
-		Service:         ServiceState{State: "running"},
-		Update:          UpdateInfo{Current: "v0.3.0", Latest: "v0.3.1", URL: "https://example.com/v0.3.1", CheckedAt: "2026-10-16T00:00:00Z"},
+		DiagnosticsNotice: &Notice{
+			Message: "Cleanup finished",
+			Tone:    "good",
+		},
+		Theme:   "dark",
+		Accent:  "blue",
+		Service: ServiceState{Installed: true, State: "running", Busy: true},
+		Update:  UpdateInfo{Current: "v0.3.0", Latest: "v0.3.1", URL: "https://example.com/v0.3.1", CheckedAt: "2026-10-16T00:00:00Z"},
 	}
 	raw, err := EncodeState(st)
 	if err != nil {
@@ -92,14 +109,16 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		`"reachable":true,` +
 		`"status":{"label":"Connected","connected":true,"authenticated":true,"email":"user@example.com","uptime":"1m23s","location":"DE","server":"de1.example:443","kill_switch":true,"exit_ip":"192.0.2.1"},` +
 		`"login":{"step":"done"},` +
+		`"doctor":{"checks":[{"name":"platform","title":"Platform","explanation":"Tells you which tunnel implementation this PC uses.","status":"ok","status_word":"OK","tone":"good","detail":"linux (full tunnel supported)"}],"details":"Kumiho v0.3.0 diagnostics\n\n{}\n"},` +
 		`"locations_loaded":true,` +
 		`"logs_loaded":false,` +
 		`"locations":[{"code":"DE","name":"Germany","cities":null}],` +
 		`"rtts":{"de1.example:443":"42 ms"},` +
 		`"notice":{"message":"Connected","tone":"info"},` +
+		`"diagnostics_notice":{"message":"Cleanup finished","tone":"good"},` +
 		`"theme":"dark",` +
 		`"accent":"blue",` +
-		`"service":{"state":"running"},` +
+		`"service":{"installed":true,"state":"running","busy":true},` +
 		`"update":{"current":"v0.3.0","latest":"v0.3.1","url":"https://example.com/v0.3.1","checked_at":"2026-10-16T00:00:00Z"}` +
 		`}}`
 	if string(raw) != want {

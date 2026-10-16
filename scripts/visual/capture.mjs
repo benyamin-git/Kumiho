@@ -51,6 +51,10 @@ const DEVICE_SCALE_FACTOR = 1;
 // never happens. A fixed settle covers the SSE snapshot and first paint.
 const SETTLE_MS = 350;
 const NAV_TIMEOUT_MS = 15000;
+// waitFor/waitAfter waits get a longer budget: the diagnostics capture waits
+// for a real doctor run (network probes) and for the dev cleanup/service
+// actions to land their notices.
+const WAIT_TIMEOUT_MS = 20000;
 
 const DEFAULT_THEME = "light";
 const DEFAULT_ACCENT = "blue";
@@ -60,13 +64,18 @@ const DEFAULT_ACCENT = "blue";
 // navigates them. The wizard steps and dialogs are deep-linked with a
 // `?state=<name>` capture hint on the screen's route — the router should
 // tolerate (and later honor) the parameter; see README.md.
+//
+// `wait` is an optional selector every capture of the screen waits for after
+// navigating: the diagnostics screen runs its first doctor suite on the
+// first visit, and the captures must show the finished check cards, not the
+// `Checking…` placeholder.
 const SCREENS = [
   { name: "dashboard", hash: "#/dashboard" },
   { name: "locations", hash: "#/locations" },
   { name: "settings", hash: "#/settings" },
   { name: "account", hash: "#/account" },
   { name: "logs", hash: "#/logs" },
-  { name: "diagnostics", hash: "#/diagnostics" },
+  { name: "diagnostics", hash: "#/diagnostics", wait: ".diag__check" },
   { name: "onboarding", hash: "#/onboarding" },
 ];
 
@@ -81,6 +90,8 @@ const ACCENTS = ["blue", "teal", "green", "orange", "rose", "violet"];
 //   scenario    /dev/scenario value to apply before navigating
 //   latencyMs   /dev/latency value to apply before navigating
 //   failMessage /dev/fail arm (message) before navigating
+//   waitFor     selector waited for after navigating, before the actions
+//   waitAfter   selector waited for after the clicks, before capturing
 //   action      /action envelope name (and optional payload) after navigating
 //   emitLog     /dev/log message after navigating
 //   fill        {selector, value} typed into a screen control after the action
@@ -97,7 +108,56 @@ const STATES = [
   { name: "error", screen: "dashboard", scenario: "error" },
   { name: "connect-options", screen: "dashboard", hint: "connect-options" },
   { name: "signout-confirm", screen: "account", hint: "signout-confirm" },
-  { name: "cleanup-confirm", screen: "diagnostics", hint: "cleanup-confirm" },
+  {
+    // The cleanup confirmation (T3.3, hint-driven, scripts/visual/README.md).
+    name: "cleanup-confirm",
+    screen: "diagnostics",
+    hint: "cleanup-confirm",
+    waitFor: "dialog[open]",
+  },
+  {
+    // A completed cleanup: the dev service settles in under a second and the
+    // inventory's `Cleanup finished` notice lands on the status line.
+    name: "cleanup-done",
+    screen: "diagnostics",
+    waitFor: ".diag__check",
+    click: ["#diag-cleanup", "#diag-cleanup-confirm"],
+    waitAfter: '.diag__status:has-text("Cleanup finished")',
+  },
+  {
+    // A re-run in flight: the list clears to the `Checking…` placeholder and
+    // Re-run is inert.
+    name: "checking",
+    screen: "diagnostics",
+    waitFor: ".diag__check",
+    click: ["#diag-rerun"],
+    waitAfter: ".diag__empty:not([hidden])",
+  },
+  {
+    // Copy details: the clipboard payload lands and the success notice
+    // shows. Runs after `checking`, whose re-run finishes first.
+    name: "copied",
+    screen: "diagnostics",
+    waitFor: ".diag__check",
+    click: ["#diag-copy"],
+    waitAfter: '.diag__status:has-text("Details copied")',
+  },
+  {
+    // A completed service stop: the card reads Stopped and the notice shows.
+    name: "service-stopped",
+    screen: "diagnostics",
+    waitFor: ".diag__check",
+    click: ["#diag-service-stop"],
+    waitAfter: '.diag__status:has-text("Service stopped")',
+  },
+  {
+    // A completed service start: everything is back to the initial state.
+    name: "service-started",
+    screen: "diagnostics",
+    waitFor: ".diag__check",
+    click: ["#diag-service-start"],
+    waitAfter: '.diag__status:has-text("Service started")',
+  },
   {
     name: "live-entry",
     screen: "logs",
@@ -211,6 +271,7 @@ function buildPlan(only) {
         route: screen.hash,
         theme,
         accent: DEFAULT_ACCENT,
+        wait: screen.wait,
       });
     }
   }
@@ -540,6 +601,9 @@ async function main() {
       reducedMotion: "reduce",
       locale: "en-US",
       timezoneId: "UTC",
+      // The diagnostics Copy details capture writes to the clipboard; grant
+      // the permissions up front so the headless run is deterministic.
+      permissions: ["clipboard-read", "clipboard-write"],
     });
     const page = await context.newPage();
 
@@ -632,6 +696,9 @@ async function main() {
           await postJSON("dev/fail", { on: true, message: state.failMessage });
         }
         await open(item.route, item.theme, item.accent);
+        if (state.waitFor) {
+          await page.waitForSelector(state.waitFor, { timeout: WAIT_TIMEOUT_MS });
+        }
         if (state.emitLog) await postJSON("dev/log", { message: state.emitLog });
         if (state.action) {
           await postAction(state.action.name, state.action.payload);
@@ -642,6 +709,9 @@ async function main() {
         for (const selector of state.click || []) {
           await page.click(selector);
         }
+        if (state.waitAfter) {
+          await page.waitForSelector(state.waitAfter, { timeout: WAIT_TIMEOUT_MS });
+        }
         await capture(item);
         if (state.afterMs) await page.waitForTimeout(state.afterMs);
       } else if (item.route === "/dev") {
@@ -649,6 +719,9 @@ async function main() {
         await capture(item);
       } else {
         await open(item.route, item.theme, item.accent);
+        if (item.wait) {
+          await page.waitForSelector(item.wait, { timeout: WAIT_TIMEOUT_MS });
+        }
         await capture(item);
       }
     }

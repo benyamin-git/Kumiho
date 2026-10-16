@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
+	"github.com/benyamin-git/kumiho/internal/doctor"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -136,9 +137,17 @@ type LoginView struct {
 }
 
 // ServiceState is the GUI-side projection of the background service; T3.3
-// fills it in. It is not a protocol type.
+// (D17) fills it from the Windows shell's SCM probes (or the harness's dev
+// stub) through Controller.SetServiceState. It is not a protocol type.
 type ServiceState struct {
-	State string `json:"state,omitempty"` // service state word
+	// Installed reports whether the kumiho service exists on this host.
+	Installed bool `json:"installed,omitempty"`
+	// State is the service state word: running, stopped, start pending, stop
+	// pending, paused, not installed or unknown.
+	State string `json:"state,omitempty"`
+	// Busy is true while a start/stop action is in flight: the service card
+	// shows the pending word and keeps its buttons inert.
+	Busy bool `json:"busy,omitempty"`
 }
 
 // Options configures a Controller. Zero values take the defaults.
@@ -169,6 +178,11 @@ type Options struct {
 	// (open_logs_folder, inventory §Logs). Nil — the default — refuses the
 	// action with a clear error.
 	OpenLogsFolder func() (string, error)
+	// DoctorRun runs the diagnostics check suite in-process (doctor_run,
+	// T3.3; D19: no IPC addition). Nil uses internal/doctor's Run. Tests
+	// inject canned reports; the seam keeps the suite's network probes out
+	// of the test lane.
+	DoctorRun func() doctor.Report
 }
 
 func (o Options) withDefaults() Options {
@@ -183,6 +197,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.NoticeTTL <= 0 {
 		o.NoticeTTL = defaultNoticeTTL
+	}
+	if o.DoctorRun == nil {
+		o.DoctorRun = doctor.Run
 	}
 	return o
 }
@@ -234,6 +251,14 @@ type Controller struct {
 	logsNotice      *Notice
 	accountNotice   *Notice
 
+	// doctor is the last doctor run's projection (T3.3); non-nil once a run
+	// started, so the screen can tell `Checking…` from `No checks yet.`
+	doctor *DoctorView
+
+	// diagnosticsNotice is the Diagnostics screen's notice (cleanup and
+	// service outcomes).
+	diagnosticsNotice *Notice
+
 	theme  string
 	accent string
 
@@ -275,28 +300,31 @@ func (c *Controller) Snapshot() State {
 	retireExpired(&c.settingsNotice, now)
 	retireExpired(&c.logsNotice, now)
 	retireExpired(&c.accountNotice, now)
+	retireExpired(&c.diagnosticsNotice, now)
 
 	return State{
-		Reachable:       c.reachable,
-		StatusError:     c.statusError,
-		Status:          c.statusViewLocked(now),
-		Login:           copyLogin(c.login),
-		Settings:        copySettings(c.settings),
-		Account:         copyAccount(c.account),
-		LocationsLoaded: c.locationsLoaded,
-		Locations:       c.locations,
-		RTTs:            copyRTTs(c.rtts),
-		LogsLoaded:      c.logsLoaded,
-		Logs:            c.logs,
-		Notice:          liveNotice(c.notice, now),
-		LocationsNotice: liveNotice(c.locationsNotice, now),
-		SettingsNotice:  liveNotice(c.settingsNotice, now),
-		LogsNotice:      liveNotice(c.logsNotice, now),
-		AccountNotice:   liveNotice(c.accountNotice, now),
-		Theme:           c.theme,
-		Accent:          c.accent,
-		Service:         c.service,
-		Update:          c.update,
+		Reachable:         c.reachable,
+		StatusError:       c.statusError,
+		Status:            c.statusViewLocked(now),
+		Login:             copyLogin(c.login),
+		Doctor:            copyDoctor(c.doctor),
+		Settings:          copySettings(c.settings),
+		Account:           copyAccount(c.account),
+		LocationsLoaded:   c.locationsLoaded,
+		Locations:         c.locations,
+		RTTs:              copyRTTs(c.rtts),
+		LogsLoaded:        c.logsLoaded,
+		Logs:              c.logs,
+		Notice:            liveNotice(c.notice, now),
+		LocationsNotice:   liveNotice(c.locationsNotice, now),
+		SettingsNotice:    liveNotice(c.settingsNotice, now),
+		LogsNotice:        liveNotice(c.logsNotice, now),
+		AccountNotice:     liveNotice(c.accountNotice, now),
+		DiagnosticsNotice: liveNotice(c.diagnosticsNotice, now),
+		Theme:             c.theme,
+		Accent:            c.accent,
+		Service:           c.service,
+		Update:            c.update,
 	}
 }
 
@@ -309,11 +337,12 @@ func (c *Controller) Snapshot() State {
 // Handled here: connect, disconnect, select_location, ping, settings_get,
 // settings_set, login_email, login_password, login_2fa, logout,
 // logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, logs_export,
-// open_logs_folder, refresh, update_check. window_show, quit and
+// open_logs_folder, doctor_run, refresh, update_check. window_show, quit and
 // open_external are recognized no-ops: the shell owns window visibility,
-// process exit and opening links (D34). Actions whose handlers arrive with
-// later tasks (cleanup, service_start, service_stop, prefs_set, doctor_run)
-// return an "unsupported action" error instead of panicking.
+// process exit and opening links (D34). cleanup, service_start, service_stop
+// and prefs_set are host-side actions the shell (or the harness) intercepts
+// before Dispatch (T3.3/T1.7); reaching them here is an "unsupported action"
+// error instead of silence.
 func (c *Controller) Dispatch(act Action) error {
 	switch act.Name {
 	case ActionConnect:
@@ -345,12 +374,20 @@ func (c *Controller) Dispatch(act Action) error {
 	case ActionLogsExport:
 		return c.dispatchLogsExport(act)
 	case ActionOpenLogsFolder:
-		return c.dispatchOpenLogsFolder()
+		return c.dispatchOpenLogsFolder(act)
+	case ActionDoctorRun:
+		return c.dispatchDoctorRun()
 	case ActionRefresh:
 		return c.dispatchRefresh(act)
-	case ActionPrefsSet, ActionDoctorRun:
-		// Deferred: prefs_set is host-side (T1.7/T1.10/T4.2) and doctor_run
-		// arrives with the diagnostics screen (T3.3).
+	case ActionPrefsSet:
+		// Deferred: prefs_set is host-side (T1.7/T1.10/T4.2).
+		return fmt.Errorf("unsupported action %q", act.Name)
+	case ActionCleanup, ActionServiceStart, ActionServiceStop:
+		// Host-side actions (T3.3): the Windows shell intercepts them for
+		// the UAC-elevated cleanup and sc.exe start/stop, and the harness
+		// intercepts them for its dev stubs. A caller that reaches Dispatch
+		// with one (a miswired composition root) gets a refusal instead of
+		// silence.
 		return fmt.Errorf("unsupported action %q", act.Name)
 	case ActionWindowShow, ActionQuit, ActionOpenExternal:
 		return nil
@@ -695,23 +732,96 @@ func (c *Controller) dispatchLogsExport(act Action) error {
 	return nil
 }
 
+// openLogsFolderRequest is the open_logs_folder action's optional payload:
+// the notice surface the screen wants the outcome on. The frozen action
+// carries no screen parameter, so `notice` names the slot: "" (or "logs")
+// is the Logs screen's own notice; "diagnostics" routes the same wording to
+// the Diagnostics screen, which reuses the action but must show the notice
+// on its own status line (inventory §Diagnostics: "Open log folder behaves
+// and notices exactly as on Logs").
+type openLogsFolderRequest struct {
+	Notice string `json:"notice,omitempty"`
+}
+
 // dispatchOpenLogsFolder opens the host's per-user log folder through
-// Options.OpenLogsFolder. The outcome is the logs notice: `Opened <dir>`
-// (10 s) or `could not open the log folder: <err>`. Daemon-free like the
-// export.
-func (c *Controller) dispatchOpenLogsFolder() error {
+// Options.OpenLogsFolder. The outcome is the calling screen's notice:
+// `Opened <dir>` (10 s) or `could not open the log folder: <err>`. Daemon-free
+// like the export.
+func (c *Controller) dispatchOpenLogsFolder(act Action) error {
+	p, err := decodePayload[openLogsFolderRequest](act)
+	if err != nil {
+		return err
+	}
+	slot := slotLogs
+	switch p.Notice {
+	case "", "logs":
+	case "diagnostics":
+		slot = slotDiagnostics
+	default:
+		return fmt.Errorf("open_logs_folder: unknown notice surface %q", p.Notice)
+	}
 	if c.opts.OpenLogsFolder == nil {
 		err := errors.New("opening the log folder is not available")
-		c.setNotice(slotLogs, "could not open the log folder: "+err.Error(), toneBad, 0)
+		c.setNotice(slot, "could not open the log folder: "+err.Error(), toneBad, 0)
 		return err
 	}
 	dir, err := c.opts.OpenLogsFolder()
 	if err != nil {
-		c.setNotice(slotLogs, "could not open the log folder: "+err.Error(), toneBad, 0)
+		c.setNotice(slot, "could not open the log folder: "+err.Error(), toneBad, 0)
 		return err
 	}
-	c.setNotice(slotLogs, "Opened "+dir, toneGood, c.opts.NoticeTTL)
+	c.setNotice(slot, "Opened "+dir, toneGood, c.opts.NoticeTTL)
 	return nil
+}
+
+// dispatchDoctorRun runs the doctor suite in-process (T3.3; D19: doctor
+// stays off the IPC protocol) and replaces State.Doctor with the projection.
+// A run already in flight is never interrupted: a second request is a no-op
+// (inventory §Diagnostics: "a second click/no-op never interrupts"). Starting
+// a run clears the previous report and the diagnostics notice, so the screen
+// shows its `Checking…` placeholder and a stale cleanup/service error cannot
+// mask the fresh summary.
+func (c *Controller) dispatchDoctorRun() error {
+	c.mu.Lock()
+	if c.doctor != nil && c.doctor.Running {
+		c.mu.Unlock()
+		return nil
+	}
+	c.doctor = &DoctorView{Running: true}
+	c.diagnosticsNotice = nil
+	c.mu.Unlock()
+
+	report := c.opts.DoctorRun()
+
+	c.mu.Lock()
+	view := projectDoctor(report)
+	c.doctor = &view
+	c.mu.Unlock()
+	return nil
+}
+
+// SetServiceState applies one host-probed service snapshot (T3.3, D17). The
+// Windows shell publishes SCM probes and elevated start/stop completions
+// through it, and the harness publishes its dev service model; the
+// controller itself never touches the SCM, so the engine stays OS-free. It
+// is safe for concurrent use.
+func (c *Controller) SetServiceState(s ServiceState) {
+	c.mu.Lock()
+	c.service = s
+	c.mu.Unlock()
+}
+
+// SetDiagnosticsNotice publishes one Diagnostics-screen result notice (T3.3;
+// the shell's cleanup and service outcomes). The screen-local notice rules
+// apply: a bad-tone failure persists until the next run or action replaces
+// it, everything else carries the 10 s success lifetime (inventory
+// §Diagnostics status line). It is safe for concurrent use.
+func (c *Controller) SetDiagnosticsNotice(message, tone string) {
+	ttl := c.opts.NoticeTTL
+	if tone == toneBad {
+		ttl = 0
+	}
+	c.setNotice(slotDiagnostics, message, tone, ttl)
 }
 
 // visibleLogs returns the buffer entries matching the screen's local level
@@ -1090,6 +1200,7 @@ const (
 	slotSettings
 	slotLogs
 	slotAccount
+	slotDiagnostics
 )
 
 // setNotice replaces one notice surface. A ttl of 0 makes the notice persist
@@ -1110,6 +1221,8 @@ func (c *Controller) setNotice(slot noticeSlot, msg, tone string, ttl time.Durat
 		c.logsNotice = n
 	case slotAccount:
 		c.accountNotice = n
+	case slotDiagnostics:
+		c.diagnosticsNotice = n
 	}
 }
 
@@ -1130,6 +1243,8 @@ func (c *Controller) clearNoticeError(slot noticeSlot) {
 		c.logsNotice = clearNoticeError(c.logsNotice)
 	case slotAccount:
 		c.accountNotice = clearNoticeError(c.accountNotice)
+	case slotDiagnostics:
+		c.diagnosticsNotice = clearNoticeError(c.diagnosticsNotice)
 	}
 }
 
@@ -1181,6 +1296,7 @@ func (c *Controller) retireNotices(now time.Time) {
 	retireExpired(&c.settingsNotice, now)
 	retireExpired(&c.logsNotice, now)
 	retireExpired(&c.accountNotice, now)
+	retireExpired(&c.diagnosticsNotice, now)
 }
 
 // observe records one daemon call's transport health: any success proves the
@@ -1238,6 +1354,17 @@ func copyLogin(l *LoginView) *LoginView {
 		return nil
 	}
 	cp := *l
+	return &cp
+}
+
+// copyDoctor returns a copy of the doctor projection with a detached checks
+// slice, so a snapshot never aliases the controller's state.
+func copyDoctor(d *DoctorView) *DoctorView {
+	if d == nil {
+		return nil
+	}
+	cp := *d
+	cp.Checks = append([]DoctorCheck(nil), d.Checks...)
 	return &cp
 }
 

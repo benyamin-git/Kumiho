@@ -58,6 +58,7 @@ registerScreen("locations", () => import("./screens/locations.js"), "css/screens
 registerScreen("settings", () => import("./screens/settings.js"), "css/screens/settings.css");
 registerScreen("account", () => import("./screens/account.js"), "css/screens/account.css");
 registerScreen("logs", () => import("./screens/logs.js"), "css/screens/logs.css");
+registerScreen("diagnostics", () => import("./screens/diagnostics.js"), "css/screens/diagnostics.css");
 
 /** Parse a location hash into {id, hint}, tolerating anything malformed. */
 export function parseHash(hash) {

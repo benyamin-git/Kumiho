@@ -41,7 +41,7 @@ refuses a `KUMIHO_CAPTURES_DIR` inside the repository.
 ## Run
 
     scripts/dev-gui-web.sh start
-    node scripts/visual/capture.mjs                # the full 43-capture run
+    node scripts/visual/capture.mjs                # the full 57-capture run
     node scripts/visual/capture.mjs --only dashboard
     node scripts/visual/capture.mjs --list         # manifest + planned files
     scripts/dev-gui-web.sh stop
@@ -108,6 +108,11 @@ States, all driven through the harness (dark theme, blue accent):
 | `connect-options` | route hint `#/dashboard?state=connect-options` |
 | `signout-confirm` | route hint `#/account?state=signout-confirm` |
 | `cleanup-confirm` | route hint `#/diagnostics?state=cleanup-confirm` |
+| `cleanup-done` | diagnostics: confirm the Cleanup… dialog; waits for the `Cleanup finished` notice |
+| `checking` | diagnostics: Re-run checks clicked; captures the `Checking…` placeholder |
+| `copied` | diagnostics: Copy details clicked; waits for the deterministic clipboard write |
+| `service-stopped` | diagnostics: Stop clicked (dev service settles to Stopped) |
+| `service-started` | diagnostics: Start clicked (dev service settles to Running) |
 | `live-entry` | `/dev/log`, then capture the logs screen |
 | `speed-test` | `ping` action for the locations screen's auto-revealed servers (`42 ms` / `timeout` labels) |
 | `welcome`, `login`, `health-check`, `autoconnect`, `finish` | wizard-step hints on `#/onboarding?state=…` |
@@ -128,7 +133,10 @@ run needs no changes.
 - **Waits:** `page.goto`/`reload` with `waitUntil: "load"` plus a fixed 350 ms
   settle. `networkidle` is deliberately not used: the SPA keeps a permanent
   SSE connection open (`GET /events`), so "no network activity for 500 ms"
-  never happens.
+  never happens. Entries may carry `waitFor` (a selector awaited after
+  navigating, before the actions — e.g. the diagnostics screen's first doctor
+  run) and `waitAfter` (a selector awaited after the clicks, before the
+  capture — e.g. a completed cleanup notice); both get a 20 s budget.
 - **Failures:** no retries. A navigation failure aborts with the harness
   hint (`scripts/dev-gui-web.sh start`). Console errors and uncaught page
   errors are recorded per capture and make the run exit non-zero at the end;

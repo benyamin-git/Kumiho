@@ -36,6 +36,11 @@ const (
 	// pump): how often the shell checks the controller snapshot for changes.
 	pushInterval = 250 * time.Millisecond
 
+	// serviceProbeInterval is how often the shell re-probes the SCM for the
+	// service card (T3.3), so a service started or stopped outside the GUI
+	// shows up on the Diagnostics screen.
+	serviceProbeInterval = 5 * time.Second
+
 	// webviewDownloadURL is Microsoft's stable evergreen link for the
 	// WebView2 Runtime bootstrapper (D15: nothing ships one, point at this).
 	webviewDownloadURL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
@@ -211,9 +216,20 @@ type host struct {
 	// bridge thread).
 	mu sync.Mutex
 
+	// svcMu guards the shell's last published service snapshot (T3.3); the
+	// probe loop, the action completions and the UI-side reads all cross
+	// goroutines.
+	svcMu   sync.Mutex
+	service ServiceState
+
 	// trayBusy guards re-entry on the tray's action entry (T1.8); it is
 	// touched from the shell thread (menu popups) and action goroutines.
 	trayBusy atomic.Bool
+
+	// serviceBusy serialises the host-side cleanup/service actions (T3.3):
+	// one elevated operation at a time; a second click while one is in
+	// flight is a logged no-op.
+	serviceBusy atomic.Bool
 
 	cancel        context.CancelFunc
 	terminateOnce sync.Once
@@ -307,6 +323,7 @@ func (h *host) run() error {
 	h.cancel = cancel
 	go h.ctrl.Poll(ctx)
 	go h.pushLoop(ctx)
+	go h.serviceLoop(ctx)
 	h.installTray()
 
 	if h.opts.trayStart {
@@ -378,6 +395,14 @@ func (h *host) handleAction(envelope string) string {
 		err = h.openExternal(act)
 	case ActionPrefsSet:
 		err = h.applyPrefs(act)
+	case ActionCleanup, ActionServiceStart, ActionServiceStop:
+		// The elevated service/cleanup actions are the shell's own
+		// intercepts (T3.3), like prefs_set: the shell runs them on their
+		// own goroutine (UAC consent can take arbitrarily long and the
+		// binding's callback thread must stay free) and publishes the
+		// outcome through the controller.
+		h.serviceAction(act)
+		return ""
 	default:
 		h.dispatchAsync(act)
 		return ""
@@ -545,6 +570,125 @@ func (h *host) traySelectLocation(code string) {
 	// inventory's rule), so a location pick runs through the regular async
 	// dispatch instead of trayAction.
 	h.dispatchAsync(Action{Name: ActionSelectLocation, Payload: raw})
+}
+
+// serviceAction runs one host-side elevated action (T3.3): cleanup,
+// service_start or service_stop. The binding's callback thread must never
+// block (the UAC consent and the elevated process can take arbitrarily
+// long), so the work runs on its own goroutine, and one action at a time is
+// enforced — a second click while one is in flight is a logged no-op. The
+// screen's buttons disable from State.Service.Busy meanwhile; this guard is
+// the authoritative one.
+func (h *host) serviceAction(act Action) {
+	if !h.serviceBusy.CompareAndSwap(false, true) {
+		h.log.logf("action %s ignored: a service action is already in flight", act.Name)
+		return
+	}
+	go func() {
+		defer h.serviceBusy.Store(false)
+		h.runServiceAction(act)
+	}()
+}
+
+// runServiceAction dispatches one intercepted action to its elevated
+// implementation.
+func (h *host) runServiceAction(act Action) {
+	switch act.Name {
+	case ActionCleanup:
+		h.runCleanup()
+	case ActionServiceStart:
+		h.runServiceStartStop(true)
+	case ActionServiceStop:
+		h.runServiceStartStop(false)
+	}
+}
+
+// runServiceStartStop starts or stops the service through one elevated
+// sc.exe call (D17) and publishes the outcome: the pending state keeps the
+// card honest while the command runs, then the fresh SCM probe lands, then
+// the diagnostics notice. The exit-code/notice wording lives in
+// serviceOutcomeNotice.
+func (h *host) runServiceStartStop(start bool) {
+	verb := "start"
+	if !start {
+		verb = "stop"
+	}
+	cur := h.serviceStatus()
+	cur.State = verb + " pending"
+	cur.Busy = true
+	h.publishService(cur)
+
+	code, err := serviceCommand(verb)
+
+	snap, perr := serviceSnapshot()
+	if perr != nil {
+		h.log.logf("service: %v", perr)
+	}
+	snap.Busy = false
+	h.publishService(snap)
+
+	msg, tone := serviceOutcomeNotice(verb, code, err)
+	h.ctrl.SetDiagnosticsNotice(msg, tone)
+	h.log.logf("service %s: code=%d err=%v state=%+v", verb, code, err, snap)
+}
+
+// runCleanup runs `kumiho cleanup` elevated (D16) and publishes the outcome
+// as the diagnostics notice; cleanup changes no service state, so the card
+// is only re-probed by the periodic loop.
+func (h *host) runCleanup() {
+	code, err := cleanupCommand()
+	msg, tone := cleanupOutcomeNotice(code, err)
+	h.ctrl.SetDiagnosticsNotice(msg, tone)
+	h.log.logf("cleanup: code=%d err=%v", code, err)
+}
+
+// serviceLoop keeps State.Service fresh (T3.3): one probe at startup, then a
+// probe every serviceProbeInterval, so the card reflects a service started
+// or stopped outside the GUI (SCM, Task Manager, the installer).
+func (h *host) serviceLoop(ctx context.Context) {
+	ticker := time.NewTicker(serviceProbeInterval)
+	defer ticker.Stop()
+	h.probeService()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.probeService()
+		}
+	}
+}
+
+// probeService publishes one SCM probe. The in-flight Busy marker is
+// preserved (a periodic probe never clears an action's pending state), and a
+// snapshot equal to the last one is not republished.
+func (h *host) probeService() {
+	snap, err := serviceSnapshot()
+	if err != nil {
+		h.log.logf("service: %v", err)
+	}
+	cur := h.serviceStatus()
+	snap.Busy = cur.Busy
+	if snap == cur {
+		return
+	}
+	h.publishService(snap)
+}
+
+// serviceStatus returns the shell's last published service snapshot.
+func (h *host) serviceStatus() ServiceState {
+	h.svcMu.Lock()
+	defer h.svcMu.Unlock()
+	return h.service
+}
+
+// publishService replaces the shell's service snapshot and pushes it into the
+// controller's State, the source of truth the UI reads.
+func (h *host) publishService(s ServiceState) {
+	h.svcMu.Lock()
+	h.service = s
+	h.svcMu.Unlock()
+	h.ctrl.SetServiceState(s)
 }
 
 // pushLoop is the host→UI half of the bridge: every pushInterval it encodes

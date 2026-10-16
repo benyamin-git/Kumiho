@@ -1,0 +1,178 @@
+/* Diagnostics screen (T3.3). Consumes the shell's primitives (button, chip,
+ * card, dialog) and the injected colour roles; geometry, type and spacing
+ * come from tokens.css. No literal colours (ban 9), logical properties only
+ * (ban 10), no shadows (ban 7). The results list follows the inventory's
+ * anatomy — friendly title + status chip (word always present), up to three
+ * small lines, a scrolling card — and the service card carries D17's state
+ * chip and Start/Stop. */
+
+.diag {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Fill the content column so the results list owns its scrolling (house
+     rule: long lists scroll inside their own region). */
+  block-size: 100%;
+  min-block-size: 0;
+  /* Match the dashboard's data column (prose measure under ~80ch). */
+  max-inline-size: 720px;
+}
+
+/* The hidden attribute must beat every author display rule inside the screen
+ * (.button is inline-flex, .diag__empty is flex). */
+.diag [hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.diag__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The inventory's 140/110/140-unit widths, plus Cleanup… (T3.3). */
+.diag__rerun,
+.diag__open {
+  min-inline-size: 140px;
+}
+
+.diag__copy {
+  min-inline-size: 110px;
+}
+
+.diag__cleanup {
+  min-inline-size: 120px;
+}
+
+/* ---------------------------------------------------------- service card */
+
+.diag__service {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.diag__service-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.diag__service-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+/* The state chip sits at the row's end; the word always carries the state. */
+.diag__service-chip {
+  min-inline-size: 120px;
+  min-block-size: 28px;
+  justify-content: center;
+  margin-inline-start: auto;
+}
+
+.diag__service-detail {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.diag__service-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.diag__service-start,
+.diag__service-stop {
+  min-inline-size: 96px;
+}
+
+/* ------------------------------------------------------------ results list */
+
+.diag__list {
+  /* offsetTop reads anchor to the list's own box (item-wise keyboard
+     scrolling). */
+  position: relative;
+  flex: 1;
+  min-block-size: 160px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.diag__check {
+  padding-block: var(--space-2);
+}
+
+.diag__check-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.diag__check-title {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The inventory's 92x20 status chip; the primitive supplies the tone fills,
+   the word inside keeps the state readable without colour. */
+.diag__check-chip {
+  inline-size: 92px;
+  min-block-size: 20px;
+  justify-content: center;
+}
+
+.diag__check-line {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* Tone is enhancement only; the Fix: line carries the remediation text. */
+.diag__check-fix[data-tone="bad"] {
+  color: var(--loss);
+}
+
+.diag__check-fix[data-tone="warn"] {
+  color: var(--warning);
+}
+
+/* The quiet placeholder in place of the card while there is nothing to show
+   (`Checking…` / `No checks yet.`). */
+.diag__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-block-size: 160px;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- status */
+
+.diag__status {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diag__status[data-tone="good"] {
+  color: var(--profit);
+}
+
+.diag__status[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.diag__status[data-tone="bad"] {
+  color: var(--loss);
+}

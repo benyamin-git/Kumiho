@@ -102,9 +102,9 @@ var knownActions = func() map[string]struct{} {
 
 // State is the payload of a host → UI state envelope: the controller's
 // projection of the daemon (status, login, settings, account, server list,
-// RTTs, logs) plus GUI-local extras (notices, theme, service, update). Every
-// field is optional, so the zero State is an empty object; the projection
-// types live in controller.go.
+// RTTs, logs) plus GUI-local extras (notices, theme, service, doctor,
+// update). Every field is optional, so the zero State is an empty object;
+// the projection types live in controller.go and doctor.go.
 type State struct {
 	// Reachable reports the control pipe's reachability: it flips false on a
 	// dial failure (the shell shows the Set up Kumiho gate) and true on the
@@ -123,6 +123,10 @@ type State struct {
 	// Login is the daemon-driven sign-in projection; nil until the first
 	// login reply.
 	Login *LoginView `json:"login,omitempty"`
+
+	// Doctor is the Diagnostics screen's projection of the last doctor run
+	// (T3.3); nil until the first run starts.
+	Doctor *DoctorView `json:"doctor,omitempty"`
 
 	// Settings is the runtime settings snapshot; nil until loaded.
 	Settings *api.SettingsView `json:"settings,omitempty"`
@@ -164,6 +168,10 @@ type State struct {
 	SettingsNotice  *Notice `json:"settings_notice,omitempty"`
 	LogsNotice      *Notice `json:"logs_notice,omitempty"`
 	AccountNotice   *Notice `json:"account_notice,omitempty"`
+
+	// DiagnosticsNotice is the Diagnostics screen's notice (T3.3): cleanup
+	// and service outcomes, 10-second successes and persistent failures.
+	DiagnosticsNotice *Notice `json:"diagnostics_notice,omitempty"`
 
 	// Theme and Accent carry the active house appearance for the webview.
 	Theme  string `json:"theme,omitempty"`
