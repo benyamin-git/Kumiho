@@ -17,6 +17,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
+	"github.com/benyamin-git/kumiho/internal/version"
 )
 
 // fakeDaemon is a hand-written Daemon for the controller tests: every method
@@ -530,6 +531,108 @@ func TestDispatchSettingsLoadFailure(t *testing.T) {
 	}
 }
 
+func TestNewControllerUpdateCurrent(t *testing.T) {
+	ctrl := NewController(newFakeDaemon(), Options{})
+	// The Version row shows the running build from the first snapshot,
+	// before any check has run (T2.4 ruling).
+	if up := ctrl.Snapshot().Update; up.Current != version.Version || up.Latest != "" || up.CheckedAt != "" {
+		t.Fatalf("Update = %+v, want just Current=%q", up, version.Version)
+	}
+}
+
+func TestDispatchUpdateCheck(t *testing.T) {
+	f := newFakeDaemon()
+	info := UpdateInfo{
+		Current:   "v0.3.0",
+		Latest:    "v0.4.0",
+		URL:       "https://example.test/r",
+		CheckedAt: "2026-10-16T00:00:00Z",
+	}
+	var gotCtx context.Context
+	ctrl := NewController(f, Options{
+		UpdateCheck: func(ctx context.Context) (UpdateInfo, error) {
+			gotCtx = ctx
+			return info, nil
+		},
+	})
+
+	if err := ctrl.Dispatch(Action{Name: ActionUpdateCheck}); err != nil {
+		t.Fatalf("Dispatch(update_check) = %v", err)
+	}
+	if _, ok := gotCtx.Deadline(); !ok {
+		t.Error("the injected checker saw no deadline; the action must bound the check")
+	}
+	if got := ctrl.Snapshot().Update; got != info {
+		t.Fatalf("Update = %+v, want %+v", got, info)
+	}
+	if n := ctrl.Snapshot().SettingsNotice; n == nil || n.Message != "Kumiho v0.4.0 is available" || n.Tone != toneInfo || n.Expires == nil {
+		t.Fatalf("settings notice = %+v, want a 10 s availability notice", n)
+	}
+	// The check talks to GitHub, never the daemon: no daemon call, no
+	// reachability change.
+	if calls := f.callLog(); len(calls) != 0 {
+		t.Fatalf("daemon calls = %v, want none", calls)
+	}
+	if !ctrl.Snapshot().Reachable {
+		t.Error("reachability changed; the update check must not touch it")
+	}
+}
+
+func TestDispatchUpdateCheckUpToDate(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{
+		UpdateCheck: func(context.Context) (UpdateInfo, error) {
+			return UpdateInfo{Current: "v0.3.0", Latest: "V0.3.0", URL: "https://example.test/r"}, nil
+		},
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionUpdateCheck}); err != nil {
+		t.Fatalf("Dispatch(update_check) = %v", err)
+	}
+	if n := ctrl.Snapshot().SettingsNotice; n == nil || n.Message != "Kumiho is up to date" || n.Tone != toneGood {
+		t.Fatalf("settings notice = %+v, want the up-to-date notice", n)
+	}
+}
+
+func TestDispatchUpdateCheckFailure(t *testing.T) {
+	f := newFakeDaemon()
+	boom := errors.New("dial tcp: no route")
+	ctrl := NewController(f, Options{
+		UpdateCheck: func(context.Context) (UpdateInfo, error) {
+			return UpdateInfo{}, boom
+		},
+	})
+	err := ctrl.Dispatch(Action{Name: ActionUpdateCheck})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Dispatch(update_check) = %v, want the checker error", err)
+	}
+	// A failure keeps the previous projection and is a persistent settings
+	// notice; it never flips reachability.
+	if got := ctrl.Snapshot().Update; got.Current != version.Version || got.Latest != "" {
+		t.Fatalf("Update = %+v, want the construction-time projection", got)
+	}
+	if n := ctrl.Snapshot().SettingsNotice; n == nil || n.Message != "could not check for updates: dial tcp: no route" || n.Tone != toneBad || n.Expires != nil {
+		t.Fatalf("settings notice = %+v, want a persistent error notice", n)
+	}
+	if !ctrl.Snapshot().Reachable {
+		t.Error("reachability flipped on an update-check failure")
+	}
+}
+
+func TestDispatchUpdateCheckFillsCurrent(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{
+		UpdateCheck: func(context.Context) (UpdateInfo, error) {
+			return UpdateInfo{Latest: "v0.4.0", URL: "https://example.test/r"}, nil
+		},
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionUpdateCheck}); err != nil {
+		t.Fatalf("Dispatch(update_check) = %v", err)
+	}
+	if got := ctrl.Snapshot().Update.Current; got != version.Version {
+		t.Fatalf("Current = %q, want internal/version's %q", got, version.Version)
+	}
+}
+
 func TestNoticeLifetimes(t *testing.T) {
 	f := newFakeDaemon()
 	ctrl := NewController(f, Options{NoticeTTL: 15 * time.Millisecond})
@@ -758,7 +861,7 @@ func TestDispatchUnsupportedAndNoOpActions(t *testing.T) {
 
 	for _, name := range []string{
 		ActionLogsExport, ActionOpenLogsFolder, ActionCleanup,
-		ActionServiceStart, ActionServiceStop, ActionUpdateCheck,
+		ActionServiceStart, ActionServiceStop,
 		ActionPrefsSet, ActionDoctorRun,
 	} {
 		err := ctrl.Dispatch(Action{Name: name})

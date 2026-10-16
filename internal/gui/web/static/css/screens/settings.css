@@ -1,0 +1,170 @@
+/* Settings screen (T2.4). Consumes the shell's primitives (button, input)
+ * and the injected colour roles; geometry, type and spacing come from
+ * tokens.css. No literal colours (ban 9), logical properties only (ban 10),
+ * no shadows (ban 7). The rows pane deliberately draws no scrollbar in any
+ * theme (inventory §Settings): wheel and Tab scroll it. */
+
+.set {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Fill the content column so the rows pane owns the scrolling. */
+  block-size: 100%;
+  /* Match the dashboard's data column so the screens read as one app. */
+  max-inline-size: 720px;
+}
+
+/* The hidden attribute must beat every author display rule inside the
+ * screen (.button is inline-flex, .set__rows is flex). */
+.set [hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.set__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.set__refresh {
+  min-inline-size: 110px;
+}
+
+/* ------------------------------------------------------------------ rows */
+
+.set__rows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-block-size: 0;
+  overflow-y: auto;
+  /* The inventory's deliberate treatment: no scrollbar look in any theme. */
+  scrollbar-width: none;
+}
+
+.set__rows::-webkit-scrollbar {
+  display: none;
+}
+
+.set__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.set__heading {
+  /* The inventory's heading-size, bold section rows. */
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.set__row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-h); /* house control height: 40px */
+  padding-block: var(--space-1);
+}
+
+.set__label {
+  color: var(--text-muted);
+}
+
+.set__control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.set__control--wrap {
+  flex-wrap: wrap;
+}
+
+/* App rows: choice buttons, toggles (110 wide) and the version row. */
+.set__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.set__choice {
+  min-inline-size: 80px;
+}
+
+/* The current choice: filled and ringed (inventory §Settings). The ring is a
+ * hard halo outside the primary fill, not a drop shadow (ban 7), and the
+ * global :focus-visible outline still marks keyboard focus on every choice. */
+.set__choice[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--primary);
+}
+
+.set__choice[aria-pressed="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 92%, var(--on-primary));
+}
+
+.set__choice[aria-pressed="true"]:active:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 84%, var(--on-primary));
+}
+
+.set__toggle {
+  min-inline-size: 110px;
+  font-variant-numeric: tabular-nums;
+}
+
+.set__version {
+  font-weight: 600;
+}
+
+.set__update-check {
+  min-inline-size: 140px;
+}
+
+.set__update-result {
+  color: var(--text-muted);
+}
+
+/* Daemon rows: text/number inputs (the walk-era 240-unit edit) + Apply. */
+.set__edit {
+  inline-size: 240px;
+}
+
+.set__apply,
+.set__reset {
+  min-inline-size: 80px;
+}
+
+/* The overridden mark: a small word beside the Reset button (never colour
+ * alone — the text carries the state). */
+.set__override {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- status */
+
+.set__status {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tone is enhancement only; every status line carries its word. */
+.set__status[data-tone="good"] {
+  color: var(--profit);
+}
+
+.set__status[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.set__status[data-tone="bad"] {
+  color: var(--loss);
+}

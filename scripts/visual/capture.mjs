@@ -116,6 +116,14 @@ const STATES = [
   { name: "autoconnect", screen: "onboarding", hint: "autoconnect" },
   { name: "finish", screen: "onboarding", hint: "finish" },
   {
+    // A completed daemon-setting change on Settings: the MTU success notice
+    // on the status line (the overridden kill-switch row is already visible
+    // in every settings capture, mock-served).
+    name: "saved",
+    screen: "settings",
+    action: { name: "settings_set", payload: { key: "mtu", value: "1500" } },
+  },
+  {
     name: "latency-3s",
     screen: "dashboard",
     latencyMs: 3000,
@@ -171,6 +179,20 @@ function buildPlan(only) {
         file: `dashboard/dark-${accent}.png`,
         label: `dashboard dark/${accent}`,
         route: "#/dashboard",
+        theme: "dark",
+        accent,
+      });
+    }
+  }
+  // The settings screen's accent variants (T2.4): the theme sweep above
+  // covers blue; two more accents prove the choice marks track the applied
+  // appearance.
+  if (wanted("settings")) {
+    for (const accent of ["teal", "violet"]) {
+      plan.push({
+        file: `settings/dark-${accent}.png`,
+        label: `settings dark/${accent}`,
+        route: "#/settings",
         theme: "dark",
         accent,
       });

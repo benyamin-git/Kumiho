@@ -82,7 +82,7 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		Theme:           "dark",
 		Accent:          "blue",
 		Service:         ServiceState{State: "running"},
-		Update:          UpdateInfo{Checked: true, Latest: "v0.3.1", URL: "https://example.com/v0.3.1"},
+		Update:          UpdateInfo{Current: "v0.3.0", Latest: "v0.3.1", URL: "https://example.com/v0.3.1", CheckedAt: "2026-10-16T00:00:00Z"},
 	}
 	raw, err := EncodeState(st)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		`"theme":"dark",` +
 		`"accent":"blue",` +
 		`"service":{"state":"running"},` +
-		`"update":{"checked":true,"latest":"v0.3.1","url":"https://example.com/v0.3.1"}` +
+		`"update":{"current":"v0.3.0","latest":"v0.3.1","url":"https://example.com/v0.3.1","checked_at":"2026-10-16T00:00:00Z"}` +
 		`}}`
 	if string(raw) != want {
 		t.Fatalf("EncodeState() = %s, want %s", raw, want)

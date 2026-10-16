@@ -55,6 +55,7 @@ export function registerScreen(id, load, css) {
 // The screen table: one line per screen as its task lands.
 registerScreen("dashboard", () => import("./screens/dashboard.js"), "css/screens/dashboard.css");
 registerScreen("locations", () => import("./screens/locations.js"), "css/screens/locations.css");
+registerScreen("settings", () => import("./screens/settings.js"), "css/screens/settings.css");
 
 /** Parse a location hash into {id, hint}, tolerating anything malformed. */
 export function parseHash(hash) {

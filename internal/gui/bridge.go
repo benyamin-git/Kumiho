@@ -162,8 +162,9 @@ type State struct {
 	Theme  string `json:"theme,omitempty"`
 	Accent string `json:"accent,omitempty"`
 
-	// Service and Update are GUI-side projections filled by later tasks
-	// (service control, update check); they are not protocol types.
+	// Service and Update are GUI-side projections filled by their tasks
+	// (service control, the manual update check); they are not protocol
+	// types.
 	Service ServiceState `json:"service"`
 	Update  UpdateInfo   `json:"update"`
 }

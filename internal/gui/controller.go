@@ -13,6 +13,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
+	"github.com/benyamin-git/kumiho/internal/version"
 )
 
 // Request timeouts, exactly the inventory's "Active timeouts"
@@ -139,15 +140,6 @@ type ServiceState struct {
 	State string `json:"state,omitempty"` // service state word
 }
 
-// UpdateInfo is the GUI-side projection of the manual update check; T2.4
-// fills it in. It is not a protocol type.
-type UpdateInfo struct {
-	Checked bool   `json:"checked,omitempty"`
-	Latest  string `json:"latest,omitempty"` // latest release tag
-	URL     string `json:"url,omitempty"`    // release page
-	Error   string `json:"error,omitempty"`
-}
-
 // Options configures a Controller. Zero values take the defaults.
 type Options struct {
 	// Theme and Accent are the initial house appearance carried in State.
@@ -161,6 +153,9 @@ type Options struct {
 	SettingsInterval time.Duration
 	// NoticeTTL is the screen-local success notice lifetime (10 s).
 	NoticeTTL time.Duration
+	// UpdateCheck runs one manual update check (update_check). Nil uses the
+	// GitHub checker (UpdateChecker.Check); tests inject their own.
+	UpdateCheck func(ctx context.Context) (UpdateInfo, error)
 }
 
 func (o Options) withDefaults() Options {
@@ -237,12 +232,19 @@ type Controller struct {
 // immediately.
 func NewController(d Daemon, opts Options) *Controller {
 	opts = opts.withDefaults()
+	if opts.UpdateCheck == nil {
+		checker := UpdateChecker{}
+		opts.UpdateCheck = checker.Check
+	}
 	return &Controller{
 		d:         d,
 		opts:      opts,
 		reachable: true, // ready until a dial failure proves otherwise
 		theme:     opts.Theme,
 		accent:    opts.Accent,
+		// The Version row shows the running build from the first snapshot,
+		// before any check has run (T2.4 ruling).
+		update: UpdateInfo{Current: version.Version},
 	}
 }
 
@@ -291,12 +293,12 @@ func (c *Controller) Snapshot() State {
 //
 // Handled here: connect, disconnect, select_location, ping, settings_get,
 // settings_set, login_email, login_password, login_2fa, logout,
-// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, refresh.
-// window_show, quit and open_external are recognized no-ops: the shell owns
-// window visibility, process exit and opening links (D34). Actions whose
-// handlers arrive with later tasks (logs_export, open_logs_folder, cleanup,
-// service_start, service_stop, update_check, prefs_set, doctor_run) return
-// an "unsupported action" error instead of panicking.
+// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, refresh,
+// update_check. window_show, quit and open_external are recognized no-ops:
+// the shell owns window visibility, process exit and opening links (D34).
+// Actions whose handlers arrive with later tasks (logs_export,
+// open_logs_folder, cleanup, service_start, service_stop, prefs_set,
+// doctor_run) return an "unsupported action" error instead of panicking.
 func (c *Controller) Dispatch(act Action) error {
 	switch act.Name {
 	case ActionConnect:
@@ -311,6 +313,8 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchSettingsGet()
 	case ActionSettingsSet:
 		return c.dispatchSettingsSet(act)
+	case ActionUpdateCheck:
+		return c.dispatchUpdateCheck()
 	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA:
 		return c.dispatchLogin(act)
 	case ActionLogout:
@@ -451,6 +455,34 @@ func (c *Controller) dispatchSettingsSet(act Action) error {
 	// settings so values and override marks stay truthful.
 	c.refreshStatus(ctx)
 	c.loadSettings(ctx)
+	return nil
+}
+
+// dispatchUpdateCheck runs the manual update check (D9: on demand only). The
+// result lands in State.Update; the outcome is also the settings notice —
+// "Kumiho vX is available", "Kumiho is up to date" for 10 s, or a persistent
+// "could not check for updates" on failure. The check talks to GitHub, never
+// the daemon, so it deliberately leaves the reachability flag alone: a feed
+// failure must not flip the shell to the Set up Kumiho gate.
+func (c *Controller) dispatchUpdateCheck() error {
+	ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
+	defer cancel()
+	info, err := c.opts.UpdateCheck(ctx)
+	if err != nil {
+		c.setNotice(slotSettings, "could not check for updates: "+err.Error(), toneBad, 0)
+		return err
+	}
+	if info.Current == "" {
+		info.Current = version.Version
+	}
+	c.mu.Lock()
+	c.update = info
+	c.mu.Unlock()
+	if sameRelease(info.Current, info.Latest) {
+		c.setNotice(slotSettings, "Kumiho is up to date", toneGood, c.opts.NoticeTTL)
+	} else {
+		c.setNotice(slotSettings, "Kumiho "+info.Latest+" is available", toneInfo, c.opts.NoticeTTL)
+	}
 	return nil
 }
 
