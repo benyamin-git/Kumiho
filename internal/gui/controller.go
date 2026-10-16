@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -156,6 +157,18 @@ type Options struct {
 	// UpdateCheck runs one manual update check (update_check). Nil uses the
 	// GitHub checker (UpdateChecker.Check); tests inject their own.
 	UpdateCheck func(ctx context.Context) (UpdateInfo, error)
+	// LogsExport writes the given plain-text log content to a new file in
+	// the host's per-user log folder and returns the resulting path
+	// (logs_export, inventory §Logs). The shell wires its writer; nil — the
+	// default — refuses the action with a clear error, so tests and
+	// non-host callers behave deterministically and the engine stays
+	// OS-free.
+	LogsExport func(content string) (string, error)
+	// OpenLogsFolder creates the host's per-user log folder if needed and
+	// opens it in the OS file manager, returning the folder path
+	// (open_logs_folder, inventory §Logs). Nil — the default — refuses the
+	// action with a clear error.
+	OpenLogsFolder func() (string, error)
 }
 
 func (o Options) withDefaults() Options {
@@ -213,6 +226,7 @@ type Controller struct {
 	rtts           map[string]string
 	logs           []logging.Entry
 	logsSubscribed bool
+	logsLoaded     bool
 
 	notice          *Notice
 	locationsNotice *Notice
@@ -272,6 +286,7 @@ func (c *Controller) Snapshot() State {
 		LocationsLoaded: c.locationsLoaded,
 		Locations:       c.locations,
 		RTTs:            copyRTTs(c.rtts),
+		LogsLoaded:      c.logsLoaded,
 		Logs:            c.logs,
 		Notice:          liveNotice(c.notice, now),
 		LocationsNotice: liveNotice(c.locationsNotice, now),
@@ -293,12 +308,12 @@ func (c *Controller) Snapshot() State {
 //
 // Handled here: connect, disconnect, select_location, ping, settings_get,
 // settings_set, login_email, login_password, login_2fa, logout,
-// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, refresh,
-// update_check. window_show, quit and open_external are recognized no-ops:
-// the shell owns window visibility, process exit and opening links (D34).
-// Actions whose handlers arrive with later tasks (logs_export,
-// open_logs_folder, cleanup, service_start, service_stop, prefs_set,
-// doctor_run) return an "unsupported action" error instead of panicking.
+// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, logs_export,
+// open_logs_folder, refresh, update_check. window_show, quit and
+// open_external are recognized no-ops: the shell owns window visibility,
+// process exit and opening links (D34). Actions whose handlers arrive with
+// later tasks (cleanup, service_start, service_stop, prefs_set, doctor_run)
+// return an "unsupported action" error instead of panicking.
 func (c *Controller) Dispatch(act Action) error {
 	switch act.Name {
 	case ActionConnect:
@@ -327,6 +342,10 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchLogsUnsubscribe()
 	case ActionLogsClear:
 		return c.dispatchLogsClear()
+	case ActionLogsExport:
+		return c.dispatchLogsExport(act)
+	case ActionOpenLogsFolder:
+		return c.dispatchOpenLogsFolder()
 	case ActionRefresh:
 		return c.dispatchRefresh(act)
 	case ActionPrefsSet, ActionDoctorRun:
@@ -568,6 +587,7 @@ func (c *Controller) dispatchLogsSnapshot(act Action) error {
 	}
 	c.mu.Lock()
 	c.logs = entries
+	c.logsLoaded = true
 	c.logsNotice = clearNoticeError(c.logsNotice)
 	c.mu.Unlock()
 	return nil
@@ -623,6 +643,106 @@ func (c *Controller) dispatchLogsClear() error {
 	c.mu.Unlock()
 	c.setNotice(slotLogs, "Logs cleared", toneGood, c.opts.NoticeTTL)
 	return nil
+}
+
+// logsExportPayload is the logs_export action's payload: the screen's local
+// level and search filters, so the host exports exactly the currently
+// visible entries (inventory §Logs "Export"). An empty level means every
+// entry; the payload is page input, and the exported content is derived
+// from the controller's retained buffer only.
+type logsExportPayload struct {
+	Level  string `json:"level,omitempty"`
+	Search string `json:"search,omitempty"`
+}
+
+// dispatchLogsExport renders the visible (level+search filtered) buffer
+// entries in the daemon's text log format and hands them to the host's
+// export writer (Options.LogsExport; the shell writes the parity path
+// `%LOCALAPPDATA%\kumiho\logs\kumiho-logs-<YYYYMMDD-HHMMSS>.log`). The
+// outcome is the logs notice: `Exported to <path>` (10 s), `Nothing to
+// export`, or `could not export the logs: <err>`. It never talks to the
+// daemon, so it leaves reachability alone.
+func (c *Controller) dispatchLogsExport(act Action) error {
+	p, err := decodePayload[logsExportPayload](act)
+	if err != nil {
+		return err
+	}
+	minLevel := logging.Debug
+	if p.Level != "" {
+		if minLevel, err = logging.ParseLevel(p.Level); err != nil {
+			return err
+		}
+	}
+	c.mu.Lock()
+	entries := append([]logging.Entry(nil), c.logs...)
+	c.mu.Unlock()
+	visible := visibleLogs(entries, minLevel, p.Search)
+	if len(visible) == 0 {
+		c.setNotice(slotLogs, "Nothing to export", toneInfo, c.opts.NoticeTTL)
+		return nil
+	}
+	if c.opts.LogsExport == nil {
+		err := errors.New("log export is not available")
+		c.setNotice(slotLogs, "could not export the logs: "+err.Error(), toneBad, 0)
+		return err
+	}
+	path, err := c.opts.LogsExport(renderLogText(visible))
+	if err != nil {
+		c.setNotice(slotLogs, "could not export the logs: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.setNotice(slotLogs, "Exported to "+path, toneGood, c.opts.NoticeTTL)
+	return nil
+}
+
+// dispatchOpenLogsFolder opens the host's per-user log folder through
+// Options.OpenLogsFolder. The outcome is the logs notice: `Opened <dir>`
+// (10 s) or `could not open the log folder: <err>`. Daemon-free like the
+// export.
+func (c *Controller) dispatchOpenLogsFolder() error {
+	if c.opts.OpenLogsFolder == nil {
+		err := errors.New("opening the log folder is not available")
+		c.setNotice(slotLogs, "could not open the log folder: "+err.Error(), toneBad, 0)
+		return err
+	}
+	dir, err := c.opts.OpenLogsFolder()
+	if err != nil {
+		c.setNotice(slotLogs, "could not open the log folder: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.setNotice(slotLogs, "Opened "+dir, toneGood, c.opts.NoticeTTL)
+	return nil
+}
+
+// visibleLogs returns the buffer entries matching the screen's local level
+// and search filters, exactly the walk-era and TUI rule (filterLogEntries):
+// entries at or above the level whose tag or message contains the trimmed,
+// case-insensitive search text, in stream order.
+func visibleLogs(entries []logging.Entry, minLevel logging.Level, search string) []logging.Entry {
+	q := strings.ToLower(strings.TrimSpace(search))
+	out := make([]logging.Entry, 0, len(entries))
+	for _, e := range entries {
+		if e.Level < minLevel {
+			continue
+		}
+		if q != "" && !strings.Contains(strings.ToLower(e.Tag+" "+e.Msg), q) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// renderLogText renders entries in the daemon's text log format (Entry.Line),
+// one newline-terminated line each: the TUI's and the walk GUI's export
+// format, so every export file greps the same way.
+func renderLogText(entries []logging.Entry) string {
+	var b strings.Builder
+	for _, e := range entries {
+		b.WriteString(e.Line())
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 // refreshRequest is the refresh action's payload. The frozen action set has

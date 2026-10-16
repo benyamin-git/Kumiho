@@ -137,6 +137,13 @@ type State struct {
 	// envelope.
 	LocationsLoaded bool `json:"locations_loaded"`
 
+	// LogsLoaded reports whether the log snapshot has been loaded at all
+	// (T3.2). The Logs screen must distinguish "Loading logs..." from a
+	// settled empty ring ("No log entries yet."), and an omitted buffer
+	// cannot say which; the flag is always present in the envelope, exactly
+	// like LocationsLoaded.
+	LogsLoaded bool `json:"logs_loaded"`
+
 	// Locations is the server list; nil until loaded.
 	Locations []serverlist.Country `json:"locations,omitempty"`
 

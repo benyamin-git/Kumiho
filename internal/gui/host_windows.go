@@ -297,7 +297,12 @@ func (h *host) run() error {
 	w.Navigate(h.server.URL())
 
 	h.client = NewDaemonClient()
-	h.ctrl = NewController(h.client, Options{Theme: string(th), Accent: accent})
+	h.ctrl = NewController(h.client, Options{
+		Theme:          string(th),
+		Accent:         accent,
+		LogsExport:     h.logsExport,
+		OpenLogsFolder: h.openLogsFolder,
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	h.cancel = cancel
 	go h.ctrl.Poll(ctx)
@@ -723,6 +728,64 @@ func effectiveAppearance(p prefs.Prefs) (theme.Theme, string) {
 // isDarkTheme reports whether a theme wants the dark native chrome.
 func isDarkTheme(t theme.Theme) bool {
 	return t == theme.Dark || t == theme.OLED
+}
+
+// logsExportDir returns %LOCALAPPDATA%\kumiho\logs, the per-user log folder
+// the Logs screen's export and open-folder actions share (the TUI's export
+// folder and the inventory's parity path; the daemon's %ProgramData%\kumiho
+// log directory is admin-only by ACL, so a user cannot browse it).
+func logsExportDir() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", errors.New("could not determine the log folder")
+	}
+	return filepath.Join(dir, "kumiho", "logs"), nil
+}
+
+// logsExport implements Options.LogsExport: it writes one log export file
+// (kumiho-logs-<YYYYMMDD-HHMMSS>.log, 0600) into the per-user log folder and
+// returns its path, so the controller can word the "Exported to <path>"
+// notice. The content is the controller's rendered visible entries.
+func (h *host) logsExport(content string) (string, error) {
+	dir, err := logsExportDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("could not create the log folder: %w", err)
+	}
+	path := filepath.Join(dir, "kumiho-logs-"+time.Now().Format("20060102-150405")+".log")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return "", fmt.Errorf("could not write the log export: %w", err)
+	}
+	h.log.logf("logs_export: %s (%d bytes)", path, len(content))
+	return path, nil
+}
+
+// openLogsFolder implements Options.OpenLogsFolder: it creates the per-user
+// log folder if needed and opens it in File Explorer through ShellExecute,
+// returning the folder path for the "Opened <dir>" notice.
+func (h *host) openLogsFolder() (string, error) {
+	dir, err := logsExportDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("could not create the log folder: %w", err)
+	}
+	verb, err := windows.UTF16PtrFromString("open")
+	if err != nil {
+		return "", fmt.Errorf("could not open the log folder: %w", err)
+	}
+	target, err := windows.UTF16PtrFromString(dir)
+	if err != nil {
+		return "", fmt.Errorf("could not open the log folder: %w", err)
+	}
+	if err := windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL); err != nil {
+		return "", fmt.Errorf("could not open the log folder: %w", err)
+	}
+	h.log.logf("open_logs_folder: %s", dir)
+	return dir, nil
 }
 
 // webviewDataPath returns the WebView2 user-data directory,

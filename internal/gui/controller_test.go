@@ -815,6 +815,241 @@ func TestDispatchLogsLifecycle(t *testing.T) {
 	if got := ctrl.Snapshot().Logs; len(got) != 0 {
 		t.Fatalf("logs = %+v, want the unsubscribed event dropped", got)
 	}
+
+	// The export and open-folder handlers are daemon-free and leave the
+	// subscribe lifecycle alone: with the screen gone the retained buffer
+	// still exports, and a later visit's subscribe still appends.
+	path := filepath.Join(t.TempDir(), "kumiho-logs-20261016-120000.log")
+	var exported []string
+	ctrl.opts.LogsExport = func(content string) (string, error) {
+		exported = append(exported, content)
+		return path, nil
+	}
+	ctrl.opts.OpenLogsFolder = func() (string, error) { return filepath.Dir(path), nil }
+	if err := ctrl.Dispatch(Action{Name: ActionLogsSnapshot, Payload: []byte(`{"level":"info"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_snapshot) = %v", err)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport}); err != nil {
+		t.Fatalf("Dispatch(logs_export) = %v", err)
+	}
+	if len(exported) != 1 || !strings.Contains(exported[0], "boot") {
+		t.Fatalf("exported content = %q, want the retained boot entry", exported)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionOpenLogsFolder}); err != nil {
+		t.Fatalf("Dispatch(open_logs_folder) = %v", err)
+	}
+	if got := ctrl.Snapshot().LogsNotice; got == nil || got.Message != "Opened "+filepath.Dir(path) || got.Tone != toneGood {
+		t.Fatalf("logs notice = %+v, want the opened folder", got)
+	}
+	// A re-visit (snapshot + subscribe) streams live entries again.
+	if err := ctrl.Dispatch(Action{Name: ActionLogsSubscribe, Payload: []byte(`{"level":"info"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_subscribe) = %v", err)
+	}
+	if got := f.subscribeLevels(); len(got) != 2 || got[1] != "info" {
+		t.Fatalf("subscribe levels = %v, want two visits", got)
+	}
+	f.emit(t, ipc.TypeLog, logging.Entry{Level: logging.Info, Tag: "daemon", Msg: "again"})
+	waitFor(t, "second visit live entry", func() bool {
+		for _, e := range ctrl.Snapshot().Logs {
+			if e.Msg == "again" {
+				return true
+			}
+		}
+		return false
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionLogsUnsubscribe}); err != nil {
+		t.Fatalf("Dispatch(logs_unsubscribe) = %v", err)
+	}
+	if got := f.count(func(d *fakeDaemon) int { return d.unsubscribes }); got != 2 {
+		t.Fatalf("unsubscribes = %d, want 2 (one per visit; no leaked subscription)", got)
+	}
+}
+
+func TestDispatchLogsExport(t *testing.T) {
+	f := newFakeDaemon()
+	base := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
+	f.set(func(d *fakeDaemon) {
+		d.logSnapshot = api.LogSnapshot{Entries: []logging.Entry{
+			{Time: base, Level: logging.Debug, Tag: "daemon", Msg: "cache hit"},
+			{Time: base.Add(time.Second), Level: logging.Info, Tag: "tunnel", Msg: "connect via CONNECT"},
+			{Time: base.Add(2 * time.Second), Level: logging.Warn, Tag: "watchdog", Msg: "probe timed out"},
+		}}
+	})
+	path := filepath.Join(t.TempDir(), "kumiho-logs-20261016-100000.log")
+	var contents []string
+	ctrl := NewController(f, Options{
+		LogsExport: func(content string) (string, error) {
+			contents = append(contents, content)
+			return path, nil
+		},
+	})
+
+	if err := ctrl.Dispatch(Action{Name: ActionLogsSnapshot, Payload: []byte(`{"level":"debug"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_snapshot) = %v", err)
+	}
+
+	// The level filter: info drops the debug entry; the payload is the
+	// screen's local view state.
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"info"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_export) = %v", err)
+	}
+	want := "2026-10-16T10:00:01Z INF [tunnel] connect via CONNECT\n" +
+		"2026-10-16T10:00:02Z WRN [watchdog] probe timed out\n"
+	if len(contents) != 1 || contents[0] != want {
+		t.Fatalf("exported content = %q, want %q", contents, want)
+	}
+	n := ctrl.Snapshot().LogsNotice
+	if n == nil || n.Message != "Exported to "+path || n.Tone != toneGood || n.Expires == nil {
+		t.Fatalf("logs notice = %+v, want the exported path", n)
+	}
+
+	// The search filter: case-insensitive on tag or message, applied on top
+	// of the level.
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"debug","search":"CACHE"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_export, search) = %v", err)
+	}
+	if len(contents) != 2 || contents[1] != "2026-10-16T10:00:00Z DBG [daemon] cache hit\n" {
+		t.Fatalf("searched content = %q", contents)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"debug","search":"watchdog probe"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_export, phrase search) = %v", err)
+	}
+	if len(contents) != 3 || contents[2] != "2026-10-16T10:00:02Z WRN [watchdog] probe timed out\n" {
+		t.Fatalf("phrase-searched content = %q", contents)
+	}
+
+	// Nothing visible: the inventory's notice, no writer call.
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"error"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_export, empty) = %v", err)
+	}
+	n = ctrl.Snapshot().LogsNotice
+	if n == nil || n.Message != "Nothing to export" || n.Tone != toneInfo || n.Expires == nil {
+		t.Fatalf("logs notice = %+v, want Nothing to export", n)
+	}
+	if len(contents) != 3 {
+		t.Fatalf("writer called for an empty export: %q", contents)
+	}
+
+	// Strict decoding, like every action payload.
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"bogus":true}`)}); err == nil {
+		t.Fatal("Dispatch(logs_export, unknown field) = nil, want a decode error")
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"trace"}`)}); err == nil {
+		t.Fatal("Dispatch(logs_export, unknown level) = nil, want a parse error")
+	}
+
+	// A writer failure is the logs error notice and the returned error.
+	boom := errors.New("disk full")
+	ctrl.opts.LogsExport = func(string) (string, error) { return "", boom }
+	err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"info"}`)})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Dispatch(logs_export) = %v, want the writer error", err)
+	}
+	if n := ctrl.Snapshot().LogsNotice; n == nil || n.Message != "could not export the logs: disk full" || n.Tone != toneBad || n.Expires != nil {
+		t.Fatalf("logs notice = %+v", n)
+	}
+}
+
+func TestDispatchLogsExportUnavailableByDefault(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.logSnapshot = api.LogSnapshot{Entries: []logging.Entry{{Level: logging.Info, Tag: "daemon", Msg: "boot"}}}
+	})
+	ctrl := NewController(f, Options{}) // no LogsExport seam
+
+	if err := ctrl.Dispatch(Action{Name: ActionLogsSnapshot, Payload: []byte(`{"level":"info"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_snapshot) = %v", err)
+	}
+	err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"info"}`)})
+	if err == nil || !strings.Contains(err.Error(), "log export is not available") {
+		t.Fatalf("Dispatch(logs_export) = %v, want the unavailable error", err)
+	}
+	if n := ctrl.Snapshot().LogsNotice; n == nil || n.Message != "could not export the logs: log export is not available" || n.Tone != toneBad {
+		t.Fatalf("logs notice = %+v", n)
+	}
+	// The unavailable seam is only reached with something visible: an empty
+	// visible set still reports the inventory's Nothing to export.
+	if err := ctrl.Dispatch(Action{Name: ActionLogsClear}); err != nil {
+		t.Fatalf("Dispatch(logs_clear) = %v", err)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLogsExport, Payload: []byte(`{"level":"info"}`)}); err != nil {
+		t.Fatalf("Dispatch(logs_export, empty) = %v", err)
+	}
+	if n := ctrl.Snapshot().LogsNotice; n == nil || n.Message != "Nothing to export" {
+		t.Fatalf("logs notice = %+v, want Nothing to export", n)
+	}
+}
+
+func TestDispatchOpenLogsFolder(t *testing.T) {
+	f := newFakeDaemon()
+	dir := filepath.Join(t.TempDir(), "kumiho", "logs")
+	ctrl := NewController(f, Options{
+		OpenLogsFolder: func() (string, error) { return dir, nil },
+	})
+
+	if err := ctrl.Dispatch(Action{Name: ActionOpenLogsFolder}); err != nil {
+		t.Fatalf("Dispatch(open_logs_folder) = %v", err)
+	}
+	if n := ctrl.Snapshot().LogsNotice; n == nil || n.Message != "Opened "+dir || n.Tone != toneGood || n.Expires == nil {
+		t.Fatalf("logs notice = %+v, want the opened folder", n)
+	}
+
+	boom := errors.New("no file manager")
+	ctrl.opts.OpenLogsFolder = func() (string, error) { return "", boom }
+	err := ctrl.Dispatch(Action{Name: ActionOpenLogsFolder})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Dispatch(open_logs_folder) = %v, want the open error", err)
+	}
+	if n := ctrl.Snapshot().LogsNotice; n == nil || n.Message != "could not open the log folder: no file manager" || n.Tone != toneBad {
+		t.Fatalf("logs notice = %+v", n)
+	}
+
+	// The default seam refuses deterministically.
+	ctrl.opts.OpenLogsFolder = nil
+	err = ctrl.Dispatch(Action{Name: ActionOpenLogsFolder})
+	if err == nil || !strings.Contains(err.Error(), "opening the log folder is not available") {
+		t.Fatalf("Dispatch(open_logs_folder, default) = %v", err)
+	}
+	if got := f.callLog(); len(got) != 0 {
+		t.Fatalf("export/open handlers called the daemon: %v", got)
+	}
+}
+
+// TestDispatchLogsLoadedProjection pins the logs_loaded flag the screen's
+// "Loading logs..." state reads: false until the first successful snapshot,
+// true afterwards including after a clear (the ring is settled-empty, not
+// loading), and false again only for a fresh controller whose snapshot
+// never succeeded.
+func TestDispatchLogsLoadedProjection(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{})
+	if ctrl.Snapshot().LogsLoaded {
+		t.Fatal("logs_loaded = true before the first snapshot")
+	}
+
+	f.set(func(d *fakeDaemon) { d.logSnapshotErr = errors.New("ring gone") })
+	if err := ctrl.Dispatch(Action{Name: ActionLogsSnapshot}); err == nil {
+		t.Fatal("Dispatch(logs_snapshot) = nil, want the failure")
+	}
+	if ctrl.Snapshot().LogsLoaded {
+		t.Fatal("logs_loaded = true after a failed snapshot")
+	}
+
+	f.set(func(d *fakeDaemon) { d.logSnapshotErr = nil })
+	if err := ctrl.Dispatch(Action{Name: ActionLogsSnapshot}); err != nil {
+		t.Fatalf("Dispatch(logs_snapshot) = %v", err)
+	}
+	// An empty successful snapshot is settled: loaded with no entries.
+	st := ctrl.Snapshot()
+	if !st.LogsLoaded || len(st.Logs) != 0 {
+		t.Fatalf("logs_loaded = %v, logs = %+v, want settled-empty", st.LogsLoaded, st.Logs)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLogsClear}); err != nil {
+		t.Fatalf("Dispatch(logs_clear) = %v", err)
+	}
+	if !ctrl.Snapshot().LogsLoaded {
+		t.Fatal("logs_loaded = false after a clear, want the settled-empty state")
+	}
 }
 
 func TestDispatchLogsFailures(t *testing.T) {
@@ -860,8 +1095,7 @@ func TestDispatchUnsupportedAndNoOpActions(t *testing.T) {
 	ctrl := NewController(f, Options{})
 
 	for _, name := range []string{
-		ActionLogsExport, ActionOpenLogsFolder, ActionCleanup,
-		ActionServiceStart, ActionServiceStop,
+		ActionCleanup, ActionServiceStart, ActionServiceStop,
 		ActionPrefsSet, ActionDoctorRun,
 	} {
 		err := ctrl.Dispatch(Action{Name: name})

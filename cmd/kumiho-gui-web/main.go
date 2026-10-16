@@ -14,10 +14,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -81,7 +83,12 @@ func run(port int) error {
 	}
 
 	m := mock.New()
-	ctrl := gui.NewController(m, gui.Options{Theme: string(th), Accent: accent})
+	ctrl := gui.NewController(m, gui.Options{
+		Theme:          string(th),
+		Accent:         accent,
+		LogsExport:     devLogsExport,
+		OpenLogsFolder: devOpenLogsFolder,
+	})
 
 	server := web.New(web.StaticFS(), web.Options{
 		Addr: fmt.Sprintf("0.0.0.0:%d", port),
@@ -147,6 +154,50 @@ func effectiveAppearance(p prefs.Prefs) (theme.Theme, string) {
 		return theme.Dark, theme.Accents[0].Name
 	}
 	return th, p.Accent
+}
+
+// devLogFolder is the harness's per-user log folder for the Logs screen's
+// export and open-folder actions: os.UserCacheDir()/kumiho/logs, the Linux
+// analogue of the shell's %LOCALAPPDATA%\kumiho\logs (UserCacheDir honours
+// XDG_CACHE_HOME, so a scratch cache is one env var away).
+func devLogFolder() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", errors.New("could not determine the log folder")
+	}
+	dir = filepath.Join(dir, "kumiho", "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("could not create the log folder: %w", err)
+	}
+	return dir, nil
+}
+
+// devLogsExport is the harness's gui.Options.LogsExport: the Linux twin of
+// the shell's writer — same filename shape and 0600 mode, one export file
+// per click.
+func devLogsExport(content string) (string, error) {
+	dir, err := devLogFolder()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "kumiho-logs-"+time.Now().Format("20060102-150405")+".log")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return "", fmt.Errorf("could not write the log export: %w", err)
+	}
+	log.Printf("logs_export: %s (%d bytes)", path, len(content))
+	return path, nil
+}
+
+// devOpenLogsFolder is the harness's gui.Options.OpenLogsFolder: it creates
+// the folder and logs it instead of spawning a file manager, returning the
+// path the UI's "Opened <dir>" notice carries.
+func devOpenLogsFolder() (string, error) {
+	dir, err := devLogFolder()
+	if err != nil {
+		return "", err
+	}
+	log.Printf("open_logs_folder: %s", dir)
+	return dir, nil
 }
 
 // prefsPath names the preferences file for the startup log: the

@@ -50,7 +50,7 @@ func TestEncodeStateEnvelopeShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeState: %v", err)
 	}
-	const want = `{"type":"state","state":{"locations_loaded":false,"service":{},"update":{}}}`
+	const want = `{"type":"state","state":{"locations_loaded":false,"logs_loaded":false,"service":{},"update":{}}}`
 	if string(raw) != want {
 		t.Fatalf("EncodeState() = %s, want %s", raw, want)
 	}
@@ -93,6 +93,7 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		`"status":{"label":"Connected","connected":true,"authenticated":true,"email":"user@example.com","uptime":"1m23s","location":"DE","server":"de1.example:443","kill_switch":true,"exit_ip":"192.0.2.1"},` +
 		`"login":{"step":"done"},` +
 		`"locations_loaded":true,` +
+		`"logs_loaded":false,` +
 		`"locations":[{"code":"DE","name":"Germany","cities":null}],` +
 		`"rtts":{"de1.example:443":"42 ms"},` +
 		`"notice":{"message":"Connected","tone":"info"},` +

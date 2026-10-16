@@ -83,6 +83,9 @@ const ACCENTS = ["blue", "teal", "green", "orange", "rose", "violet"];
 //   failMessage /dev/fail arm (message) before navigating
 //   action      /action envelope name (and optional payload) after navigating
 //   emitLog     /dev/log message after navigating
+//   fill        {selector, value} typed into a screen control after the action
+//   click       selectors clicked in order after the action/fill (screen
+//               controls like the logs level button)
 //   afterMs     extra wait after the capture (in-flight daemon calls)
 //
 // Order matters only through the notices actions leave behind: the
@@ -99,6 +102,36 @@ const STATES = [
     name: "live-entry",
     screen: "logs",
     emitLog: "dev: capture live entry",
+  },
+  {
+    // The level filter clicked round to debug (info → warn → error →
+    // debug): all seven mock entries visible. Runs before the states that
+    // fill the search box (the screen keeps its filters for the session).
+    name: "level-debug",
+    screen: "logs",
+    click: ["#logs-level", "#logs-level", "#logs-level"],
+  },
+  {
+    // A live search: only the entries whose tag or message match remain.
+    name: "filtered",
+    screen: "logs",
+    fill: { selector: "#logs-search", value: "tunnel" },
+  },
+  {
+    // A completed export through the real button: the Exported to <path>
+    // notice on the status line (the search box is cleared first so the
+    // whole visible stream exports).
+    name: "exported",
+    screen: "logs",
+    fill: { selector: "#logs-search", value: "" },
+    click: ["#logs-export"],
+  },
+  {
+    // A cleared ring: the quiet empty-stream line and the Logs cleared
+    // notice.
+    name: "cleared",
+    screen: "logs",
+    click: ["#logs-clear"],
   },
   {
     // The locations screen with Test-speed labels on its auto-revealed
@@ -594,6 +627,12 @@ async function main() {
         if (state.emitLog) await postJSON("dev/log", { message: state.emitLog });
         if (state.action) {
           await postAction(state.action.name, state.action.payload);
+        }
+        if (state.fill) {
+          await page.fill(state.fill.selector, state.fill.value);
+        }
+        for (const selector of state.click || []) {
+          await page.click(selector);
         }
         await capture(item);
         if (state.afterMs) await page.waitForTimeout(state.afterMs);
