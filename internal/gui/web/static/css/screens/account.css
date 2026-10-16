@@ -1,0 +1,107 @@
+/* Account screen (T3.1). Consumes the shell's primitives (button, card,
+ * dialog) and the injected colour roles; geometry, type and spacing come
+ * from tokens.css. No literal colours (ban 9), logical properties only
+ * (ban 10), no shadows (ban 7). The card follows the dashboard's data column
+ * and 36px row metric with the inventory's 140-unit label column; the dialog
+ * is the app.css house pattern (16px radius, actions grouped, destructive
+ * confirm in the loss colour). */
+
+.acct {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Match the dashboard's data column so the screens read as one app. */
+  max-inline-size: 720px;
+}
+
+/* The hidden attribute must beat every author display rule inside the
+ * screen (.button is inline-flex, .acct__card is grid, the card cells are
+ * flex). */
+.acct [hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.acct__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.acct__refresh {
+  min-inline-size: 110px;
+}
+
+/* ------------------------------------------------------------ status card */
+
+.acct__card {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+}
+
+.acct__card dt {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row-h);
+  color: var(--text-muted);
+}
+
+.acct__card dd {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row-h);
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Tone is enhancement only; the value text carries the meaning. */
+.acct__value[data-tone="good"] {
+  color: var(--profit);
+}
+
+.acct__value[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.acct__value[data-tone="bad"] {
+  color: var(--loss);
+}
+
+/* ---------------------------------------------------------------- sign out */
+
+.acct__signout {
+  min-inline-size: 140px;
+  /* Below the card, sized to its content, not the column. */
+  align-self: flex-start;
+}
+
+/* ------------------------------------------------------------- dialog body */
+
+/* The inventory's two body lines sit as separate paragraphs of one message. */
+.acct__dialog .dialog__body + .dialog__body {
+  margin-block-start: var(--space-3);
+}
+
+/* --------------------------------------------------------------- status */
+
+.acct__status {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tone is enhancement only; every status line carries its word. */
+.acct__status[data-tone="good"] {
+  color: var(--profit);
+}
+
+.acct__status[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.acct__status[data-tone="bad"] {
+  color: var(--loss);
+}
