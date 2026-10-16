@@ -12,7 +12,11 @@
  * gap): every service control is ignored while one change is in flight, and
  * the guard ends on the change's completion evidence — the settings notice
  * moving or the reloaded settings snapshot changing — or at the settle timer,
- * so a byte-identical repeat failure can never stick (T2.2's pattern).
+ * so a byte-identical repeat failure can never stick (T2.2's pattern). The
+ * update check and the daemon mutations are mutually exclusive — a check
+ * refuses while a change runs and vice versa — because both end their guard
+ * on the one shared settings-notice slot (inventory §Settings: one change at
+ * a time).
  *
  * Wording authority: the row labels, order, cues, section headings, the
  * `overridden`/Reset treatment, the status-line priority and the tooltip
@@ -547,7 +551,10 @@ export default {
     }
 
     function renderActions() {
-      ui.updateCheck.disabled = view.updateBusy;
+      // Both guards are visible on the update button: while either an update
+      // check or a daemon change is in flight the check is ignored, and the
+      // button says so (since the mutual refusals below are silent).
+      ui.updateCheck.disabled = view.updateBusy || view.busy;
     }
 
     function renderPane(snapshot) {
@@ -663,9 +670,14 @@ export default {
       ui.status.hidden = text === "";
     }
 
-    /** One daemon-row mutation through the busy guard. */
+    /**
+     * One daemon-row mutation through the busy guard. A mutation is refused
+     * while an update check is in flight as well: the two share the settings
+     * notice slot, so letting them overlap would let one completion release
+     * the other's guard (inventory §Settings: one change at a time).
+     */
     function mutate(payload) {
-      if (view.busy) return;
+      if (view.busy || view.updateBusy) return;
       beginBusy();
       run("settings_set", payload).then(function (err) {
         if (!err) return;
@@ -712,7 +724,9 @@ export default {
       },
 
       onUpdateCheck() {
-        if (view.updateBusy) return;
+        // The check is refused while a daemon change is in flight (the
+        // mutation guard's mirror; see mutate).
+        if (view.updateBusy || view.busy) return;
         beginUpdate();
         run("update_check", {}).then(function (err) {
           if (!err) return;
@@ -728,7 +742,7 @@ export default {
       },
 
       onActivate(entry) {
-        if (view.busy) return;
+        if (view.busy || view.updateBusy) return;
         const spec = entry.spec;
         if (spec.kind === "toggle") {
           mutate({ key: spec.key, value: entry.value === "on" ? "off" : "on" });
