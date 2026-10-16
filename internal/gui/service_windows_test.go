@@ -6,9 +6,129 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-
+	"sync"
 	"testing"
+	"time"
 )
+
+// newServiceTestHost returns a host the service-state tests can drive; only
+// the controller (the state sink) and svcMu are needed.
+func newServiceTestHost() *host {
+	return &host{ctrl: NewController(newFakeDaemon(), Options{})}
+}
+
+// TestUpdateServiceIsAtomic pins the fix for the stuck-Busy interleave (T3.3
+// review): the read-modify-write and the controller publish happen in one
+// svcMu critical section. While a writer is inside its callback the second
+// writer's callback cannot run, and the controller still holds the previous
+// snapshot (the publish is part of the same section).
+func TestUpdateServiceIsAtomic(t *testing.T) {
+	h := newServiceTestHost()
+	h.updateService(func(ServiceState) ServiceState {
+		return ServiceState{Installed: true, State: "running"}
+	})
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		h.updateService(func(ServiceState) ServiceState {
+			close(entered)
+			<-release
+			return ServiceState{Installed: true, State: "stop pending", Busy: true}
+		})
+	}()
+	<-entered
+
+	secondRan := make(chan struct{})
+	secondDone := make(chan struct{})
+	go func() {
+		defer close(secondDone)
+		h.updateService(func(ServiceState) ServiceState {
+			close(secondRan)
+			return ServiceState{Installed: true, State: "stopped"}
+		})
+	}()
+	select {
+	case <-secondRan:
+		t.Fatal("the second update ran while the first held the critical section")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if got := h.ctrl.Snapshot().Service; got.State != "running" || got.Busy {
+		t.Fatalf("controller service = %+v mid-section, want the previous snapshot", got)
+	}
+
+	close(release)
+	<-firstDone
+	<-secondDone
+	if got := h.ctrl.Snapshot().Service; got.State != "stopped" || got.Busy {
+		t.Fatalf("controller service = %+v, want the completion's stopped/not-busy state", got)
+	}
+	if h.service != (ServiceState{Installed: true, State: "stopped"}) {
+		t.Fatalf("host service = %+v, want the controller and host in step", h.service)
+	}
+}
+
+// TestProbeAfterCompletionKeepsBusyClear pins the reported order: the
+// completion publishes stopped/Busy=false, then a probe preserves the
+// now-false flag. Busy must stay false (the pre-fix code could republish a
+// stale Busy=true here and never clear it).
+func TestProbeAfterCompletionKeepsBusyClear(t *testing.T) {
+	h := newServiceTestHost()
+	h.updateService(func(cur ServiceState) ServiceState {
+		cur.Installed = true
+		cur.State = "stop pending"
+		cur.Busy = true
+		return cur
+	})
+	h.updateService(func(ServiceState) ServiceState {
+		return ServiceState{Installed: true, State: "stopped"}
+	})
+	// The probe's shape: preserve the captured Busy.
+	h.updateService(func(cur ServiceState) ServiceState {
+		return ServiceState{Installed: true, State: "stopped", Busy: cur.Busy}
+	})
+
+	if got := h.ctrl.Snapshot().Service; got.Busy || got.State != "stopped" {
+		t.Fatalf("service = %+v, want stopped with Busy=false", got)
+	}
+}
+
+// TestProbeAndCompletionConcurrent runs the two writers together: whatever
+// the interleave, the completion always leaves Busy=false (the regression the
+// atomic updateService fixes — the probe's preserve can no longer land after
+// the completion while carrying a pre-completion read). It cannot fail with
+// the fix and would fail intermittently under the old split read/publish.
+func TestProbeAndCompletionConcurrent(t *testing.T) {
+	h := newServiceTestHost()
+	for round := 0; round < 200; round++ {
+		h.updateService(func(cur ServiceState) ServiceState {
+			cur.Installed = true
+			cur.State = "start pending"
+			cur.Busy = true
+			return cur
+		})
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			h.updateService(func(cur ServiceState) ServiceState {
+				return ServiceState{Installed: true, State: "running", Busy: cur.Busy}
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			h.updateService(func(ServiceState) ServiceState {
+				return ServiceState{Installed: true, State: "running"}
+			})
+		}()
+		wg.Wait()
+		if got := h.ctrl.Snapshot().Service; got.Busy {
+			t.Fatalf("round %d: service = %+v, Busy stuck true", round, got)
+		}
+	}
+}
 
 // TestServiceStateWord pins the SCM-to-card word mapping, including the
 // unknown-state fallback.

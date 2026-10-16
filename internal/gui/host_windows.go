@@ -607,29 +607,36 @@ func (h *host) runServiceAction(act Action) {
 // sc.exe call (D17) and publishes the outcome: the pending state keeps the
 // card honest while the command runs, then the fresh SCM probe lands, then
 // the diagnostics notice. The exit-code/notice wording lives in
-// serviceOutcomeNotice.
+// serviceOutcomeNotice; both publishes go through the atomic updateService.
 func (h *host) runServiceStartStop(start bool) {
 	verb := "start"
 	if !start {
 		verb = "stop"
 	}
-	cur := h.serviceStatus()
-	cur.State = verb + " pending"
-	cur.Busy = true
-	h.publishService(cur)
+	h.updateService(func(cur ServiceState) ServiceState {
+		cur.State = verb + " pending"
+		cur.Busy = true
+		return cur
+	})
 
 	code, err := serviceCommand(verb)
 
-	snap, perr := serviceSnapshot()
-	if perr != nil {
-		h.log.logf("service: %v", perr)
-	}
-	snap.Busy = false
-	h.publishService(snap)
+	// The completion's SCM query runs inside the critical section too, so the
+	// snapshot it publishes can never predate a concurrent probe.
+	var final ServiceState
+	h.updateService(func(ServiceState) ServiceState {
+		snap, perr := serviceSnapshot()
+		if perr != nil {
+			h.log.logf("service: %v", perr)
+		}
+		snap.Busy = false
+		final = snap
+		return snap
+	})
 
 	msg, tone := serviceOutcomeNotice(verb, code, err)
 	h.ctrl.SetDiagnosticsNotice(msg, tone)
-	h.log.logf("service %s: code=%d err=%v state=%+v", verb, code, err, snap)
+	h.log.logf("service %s: code=%d err=%v state=%+v", verb, code, err, final)
 }
 
 // runCleanup runs `kumiho cleanup` elevated (D16) and publishes the outcome
@@ -659,36 +666,40 @@ func (h *host) serviceLoop(ctx context.Context) {
 	}
 }
 
-// probeService publishes one SCM probe. The in-flight Busy marker is
-// preserved (a periodic probe never clears an action's pending state), and a
-// snapshot equal to the last one is not republished.
+// probeService publishes one SCM probe. The query and the preserve-Busy
+// update both run inside the snapshot's critical section (see updateService),
+// so a probe can neither overwrite a completion's Busy=false nor briefly
+// revert a pending word, whatever the interleave with an action.
 func (h *host) probeService() {
-	snap, err := serviceSnapshot()
-	if err != nil {
-		h.log.logf("service: %v", err)
-	}
-	cur := h.serviceStatus()
-	snap.Busy = cur.Busy
-	if snap == cur {
-		return
-	}
-	h.publishService(snap)
+	h.updateService(func(cur ServiceState) ServiceState {
+		snap, err := serviceSnapshot()
+		if err != nil {
+			h.log.logf("service: %v", err)
+		}
+		snap.Busy = cur.Busy
+		return snap
+	})
 }
 
-// serviceStatus returns the shell's last published service snapshot.
-func (h *host) serviceStatus() ServiceState {
+// updateService is the single writer of the shell's service snapshot (T3.3):
+// the read-modify-write AND the controller publish happen in one svcMu
+// critical section. That atomicity is the fix for the stuck-Busy interleave
+// (T3.3 review): a probe's preserve-Busy either lands before an action
+// completion — which then clears Busy — or after it and reads Busy=false; it
+// can never publish a preservation of a stale Busy=true after the
+// completion. Lock order is svcMu → the controller's own mutex; nothing
+// takes them the other way. An update that changes nothing is not
+// republished (every assignment is paired with a publish under this lock, so
+// an unchanged h.service means the controller already holds the value).
+func (h *host) updateService(update func(cur ServiceState) ServiceState) {
 	h.svcMu.Lock()
 	defer h.svcMu.Unlock()
-	return h.service
-}
-
-// publishService replaces the shell's service snapshot and pushes it into the
-// controller's State, the source of truth the UI reads.
-func (h *host) publishService(s ServiceState) {
-	h.svcMu.Lock()
-	h.service = s
-	h.svcMu.Unlock()
-	h.ctrl.SetServiceState(s)
+	next := update(h.service)
+	if next == h.service {
+		return
+	}
+	h.service = next
+	h.ctrl.SetServiceState(next)
 }
 
 // pushLoop is the host→UI half of the bridge: every pushInterval it encodes
