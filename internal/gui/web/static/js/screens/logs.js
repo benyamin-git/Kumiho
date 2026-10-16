@@ -229,6 +229,10 @@ export default {
       statusTone: null,
     };
 
+    // Set by unmount: a seed reply that lands after the screen left must not
+    // follow through with the chained re-subscribe (no leaked subscription).
+    let disposed = false;
+
     /** Whether the console is scrolled to (or beyond) the tail. */
     function atTail() {
       return ui.list.scrollHeight - ui.list.scrollTop - ui.list.clientHeight <= TAIL_EPSILON_PX;
@@ -333,13 +337,16 @@ export default {
 
     // seed re-runs the visit sequence: a fresh ring snapshot at the selected
     // level, then the live subscription at it (the ruling's order; the daemon
-    // replaces an existing subscription, so a re-seed never leaks one).
+    // replaces an existing subscription, so a re-seed never leaks one). A
+    // reply that lands after unmount is dropped: the chained subscribe must
+    // not resurrect a subscription the leave already cancelled.
     function seed() {
       ctx.send("logs_snapshot", { level: session.level }).then(function (err) {
         if (err) {
           console.warn("kumiho: logs snapshot refused: " + err);
           return;
         }
+        if (disposed) return;
         ctx.send("logs_subscribe", { level: session.level }).then(function (err2) {
           if (err2) console.warn("kumiho: logs subscribe refused: " + err2);
         });
@@ -445,8 +452,10 @@ export default {
 
     // Teardown: the store subscription, then the daemon-side subscription
     // (fire-and-forget; the controller drops racing events once it clears
-    // its flag). No leaked subscriptions across navigation.
+    // its flag, and the disposed guard drops an in-flight seed's chained
+    // re-subscribe). No leaked subscriptions across navigation.
     cleanup = function () {
+      disposed = true;
       unsubscribe();
       ctx.send("logs_unsubscribe", {});
     };

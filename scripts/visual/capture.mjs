@@ -118,6 +118,14 @@ const STATES = [
     fill: { selector: "#logs-search", value: "tunnel" },
   },
   {
+    // The debug stop again in OLED (the accent-change reload resets the
+    // session's filters): the fix-round contrast check for the debug tint.
+    name: "level-debug",
+    screen: "logs",
+    theme: "oled",
+    click: ["#logs-level", "#logs-level", "#logs-level"],
+  },
+  {
     // A completed export through the real button: the Exported to <path>
     // notice on the status line (the search box is cleared first so the
     // whole visible stream exports).

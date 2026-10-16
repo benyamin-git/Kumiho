@@ -89,7 +89,14 @@
 }
 
 /* Level tints (the walk levelColor roles); the level tag in the text keeps
-   severity readable without colour. */
+   severity readable without colour. The debug tint mixes the outline role
+   toward on-surface so it stays visibly dim while clearing accessibility
+   floor 1 in every theme: the mix (60% outline, Oklab) resolves to #514e56
+   (8.16:1 on #ffffff), #b3afb7 (8.95:1 on #0f0d13) and #9d9aa1 (7.57:1 on
+   #000000) over the card's surface-container-1; the raw outline fails OLED
+   at 3.99:1 (Light 4.55:1). Ratios = WCAG 2 relative luminance over the
+   Oklab mix, verified against the browser's computed color-mix output,
+   2026-10-16 (the T3.2 review fix). */
 .logs__line[data-level="warn"] {
   color: var(--warning);
 }
@@ -99,7 +106,7 @@
 }
 
 .logs__line[data-level="debug"] {
-  color: var(--outline);
+  color: color-mix(in oklab, var(--outline) 60%, var(--on-surface));
 }
 
 /* A filter that hides every entry inside a non-empty stream: the quiet first
