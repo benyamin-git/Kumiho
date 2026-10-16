@@ -52,9 +52,10 @@ type fakeDaemon struct {
 	accountErr   error
 	accountCalls int
 
-	locations     api.LocationsResult
-	locationsErr  error
-	locationCalls int
+	locations         api.LocationsResult
+	locationsErr      error
+	locationCalls     int
+	locationRefreshes []bool
 
 	logSnapshot    api.LogSnapshot
 	logSnapshotErr error
@@ -130,6 +131,12 @@ func (f *fakeDaemon) pingHosts() [][]string {
 	return out
 }
 
+func (f *fakeDaemon) locationRefreshFlags() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]bool(nil), f.locationRefreshes...)
+}
+
 func (f *fakeDaemon) subscribeLevels() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -175,11 +182,12 @@ func (f *fakeDaemon) SelectLocation(_ context.Context, p api.SelectLocationPaylo
 	return api.Result{OK: true}, f.selectErr
 }
 
-func (f *fakeDaemon) Locations(context.Context, bool) (api.LocationsResult, error) {
+func (f *fakeDaemon) Locations(_ context.Context, refresh bool) (api.LocationsResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "locations")
 	f.locationCalls++
+	f.locationRefreshes = append(f.locationRefreshes, refresh)
 	return f.locations, f.locationsErr
 }
 
@@ -922,6 +930,85 @@ func TestDispatchRefresh(t *testing.T) {
 		s := ctrl.Snapshot()
 		return s.Account != nil && s.LocationsLoaded && len(s.Locations) == 1
 	})
+}
+
+// TestDispatchRefreshForcesLocationsDownload covers the {"locations":true}
+// payload: the Locations screen's Refresh asks the daemon to re-download the
+// server list even when one is already loaded, with the refresh flag set,
+// and the fresh list replaces the stale one.
+func TestDispatchRefreshForcesLocationsDownload(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	ctrl := NewController(f, quietOptions())
+	startPoll(t, ctrl)
+	waitFor(t, "initial locations load", func() bool { return ctrl.Snapshot().LocationsLoaded })
+
+	f.set(func(d *fakeDaemon) {
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "JP", Name: "Japan"}}}
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh, Payload: []byte(`{"locations":true}`)}); err != nil {
+		t.Fatalf("Dispatch(refresh, locations) = %v", err)
+	}
+	waitFor(t, "forced locations reload", func() bool {
+		s := ctrl.Snapshot()
+		return len(s.Locations) == 1 && s.Locations[0].Code == "JP"
+	})
+	if flags := f.locationRefreshFlags(); len(flags) != 2 || flags[0] != false || flags[1] != true {
+		t.Fatalf("Locations refresh flags = %v, want [false true]", flags)
+	}
+}
+
+// TestDispatchRefreshLocationsFailureKeepsRows covers a failed forced
+// re-download: the loaded rows stay and the raw error lands on the locations
+// notice (inventory §Locations "a failed refresh keeps the rows and reports
+// the error in the status line").
+func TestDispatchRefreshLocationsFailureKeepsRows(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	ctrl := NewController(f, quietOptions())
+	startPoll(t, ctrl)
+	waitFor(t, "initial locations load", func() bool { return ctrl.Snapshot().LocationsLoaded })
+
+	f.set(func(d *fakeDaemon) { d.locationsErr = errors.New("list down") })
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh, Payload: []byte(`{"locations":true}`)}); err != nil {
+		t.Fatalf("Dispatch(refresh, locations) = %v", err)
+	}
+	waitFor(t, "locations error notice", func() bool {
+		n := ctrl.Snapshot().LocationsNotice
+		return n != nil && n.Message == "list down" && n.Tone == toneBad
+	})
+	s := ctrl.Snapshot()
+	if !s.LocationsLoaded || len(s.Locations) != 1 || s.Locations[0].Code != "DE" {
+		t.Fatalf("locations after failed refresh = %+v (loaded=%v), want the stale DE list", s.Locations, s.LocationsLoaded)
+	}
+}
+
+// TestDispatchRefreshWithoutLocationsKeepsGuard covers the plain payload
+// (the Dashboard's Refresh/Retry): the autonomous meaning is unchanged, so a
+// loaded list is never re-downloaded, and an unknown payload field is a
+// strict-decoding error.
+func TestDispatchRefreshWithoutLocationsKeepsGuard(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	ctrl := NewController(f, quietOptions())
+	startPoll(t, ctrl)
+	waitFor(t, "initial locations load", func() bool { return ctrl.Snapshot().LocationsLoaded })
+
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh, Payload: []byte(`{}`)}); err != nil {
+		t.Fatalf("Dispatch(refresh) = %v", err)
+	}
+	if got := f.count(func(d *fakeDaemon) int { return d.locationCalls }); got != 1 {
+		t.Fatalf("Locations calls = %d, want 1 (the initial load; a plain refresh must not re-fetch)", got)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh, Payload: []byte(`{"bogus":true}`)}); err == nil {
+		t.Fatal("Dispatch(refresh, unknown field) = nil, want a decode error")
+	}
 }
 
 func TestDispatchRefreshFailureNotice(t *testing.T) {

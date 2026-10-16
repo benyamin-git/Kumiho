@@ -324,7 +324,7 @@ func (c *Controller) Dispatch(act Action) error {
 	case ActionLogsClear:
 		return c.dispatchLogsClear()
 	case ActionRefresh:
-		return c.dispatchRefresh()
+		return c.dispatchRefresh(act)
 	case ActionPrefsSet, ActionDoctorRun:
 		// Deferred: prefs_set is host-side (T1.7/T1.10/T4.2) and doctor_run
 		// arrives with the diagnostics screen (T3.3).
@@ -593,6 +593,14 @@ func (c *Controller) dispatchLogsClear() error {
 	return nil
 }
 
+// refreshRequest is the refresh action's payload. The frozen action set has
+// no dedicated server-list verb, so the Locations screen's Refresh rides
+// {"locations":true} here; an absent or empty payload keeps the autonomous
+// meaning. Unknown fields are errors, like every action payload.
+type refreshRequest struct {
+	Locations bool `json:"locations,omitempty"`
+}
+
 // dispatchRefresh re-runs the controller's autonomous loads, reusing the
 // same paths Poll uses: the status snapshot reloads synchronously (a failure
 // becomes the shared "could not refresh the status" notice — the Dashboard's
@@ -601,14 +609,32 @@ func (c *Controller) dispatchLogsClear() error {
 // short-circuits, exactly like Poll's tick. Settings stay behind
 // settings_get. Safe to call while Poll runs: the loading guards and the
 // state mutex serialise every fetch.
-func (c *Controller) dispatchRefresh() error {
-	err := c.refreshStatus(context.Background())
+//
+// The optional payload {"locations":true} additionally forces a fresh
+// server-list download through Daemon.Locations with the refresh flag set,
+// even when a list is already loaded: the Locations screen's Refresh asks
+// the daemon to re-download the server list (inventory §Locations). The
+// controller only replaces the list on success, so the screen's stale rows
+// stay visible while the fetch runs and after a failure; a failure reports
+// the raw error on the locations notice exactly like the first-load path.
+// An empty payload (the Dashboard's Refresh/Retry) keeps the guarded
+// behavior above — it must never trigger a network re-download.
+func (c *Controller) dispatchRefresh(act Action) error {
+	req, err := decodePayload[refreshRequest](act)
+	if err != nil {
+		return err
+	}
+	err = c.refreshStatus(context.Background())
 	if err != nil {
 		c.setNotice(slotShared, "could not refresh the status: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.ensureAccount(context.Background())
-	c.ensureLocations(context.Background())
+	if req.Locations {
+		c.loadLocations(context.Background(), true, true)
+	} else {
+		c.loadLocations(context.Background(), false, false)
+	}
 	return nil
 }
 
@@ -771,11 +797,22 @@ func (c *Controller) ensureAccount(ctx context.Context) {
 }
 
 // ensureLocations fetches the server list in the background when none is
-// loaded. The Locations screen has no action in the frozen vocabulary, so
-// the controller keeps its snapshot fresh itself.
+// loaded. The Locations screen has no load action in the frozen vocabulary,
+// so the controller keeps its snapshot fresh itself.
 func (c *Controller) ensureLocations(ctx context.Context) {
+	c.loadLocations(ctx, false, false)
+}
+
+// loadLocations fetches the server list in the background. refresh asks the
+// daemon to re-download it (the inventory's 30 s refresh); force loads even
+// when a list is already loaded (the refresh action's {"locations":true}).
+// The loading guard keeps one fetch in flight at a time either way. A failed
+// fetch keeps the loaded rows and writes the raw error to the locations
+// notice (inventory §Locations); a successful one replaces the list and
+// clears a stale error.
+func (c *Controller) loadLocations(ctx context.Context, refresh, force bool) {
 	c.mu.Lock()
-	if c.locationsLoading || c.locationsLoaded {
+	if c.locationsLoading || (!force && c.locationsLoaded) {
 		c.mu.Unlock()
 		return
 	}
@@ -790,7 +827,7 @@ func (c *Controller) ensureLocations(ctx context.Context) {
 		}()
 		actx, cancel := context.WithTimeout(ctx, locationsTimeout)
 		defer cancel()
-		res, err := c.d.Locations(actx, false)
+		res, err := c.d.Locations(actx, refresh)
 		if err != nil {
 			c.observe(err)
 			// The status line shows the raw load error (inventory §Locations).

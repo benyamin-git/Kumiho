@@ -31,9 +31,9 @@
  * still flips the stored state and shows through once the filter clears), a
  * city-only match keeps just the matching cities, quarantined or
  * target-less servers never list, first-page/PageDown move by a viewport of
- * rows, and the wheel scrolls three rows per notch. Rows are 40 px (the
- * house floor's desktop target size; the walk-era metric was 36 — recorded
- * in the report).
+ * rows, and the wheel scrolls three rows per notch. Rows are the inventory's
+ * 36-unit tree metric (the house table-row density; the walk-era
+ * listRowHeight was the same 36).
  *
  * The router links css/screens/locations.css from the registry entry.
  *
@@ -46,9 +46,9 @@
 // §Locations "up to the first 16 visible server rows").
 const MAX_PING_HOSTS = 16;
 
-// Row metrics: the 40 px desktop target (house floor) and the wheel's three
-// rows per notch.
-const ROW_PX = 40;
+// Row metrics: the inventory's 36-unit tree rows (the house table-row
+// density) and the wheel's three rows per notch.
+const ROW_PX = 36;
 const WHEEL_NOTCH_MIN = 40; // smaller deltas are trackpad-scale: scroll natively
 const WHEEL_ROWS = 3;
 
@@ -570,8 +570,12 @@ export default {
       });
     }
 
+    // Refresh asks the daemon to re-download the server list: the ruled
+    // {"locations":true} payload forces the fetch through the controller's
+    // loaded guard. The screen keeps its stale rows while it runs and after
+    // a failure (it renders from the state envelope and never clears them).
     function onRefresh() {
-      ctx.send("refresh", {}).then(function (err) {
+      ctx.send("refresh", { locations: true }).then(function (err) {
         if (err) console.warn("kumiho: locations refresh refused: " + err);
       });
     }

@@ -2,8 +2,8 @@
  * field/input) and the injected colour roles; geometry, type and spacing
  * come from tokens.css. No literal colours (ban 9), logical properties only
  * (ban 10), no shadows (ban 7). The list card's metrics follow the walk-era
- * widget (8 px padding, indent 8/28/48 per level) with 40 px rows (the house
- * floor's desktop target size). */
+ * widget and the inventory: 8 px padding, indent 8/28/48 per level, and
+ * 36-unit rows (--row-h, the house table-row density). */
 
 .loc {
   display: flex;
@@ -57,7 +57,7 @@
 .loc__row {
   display: flex;
   align-items: center;
-  min-block-size: var(--control-h); /* 40 px desktop target (house floor) */
+  min-block-size: var(--row-h); /* 36 px, the inventory's tree-row metric */
   padding-inline: var(--space-2);
   border-radius: var(--radius-button);
   cursor: pointer;
