@@ -22,13 +22,17 @@ const (
 	// ScenarioError reports a FATAL state with an exhausted quota and a
 	// failed entitlement lookup.
 	ScenarioError Scenario = "error"
+	// ScenarioSignedOut reports a daemon with no stored session (T3.4): the
+	// onboarding wizard's login step shows its credential pages and the
+	// Account screen its "Not signed in" state.
+	ScenarioSignedOut Scenario = "signed-out"
 )
 
 // normalize maps unknown scenarios to ScenarioDisconnected, the "off" state,
 // so the mock never reports a state the screens cannot label.
 func (s Scenario) normalize() Scenario {
 	switch s {
-	case ScenarioDisconnected, ScenarioConnected, ScenarioConnecting, ScenarioError:
+	case ScenarioDisconnected, ScenarioConnected, ScenarioConnecting, ScenarioError, ScenarioSignedOut:
 		return s
 	}
 	return ScenarioDisconnected
@@ -77,6 +81,11 @@ func quota(remaining int64) *api.Quota {
 // quota but carry no exit IP or counters; only connected adds the session
 // facts (since, pass expiry, exit, totals, rates).
 func statusFor(s Scenario) api.Status {
+	if s.normalize() == ScenarioSignedOut {
+		// No stored session: the wizard's sign-in pages and the "Not signed
+		// in" state word; the kill-switch value stays the daemon's.
+		return api.Status{State: "UNAUTHENTICATED", KillSwitch: true}
+	}
 	st := api.Status{
 		Authenticated: true,
 		Email:         demoEmail,
@@ -111,6 +120,10 @@ func statusFor(s Scenario) api.Status {
 // scenario models a failed online entitlement lookup: the local session facts
 // stay valid, the subscription facts do not, and Error carries the cause.
 func accountFor(s Scenario) api.AccountInfo {
+	if s.normalize() == ScenarioSignedOut {
+		// No local session facts at all: an anonymous snapshot.
+		return api.AccountInfo{}
+	}
 	info := api.AccountInfo{
 		Email:        demoEmail,
 		TokenExpires: mockEpoch.Add(30 * 24 * time.Hour).Unix(),

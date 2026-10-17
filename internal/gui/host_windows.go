@@ -316,6 +316,7 @@ func (h *host) run() error {
 	h.ctrl = NewController(h.client, Options{
 		Theme:          string(th),
 		Accent:         accent,
+		Onboarded:      h.prefs.Onboarded,
 		LogsExport:     h.logsExport,
 		OpenLogsFolder: h.openLogsFolder,
 	})
@@ -777,12 +778,13 @@ func (h *host) openExternal(act Action) error {
 	return nil
 }
 
-// prefsSetPayload is the prefs_set action's payload: any subset of the three
-// GUI preferences the page may change.
+// prefsSetPayload is the prefs_set action's payload: any subset of the GUI
+// preferences the page may change.
 type prefsSetPayload struct {
 	Theme     string `json:"theme,omitempty"`
 	Accent    string `json:"accent,omitempty"`
 	Autostart *bool  `json:"autostart,omitempty"`
+	Onboarded *bool  `json:"onboarded,omitempty"`
 }
 
 // applyPrefs handles prefs_set host-side: persist gui.toml, then apply a
@@ -796,6 +798,9 @@ type prefsSetPayload struct {
 // reloaded page's injected CSS block, not through State.Theme/State.Accent;
 // those stay at their startup values until the shell restarts. Autostart is
 // persisted here; mirroring it to the Run key is T4.2's handler.
+// Onboarded (T3.4) is persisted and pushed into the controller through
+// SetOnboarded, so the wizard's `Open Kumiho` reaches the UI as the ratified
+// State.Onboarded projection immediately.
 func (h *host) applyPrefs(act Action) error {
 	p, err := decodePayload[prefsSetPayload](act)
 	if err != nil {
@@ -812,6 +817,9 @@ func (h *host) applyPrefs(act Action) error {
 	if p.Autostart != nil {
 		updated.Autostart = *p.Autostart
 	}
+	if p.Onboarded != nil {
+		updated.Onboarded = *p.Onboarded
+	}
 	css, err := theme.CSS(theme.Theme(updated.Theme), updated.Accent)
 	if err != nil {
 		return fmt.Errorf("prefs_set: %w", err)
@@ -825,6 +833,9 @@ func (h *host) applyPrefs(act Action) error {
 	h.mu.Lock()
 	h.prefs = updated
 	h.mu.Unlock()
+	if updated.Onboarded != current.Onboarded {
+		h.ctrl.SetOnboarded(updated.Onboarded)
+	}
 	if updated.Theme != current.Theme || updated.Accent != current.Accent {
 		h.server.SetThemeCSS(css)
 		th := theme.Theme(updated.Theme)
@@ -833,7 +844,8 @@ func (h *host) applyPrefs(act Action) error {
 			h.webview.Navigate(h.server.URL())
 		})
 	}
-	h.log.logf("prefs_set: theme=%s accent=%s autostart=%v", updated.Theme, updated.Accent, updated.Autostart)
+	h.log.logf("prefs_set: theme=%s accent=%s autostart=%v onboarded=%v",
+		updated.Theme, updated.Accent, updated.Autostart, updated.Onboarded)
 	return nil
 }
 

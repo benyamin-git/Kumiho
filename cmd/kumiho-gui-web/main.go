@@ -87,6 +87,7 @@ func run(port int) error {
 	ctrl := gui.NewController(m, gui.Options{
 		Theme:          string(th),
 		Accent:         accent,
+		Onboarded:      p.Onboarded,
 		LogsExport:     devLogsExport,
 		OpenLogsFolder: devOpenLogsFolder,
 	})
@@ -117,7 +118,10 @@ func run(port int) error {
 			}
 			return ctrl.Dispatch(gui.Action{Name: a.Name, Payload: a.Payload})
 		},
-		Prefs: p,
+		// The wizard's Open Kumiho flips the flag through prefs_set; the
+		// harness mirrors the shell: persist, then push State.Onboarded.
+		SetOnboarded: ctrl.SetOnboarded,
+		Prefs:        p,
 		DevControl: &web.DevControl{
 			SetScenario: func(name string) { m.SetScenario(mock.Scenario(name)) },
 			SetLatency:  m.SetLatency,

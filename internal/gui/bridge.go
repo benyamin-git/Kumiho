@@ -148,6 +148,14 @@ type State struct {
 	// like LocationsLoaded.
 	LogsLoaded bool `json:"logs_loaded"`
 
+	// Onboarded reports whether the first-run wizard is finished (T3.4):
+	// while false the UI shows the wizard full-screen. It starts from
+	// gui.toml (the shell and harness pass prefs.Onboarded into the
+	// controller) and flips true when the wizard's `Open Kumiho` persists
+	// prefs_set {"onboarded":true}. It is always present in the envelope,
+	// exactly like LocationsLoaded: its false gates the whole shell.
+	Onboarded bool `json:"onboarded"`
+
 	// Locations is the server list; nil until loaded.
 	Locations []serverlist.Country `json:"locations,omitempty"`
 

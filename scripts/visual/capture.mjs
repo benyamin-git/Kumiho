@@ -87,6 +87,8 @@ const ACCENTS = ["blue", "teal", "green", "orange", "rose", "violet"];
 //   name        file-name suffix and manifest label
 //   screen      SCREENS destination
 //   hint        `?state=<hint>` capture hint (dialogs, wizard steps)
+//   prefs       prefs_set payload applied before navigating; the appearance
+//               baseline (onboarded true) is restored after the capture
 //   scenario    /dev/scenario value to apply before navigating
 //   latencyMs   /dev/latency value to apply before navigating
 //   failMessage /dev/fail arm (message) before navigating
@@ -211,11 +213,116 @@ const STATES = [
       payload: { hosts: ["de1.edge.example:443", "de2.edge.example:443"] },
     },
   },
-  { name: "welcome", screen: "onboarding", hint: "welcome" },
-  { name: "login", screen: "onboarding", hint: "login" },
-  { name: "health-check", screen: "onboarding", hint: "health-check" },
-  { name: "autoconnect", screen: "onboarding", hint: "autoconnect" },
-  { name: "finish", screen: "onboarding", hint: "finish" },
+  // The onboarding wizard (T3.4): every step, dark and light, with
+  // gui.toml's `onboarded` flag false so the first-run gate is the real one;
+  // the route hint selects the step. The baseline gate state is restored
+  // after each capture so later states show their own screens, not the
+  // wizard.
+  {
+    name: "welcome",
+    screen: "onboarding",
+    hint: "welcome",
+    prefs: { onboarded: false },
+  },
+  {
+    // The signed-out daemon (T3.4 mock scenario) shows the email page; the
+    // mock's blank-email login email resets its login machine first, so the
+    // capture is deterministic from any prior state.
+    name: "login",
+    screen: "onboarding",
+    hint: "login",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "" } },
+    waitAfter: "#onb-email",
+  },
+  {
+    // The already-signed-in variant: the same reset against a live session.
+    name: "login-signed-in",
+    screen: "onboarding",
+    hint: "login",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "" } },
+    waitAfter: ".onb__signed",
+  },
+  {
+    // The password page: the daemon asks for one.
+    name: "login-password",
+    screen: "onboarding",
+    hint: "login",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "user@example.com" } },
+    waitAfter: "#onb-password",
+  },
+  {
+    // The 2FA page (the mock's 2fa@… rule).
+    name: "login-2fa",
+    screen: "onboarding",
+    hint: "login",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "2fa@example.com" } },
+    waitAfter: "#onb-code",
+  },
+  {
+    name: "health-check",
+    screen: "onboarding",
+    hint: "health-check",
+    prefs: { onboarded: false },
+    waitFor: ".onb__check",
+  },
+  {
+    name: "autoconnect",
+    screen: "onboarding",
+    hint: "autoconnect",
+    prefs: { onboarded: false },
+  },
+  {
+    name: "finish",
+    screen: "onboarding",
+    hint: "finish",
+    prefs: { onboarded: false },
+  },
+  {
+    name: "welcome",
+    screen: "onboarding",
+    hint: "welcome",
+    theme: "light",
+    prefs: { onboarded: false },
+  },
+  {
+    name: "login",
+    screen: "onboarding",
+    hint: "login",
+    theme: "light",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "" } },
+    waitAfter: "#onb-email",
+  },
+  {
+    name: "health-check",
+    screen: "onboarding",
+    hint: "health-check",
+    theme: "light",
+    prefs: { onboarded: false },
+    waitFor: ".onb__check",
+  },
+  {
+    name: "autoconnect",
+    screen: "onboarding",
+    hint: "autoconnect",
+    theme: "light",
+    prefs: { onboarded: false },
+  },
+  {
+    name: "finish",
+    screen: "onboarding",
+    hint: "finish",
+    theme: "light",
+    prefs: { onboarded: false },
+  },
   {
     // A completed daemon-setting change on Settings: the MTU success notice
     // on the status line (the overridden kill-switch row is already visible
@@ -673,9 +780,10 @@ async function main() {
       await postJSON("dev/scenario", { scenario: "disconnected" });
     };
 
-    // Baseline: a known appearance (light/blue) and a clean scenario, so the
+    // Baseline: a known appearance (light/blue), the onboarded gate lifted
+    // (the wizard lives behind it since T3.4) and a clean scenario, so the
     // run is deterministic regardless of what the harness last served.
-    await postAction("prefs_set", { theme: DEFAULT_THEME, accent: DEFAULT_ACCENT });
+    await postAction("prefs_set", { theme: DEFAULT_THEME, accent: DEFAULT_ACCENT, onboarded: true });
     current = { theme: DEFAULT_THEME, accent: DEFAULT_ACCENT };
     await resetDevState();
     await navigate(HARNESS_URL, "initial navigation");
@@ -695,6 +803,9 @@ async function main() {
         if (state.failMessage) {
           await postJSON("dev/fail", { on: true, message: state.failMessage });
         }
+        if (state.prefs) {
+          await postAction("prefs_set", state.prefs);
+        }
         await open(item.route, item.theme, item.accent);
         if (state.waitFor) {
           await page.waitForSelector(state.waitFor, { timeout: WAIT_TIMEOUT_MS });
@@ -713,6 +824,11 @@ async function main() {
           await page.waitForSelector(state.waitAfter, { timeout: WAIT_TIMEOUT_MS });
         }
         await capture(item);
+        if (state.prefs) {
+          // Restore the appearance baseline (the gate lifted) so later states
+          // capture their own screens, not the wizard.
+          await postAction("prefs_set", { onboarded: true });
+        }
         if (state.afterMs) await page.waitForTimeout(state.afterMs);
       } else if (item.route === "/dev") {
         await navigate(HARNESS_URL + "dev", "dev panel navigation");
@@ -728,7 +844,7 @@ async function main() {
 
     // Leave the harness as found, at the house-default appearance and a clean
     // scenario, so the next run (or a human at the panel) starts neutral.
-    await postAction("prefs_set", { theme: "dark", accent: DEFAULT_ACCENT });
+    await postAction("prefs_set", { theme: "dark", accent: DEFAULT_ACCENT, onboarded: true });
     await resetDevState();
   } finally {
     await browser.close();

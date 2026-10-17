@@ -330,6 +330,70 @@ func TestAccountPerScenario(t *testing.T) {
 	}
 }
 
+// TestScenarioSignedOut pins the T3.4 harness state: no stored session, so
+// the onboarding wizard's login step shows its credential pages and the
+// Account screen its "Not signed in" state.
+func TestScenarioSignedOut(t *testing.T) {
+	ctx := context.Background()
+	m := New()
+	m.SetScenario(ScenarioSignedOut)
+
+	st, err := m.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.State != "UNAUTHENTICATED" || st.Authenticated || st.Email != "" {
+		t.Fatalf("status = %+v, want an unauthenticated snapshot", st)
+	}
+	if st.Location != "" || st.Server != "" || st.Quota != nil {
+		t.Fatalf("signed-out status carries session facts: %+v", st)
+	}
+	if !st.KillSwitch {
+		t.Fatal("signed-out status must keep the kill-switch value")
+	}
+
+	info, err := m.Account(ctx)
+	if err != nil {
+		t.Fatalf("Account: %v", err)
+	}
+	if info.Email != "" || info.UID != "" || info.Subscribed || info.MaxBytes != nil {
+		t.Fatalf("account = %+v, want an anonymous snapshot", info)
+	}
+}
+
+// TestLoginEmailMachine pins the fixture's deterministic login machine: a
+// blank email resets to the email step with no error (the harness's
+// deterministic reset; a real daemon answers "email is required"), a plain
+// address asks for the password, and a 2fa@… address asks for the code.
+func TestLoginEmailMachine(t *testing.T) {
+	ctx := context.Background()
+	m := New()
+
+	st, err := m.LoginEmail(ctx, api.LoginEmailPayload{Email: "user@example.com"})
+	if err != nil {
+		t.Fatalf("LoginEmail: %v", err)
+	}
+	if st.Step != "password" || st.Email != "user@example.com" || st.Error != "" {
+		t.Fatalf("password step = %+v", st)
+	}
+
+	st, err = m.LoginEmail(ctx, api.LoginEmailPayload{Email: "2fa@example.com"})
+	if err != nil {
+		t.Fatalf("LoginEmail(2fa): %v", err)
+	}
+	if st.Step != "2fa" || st.VerificationMethod != "email-otp" {
+		t.Fatalf("2fa step = %+v", st)
+	}
+
+	st, err = m.LoginEmail(ctx, api.LoginEmailPayload{Email: "  "})
+	if err != nil {
+		t.Fatalf("LoginEmail(blank): %v", err)
+	}
+	if st.Step != "email" || st.Email != "" || st.Error != "" {
+		t.Fatalf("reset step = %+v, want the email step with no error", st)
+	}
+}
+
 // TestFailNextAppliesToEveryCall checks the injection across the whole
 // daemon surface: exactly one call fails with the sentinel unchanged, the
 // next call succeeds.

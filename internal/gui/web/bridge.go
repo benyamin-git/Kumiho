@@ -104,6 +104,13 @@ type HarnessConfig struct {
 	// contract).
 	Dispatch func(Action) error
 
+	// SetOnboarded applies one prefs_set onboarding-flag change to the host
+	// state (T3.4): the composition root wires it to
+	// gui.Controller.SetOnboarded, exactly the shell's rule. Optional; nil
+	// persists the flag without mirroring it (tests that do not read
+	// State.Onboarded).
+	SetOnboarded func(bool)
+
 	// Prefs is the current GUI preference set (prefs.Load); prefs_set merges
 	// into it.
 	Prefs prefs.Prefs
@@ -445,12 +452,13 @@ func (h *Harness) pushNow() {
 	h.broadcast(raw)
 }
 
-// prefsSetPayload is the prefs_set action payload: any subset of the three
-// GUI preferences the page may change (the shell's shape).
+// prefsSetPayload is the prefs_set action payload: any subset of the GUI
+// preferences the page may change (the shell's shape).
 type prefsSetPayload struct {
 	Theme     string `json:"theme,omitempty"`
 	Accent    string `json:"accent,omitempty"`
 	Autostart *bool  `json:"autostart,omitempty"`
+	Onboarded *bool  `json:"onboarded,omitempty"`
 }
 
 // applyPrefs handles prefs_set host-side, mirroring the Windows shell: merge
@@ -459,9 +467,11 @@ type prefsSetPayload struct {
 // gui.toml through prefs.Save — which honours the KUMIHO_GUI_PREFS override —
 // and re-inject the theme CSS, so the change is live for the next index
 // render without a restart (the shell's Navigate becomes the browser's
-// reload). The current state is pushed either way, so the UI sees the
-// completed action. The controller's State.Theme/State.Accent stay at their
-// construction values, exactly as in the shell.
+// reload). An onboarded change is pushed into the host state through
+// SetOnboarded once the file is saved, the shell's rule (T3.4). The current
+// state is pushed either way, so the UI sees the completed action. The
+// controller's State.Theme/State.Accent stay at their construction values,
+// exactly as in the shell.
 func (h *Harness) applyPrefs(raw json.RawMessage) error {
 	p, err := decodePayload[prefsSetPayload](raw)
 	if err != nil {
@@ -481,6 +491,9 @@ func (h *Harness) applyPrefs(raw json.RawMessage) error {
 	if p.Autostart != nil {
 		updated.Autostart = *p.Autostart
 	}
+	if p.Onboarded != nil {
+		updated.Onboarded = *p.Onboarded
+	}
 	css, err := theme.CSS(theme.Theme(updated.Theme), updated.Accent)
 	if err != nil {
 		return fmt.Errorf("prefs_set: %w", err)
@@ -492,10 +505,14 @@ func (h *Harness) applyPrefs(raw json.RawMessage) error {
 		h.mu.Lock()
 		h.prefs = updated
 		h.mu.Unlock()
+		if updated.Onboarded != current.Onboarded && h.cfg.SetOnboarded != nil {
+			h.cfg.SetOnboarded(updated.Onboarded)
+		}
 		if updated.Theme != current.Theme || updated.Accent != current.Accent {
 			h.cfg.Server.SetThemeCSS(css)
 		}
-		h.logf("prefs_set: theme=%s accent=%s autostart=%v", updated.Theme, updated.Accent, updated.Autostart)
+		h.logf("prefs_set: theme=%s accent=%s autostart=%v onboarded=%v",
+			updated.Theme, updated.Accent, updated.Autostart, updated.Onboarded)
 	}
 	h.pushNow()
 	return nil

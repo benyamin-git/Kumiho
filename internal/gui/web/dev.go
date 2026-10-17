@@ -10,7 +10,7 @@ package web
 // {"error":"..."} response for every endpoint):
 //
 //	GET  /dev            the self-contained control panel page
-//	POST /dev/scenario   {"scenario":"disconnected|connected|connecting|error"}
+//	POST /dev/scenario   {"scenario":"disconnected|connected|connecting|error|signed-out"}
 //	                     switches the mock's reported state
 //	POST /dev/latency    {"ms":800}      delays every mock call; 0 disables
 //	POST /dev/fail       {"on":true,"message":"guardian: HTTP 503"} arms the
@@ -36,7 +36,7 @@ import (
 // vocabulary. Unknown names are rejected: the panel and the capture script
 // should fail loudly, not fall silently into the disconnected state the mock
 // itself would default to.
-var devScenarios = []string{"disconnected", "connected", "connecting", "error"}
+var devScenarios = []string{"disconnected", "connected", "connecting", "error", "signed-out"}
 
 // Fixed sample texts the endpoints substitute when a request carries none.
 const (
@@ -225,6 +225,7 @@ pre{max-width:760px;margin:0;padding:10px 12px;background:var(--surface-containe
 <button data-scenario="connected">connected</button>
 <button data-scenario="connecting">connecting</button>
 <button data-scenario="error">error</button>
+<button data-scenario="signed-out">signed-out</button>
 </section>
 <section>
 <h2>Latency</h2>

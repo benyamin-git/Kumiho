@@ -1199,6 +1199,33 @@ func TestSetServiceStateAndDiagnosticsNotice(t *testing.T) {
 	}
 }
 
+// TestOnboardedProjection pins the onboarding flag (T3.4): Options.Onboarded
+// seeds it from gui.toml, SetOnboarded flips it exactly as the shell and the
+// harness do after prefs_set {"onboarded":true}, and the Snapshot always
+// carries the current value.
+func TestOnboardedProjection(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{Onboarded: true})
+	if !ctrl.Snapshot().Onboarded {
+		t.Fatal("onboarded = false, want the Options seed")
+	}
+
+	ctrl.SetOnboarded(false)
+	if ctrl.Snapshot().Onboarded {
+		t.Fatal("onboarded = true after SetOnboarded(false)")
+	}
+	ctrl.SetOnboarded(true)
+	if !ctrl.Snapshot().Onboarded {
+		t.Fatal("onboarded = false after SetOnboarded(true)")
+	}
+
+	// The zero value is the first run: the wizard shows.
+	zero := NewController(newFakeDaemon(), Options{})
+	if zero.Snapshot().Onboarded {
+		t.Fatal("onboarded = true on a zero controller, want false")
+	}
+}
+
 // TestDispatchLogsLoadedProjection pins the logs_loaded flag the screen's
 // "Loading logs..." state reads: false until the first successful snapshot,
 // true afterwards including after a clear (the ring is settled-empty, not

@@ -7,9 +7,18 @@
  *
  * The six rail destinations are the shell's navigation; the DOM rail in
  * index.html is the single source for their ids and titles. A route to an
- * unregistered screen (onboarding until T3.4, any destination before its
- * screen task) renders a neutral scaffold empty-state built from the shared
- * primitives, so captures and deep links already work.
+ * unregistered screen renders a neutral scaffold empty-state built from the
+ * shared primitives, so captures and deep links already work.
+ *
+ * The onboarding wizard (T3.4) is a registered screen that is not a rail
+ * destination: while the wire's always-present `onboarded` flag is not true
+ * the router gates every route to `onboarding`, so the first-run user can
+ * never reach another destination (inventory §Onboarding wizard). The gate
+ * lifts the moment {@link State.Onboarded} flips true (the wizard's `Open
+ * Kumiho`), and the router's store subscription then shows whatever route
+ * the hash asks for. While the wizard is the shown route the shell chrome
+ * steps aside (`app--wizard`, css/screens/onboarding.css), so it occupies
+ * the window; the wizard's hint selects its step for captures.
  *
  * Screen modules (static/js/screens/<id>.js) default-export an object:
  *
@@ -43,6 +52,10 @@ const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_ID = 32;
 const DEFAULT_SCREEN = "dashboard";
 
+// The wizard's screen id (T3.4): the gate target and the one route that
+// hides the shell chrome.
+const WIZARD_SCREEN = "onboarding";
+
 /** id -> { load: () => Promise<module>, css: string }; filled by registerScreen. */
 const loaders = new Map();
 
@@ -59,6 +72,7 @@ registerScreen("settings", () => import("./screens/settings.js"), "css/screens/s
 registerScreen("account", () => import("./screens/account.js"), "css/screens/account.css");
 registerScreen("logs", () => import("./screens/logs.js"), "css/screens/logs.css");
 registerScreen("diagnostics", () => import("./screens/diagnostics.js"), "css/screens/diagnostics.css");
+registerScreen("onboarding", () => import("./screens/onboarding.js"), "css/screens/onboarding.css");
 
 /** Parse a location hash into {id, hint}, tolerating anything malformed. */
 export function parseHash(hash) {
@@ -111,9 +125,42 @@ export function initRouter(opts) {
   const links = Array.from(document.querySelectorAll(".rail__item[data-screen]"));
   const titles = new Map(links.map((el) => [el.dataset.screen, el.textContent.trim()]));
 
+  const appEl = document.querySelector(".app");
+
   let generation = 0;
   let current = null;
   let currentCSS = null; // the mounted screen's <link>, linked by the router
+  let currentRoute = null; // the effective route actually shown
+
+  /**
+   * The first-run gate (T3.4/inventory §Onboarding wizard): while the state's
+   * always-present `onboarded` flag is not true the wizard owns the window.
+   * Before the first envelope arrives nothing is pinned, so a returning user
+   * never sees a wizard flash while the initial push is in flight.
+   */
+  function wizardPending() {
+    return store.hasState() && store.get().onboarded !== true;
+  }
+
+  /** The route actually shown: every request gates to the wizard while it
+   * is pending, keeping the requested wizard hint so captures can select a
+   * step. */
+  function effectiveRoute(requested) {
+    if (!wizardPending()) return requested;
+    return { id: WIZARD_SCREEN, hint: requested.id === WIZARD_SCREEN ? requested.hint : "" };
+  }
+
+  function routeKey(route) {
+    return route.id + (route.hint ? "?state=" + route.hint : "");
+  }
+
+  /** Resolve, compare and show; same-route requests are no-ops, so the
+   * mounted wizard keeps its in-flight step across state pushes. */
+  function routeTo(requested, moveFocus) {
+    const route = effectiveRoute(requested);
+    if (currentRoute && routeKey(route) === routeKey(currentRoute)) return;
+    show(route, moveFocus);
+  }
 
   function linkScreenCSS(id, href) {
     const link = document.createElement("link");
@@ -132,6 +179,11 @@ export function initRouter(opts) {
 
   async function show(route, moveFocus) {
     const gen = ++generation;
+    currentRoute = route;
+
+    // The wizard takes the whole window: the shell chrome hides while it is
+    // the shown route (css/screens/onboarding.css owns the rule).
+    if (appEl) appEl.classList.toggle("app--wizard", route.id === WIZARD_SCREEN);
 
     for (const link of links) {
       if (link.dataset.screen === route.id) link.setAttribute("aria-current", "page");
@@ -188,12 +240,20 @@ export function initRouter(opts) {
   }
 
   window.addEventListener("hashchange", () => {
-    show(parseHash(location.hash), true);
+    routeTo(parseHash(location.hash), true);
+  });
+
+  // Every state envelope re-evaluates the gate: the wizard's `Open Kumiho`
+  // flips `onboarded` mid-session (from the wizard's own navigation, or from
+  // the hash the user was on when the wizard opened), and the router must
+  // then show the route the hash asks for.
+  store.subscribe(() => {
+    routeTo(parseHash(location.hash), false);
   });
 
   const initial = parseHash(location.hash);
   if (location.hash !== routeHash(initial)) {
     history.replaceState(null, "", routeHash(initial));
   }
-  show(initial, false);
+  routeTo(initial, false);
 }

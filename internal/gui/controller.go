@@ -155,6 +155,11 @@ type Options struct {
 	// Theme and Accent are the initial house appearance carried in State.
 	Theme  string
 	Accent string
+	// Onboarded is the initial onboarding flag from gui.toml (T3.4): while
+	// false the UI shows the first-run wizard. The shell and the harness
+	// pass prefs.Onboarded at construction and flip it through SetOnboarded
+	// when prefs_set {"onboarded":…} persists the flag.
+	Onboarded bool
 	// PumpInterval is the UI pump cadence: how often expired notices retire.
 	PumpInterval time.Duration
 	// StatusInterval is the status snapshot's slow safety tick.
@@ -262,6 +267,10 @@ type Controller struct {
 	theme  string
 	accent string
 
+	// onboarded carries the first-run wizard flag (T3.4); see
+	// Options.Onboarded and SetOnboarded.
+	onboarded bool
+
 	service ServiceState
 	update  UpdateInfo
 }
@@ -281,6 +290,7 @@ func NewController(d Daemon, opts Options) *Controller {
 		reachable: true, // ready until a dial failure proves otherwise
 		theme:     opts.Theme,
 		accent:    opts.Accent,
+		onboarded: opts.Onboarded,
 		// The Version row shows the running build from the first snapshot,
 		// before any check has run (T2.4 ruling).
 		update: UpdateInfo{Current: version.Version},
@@ -314,6 +324,7 @@ func (c *Controller) Snapshot() State {
 		Locations:         c.locations,
 		RTTs:              copyRTTs(c.rtts),
 		LogsLoaded:        c.logsLoaded,
+		Onboarded:         c.onboarded,
 		Logs:              c.logs,
 		Notice:            liveNotice(c.notice, now),
 		LocationsNotice:   liveNotice(c.locationsNotice, now),
@@ -808,6 +819,16 @@ func (c *Controller) dispatchDoctorRun() error {
 func (c *Controller) SetServiceState(s ServiceState) {
 	c.mu.Lock()
 	c.service = s
+	c.mu.Unlock()
+}
+
+// SetOnboarded applies the first-run wizard flag the host persisted through
+// prefs_set {"onboarded":…} (T3.4): the shell and the dev harness call it
+// after prefs.Save succeeds, and while it is false the UI shows the wizard.
+// It is safe for concurrent use.
+func (c *Controller) SetOnboarded(v bool) {
+	c.mu.Lock()
+	c.onboarded = v
 	c.mu.Unlock()
 }
 

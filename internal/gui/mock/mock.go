@@ -323,12 +323,18 @@ func (m *Mock) LogsClear(ctx context.Context) (api.Result, error) {
 
 // LoginEmail implements gui.Daemon: it asks for the password next, or for the
 // emailed 2FA code when the address starts with "2fa" (e.g. 2fa@example.com),
-// so the harness can drive both wizard paths deterministically.
+// so the harness can drive both wizard paths deterministically. A blank email
+// resets the fixture's login machine to the email step with no error — the
+// harness's deterministic reset between capture states (the fixture keeps its
+// last reply, unlike a daemon whose pending login expires).
 func (m *Mock) LoginEmail(ctx context.Context, p api.LoginEmailPayload) (api.LoginState, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.LoginState{}, err
 	}
 	email := strings.TrimSpace(p.Email)
+	if email == "" {
+		return api.LoginState{Step: "email"}, nil
+	}
 	if strings.HasPrefix(strings.ToLower(email), "2fa") {
 		return api.LoginState{Step: "2fa", Email: email, VerificationMethod: "email-otp"}, nil
 	}

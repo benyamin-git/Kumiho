@@ -55,11 +55,15 @@ func startFixture(t *testing.T, opts fixtureOptions) *fixture {
 	logger := newSafeLogger(t)
 
 	m := mock.New()
-	ctrl := gui.NewController(m, gui.Options{Theme: "dark", Accent: "blue"})
 	prefPath := filepath.Join(t.TempDir(), "gui.toml")
 	t.Setenv("KUMIHO_GUI_PREFS", prefPath)
 
 	p := prefs.Prefs{Theme: "dark", Accent: "blue", Autostart: true}
+	ctrl := gui.NewController(m, gui.Options{
+		Theme:     "dark",
+		Accent:    "blue",
+		Onboarded: p.Onboarded,
+	})
 	srv := web.New(web.StaticFS(), web.Options{
 		Addr:  "127.0.0.1:0",
 		Token: opts.token,
@@ -80,6 +84,7 @@ func startFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Dispatch: func(a web.Action) error {
 			return ctrl.Dispatch(gui.Action{Name: a.Name, Payload: a.Payload})
 		},
+		SetOnboarded:      ctrl.SetOnboarded,
 		Prefs:             p,
 		DevControl:        devControl(m),
 		PushInterval:      opts.push,
@@ -433,6 +438,45 @@ func TestHarnessPrefsSetLiveTheme(t *testing.T) {
 		`{"type":"action","name":"`+gui.ActionPrefsSet+`","payload":{"theme":42}}`)
 	if malformed.status != http.StatusBadRequest {
 		t.Errorf("POST prefs_set with a mistyped value = %d (%s); want 400", malformed.status, malformed.body)
+	}
+}
+
+// TestHarnessPrefsSetOnboarded pins the T3.4 wiring: the wizard's
+// `prefs_set {"onboarded":true}` persists gui.toml and mirrors the flag into
+// the host state (State.Onboarded), exactly as the shell does — the wizard
+// gate's release evidence.
+func TestHarnessPrefsSetOnboarded(t *testing.T) {
+	f := startFixture(t, fixtureOptions{})
+	stream := openSSE(t, f.base()+"events")
+
+	first := stream.nextState(t, func(gui.State) bool { return true })
+	if first.Onboarded {
+		t.Fatal("onboarded = true before the wizard finished, want false")
+	}
+
+	got := postAction(t, f.base(),
+		`{"type":"action","name":"`+gui.ActionPrefsSet+`","payload":{"onboarded":true}}`)
+	if got.status != http.StatusOK {
+		t.Fatalf("POST prefs_set onboarded = %d (%s); want 200", got.status, got.body)
+	}
+
+	flipped := stream.nextState(t, func(s gui.State) bool { return s.Onboarded })
+	if !flipped.Onboarded {
+		t.Fatal("state.onboarded did not flip after prefs_set")
+	}
+
+	saved, err := prefs.Load()
+	if err != nil {
+		t.Fatalf("prefs.Load: %v", err)
+	}
+	if !saved.Onboarded {
+		t.Error("saved prefs have onboarded = false; want true")
+	}
+
+	malformed := postAction(t, f.base(),
+		`{"type":"action","name":"`+gui.ActionPrefsSet+`","payload":{"onboarded":"yes"}}`)
+	if malformed.status != http.StatusBadRequest {
+		t.Errorf("POST prefs_set with a mistyped onboarded = %d (%s); want 400", malformed.status, malformed.body)
 	}
 }
 

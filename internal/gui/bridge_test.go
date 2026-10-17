@@ -42,15 +42,15 @@ var frozenActions = []string{
 }
 
 // TestEncodeStateEnvelopeShape pins the host → UI wire shape for the zero
-// state: every optional field is omitted; LocationsLoaded is always present
-// (its false must be visible to the UI); the GUI extras Service and Update
-// appear as empty objects.
+// state: every optional field is omitted; LocationsLoaded and Onboarded are
+// always present (their false must be visible to the UI); the GUI extras
+// Service and Update appear as empty objects.
 func TestEncodeStateEnvelopeShape(t *testing.T) {
 	raw, err := EncodeState(State{})
 	if err != nil {
 		t.Fatalf("EncodeState: %v", err)
 	}
-	const want = `{"type":"state","state":{"locations_loaded":false,"logs_loaded":false,"service":{},"update":{}}}`
+	const want = `{"type":"state","state":{"locations_loaded":false,"logs_loaded":false,"onboarded":false,"service":{},"update":{}}}`
 	if string(raw) != want {
 		t.Fatalf("EncodeState() = %s, want %s", raw, want)
 	}
@@ -59,7 +59,8 @@ func TestEncodeStateEnvelopeShape(t *testing.T) {
 // TestEncodeStatePopulatedShape pins the populated host → UI wire shape:
 // field names, JSON types and order for the richer state the controller
 // produces. The T3.3 additions (doctor projection, diagnostics notice,
-// service card fields) are pinned deliberately, like every earlier field.
+// service card fields) and the T3.4 onboarding flag are pinned deliberately,
+// like every earlier field.
 func TestEncodeStatePopulatedShape(t *testing.T) {
 	st := State{
 		Reachable:   true,
@@ -89,6 +90,7 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 			Details: "Kumiho v0.3.0 diagnostics\n\n{}\n",
 		},
 		LocationsLoaded: true,
+		Onboarded:       true,
 		Locations:       []serverlist.Country{{Code: "DE", Name: "Germany"}},
 		RTTs:            map[string]string{"de1.example:443": "42 ms"},
 		Notice:          &Notice{Message: "Connected", Tone: "info"},
@@ -112,6 +114,7 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		`"doctor":{"checks":[{"name":"platform","title":"Platform","explanation":"Tells you which tunnel implementation this PC uses.","status":"ok","status_word":"OK","tone":"good","detail":"linux (full tunnel supported)"}],"details":"Kumiho v0.3.0 diagnostics\n\n{}\n"},` +
 		`"locations_loaded":true,` +
 		`"logs_loaded":false,` +
+		`"onboarded":true,` +
 		`"locations":[{"code":"DE","name":"Germany","cities":null}],` +
 		`"rtts":{"de1.example:443":"42 ms"},` +
 		`"notice":{"message":"Connected","tone":"info"},` +
