@@ -211,6 +211,9 @@ type host struct {
 	client  *DaemonClient
 	ctrl    *Controller
 	tray    *Tray
+	// trayHook is the tooltip's live state watcher (T4.1); the push loop
+	// drives it and it posts refreshes onto the shell's thread.
+	trayHook *trayStateHook
 
 	// mu guards prefs (geometry saves on the window thread, prefs_set on the
 	// bridge thread).
@@ -322,10 +325,14 @@ func (h *host) run() error {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	h.cancel = cancel
+	// The tray and its state hook exist before the push loop starts: the loop
+	// observes every snapshot to keep the tooltip live, and constructing the
+	// hook first is what makes that read race-free. Only the Win32 install is
+	// dispatched onto the pump.
+	h.installTray()
 	go h.ctrl.Poll(ctx)
 	go h.pushLoop(ctx)
 	go h.serviceLoop(ctx)
-	h.installTray()
 
 	if h.opts.trayStart {
 		showWindow(hwnd, windows.SW_HIDE)
@@ -451,13 +458,14 @@ func (h *host) requestQuit() {
 	})
 }
 
-// installTray creates the notification-area icon (T1.8). The window, the
-// icon handle and the menu's modal loop are thread-affine, so the install
-// itself is dispatched onto the pump (the probe's pattern); the shell thread
-// callback runs before Run processes any click. The providers read the
-// controller's snapshot when they are called — at creation and at every menu
-// popup — and the actions reuse the shell's existing exit and dispatch
-// paths. A failure is logged: the shell runs on without an icon.
+// installTray creates the notification-area icon and its state hook (T1.8,
+// T4.1). The window, the icon handle and the menu's modal loop are
+// thread-affine, so the install itself is dispatched onto the pump (the
+// probe's pattern); the shell thread callback runs before Run processes any
+// click. The providers read the controller's snapshot when they are called —
+// at creation, at every menu popup and at every tooltip refresh — and the
+// actions reuse the shell's existing exit and dispatch paths. A failure is
+// logged: the shell runs on without an icon.
 func (h *host) installTray() {
 	h.tray = NewTray(TrayProviders{
 		Tooltip:          h.trayStateWord,
@@ -465,12 +473,13 @@ func (h *host) installTray() {
 		Busy:             h.trayBusy.Load,
 		Locations:        h.trayLocations,
 		OnShow:           h.showFromTray,
-		OnDiagnostics:    h.showFromTray, // T3.3/T4.1 add the screen switch
+		OnDiagnostics:    h.showDiagnosticsFromTray,
 		OnQuit:           h.requestQuit,
 		OnConnect:        func() { h.trayAction(Action{Name: ActionConnect}) },
 		OnDisconnect:     func() { h.trayAction(Action{Name: ActionDisconnect}) },
 		OnSelectLocation: h.traySelectLocation,
 	}, h.log)
+	h.trayHook = newTrayStateHook(h.tray)
 	h.webview.Dispatch(func() {
 		if err := h.tray.Install(); err != nil {
 			h.log.logf("tray: install: %v", err)
@@ -479,37 +488,20 @@ func (h *host) installTray() {
 }
 
 // trayStateWord is the tray tooltip's state word: the exact header wording
-// (the inventory's rule), derived from the controller snapshot the way the
-// header's status model reads it — unreachable first because every screen
-// depends on reachability, then the live state label, then the first-load
-// failure, then the loading placeholder.
+// (the inventory's rule), derived by trayWord (state_hooks_windows.go) — the
+// single mapping the state hook shares, so the tooltip and the refresh can
+// never drift apart.
 func (h *host) trayStateWord() string {
-	snap := h.ctrl.Snapshot()
-	switch {
-	case !snap.Reachable:
-		return "Daemon unreachable"
-	case snap.Status != nil:
-		return snap.Status.Label
-	case snap.StatusError != "":
-		return "Status unavailable"
-	default:
-		return "Loading..."
-	}
+	return trayWord(h.ctrl.Snapshot())
 }
 
 // trayConnected reports whether the tray's action entry disconnects instead
-// of connects: the Dashboard button's rule (the inventory's "same rule as
-// the Dashboard button"), which the status label carries.
+// of connects: the Dashboard button's rule (the inventory's "same rule as the
+// Dashboard button"), read off the very state word the tooltip shows. A
+// stale connected status under an unreachable daemon therefore reads
+// "Connect", exactly like the Dashboard chip.
 func (h *host) trayConnected() bool {
-	snap := h.ctrl.Snapshot()
-	if snap.Status == nil {
-		return false
-	}
-	switch snap.Status.Label {
-	case "Connected", "Proxy only", "Connecting", "Reconnecting", "Waiting for network":
-		return true
-	}
-	return false
+	return trayDisconnect(trayWord(h.ctrl.Snapshot()))
 }
 
 // trayLocations is the menu's location list: the controller's server list
@@ -521,9 +513,24 @@ func (h *host) trayLocations() []serverlist.Country {
 
 // showFromTray is the tray's Show Kumiho / left-click behavior: restore and
 // focus the window on the pump thread, the same call the bridge's
-// window_show action makes.
+// window_show action makes. chrome.show() uses SW_RESTORE, so a minimized
+// window comes back at its previous size.
 func (h *host) showFromTray() {
 	h.webview.Dispatch(func() { h.chrome.show() })
+}
+
+// showDiagnosticsFromTray is the tray's Diagnostics entry (inventory §Tray):
+// restore/focus the window, then send the page's existing hash router to the
+// Diagnostics screen. Both steps run in one dispatch on the pump, the shell's
+// thread discipline for Eval (the same pattern as pushState), and the hash is
+// the router's published contract — no new JS surface. Clicking it while the
+// first-run wizard still gates the page lands on the wizard, as every route
+// does until onboarding finishes.
+func (h *host) showDiagnosticsFromTray() {
+	h.webview.Dispatch(func() {
+		h.chrome.show()
+		h.webview.Eval("location.hash='#/diagnostics'")
+	})
 }
 
 // trayAction runs one tray menu action: the busy flag disables the entry at
@@ -706,9 +713,10 @@ func (h *host) updateService(update func(cur ServiceState) ServiceState) {
 // pushLoop is the host→UI half of the bridge: every pushInterval it encodes
 // the controller snapshot and evaluates window.kumihoReceive(<json>), but
 // only when the envelope changed since the last push (plus once at startup).
-// The eval is dispatched onto the pump thread, the binding's own reply
-// pattern. It also logs control-pipe reachability transitions (the shell's
-// view of IPC connect failures).
+// The same tick drives the tray's live state hook (T4.1), which refreshes the
+// icon's tooltip when the state word changes. The eval is dispatched onto the
+// pump thread, the binding's own reply pattern. It also logs control-pipe
+// reachability transitions (the shell's view of IPC connect failures).
 func (h *host) pushLoop(ctx context.Context) {
 	ticker := time.NewTicker(pushInterval)
 	defer ticker.Stop()
@@ -717,6 +725,7 @@ func (h *host) pushLoop(ctx context.Context) {
 	first := true
 	for {
 		snap := h.ctrl.Snapshot()
+		h.trayHook.observe(snap)
 		raw, err := EncodeState(snap)
 		if err != nil {
 			h.log.logf("bridge: encode state: %v", err)

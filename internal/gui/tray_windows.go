@@ -4,18 +4,21 @@ package gui
 
 // This file is the tray's behavior: the providers the shell injects, the
 // exact tooltip wording, the menu built at popup time, the notification
-// routing and the exported seam T4.1 (live wiring) and T4.2 (the first-close
-// hint) consume. The Win32 transport — hidden window, Shell_NotifyIconW,
-// icon loading, menu primitives — lives in trayicon_windows.go.
+// routing and the seam the shell's live controller wiring (T4.1) and the
+// first-close hint (T4.2) consume. The Win32 transport — hidden window,
+// Shell_NotifyIconW, icon loading, menu primitives — lives in
+// trayicon_windows.go; the state-word hook that keeps the tooltip live lives
+// in state_hooks_windows.go.
 
 import (
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
 
 // TrayProviders is the tray's entire view of the shell: the state it renders
-// (read at creation and at every menu popup, on the shell's thread) and the
-// actions its menu runs. T1.8 wires it to the controller snapshot; T4.1 adds
-// the live state hooks on top.
+// (read at creation, at every menu popup and at every tooltip refresh, on the
+// shell's thread) and the actions its menu runs. The shell wires it to the
+// controller snapshot; T4.1 adds the state hook (state_hooks_windows.go) that
+// drives the tooltip between popups.
 type TrayProviders struct {
 	// Tooltip returns the state word for the icon's hover text; the tray
 	// renders it as "Kumiho — <word>" (the inventory's exact format).
@@ -40,8 +43,8 @@ type TrayProviders struct {
 	// the first-close hint's click action.
 	OnShow func()
 
-	// OnDiagnostics opens the Diagnostics screen; T4.1 wires the screen
-	// switch (T1.8 ships it landing on the restored window).
+	// OnDiagnostics opens the Diagnostics screen: the shell restores the
+	// window and navigates the page's hash router to #/diagnostics.
 	OnDiagnostics func()
 
 	// OnQuit exits the shell cleanly — the tray's Quit, the same path as
@@ -120,7 +123,8 @@ func (t *Tray) Remove() {
 
 // RefreshTooltip re-reads the Tooltip provider and updates the icon. Safe
 // from any goroutine: the update is posted to the tray's window and applied
-// on the shell's thread. T4.1 calls it whenever the pushed state changes.
+// on the shell's thread. The shell's trayStateHook calls it whenever the
+// pushed state word changes.
 func (t *Tray) RefreshTooltip() {
 	t.icon.postMessage(trayMsgTooltip)
 }
