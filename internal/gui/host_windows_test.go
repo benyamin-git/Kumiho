@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/benyamin-git/kumiho/internal/gui/prefs"
 )
@@ -32,6 +33,45 @@ func stubAutostart(t *testing.T, err error) *[]bool {
 	}
 	t.Cleanup(func() { syncAutostart = prev })
 	return &calls
+}
+
+// TestSyncAutostartFromPrefsReadsUnderTheLock pins the fix-round ordering
+// rule: the launch mirror reads the stored flag only after it holds
+// autostartMu, so a mirror delayed past a Settings toggle writes the toggle's
+// value, never a stale capture. The test holds the lock as an in-flight write
+// would, flips the flag, then releases and checks the value the waiting sync
+// reads. (Deterministic; runs in the Windows CI lane with the rest of this
+// file.)
+func TestSyncAutostartFromPrefsReadsUnderTheLock(t *testing.T) {
+	useTempPrefs(t)
+	h := &host{prefs: prefs.Prefs{Theme: "dark", Accent: "blue", Autostart: true}}
+	calls := stubAutostart(t, nil)
+
+	// An in-flight launch write holds the lock while the toggle flips the
+	// stored flag.
+	h.autostartMu.Lock()
+	h.mu.Lock()
+	h.prefs.Autostart = false
+	h.mu.Unlock()
+
+	done := make(chan error, 1)
+	go func() { done <- h.syncAutostartFromPrefs() }()
+
+	// The waiting sync must not run while the in-flight write holds the lock.
+	select {
+	case err := <-done:
+		h.autostartMu.Unlock()
+		t.Fatalf("syncAutostartFromPrefs returned while the lock was held (%v)", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	h.autostartMu.Unlock()
+	if err := <-done; err != nil {
+		t.Fatalf("syncAutostartFromPrefs: %v", err)
+	}
+
+	if len(*calls) != 1 || (*calls)[0] {
+		t.Fatalf("syncAutostart calls = %v, want [false] (the flag read after the lock)", *calls)
+	}
 }
 
 // TestSaveGeometryPersistsMaximized pins the T4.2 geometry write: the

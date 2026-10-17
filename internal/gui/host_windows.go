@@ -220,9 +220,11 @@ type host struct {
 	mu sync.Mutex
 
 	// autostartMu serialises Run-key writes: the launch-time mirror (its own
-	// goroutine) and the Settings toggle (the bridge thread) read the current
-	// prefs under mu and write under this lock, so a slow launch write can
-	// never overwrite a newer toggle.
+	// goroutine) and the Settings toggle (the bridge thread) both go through
+	// syncAutostartFromPrefs, which takes autostartMu first and only then
+	// reads the flag under mu (lock order autostartMu → mu; nothing takes
+	// them the other way), so a slow launch write can never overwrite a
+	// newer toggle.
 	autostartMu sync.Mutex
 
 	// svcMu guards the shell's last published service snapshot (T3.3); the
@@ -267,7 +269,7 @@ func (h *host) run() error {
 	// write runs off the startup path and a failure is only logged: the
 	// Settings toggle surfaces its own outcome.
 	go func() {
-		if err := h.writeAutostart(h.currentPrefs().Autostart); err != nil {
+		if err := h.syncAutostartFromPrefs(); err != nil {
 			h.log.logf("autostart: %v", err)
 		}
 	}()
@@ -901,7 +903,7 @@ func (h *host) applyPrefs(act Action) error {
 	}
 	if updated.Autostart != current.Autostart {
 		h.ctrl.SetAutostart(updated.Autostart)
-		if err := h.writeAutostart(updated.Autostart); err != nil {
+		if err := h.syncAutostartFromPrefs(); err != nil {
 			// The stored flag is kept (inventory §Tray/app lifecycle): the
 			// row shows the choice and the next launch re-syncs the entry.
 			h.log.logf("autostart: %v", err)
@@ -951,12 +953,17 @@ func (h *host) saveGeometry(r rect, maximized bool) {
 	h.prefs = saved
 }
 
-// writeAutostart is the single writer of the per-user Run entry: the launch
-// mirror and the Settings toggle both serialize here, so the newest stored
-// flag always wins the last registry write.
-func (h *host) writeAutostart(enabled bool) error {
+// syncAutostartFromPrefs is the single writer of the per-user Run entry. It
+// takes autostartMu before reading the flag, so a launch-time mirror that was
+// delayed past a Settings toggle reads — and writes — the toggle's value,
+// never a stale capture; the newest stored flag always wins the last registry
+// write.
+func (h *host) syncAutostartFromPrefs() error {
 	h.autostartMu.Lock()
 	defer h.autostartMu.Unlock()
+	h.mu.Lock()
+	enabled := h.prefs.Autostart
+	h.mu.Unlock()
 	return syncAutostart(enabled)
 }
 
