@@ -56,11 +56,12 @@ Start the app from the Start Menu, or from a shell with:
 
     kumiho gui
 
-`kumiho gui` locates `kumiho-gui.exe` next to the CLI executable and starts it
-detached, returning immediately. If the GUI binary is missing it prints
-`kumiho gui: <path> is missing; run install.cmd to install the desktop app`
-and exits nonzero. The desktop app is Windows-only; on other platforms
-`kumiho gui` prints a note and points at the TUI.
+`kumiho gui` looks for `kumiho-gui.exe` beside the CLI executable first, then
+in `%ProgramFiles%\Kumiho`, and starts it detached, returning immediately. If
+the binary is not found in either place it prints an error naming the searched
+directories and pointing at `install.cmd`, and exits nonzero. The desktop app
+is Windows-only; on other platforms `kumiho gui` prints a note and points at
+the TUI.
 
 Only one window runs per user. Launching a second time focuses the existing
 window instead of opening another (see [Tray and lifecycle](#tray-and-lifecycle)).
@@ -72,7 +73,8 @@ the screens. The rail and header are hidden while it runs. Its steps are:
 
 1. **Welcome to Kumiho** — the consent gate. Read the two panels (*What
    Kumiho does* and *What to keep in mind*), then tick **I understand** to
-   unlock **Continue**. Nothing is stored until you finish.
+   unlock **Continue**. The tick itself is not persisted: if you quit before
+   finishing, the wizard starts at this step again next launch.
 2. **Sign in** — sign in with the Firefox account that holds the VPN. Kumiho
    stores the resulting tokens on this PC and never your password. Depending
    on the account, this is email → password → a 2FA code, or a "check your
@@ -209,8 +211,10 @@ shows the entitlement:
 
 A tonal **Sign out** button opens a confirmation dialog — *Sign out of
 Kumiho?* / *The stored sign-in tokens are cleared and the tunnel disconnects.*
-— before it clears the tokens. Signing out routes you back to the setup
-wizard's sign-in step.
+— before it clears the tokens. Signing out does not reopen the wizard: you
+stay on the Account screen, its card disappears, and the status line reads
+`Not signed in`. The wizard only reappears for a daemon that still reports
+setup as incomplete.
 
 ## Logs
 
@@ -225,8 +229,10 @@ console keeps the last 2000 lines.
 ## Diagnostics
 
 **Reached:** the `Diagnostics` rail item. The action row holds **Re-run
-checks**, **Copy details**, **Open log folder** and **Cleanup…** (the last
-removes stale Kumiho networking state; it also runs at service start).
+checks**, **Copy details**, **Open log folder** and **Cleanup…**. The last
+opens a confirmation dialog and then runs the full `kumiho cleanup`; the
+daemon also runs a stale-only cleanup of its own networking state when the
+service starts.
 
 - The **results list** renders `kumiho doctor`'s checks as chips: `OK`,
   `Warning`, `Failed` or `Skipped`. On the first visit each launch the checks
