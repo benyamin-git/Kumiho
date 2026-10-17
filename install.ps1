@@ -86,10 +86,10 @@ function Resolve-WintunDll {
     throw 'missing wintun.dll: expected beside install.ps1 (release zip) or third_party\wintun\amd64\wintun.dll (checkout)'
 }
 
-# Copy-InstallFile places one file beside the installed exes. The GUI's
-# "Set up Kumiho" button re-runs the installed copy of this installer, where
-# source and destination resolve to the same file; copying a file onto itself
-# is an error even with -Force, so that case is a no-op.
+# Copy-InstallFile places one file beside the installed exes. The installer
+# copies itself and install.cmd into $installDir, so when it is run from that
+# directory the source and destination resolve to the same file; copying a
+# file onto itself is an error even with -Force, so that case is a no-op.
 function Copy-InstallFile {
     param([string]$Source, [string]$Name)
     $destination = Join-Path $installDir $Name
@@ -442,7 +442,7 @@ function Install-Kumiho {
         if (Test-Path -LiteralPath $source -PathType Leaf) {
             Copy-InstallFile -Source $source -Name $name
         } else {
-            Write-Host "warning: $name is not beside this script; not copied (the GUI's Set up Kumiho button falls back to the other installer)"
+            Write-Host "warning: $name is not beside this script; not copied (re-run it from the download to upgrade or uninstall)"
         }
     }
 

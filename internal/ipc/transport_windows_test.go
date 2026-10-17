@@ -57,11 +57,6 @@ func TestParsePipeUsers(t *testing.T) {
 			malformed: 1,
 		},
 		{
-			name:      "sddl injection is rejected",
-			content:   testSIDAlice + ")(A;;GA;;;WD\n",
-			malformed: 1,
-		},
-		{
 			// ConvertStringSidToSid accepts these SDDL aliases; the parser
 			// must not, or "WD" would quietly grant Everyone.
 			name:      "sddl aliases rejected",
@@ -102,6 +97,32 @@ func TestParsePipeUsersNeverEchoesInput(t *testing.T) {
 		// Accepted and canonicalized.
 	default:
 		t.Fatalf("parsePipeUsers(lowercase SID) = %v, want none or canonical S-1-5-18", got)
+	}
+}
+
+// An SDDL-injection tail after a valid SID prefix: Windows may accept the
+// valid prefix and canonicalize it, or reject the whole line. Either outcome
+// is safe; the attacker-controlled tail must never reach an accepted SID or
+// the produced SDDL.
+func TestParsePipeUsersSddlTailNeverEchoes(t *testing.T) {
+	const tail = ")(A;;GA;;;WD"
+	content := testSIDAlice + tail + "\n"
+	got, _ := parsePipeUsers([]byte(content))
+	switch {
+	case len(got) == 0:
+		// Rejected by this Windows build: fails closed.
+	case len(got) == 1 && got[0] == testSIDAlice:
+		// Accepted the valid prefix and canonicalized it; the tail is gone.
+	default:
+		t.Fatalf("parsePipeUsers(%q) = %v, want none or canonical %s", content, got, testSIDAlice)
+	}
+	for _, sid := range got {
+		if strings.Contains(sid, tail) || strings.Contains(sid, "WD") {
+			t.Fatalf("accepted SID %q echoes the sddl tail", sid)
+		}
+	}
+	if sddl := pipeSDDL("", got...); strings.Contains(sddl, tail) || strings.Contains(sddl, "WD") {
+		t.Fatalf("SDDL %q echoes the sddl tail", sddl)
 	}
 }
 

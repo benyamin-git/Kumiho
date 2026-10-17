@@ -20,6 +20,15 @@
  * steps aside (`app--wizard`, css/screens/onboarding.css), so it occupies
  * the window; the wizard's hint selects its step for captures.
  *
+ * The last route actually shown is remembered in sessionStorage (best effort;
+ * the store may be unavailable). A theme or accent change reloads the
+ * document at the bare host URL, which drops the fragment: on boot with no
+ * explicit screen (an empty hash or a bare `#`) the router restores the
+ * remembered route when it still parses to a registered screen, so the change
+ * keeps the user on the screen they were on instead of booting to Dashboard.
+ * An explicit hash (a deep link, or a capture hint such as
+ * `#/settings?state=dark`) always wins and is never overridden.
+ *
  * Screen modules (static/js/screens/<id>.js) default-export an object:
  *
  *   export default {
@@ -51,6 +60,11 @@ import { store } from "./store.js";
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_ID = 32;
 const DEFAULT_SCREEN = "dashboard";
+
+// Namespaced sessionStorage key for the last route actually shown, so a
+// fragment-less reload keeps the current screen instead of booting to
+// Dashboard.
+const LAST_ROUTE_KEY = "kumiho:last-route";
 
 // The wizard's screen id (T3.4): the gate target and the one route that
 // hides the shell chrome.
@@ -94,6 +108,45 @@ export function routeHash(route) {
 /** Navigate to a screen (optionally carrying a capture hint). */
 export function navigate(id, hint) {
   location.hash = routeHash({ id: id, hint: hint || "" });
+}
+
+/** Whether the hash carries an explicit screen, as opposed to empty or a bare
+ * `#`/`#/`, which let a remembered route apply on boot. Any other hash - a
+ * deep link, a capture hint, even a malformed one - is explicit and wins. */
+function hasExplicitScreen(hash) {
+  return String(hash || "").replace(/^#\/?/, "").trim() !== "";
+}
+
+/** Remember the route just shown (best effort; sessionStorage may be off). */
+function rememberRoute(route) {
+  try {
+    sessionStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({ id: route.id, hint: route.hint || "" }));
+  } catch (err) {
+    // Private browsing or a disabled store: the memory is a convenience only.
+  }
+}
+
+/** The remembered route, or null when absent, unparseable, or neither a valid
+ * nor a registered screen id. */
+function recallRoute() {
+  let stored;
+  try {
+    stored = sessionStorage.getItem(LAST_ROUTE_KEY);
+  } catch (err) {
+    return null;
+  }
+  if (!stored) return null;
+  let route;
+  try {
+    route = JSON.parse(stored);
+  } catch (err) {
+    return null;
+  }
+  if (!route || typeof route.id !== "string") return null;
+  if (!ID_RE.test(route.id) || route.id.length > MAX_ID || !loaders.has(route.id)) return null;
+  let hint = typeof route.hint === "string" ? route.hint : "";
+  if (!ID_RE.test(hint) || hint.length > MAX_ID) hint = "";
+  return { id: route.id, hint: hint };
 }
 
 function capitalize(id) {
@@ -180,6 +233,9 @@ export function initRouter(opts) {
   async function show(route, moveFocus) {
     const gen = ++generation;
     currentRoute = route;
+    // Remember only routes the hash asks for: a state push with a bare host
+    // URL defaults to Dashboard and must not clobber the remembered screen.
+    if (hasExplicitScreen(location.hash)) rememberRoute(route);
 
     // The wizard takes the whole window: the shell chrome hides while it is
     // the shown route (css/screens/onboarding.css owns the rule).
@@ -251,7 +307,9 @@ export function initRouter(opts) {
     routeTo(parseHash(location.hash), false);
   });
 
-  const initial = parseHash(location.hash);
+  // A fragment-less boot (the theme/accent reload) restores the last shown
+  // route; an explicit hash always wins.
+  const initial = hasExplicitScreen(location.hash) ? parseHash(location.hash) : recallRoute() || parseHash(location.hash);
   if (location.hash !== routeHash(initial)) {
     history.replaceState(null, "", routeHash(initial));
   }
