@@ -7,3 +7,8 @@
 *.ico binary
 *.zip binary
 *.gif binary
+
+# cmd.exe can fail to find goto/call labels in LF-only batch files (labels
+# that straddle a 512-byte scan boundary), so checked-out batch files need
+# CRLF even though the repository stores LF.
+install.cmd text eol=crlf
