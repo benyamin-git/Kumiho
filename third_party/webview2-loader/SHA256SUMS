@@ -1,0 +1,8 @@
+# WebView2Loader DLLs from github.com/jchv/go-webview2
+# v0.0.0-20260205173254-56598839c808 (vendored). Kumiho's windows/amd64 build
+# embeds only x64/WebView2Loader.dll into kumiho-gui.exe (D5, D15/A5); the
+# arm64 and x86 payloads are retained in the vendored tree but not built.
+# Verify from this directory: sha256sum -c SHA256SUMS
+c4674acf95f0800793a4a6d61132adf5dfa694c218e482d86093494c4e84100a  ../../vendor/github.com/jchv/go-webview2/webviewloader/sdk/x64/WebView2Loader.dll
+255cad81b768fb29e68d7b1605ec64e4daeed8ad0f8e8a4547e1304e8aec505d  ../../vendor/github.com/jchv/go-webview2/webviewloader/sdk/arm64/WebView2Loader.dll
+758f4003d91b3b81951d95de28e0e03f96e23922a73d7fe0abf6f607e2a89f2b  ../../vendor/github.com/jchv/go-webview2/webviewloader/sdk/x86/WebView2Loader.dll

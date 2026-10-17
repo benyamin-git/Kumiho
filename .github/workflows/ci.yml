@@ -66,10 +66,23 @@ jobs:
         run: go test ./...
 
       - name: Build (windows/amd64)
-        run: go build -o dist/kumiho-windows-amd64.exe ./cmd/kumiho
+        run: |
+          go build -o dist/kumiho-windows-amd64.exe ./cmd/kumiho
+          go build -ldflags "-H=windowsgui" -o dist/kumiho-gui-windows-amd64.exe ./cmd/kumiho-gui
 
       - name: Version smoke test
         run: ./dist/kumiho-windows-amd64.exe version
+
+      - name: GUI version smoke test
+        run: |
+          $p = Start-Process -FilePath '.\dist\kumiho-gui-windows-amd64.exe' `
+            -ArgumentList '--version' -Wait -PassThru -RedirectStandardOutput gui-version.txt
+          Get-Content gui-version.txt
+          if ($p.ExitCode -ne 0) { Write-Error "kumiho-gui --version exited $($p.ExitCode)"; exit 1 }
+          if (-not (Select-String -Quiet -Path gui-version.txt -Pattern '^kumiho-gui \S+')) {
+            Write-Error 'unexpected kumiho-gui --version output'
+            exit 1
+          }
 
       - name: Parse install.ps1
         run: pwsh -NoProfile -Command '$t=$null; $e=$null; $null = [System.Management.Automation.Language.Parser]::ParseFile(''install.ps1'',[ref]$t,[ref]$e); if ($e) { $e | ForEach-Object { Write-Host $_ }; exit 1 }'

@@ -29,6 +29,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-linux-amd64 ./cmd/kumiho
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-linux-arm64 ./cmd/kumiho
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-windows-amd64.exe ./cmd/kumiho
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS -H=windowsgui" -o dist/kumiho-gui-windows-amd64.exe ./cmd/kumiho-gui
 
       - name: Package zips and checksums
         run: |
@@ -45,12 +46,14 @@ jobs:
           package_linux arm64
 
           staging="$(mktemp -d)"
-          mkdir -p "$staging/third_party/wintun"
+          mkdir -p "$staging/third_party/wintun" "$staging/third_party/webview2-loader"
           cp dist/kumiho-windows-amd64.exe "$staging/kumiho.exe"
+          cp dist/kumiho-gui-windows-amd64.exe "$staging/kumiho-gui.exe"
           cp third_party/wintun/amd64/wintun.dll "$staging/wintun.dll"
-          cp install.ps1 LICENSE NOTICE "$staging/"
+          cp install.ps1 install.cmd LICENSE NOTICE "$staging/"
           cp third_party/wintun/LICENSE.txt "$staging/third_party/wintun/LICENSE.txt"
-          (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe wintun.dll install.ps1 LICENSE NOTICE third_party/wintun/LICENSE.txt)
+          cp third_party/webview2-loader/LICENSE.txt "$staging/third_party/webview2-loader/LICENSE.txt"
+          (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe kumiho-gui.exe wintun.dll install.ps1 install.cmd LICENSE NOTICE third_party/wintun/LICENSE.txt third_party/webview2-loader/LICENSE.txt)
 
           sha256sum "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" > SHA256SUMS
           cat SHA256SUMS
