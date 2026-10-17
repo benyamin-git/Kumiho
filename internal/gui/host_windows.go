@@ -219,6 +219,12 @@ type host struct {
 	// bridge thread).
 	mu sync.Mutex
 
+	// autostartMu serialises Run-key writes: the launch-time mirror (its own
+	// goroutine) and the Settings toggle (the bridge thread) read the current
+	// prefs under mu and write under this lock, so a slow launch write can
+	// never overwrite a newer toggle.
+	autostartMu sync.Mutex
+
 	// svcMu guards the shell's last published service snapshot (T3.3); the
 	// probe loop, the action completions and the UI-side reads all cross
 	// goroutines.
@@ -254,6 +260,17 @@ func (h *host) run() error {
 		p = prefs.Prefs{Theme: string(theme.Light), Accent: theme.Accents[0].Name, Autostart: true}
 	}
 	h.prefs = p
+
+	// The stored autostart flag is mirrored into the per-user Run entry at
+	// every launch (inventory §Tray/app lifecycle), so the logon registration
+	// always matches gui.toml even if it was changed elsewhere. The registry
+	// write runs off the startup path and a failure is only logged: the
+	// Settings toggle surfaces its own outcome.
+	go func() {
+		if err := h.writeAutostart(h.currentPrefs().Autostart); err != nil {
+			h.log.logf("autostart: %v", err)
+		}
+	}()
 
 	th, accent := effectiveAppearance(h.prefs)
 	css, err := theme.CSS(th, accent)
@@ -299,7 +316,7 @@ func (h *host) run() error {
 	h.webview = w
 
 	hwnd := uintptr(w.Window())
-	h.chrome = newWindowChrome(hwnd, h.saveGeometry)
+	h.chrome = newWindowChrome(hwnd, h.saveGeometry, h.handleClose)
 	if err := h.chrome.install(); err != nil {
 		// Without the subclass, close destroys the window and exits the
 		// shell; the window itself is still fully usable.
@@ -309,6 +326,13 @@ func (h *host) run() error {
 	applyTitlebarTheme(hwnd, isDarkTheme(th))
 	applyWindowGeometry(hwnd, placement)
 	w.SetSize(prefs.MinWidth, prefs.MinHeight, webview2.HintMin)
+	if h.opts.trayStart {
+		// The Run entry's logon start (D11) hides immediately after the
+		// geometry restore — before the binding and the first navigation —
+		// keeping the visible flash the binding's own ShowWindow causes as
+		// short as possible.
+		showWindow(hwnd, windows.SW_HIDE)
+	}
 
 	if err := w.Bind("kumihoAction", h.handleAction); err != nil {
 		return fmt.Errorf("webview2 bind: %w", err)
@@ -316,10 +340,12 @@ func (h *host) run() error {
 	w.Navigate(h.server.URL())
 
 	h.client = NewDaemonClient()
+	autostart := h.prefs.Autostart
 	h.ctrl = NewController(h.client, Options{
 		Theme:          string(th),
 		Accent:         accent,
 		Onboarded:      h.prefs.Onboarded,
+		Autostart:      &autostart,
 		LogsExport:     h.logsExport,
 		OpenLogsFolder: h.openLogsFolder,
 	})
@@ -334,9 +360,6 @@ func (h *host) run() error {
 	go h.pushLoop(ctx)
 	go h.serviceLoop(ctx)
 
-	if h.opts.trayStart {
-		showWindow(hwnd, windows.SW_HIDE)
-	}
 	state := "shown"
 	if h.opts.trayStart {
 		state = "hidden (--tray-start)"
@@ -456,6 +479,29 @@ func (h *host) requestQuit() {
 		}
 		h.webview.Dispatch(func() { h.webview.Terminate() })
 	})
+}
+
+// handleClose is the window's WM_CLOSE path (D10): on the first close it
+// records close_hint_shown in gui.toml and shows the tray's one-time
+// notification (T1.8's ShowFirstCloseHint); every close saves the geometry
+// and hides the window. The shell keeps running; the tray and the UI's quit
+// action are the exit paths. The prefs write is one small atomic file write
+// (temp + rename), bounded enough for the pump thread, and a failure is
+// logged without losing the hint for the session.
+func (h *host) handleClose() {
+	h.mu.Lock()
+	first := !h.prefs.CloseHintShown
+	if first {
+		h.prefs.CloseHintShown = true
+		if err := prefs.Save(h.prefs); err != nil {
+			h.log.logf("prefs: save close hint: %v", err)
+		}
+	}
+	h.mu.Unlock()
+	h.chrome.hide()
+	if first && h.tray != nil {
+		h.tray.ShowFirstCloseHint()
+	}
 }
 
 // installTray creates the notification-area icon and its state hook (T1.8,
@@ -805,11 +851,16 @@ type prefsSetPayload struct {
 // (Options are constructor input; the controller has no appearance setter and
 // T1.7 must not change it), so a live change reaches the UI through the
 // reloaded page's injected CSS block, not through State.Theme/State.Accent;
-// those stay at their startup values until the shell restarts. Autostart is
-// persisted here; mirroring it to the Run key is T4.2's handler.
-// Onboarded (T3.4) is persisted and pushed into the controller through
-// SetOnboarded, so the wizard's `Open Kumiho` reaches the UI as the ratified
-// State.Onboarded projection immediately.
+// those stay at their startup values until the shell restarts. Autostart
+// (T4.2) is persisted, mirrored into the per-user Run key (D11), pushed into
+// the controller as the State.Autostart projection, and its outcome is the
+// Settings notice: `Start at login saved` (10 s) or `could not change the
+// login setting: <err>`. The stored flag survives a Run-key failure — the
+// next launch re-syncs from gui.toml (inventory §Tray/app lifecycle) — and
+// prefs are written before the registry so a Save failure leaves nothing
+// half-applied. Onboarded (T3.4) is persisted and pushed into the controller
+// through SetOnboarded, so the wizard's `Open Kumiho` reaches the UI as the
+// ratified State.Onboarded projection immediately.
 func (h *host) applyPrefs(act Action) error {
 	p, err := decodePayload[prefsSetPayload](act)
 	if err != nil {
@@ -837,6 +888,9 @@ func (h *host) applyPrefs(act Action) error {
 		return nil
 	}
 	if err := prefs.Save(updated); err != nil {
+		if updated.Autostart != current.Autostart {
+			h.ctrl.SetSettingsNotice("could not change the login setting: "+err.Error(), toneBad)
+		}
 		return fmt.Errorf("prefs_set: %w", err)
 	}
 	h.mu.Lock()
@@ -844,6 +898,17 @@ func (h *host) applyPrefs(act Action) error {
 	h.mu.Unlock()
 	if updated.Onboarded != current.Onboarded {
 		h.ctrl.SetOnboarded(updated.Onboarded)
+	}
+	if updated.Autostart != current.Autostart {
+		h.ctrl.SetAutostart(updated.Autostart)
+		if err := h.writeAutostart(updated.Autostart); err != nil {
+			// The stored flag is kept (inventory §Tray/app lifecycle): the
+			// row shows the choice and the next launch re-syncs the entry.
+			h.log.logf("autostart: %v", err)
+			h.ctrl.SetSettingsNotice("could not change the login setting: "+err.Error(), toneBad)
+		} else {
+			h.ctrl.SetSettingsNotice("Start at login saved", toneGood)
+		}
 	}
 	if updated.Theme != current.Theme || updated.Accent != current.Accent {
 		h.server.SetThemeCSS(css)
@@ -858,11 +923,12 @@ func (h *host) applyPrefs(act Action) error {
 	return nil
 }
 
-// saveGeometry persists one window rectangle into gui.toml; the shell calls
-// it when the user finishes a move/resize and on the close/quit paths. A
-// rectangle equal to the saved one is a no-op, so the debounced saves do not
-// rewrite the file.
-func (h *host) saveGeometry(r rect) {
+// saveGeometry persists the window's restored rectangle and maximized state
+// into gui.toml; the shell calls it when the user finishes a move/resize and
+// on the close/quit paths. A rectangle and state equal to the saved ones are
+// a no-op, so the debounced saves do not rewrite the file. One small atomic
+// write on the window thread; the pump stays responsive.
+func (h *host) saveGeometry(r rect, maximized bool) {
 	w, ht := int(r.right-r.left), int(r.bottom-r.top)
 	if w <= 0 || ht <= 0 {
 		return
@@ -871,16 +937,27 @@ func (h *host) saveGeometry(r rect) {
 	defer h.mu.Unlock()
 	saved := h.prefs
 	if saved.Window.X == int(r.left) && saved.Window.Y == int(r.top) &&
-		saved.Window.Width == w && saved.Window.Height == ht {
+		saved.Window.Width == w && saved.Window.Height == ht &&
+		saved.Window.Maximized == maximized {
 		return
 	}
 	saved.Window.X, saved.Window.Y = int(r.left), int(r.top)
 	saved.Window.Width, saved.Window.Height = w, ht
+	saved.Window.Maximized = maximized
 	if err := prefs.Save(saved); err != nil {
 		h.log.logf("prefs: save geometry: %v", err)
 		return
 	}
 	h.prefs = saved
+}
+
+// writeAutostart is the single writer of the per-user Run entry: the launch
+// mirror and the Settings toggle both serialize here, so the newest stored
+// flag always wins the last registry write.
+func (h *host) writeAutostart(enabled bool) error {
+	h.autostartMu.Lock()
+	defer h.autostartMu.Unlock()
+	return syncAutostart(enabled)
 }
 
 // currentPrefs returns a consistent copy of the preferences.

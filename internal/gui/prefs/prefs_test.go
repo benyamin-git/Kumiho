@@ -56,6 +56,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	want.Window.X, want.Window.Y = -300, 40
 	want.Window.Width, want.Window.Height = 1280, 800
+	want.Window.Maximized = true
 
 	if err := Save(want); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -69,6 +70,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		`theme = "oled"`, `accent = "rose"`, `autostart = false`,
 		`onboarded = true`, `close_hint_shown = true`, "[window]",
 		"x = -300", "y = 40", "width = 1280", "height = 800",
+		"maximized = true",
 	} {
 		if !strings.Contains(string(data), key) {
 			t.Errorf("saved file missing %q:\n%s", key, data)

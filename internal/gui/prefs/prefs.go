@@ -49,10 +49,11 @@ type Prefs struct {
 	Theme  string `toml:"theme"`
 	Accent string `toml:"accent"`
 	Window struct {
-		X      int `toml:"x"`
-		Y      int `toml:"y"`
-		Width  int `toml:"width"`
-		Height int `toml:"height"`
+		X         int  `toml:"x"`
+		Y         int  `toml:"y"`
+		Width     int  `toml:"width"`
+		Height    int  `toml:"height"`
+		Maximized bool `toml:"maximized"`
 	} `toml:"window"`
 	Autostart      bool `toml:"autostart"`
 	Onboarded      bool `toml:"onboarded"`

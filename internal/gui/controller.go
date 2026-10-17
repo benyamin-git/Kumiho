@@ -160,6 +160,12 @@ type Options struct {
 	// pass prefs.Onboarded at construction and flip it through SetOnboarded
 	// when prefs_set {"onboarded":…} persists the flag.
 	Onboarded bool
+	// Autostart is the persisted Start at login preference from gui.toml
+	// (T4.2): the shell seeds it at construction and republishes it through
+	// SetAutostart after every prefs_set. Nil leaves State.Autostart absent,
+	// so the Settings row keeps its session record (the harness and tests
+	// that do not host the Run entry).
+	Autostart *bool
 	// PumpInterval is the UI pump cadence: how often expired notices retire.
 	PumpInterval time.Duration
 	// StatusInterval is the status snapshot's slow safety tick.
@@ -271,6 +277,11 @@ type Controller struct {
 	// Options.Onboarded and SetOnboarded.
 	onboarded bool
 
+	// autostart carries the persisted Start at login preference (T4.2); nil
+	// means the host does not project it. See Options.Autostart and
+	// SetAutostart.
+	autostart *bool
+
 	service ServiceState
 	update  UpdateInfo
 }
@@ -284,6 +295,11 @@ func NewController(d Daemon, opts Options) *Controller {
 		checker := UpdateChecker{}
 		opts.UpdateCheck = checker.Check
 	}
+	var autostart *bool
+	if opts.Autostart != nil {
+		v := *opts.Autostart
+		autostart = &v
+	}
 	return &Controller{
 		d:         d,
 		opts:      opts,
@@ -291,6 +307,7 @@ func NewController(d Daemon, opts Options) *Controller {
 		theme:     opts.Theme,
 		accent:    opts.Accent,
 		onboarded: opts.Onboarded,
+		autostart: autostart,
 		// The Version row shows the running build from the first snapshot,
 		// before any check has run (T2.4 ruling).
 		update: UpdateInfo{Current: version.Version},
@@ -312,6 +329,12 @@ func (c *Controller) Snapshot() State {
 	retireExpired(&c.accountNotice, now)
 	retireExpired(&c.diagnosticsNotice, now)
 
+	var autostart *bool
+	if c.autostart != nil {
+		v := *c.autostart
+		autostart = &v
+	}
+
 	return State{
 		Reachable:         c.reachable,
 		StatusError:       c.statusError,
@@ -325,6 +348,7 @@ func (c *Controller) Snapshot() State {
 		RTTs:              copyRTTs(c.rtts),
 		LogsLoaded:        c.logsLoaded,
 		Onboarded:         c.onboarded,
+		Autostart:         autostart,
 		Logs:              c.logs,
 		Notice:            liveNotice(c.notice, now),
 		LocationsNotice:   liveNotice(c.locationsNotice, now),
@@ -830,6 +854,31 @@ func (c *Controller) SetOnboarded(v bool) {
 	c.mu.Lock()
 	c.onboarded = v
 	c.mu.Unlock()
+}
+
+// SetAutostart publishes the persisted Start at login preference (T4.2). The
+// shell calls it after prefs_set has saved gui.toml, whether or not the Run
+// key write succeeded: the stored flag is authoritative (inventory §Tray/app
+// lifecycle), and the Settings row reads State.Autostart instead of its
+// page-session record. It is safe for concurrent use.
+func (c *Controller) SetAutostart(v bool) {
+	c.mu.Lock()
+	c.autostart = &v
+	c.mu.Unlock()
+}
+
+// SetSettingsNotice publishes one Settings-screen result notice on the host's
+// behalf (T4.2's Start at login outcome). It follows the screen-local notice
+// rules: a bad-tone failure persists until the next action replaces it,
+// everything else carries the 10 s success lifetime (inventory §Settings).
+// The Settings screen already renders State.SettingsNotice on its status line,
+// so no extra UI wiring is needed. It is safe for concurrent use.
+func (c *Controller) SetSettingsNotice(message, tone string) {
+	ttl := c.opts.NoticeTTL
+	if tone == toneBad {
+		ttl = 0
+	}
+	c.setNotice(slotSettings, message, tone, ttl)
 }
 
 // SetDiagnosticsNotice publishes one Diagnostics-screen result notice (T3.3;

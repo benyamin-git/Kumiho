@@ -33,11 +33,13 @@
  * mutating them (T1.7/T1.10), so they go stale for the rest of the process
  * and would ring the wrong option after every change (reported to the
  * controller). The injected values cannot go stale: they are what the user
- * sees. `Start at login` has no state projection at all (gui.toml is
- * host-side), so its toggle is screen-local: the click's value is kept for
- * the page's session (sessionStorage survives the shell's reload) and the
- * documented first-run default `on` (D11) is the initial reading (reported
- * as a projection gap).
+ * sees. `Start at login` reads the host's persisted gui.toml flag through
+ * State.Autostart (T4.2: the shell seeds it and republishes it after every
+ * prefs_set), with the click's own value on top and the page's session record
+ * (sessionStorage) only as a fallback for hosts that do not project it (the
+ * dev harness). The documented first-run default `on` (D11) remains the last
+ * fallback, and the host's `Start at login saved` / failure notices arrive on
+ * the shared settings status line below.
  *
  * Scrolling follows the inventory's deliberate treatment: the rows pane never
  * draws a scrollbar, the wheel moves it three rows per notch, and Tab moves
@@ -239,6 +241,17 @@ function storeAutostart(v) {
   } catch (err) {
     // Session storage is a convenience; the click's value still shows.
   }
+}
+
+/**
+ * The host's persisted Start at login value from State.Autostart (T4.2):
+ * "on"/"off", or "" when the host does not project it (the harness). This is
+ * authoritative over the page's session record.
+ */
+function projectedAutostart(snapshot) {
+  if (snapshot && snapshot.autostart === true) return "on";
+  if (snapshot && snapshot.autostart === false) return "off";
+  return "";
 }
 
 /** The daemon setting's display/effective value from a settings snapshot. */
@@ -589,7 +602,8 @@ export default {
         button.setAttribute("aria-pressed", selected ? "true" : "false");
       }
 
-      const autostart = view.picked.autostart || storedAutostart() || "on";
+      const autostart =
+        view.picked.autostart || projectedAutostart(snapshot) || storedAutostart() || "on";
       ui.autostart.textContent = autostart;
       ui.autostart.setAttribute("aria-label", "Start at login: " + autostart);
 
@@ -708,7 +722,8 @@ export default {
       },
 
       onAutostart() {
-        const current = view.picked.autostart || storedAutostart() || "on";
+        const current =
+          view.picked.autostart || projectedAutostart(ctx.store.get()) || storedAutostart() || "on";
         const next = current === "on" ? false : true;
         view.picked.autostart = next ? "on" : "off";
         storeAutostart(view.picked.autostart);

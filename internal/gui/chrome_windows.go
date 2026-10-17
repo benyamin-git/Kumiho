@@ -24,12 +24,14 @@ var (
 	procCallWindowProcW     = user32.NewProc("CallWindowProcW")
 	procDefWindowProcW      = user32.NewProc("DefWindowProcW")
 	procGetWindowRect       = user32.NewProc("GetWindowRect")
+	procGetWindowPlacement  = user32.NewProc("GetWindowPlacement")
 	procSetWindowPos        = user32.NewProc("SetWindowPos")
 	procGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
 	procShowWindow          = user32.NewProc("ShowWindow")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 	procFindWindowW         = user32.NewProc("FindWindowW")
 	procIsIconic            = user32.NewProc("IsIconic")
+	procIsZoomed            = user32.NewProc("IsZoomed")
 	procLoadImageW          = user32.NewProc("LoadImageW")
 	procSendMessageW        = user32.NewProc("SendMessageW")
 
@@ -79,6 +81,19 @@ const (
 // rect mirrors RECT (windef.h).
 type rect struct{ left, top, right, bottom int32 }
 
+// nativePlacement mirrors WINDOWPLACEMENT (winuser.h): the show state and the
+// normal (restored) rectangle GetWindowPlacement reports, even while the
+// window is maximized. The field order and sizes match the Win32 struct, whose
+// length field must be initialized to its size before the call.
+type nativePlacement struct {
+	length      uint32
+	flags       uint32
+	showCmd     uint32
+	minPosition point
+	maxPosition point
+	normal      rect
+}
+
 // windowChrome owns the shell window's native behavior: a WNDPROC subclass
 // that turns WM_CLOSE into close-to-tray (D10) and persists geometry after a
 // user move/resize, plus the icon, native titlebar theme and initial
@@ -86,7 +101,8 @@ type rect struct{ left, top, right, bottom int32 }
 type windowChrome struct {
 	hwnd         uintptr
 	origProc     uintptr
-	saveGeometry func(rect)
+	saveGeometry func(rect, bool)
+	onClose      func()
 }
 
 // activeChrome is the process's single subclassed window; the Win32 window
@@ -96,9 +112,12 @@ type windowChrome struct {
 var activeChrome *windowChrome
 
 // newWindowChrome returns the chrome for hwnd; saveGeometry is called on the
-// window thread after every finished user move/resize and on close.
-func newWindowChrome(hwnd uintptr, saveGeometry func(rect)) *windowChrome {
-	return &windowChrome{hwnd: hwnd, saveGeometry: saveGeometry}
+// window thread after every finished user move/resize and on close (with the
+// window's restored rectangle and maximized state), and onClose is the
+// WM_CLOSE handler (the shell's first-close hint plus hide-to-tray). A nil
+// onClose falls back to a plain save-and-hide.
+func newWindowChrome(hwnd uintptr, saveGeometry func(rect, bool), onClose func()) *windowChrome {
+	return &windowChrome{hwnd: hwnd, saveGeometry: saveGeometry, onClose: onClose}
 }
 
 // install subclasses the window, replacing the vendored binding's window
@@ -133,8 +152,13 @@ func chromeWndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	switch msg {
 	case wmClose:
 		// Close hides to tray (D10): the shell keeps running, the tray
-		// (T1.8) and the UI's quit action are the exit paths.
-		c.hide()
+		// (T1.8) and the UI's quit action are the exit paths. The shell's
+		// onClose owns the one-time hint and the flag save (T4.2).
+		if c.onClose != nil {
+			c.onClose()
+		} else {
+			c.hide()
+		}
 		return 0
 	case wmExitSizeMove:
 		// The end of a user move/resize is the debounce point (D24).
@@ -155,16 +179,36 @@ func (c *windowChrome) show() {
 	setForegroundWindow(c.hwnd)
 }
 
-// save captures the current window rectangle into the shell preferences, as
-// long as the window is not minimized (minimized positions are ignored, per
-// the inventory).
+// save captures the window's restored (normal) rectangle and maximized state
+// into the shell preferences, as long as the window is not minimized
+// (minimized positions are ignored, per the inventory). GetWindowPlacement
+// supplies the normal rectangle even while the window is maximized, so a
+// maximized window can never persist its full-monitor rectangle (the
+// password to the T1.7 review's geometry bug); GetWindowRect is the fallback
+// when the placement query fails.
 func (c *windowChrome) save() {
 	if iconic(c.hwnd) {
 		return
 	}
-	if r, ok := windowRectOf(c.hwnd); ok && c.saveGeometry != nil {
-		c.saveGeometry(r)
+	r, maximized, ok := placementOf(c.hwnd)
+	if !ok {
+		r, ok = windowRectOf(c.hwnd)
+		maximized = false
 	}
+	if ok && c.saveGeometry != nil {
+		c.saveGeometry(r, maximized)
+	}
+}
+
+// placementOf returns the window's normal rectangle and maximized state
+// through GetWindowPlacement; IsZoomed is the belt-and-braces guard for the
+// show command.
+func placementOf(hwnd uintptr) (r rect, maximized, ok bool) {
+	p := nativePlacement{length: uint32(unsafe.Sizeof(nativePlacement{}))}
+	if res, _, _ := procGetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&p))); res == 0 {
+		return rect{}, false, false
+	}
+	return p.normal, p.showCmd == windows.SW_SHOWMAXIMIZED || zoomed(hwnd), true
 }
 
 func defWindowProc(hwnd, msg, wparam, lparam uintptr) uintptr {
@@ -187,6 +231,11 @@ func setForegroundWindow(hwnd uintptr) {
 
 func iconic(hwnd uintptr) bool {
 	r, _, _ := procIsIconic.Call(hwnd)
+	return r != 0
+}
+
+func zoomed(hwnd uintptr) bool {
+	r, _, _ := procIsZoomed.Call(hwnd)
 	return r != 0
 }
 
@@ -242,20 +291,32 @@ func applyTitlebarTheme(hwnd uintptr, dark bool) {
 }
 
 // windowPlacement is the initial window geometry: x/y are meaningful only
-// when place is true (a saved rectangle was restored).
+// when place is true (a saved rectangle was restored), and maximized asks the
+// caller to re-enter the maximized state after applying the rectangle.
 type windowPlacement struct {
 	x, y, w, h int
 	place      bool
+	maximized  bool
 }
 
 // placementFor computes the initial window geometry from the saved
 // preferences (D24): the saved rectangle is restored and clamped into the
 // virtual screen; a rectangle that intersects no monitor falls back to the
-// default size and position. The minimum size is always enforced.
+// default size and position. The minimum size is always enforced. The saved
+// maximized state carries through either way, so a window closed maximized
+// reopens maximized even after its normal rectangle left the monitor set.
 func placementFor(p prefs.Prefs) windowPlacement {
+	vx, vy, vw, vh := virtualScreen()
+	return placementIn(p, vx, vy, vw, vh)
+}
+
+// placementIn is placementFor's pure core: the restore/clamp rules against an
+// explicit monitor-set rectangle (virtualScreen in production).
+func placementIn(p prefs.Prefs, vx, vy, vw, vh int) windowPlacement {
+	maximized := p.Window.Maximized
 	w, h := p.Window.Width, p.Window.Height
 	if w <= 0 || h <= 0 {
-		return windowPlacement{w: prefs.DefaultWidth, h: prefs.DefaultHeight}
+		return windowPlacement{w: prefs.DefaultWidth, h: prefs.DefaultHeight, maximized: maximized}
 	}
 	if w < prefs.MinWidth {
 		w = prefs.MinWidth
@@ -263,17 +324,17 @@ func placementFor(p prefs.Prefs) windowPlacement {
 	if h < prefs.MinHeight {
 		h = prefs.MinHeight
 	}
-	vx, vy, vw, vh := virtualScreen()
 	x, y := p.Window.X, p.Window.Y
 	if !rectsIntersect(x, y, w, h, vx, vy, vw, vh) {
-		return windowPlacement{w: prefs.DefaultWidth, h: prefs.DefaultHeight}
+		return windowPlacement{w: prefs.DefaultWidth, h: prefs.DefaultHeight, maximized: maximized}
 	}
 	return windowPlacement{
-		x:     clampContained(x, vx, vx+vw-w),
-		y:     clampContained(y, vy, vy+vh-h),
-		w:     w,
-		h:     h,
-		place: true,
+		x:         clampContained(x, vx, vx+vw-w),
+		y:         clampContained(y, vy, vy+vh-h),
+		w:         w,
+		h:         h,
+		place:     true,
+		maximized: maximized,
 	}
 }
 
@@ -306,15 +367,19 @@ func clampContained(v, lo, hi int) int {
 
 // applyWindowGeometry moves and sizes the window to the placement; without a
 // saved position it only sizes the window and keeps the system's default
-// placement.
+// placement. A saved maximized state is re-entered last, after the restored
+// rectangle is in place, so un-maximizing lands on the right normal size.
 func applyWindowGeometry(hwnd uintptr, p windowPlacement) {
 	flags := uintptr(swpNoZOrder | swpNoActivate)
 	if p.place {
 		procSetWindowPos.Call(hwnd, 0,
 			uintptr(int64(p.x)), uintptr(int64(p.y)),
 			uintptr(p.w), uintptr(p.h), flags)
-		return
+	} else {
+		procSetWindowPos.Call(hwnd, 0, 0, 0,
+			uintptr(p.w), uintptr(p.h), flags|swpNoMove)
 	}
-	procSetWindowPos.Call(hwnd, 0, 0, 0,
-		uintptr(p.w), uintptr(p.h), flags|swpNoMove)
+	if p.maximized {
+		showWindow(hwnd, windows.SW_SHOWMAXIMIZED)
+	}
 }

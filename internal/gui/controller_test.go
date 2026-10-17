@@ -1226,6 +1226,63 @@ func TestOnboardedProjection(t *testing.T) {
 	}
 }
 
+// TestSetSettingsNoticeAndAutostart pins the T4.2 host API: the persisted
+// Start at login flag is projected into State.Autostart (a pointer, so false
+// survives the envelope) and SetSettingsNotice applies the Settings
+// screen-local lifetime rules (good expires at NoticeTTL, bad persists).
+func TestSetSettingsNoticeAndAutostart(t *testing.T) {
+	f := newFakeDaemon()
+	on := true
+	ctrl := NewController(f, Options{Autostart: &on})
+
+	snap := ctrl.Snapshot()
+	if snap.Autostart == nil || !*snap.Autostart {
+		t.Fatalf("autostart = %v, want the projected true", snap.Autostart)
+	}
+	// The constructor copies the option: a caller-side flip cannot change
+	// the published flag.
+	on = false
+	if got := ctrl.Snapshot().Autostart; got == nil || !*got {
+		t.Fatalf("autostart = %v after mutating Options.Autostart, want true", got)
+	}
+
+	ctrl.SetAutostart(false)
+	snap = ctrl.Snapshot()
+	if snap.Autostart == nil || *snap.Autostart {
+		t.Fatalf("autostart = %v after SetAutostart(false), want the projected false", snap.Autostart)
+	}
+	raw, err := EncodeState(snap)
+	if err != nil {
+		t.Fatalf("EncodeState: %v", err)
+	}
+	if !strings.Contains(string(raw), `"autostart":false`) {
+		t.Errorf("envelope %s does not carry the off value", raw)
+	}
+
+	ctrl.SetSettingsNotice("Start at login saved", toneGood)
+	n := ctrl.Snapshot().SettingsNotice
+	if n == nil || n.Message != "Start at login saved" || n.Tone != toneGood || n.Expires == nil {
+		t.Fatalf("settings notice = %+v, want a 10 s success", n)
+	}
+	if shared := ctrl.Snapshot().Notice; shared != nil {
+		t.Fatalf("shared notice = %+v, want the settings slot only", shared)
+	}
+
+	ctrl.SetSettingsNotice("could not change the login setting: boom", toneBad)
+	n = ctrl.Snapshot().SettingsNotice
+	if n == nil || n.Message != "could not change the login setting: boom" ||
+		n.Tone != toneBad || n.Expires != nil {
+		t.Fatalf("settings notice = %+v, want a persistent failure", n)
+	}
+
+	// A controller whose host does not project the flag leaves it absent, so
+	// the page keeps its session record.
+	zero := NewController(newFakeDaemon(), Options{})
+	if got := zero.Snapshot().Autostart; got != nil {
+		t.Fatalf("autostart = %v on an unprojected controller, want nil", got)
+	}
+}
+
 // TestDispatchLogsLoadedProjection pins the logs_loaded flag the screen's
 // "Loading logs..." state reads: false until the first successful snapshot,
 // true afterwards including after a clear (the ring is settled-empty, not

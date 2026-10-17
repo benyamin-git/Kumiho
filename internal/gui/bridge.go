@@ -156,6 +156,13 @@ type State struct {
 	// exactly like LocationsLoaded: its false gates the whole shell.
 	Onboarded bool `json:"onboarded"`
 
+	// Autostart is the persisted Start at login preference (T4.2): the
+	// shell seeds it from gui.toml and republishes it after every
+	// prefs_set. A pointer keeps false ("off") distinguishable from "not
+	// projected" (the harness and tests that do not host the Run entry);
+	// the Settings row falls back to its session record when it is absent.
+	Autostart *bool `json:"autostart,omitempty"`
+
 	// Locations is the server list; nil until loaded.
 	Locations []serverlist.Country `json:"locations,omitempty"`
 
