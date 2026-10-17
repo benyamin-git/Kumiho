@@ -86,7 +86,9 @@ Cross-compile from any OS with Go >= 1.27:
 
     make build          # dist/kumiho-linux-amd64
     make build-arm64    # dist/kumiho-linux-arm64
-    make build-windows  # dist/kumiho-windows-amd64.exe (Windows 11 amd64)
+    make build-windows  # dist/kumiho-windows-amd64.exe + dist/kumiho-gui-windows-amd64.exe
+    make build-gui      # dist/kumiho-gui-windows-amd64.exe (Windows GUI)
+    make build-probe    # dist/kumiho-gui-probe-windows-amd64.exe (diagnostic)
     make build-web      # dist/kumiho-gui-web-linux-amd64 (GUI dev harness)
     make test           # unit tests (run on any OS)
     make vet
@@ -94,7 +96,9 @@ Cross-compile from any OS with Go >= 1.27:
 Module dependencies are vendored in `vendor/`, so no network access is
 needed to build or test. The Windows build needs the signed `wintun.dll`
 committed under `third_party/wintun/amd64/` beside the binary at run time;
-the release zip and `install.ps1` place it in `%ProgramFiles%\Kumiho`.
+the release zip and `install.ps1` place it in `%ProgramFiles%\Kumiho`. The
+GUI needs no extra file at run time: the WebView2 loader is embedded in
+`kumiho-gui.exe`.
 
 ## Usage
 
@@ -106,11 +110,6 @@ the release zip and `install.ps1` place it in `%ProgramFiles%\Kumiho`.
     kumiho doctor [--json]
     kumiho version
 
-The v0.3.0 web GUI is developed in a browser on this machine, against the
-mock daemon: `make build-web && scripts/dev-gui-web.sh start` serves the real
-UI assets on `http://<host>:7407/` (a `/dev` panel drives mock scenarios,
-latency and failures); `scripts/dev-gui-web.sh stop` stops it.
-
 The full command surface (connect/disconnect flags, locations, logs, cleanup)
 is documented in [docs/usage.md](docs/usage.md). On Linux the daemon reads its
 config/state from `/etc/kumiho` and `/var/lib/kumiho` and listens on
@@ -119,6 +118,54 @@ listens on the named pipe `\\.\pipe\kumiho\control` (see PLAN.md §8). For
 development or alternative locations on either OS, override with
 `KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS`, and `KUMIHO_RUNTIME_DIR`
 (see `scripts/dev-env.sh` and `scripts/dev-env.ps1`).
+
+## Windows GUI
+
+Kumiho's Windows 11 desktop app (v0.3.0), `kumiho-gui.exe`, is a small native
+shell that renders the interface with the Microsoft Edge WebView2 Runtime,
+owns the tray icon and the window, and talks to the same daemon over the same
+control pipe. The daemon still does all the tunnel work; the app is a client
+that runs per logged-in user. It has six screens:
+
+- **Dashboard** — the connection state, Connect/Disconnect, per-connect
+  options (location, proxy only, kill switch) and the live status card;
+- **Locations** — a filterable country/city/server tree with a speed test;
+- **Settings** — Light/Dark/OLED theme, six accents, start at login, plus the
+  daemon's own settings with per-setting overrides;
+- **Account** — the entitlement and a tonal sign-out;
+- **Logs** — the daemon log with level filter, follow, search and export;
+- **Diagnostics** — `kumiho doctor` checks, service start/stop and cleanup
+  (the last two via UAC).
+
+A five-step wizard (consent, sign-in, health check, autoconnect, finish) runs
+on first launch. Closing the window hides it to the tray rather than quitting;
+the tray keeps Connect/Disconnect, location, Show, Diagnostics and Quit, and
+the app starts hidden at login by default.
+
+Install it with the normal Windows installer (see [Quick start](#quick-start)):
+`install.ps1` places the app beside the CLI, adds a Start Menu shortcut and a
+login entry, and grants your account access to the control pipe. Start it from
+the Start Menu, or from a shell with:
+
+    kumiho gui
+
+From a checkout, `make build-windows` produces both the CLI/TUI binary and
+`kumiho-gui.exe`, and `make build-gui` builds the app on its own. The app needs
+the WebView2 Runtime, which ships with Windows 11; if it is missing, the app
+offers Microsoft's download page. The full guide — install, first run, each
+screen, the tray, diagnostics and uninstall — is
+[docs/gui.md](docs/gui.md).
+
+To develop the UI in a browser on this machine against the mock daemon:
+
+    make build-web
+    scripts/dev-gui-web.sh start   # real UI assets on http://<host>:7407/
+    scripts/dev-gui-web.sh stop
+
+The harness binds `0.0.0.0:7407` (override the port with
+`KUMIHO_GUI_WEB_PORT`) and a `/dev` panel drives mock scenarios, latency and
+failures. The GUI is Windows-only and the harness is a dev tool; neither
+changes the daemon, CLI or TUI.
 
 ## Plan and docs
 

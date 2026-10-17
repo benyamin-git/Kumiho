@@ -2,10 +2,11 @@
 
 Guidance for coding agents working in the Kumiho repository.
 
-Kumiho is a Go daemon + TUI/CLI client for the Firefox-account VPN
-entitlement. The daemon owns the tunnel; clients talk to it over local IPC.
-Supported targets: **Ubuntu 24.04 LTS** (amd64/arm64, systemd + Unix socket)
-and **Windows 11 amd64** (service + Wintun + named pipe). Read
+Kumiho is a Go daemon + TUI/CLI/GUI client for the Firefox-account VPN
+entitlement. The daemon owns the tunnel; clients — the TUI, the CLI and a
+Windows GUI — talk to it over local IPC. Supported targets: **Ubuntu 24.04
+LTS** (amd64/arm64, systemd + Unix socket) and **Windows 11 amd64** (service +
+Wintun + named pipe). Read
 [README.md](README.md) first; the protocol and design live in
 [PLAN.md](PLAN.md), user documentation in [docs/](docs/).
 
@@ -16,7 +17,10 @@ needed to build or test.
 
     make build          # linux/amd64   -> dist/kumiho-linux-amd64
     make build-arm64    # linux/arm64   -> dist/kumiho-linux-arm64
-    make build-windows  # windows/amd64 -> dist/kumiho-windows-amd64.exe
+    make build-windows  # windows/amd64 -> dist/kumiho-windows-amd64.exe + dist/kumiho-gui-windows-amd64.exe
+    make build-gui      # windows/amd64 -> dist/kumiho-gui-windows-amd64.exe
+    make build-probe    # windows/amd64 -> dist/kumiho-gui-probe-windows-amd64.exe
+    make build-web      # linux/amd64   -> dist/kumiho-gui-web-linux-amd64 (dev harness)
     make test           # go test ./...
     make test-integration  # go test -tags integration ./... (real endpoints)
     make lint           # gofmt check + go vet ./...
@@ -53,12 +57,12 @@ gate green:
   - `build-test` (ubuntu-24.04): vet, tests, race tests, `make build` and
     `make build-arm64` + version smoke, Windows/Android cross-builds,
     informational doctor smoke.
-  - `windows` (windows-latest): vet, tests, Windows build + version smoke,
-    `install.ps1` parse check.
+  - `windows` (windows-latest): vet, tests, CLI + GUI builds and version
+    smokes, `install.ps1` parse check.
 - `.github/workflows/release.yml` — on `v*` tags: builds linux/amd64,
-  linux/arm64 and windows/amd64; packages zips (binary, `wintun.dll`,
-  `install.sh`/`install.ps1`, systemd units, licenses), writes `SHA256SUMS`
-  and creates the GitHub release.
+  linux/arm64 and windows/amd64; packages zips (CLI, `kumiho-gui.exe`,
+  `wintun.dll`, `install.sh`/`install.ps1`, systemd units, licenses including
+  the WebView2 loader), writes `SHA256SUMS` and creates the GitHub release.
 
 ## Architecture map
 
@@ -79,6 +83,16 @@ gate green:
   transport (`default_unix.go` / `default_windows.go`): Unix socket vs a
   `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is
   administrators-only (Linux root parity).
+- **Windows GUI** (`internal/gui`, `cmd/kumiho-gui*`): a Windows-only
+  (build-tagged `*_windows.go`) WebView2 shell + tray client, plus an untagged
+  dev harness (`cmd/kumiho-gui-web`) and a support probe (`cmd/kumiho-gui-probe`).
+  It is purely additive: a client over the same control protocol and platform
+  transport that reuses `internal/doctor` and `internal/ipc`, so the engine and
+  protocol v1 stay OS-free and byte-identical. The UI is hand-written
+  HTML/CSS/JS embedded with `go:embed` and served from an in-process loopback
+  server; `internal/gui/mock` backs the harness and the Go tests,
+  `internal/gui/theme` computes the palette, `internal/gui/prefs` owns
+  `gui.toml`. The harness binds `0.0.0.0:7407` (dev only, never released).
 - **Deliberate OS branches outside the seam** (all small and paired):
   `internal/cli/doctor.go` (`runtime.GOOS` branches) plus
   `doctor_{windows,other}.go` (doctor checks),
@@ -89,6 +103,13 @@ gate green:
   `Cleanup`/`CleanupStale` through interfaces, not OS switches.
 - **Settings/paths**: `internal/settings` owns the per-OS config/state/tokens
   layout plus the `KUMIHO_*` overrides.
+
+## Design
+
+- Palette: skill `design` — six accents, default blue
+- Themes: Light / Dark / OLED; first run follows prefers-color-scheme; OLED opt-in
+- Type: system-ui (Segoe UI Variable on Windows 11), one family
+- Approved: 2026-10-15
 
 ## Vendor policy
 
@@ -101,6 +122,12 @@ gate green:
   embed it or load it from memory. Verify with
   `cd third_party/wintun && sha256sum -c SHA256SUMS`; the replacement
   procedure is in `third_party/wintun/README.md`.
+- `github.com/jchv/go-webview2` (and its `jchv/go-winloader` dependency) is
+  vendored for the Windows GUI; the build embeds Microsoft's WebView2Loader
+  DLL from its `webviewloader/sdk/x64/` payload, so no loader DLL ships as a
+  separate file. `third_party/webview2-loader/` keeps the Microsoft 3-Clause
+  BSD license text (pruned from the vendored tree) and checksums; verify with
+  `cd third_party/webview2-loader && sha256sum -c SHA256SUMS`.
 - Update `NOTICE` when adding third-party code or binaries.
 
 ## Commit style

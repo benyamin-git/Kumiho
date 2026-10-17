@@ -8,6 +8,50 @@ and this project adheres to
 
 ## [Unreleased]
 
+The next release, **v0.3.0**, adds the Windows 11 GUI; the release date is
+added with the tag at release time.
+
+### Added
+
+- Windows 11 desktop app `kumiho-gui.exe`: a native shell that renders the UI
+  with the Microsoft Edge WebView2 Runtime, owns the tray icon and window, and
+  talks to the same daemon over the same local control protocol — the daemon
+  still does all the tunnel work and the app runs per logged-in user.
+- Six screens: Dashboard (state chip, connect with per-connect options, live
+  status), Locations (filter and speed test), Settings (theme, accent, start
+  at login, and the daemon's settings with per-setting overrides), Account,
+  Logs (level filter, follow, search, export) and Diagnostics (`kumiho doctor`
+  checks, service start/stop and cleanup, the last two via UAC).
+- Five-step first-run wizard: consent, Firefox Accounts sign-in, health check,
+  autoconnect and finish.
+- Tray and lifecycle: connect/disconnect and location menus, close hides to
+  the tray, quit from the tray, start at login hidden, single-instance focus,
+  and a remembered window size and position.
+- `kumiho gui` launcher for the app (Windows; on other platforms it points at
+  the TUI).
+- Installer: `install.ps1` (and a new double-click `install.cmd`) install the
+  GUI beside the CLI, add a Start Menu shortcut and a per-user login entry, and
+  grant the installing user access to the daemon's control pipe so the app
+  works without a re-login; `-Uninstall` removes the shortcut, login entry and
+  pipe access.
+- Release/CI: `v*` zips now ship `kumiho-gui.exe` beside `kumiho.exe` and
+  `wintun.dll` (the WebView2 loader is embedded, so no new runtime file is
+  needed), `SHA256SUMS` covers it, and the Windows CI job version-smokes the
+  GUI.
+- Docs: `docs/gui.md` user guide and a v0.3.0 GUI section in
+  `docs/windows-testing.md`.
+
+### Changed
+
+- The Windows GUI is rebuilt on web technologies: hand-written HTML/CSS/JS
+  embedded in the binary, with the palette (Light/Dark/OLED, six accents,
+  default blue) computed in Go and the system UI font (Segoe UI Variable on
+  Windows 11) used throughout. It replaces the earlier native-toolkit GUI,
+  which never shipped.
+- A dev-only web harness serves the real UI assets on `0.0.0.0:7407` against a
+  mock daemon for local work (override the port with `KUMIHO_GUI_WEB_PORT`);
+  neither the harness nor the probe tool ships in a release.
+
 ### Fixed
 
 - Toggling `kill_switch` on a live tunnel no longer reports success when the
