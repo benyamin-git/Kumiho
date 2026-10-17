@@ -221,6 +221,11 @@ on/off/last via settings-then-connect — same sequence as the CLI), one-click
 connect uses defaults.
 Verification: controller projection tests; capture set for its states.
 
+> **Post-ship delta (v0.3.0):** the state chip was dropped after this task —
+> the shell header's status word is the single state display (see the
+> post-rewrite note in `docs/gui-feature-inventory.md`). The rest of the task
+> shipped as written.
+
 **T2.3 `feat: add the locations screen`**
 Files: `static/js/screens/locations.js`, `static/css/screens/locations.css`.
 Behavior (inventory §Locations): filter, country/city/server tree, REC-first,

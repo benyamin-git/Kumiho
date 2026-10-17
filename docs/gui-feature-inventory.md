@@ -15,6 +15,14 @@ Conventions in this document: quoted text in backticks is an **exact
 user-visible string** (mind the `...` vs `…` differences — they are real).
 "House" refers to the design system summarized later.
 
+> **Post-rewrite note (v0.3.0).** The shipped WebView2 app follows this
+> inventory as its behavioral authority with one deliberate delta: the
+> Dashboard's **state chip** was dropped. The Connect/Disconnect row, the
+> Connect options, the status card and the notice are unchanged; the shell
+> header's status word (§Shell) is now the single state display, which also
+> settles the header-tone issue in the list at the end. Everything else below
+> describes the app as it exists at `282d63c`.
+
 ---
 
 ## Shell (always-visible frame)
@@ -1005,6 +1013,8 @@ covering a missing/stopped service.
    (bad/good) but the header shows the same word in the normal text tone
    (tone is only used for `Status unavailable` / `Daemon unreachable`).
    Decide whether the rewrite should tone header state words too.
+   **Resolved (v0.3.0):** the rewrite dropped the Dashboard chip, so the
+   header word is the only state display and keeps the normal text tone.
 8. **Back from Health check.** The onboarding `Back` from Health always goes
    to the sign-in email page (the model's rule), not to the page the user
    actually came from (e.g. password/2FA or the signed-in variant). Confirm
