@@ -1,10 +1,11 @@
-# Windows 11 manual end-to-end checklist (v0.2.0)
+# Windows 11 manual end-to-end checklist (v0.2.0 + v0.3.0 GUI)
 
 This is the committed manual E2E checklist from spec criterion 10. Run it top
 to bottom on a **fresh Windows 11 amd64 machine** (or VM) before tagging
 `v0.2.0`, and record the result of every step. A step passes only when the
 observed output matches "Expect"; if anything diverges, file it and stop the
-release.
+release. Sections 1–15 are the v0.2.0 release checklist; section 16 is the
+v0.3.0 GUI acceptance script (its design spec is linked there).
 
 Everything runs in PowerShell. The machine has no prior Kumiho install; if you
 are re-running the list, finish section 15 first so the box is clean again.
@@ -13,8 +14,11 @@ are re-running the list, finish section 15 first so the box is clean again.
 
 Criterion coverage and the sign-off table are at the end. Background reading:
 [docs/usage.md](usage.md), [docs/install.md](install.md),
-[docs/troubleshooting.md](troubleshooting.md), the design spec at
-[docs/superpowers/specs/2026-10-10-v0.2.0-windows-release-design.md](superpowers/specs/2026-10-10-v0.2.0-windows-release-design.md).
+[docs/troubleshooting.md](troubleshooting.md), the GUI guide
+[docs/gui.md](gui.md), the design specs at
+[docs/superpowers/specs/2026-10-10-v0.2.0-windows-release-design.md](superpowers/specs/2026-10-10-v0.2.0-windows-release-design.md)
+and
+[docs/superpowers/specs/2026-10-15-gui-rewrite-design.md](superpowers/specs/2026-10-15-gui-rewrite-design.md).
 
 ## 1. Preconditions
 
@@ -531,7 +535,382 @@ Criterion coverage and the sign-off table are at the end. Background reading:
 
       Get-Command kumiho -ErrorAction SilentlyContinue   # nothing
 
-## 16. Results and criterion map
+## 16. Windows GUI (v0.3.0)
+
+This is the v0.3.0 GUI acceptance script (design spec criteria 1 and 3, at
+[docs/superpowers/specs/2026-10-15-gui-rewrite-design.md](superpowers/specs/2026-10-15-gui-rewrite-design.md)).
+Run it after section 15 has returned the box to a clean state. The companion
+guide is [docs/gui.md](gui.md); `<physical>` comes from section 8, and section
+15's `-Purge` left no account, so the wizard in 16.2 signs in afresh.
+
+> **Out of scope — the "Set up Kumiho" gate page.** The inventory
+> ([docs/gui-feature-inventory.md](gui-feature-inventory.md), line 515)
+> describes a hidden page that runs the installer when the daemon is
+> unreachable; it is **not** part of v0.3.0 and does not ship (`router.js`
+> registers only the six rails plus `onboarding`). Do not test it. A first-run
+> user (`onboarded = false`) is pinned to the wizard, so the Diagnostics
+> service **Start**/**Stop** buttons — the only in-app service recovery — are
+> unreachable until setup completes; recover a stopped `kumiho` service during
+> first run from a shell (`Start-Service kumiho`) or by re-running
+> `install.cmd`.
+
+### 16.1 Install, pipe access and the launcher
+
+- [ ] Download `kumiho-v0.3.0-windows-amd64.zip` and `SHA256SUMS`, verify and
+      extract with Explorer (right-click → Extract All, so the Mark of the Web
+      is preserved), then list it:
+
+      (Get-FileHash .\kumiho-v0.3.0-windows-amd64.zip -Algorithm SHA256).Hash
+      Get-Content .\SHA256SUMS | Select-String windows-amd64
+      Get-ChildItem .\kumiho-v0.3.0-windows-amd64
+
+  Expect: the two hashes match (case-insensitive), and the folder holds
+  `kumiho.exe`, `kumiho-gui.exe`, `wintun.dll`, `install.cmd`, `install.ps1`,
+  `LICENSE`, `NOTICE` and `third_party` (with `third_party\wintun\LICENSE.txt`).
+
+- [ ] Install (allow the script and unblock the download):
+
+      Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+      Unblock-File .\install.ps1, .\install.cmd, .\kumiho.exe, .\kumiho-gui.exe, .\wintun.dll
+      .\install.ps1
+
+  Expect, in order: group; state; binary (`kumiho.exe`, `kumiho-gui.exe` and
+  `wintun.dll` copied to `C:\Program Files\Kumiho`); installer copies;
+  Start Menu shortcut; PATH; config; service; group membership; pipe access;
+  login entry; start. The `pipe access` line runs **before** the service
+  (re)starts, so the GUI can connect without a sign-out.
+
+- [ ] Verify the GUI files, shortcut and login entry:
+
+      Test-Path 'C:\Program Files\Kumiho\kumiho-gui.exe'    # True
+      Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Kumiho.lnk"   # True
+      (New-Object -ComObject WScript.Shell).CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Kumiho.lnk").TargetPath
+      Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Kumiho GUI'
+
+  Expect: `True`, `True`; the shortcut's `TargetPath` is
+  `C:\Program Files\Kumiho\kumiho-gui.exe`; the Run value's `Kumiho GUI` data
+  is `"C:\Program Files\Kumiho\kumiho-gui.exe" --tray-start` (default on).
+
+- [ ] Verify the control-pipe allowlist (the installer's immediate grant):
+
+      Get-Content "$env:ProgramData\kumiho\pipe-users"
+      (Get-Acl "$env:ProgramData\kumiho\pipe-users").Access |
+        Format-Table IdentityReference,FileSystemRights
+      (New-Object Security.Principal.NTAccount($env:USERNAME)).Translate('SecurityIdentifier').Value
+
+  Expect: `pipe-users` holds your canonical SID, one per line; only
+  `NT AUTHORITY\SYSTEM` and `BUILTIN\Administrators` have control (the file is
+  admin-only); the last line equals the SID in the file.
+
+- [ ] Launcher and version:
+
+      kumiho gui
+      Start-Sleep -Seconds 2
+      Get-Process kumiho-gui -ErrorAction SilentlyContinue | Select-Object Id,ProcessName
+      & 'C:\Program Files\Kumiho\kumiho-gui.exe' --version
+
+  Expect: `kumiho gui` returns immediately (exit 0) and a `kumiho-gui` process
+  runs; `--version` prints `kumiho-gui <version>` in the console and exits
+  without opening a window. Quit the app before the wizard pass so 16.2 starts
+  clean: tray icon → **Quit** (or `Stop-Process -Name kumiho-gui`).
+
+### 16.2 First run: the setup wizard
+
+Launch the app from the Start Menu (`Kumiho`) so the shortcut is exercised.
+The wizard has five steps and **no** rail or header; closing the window
+mid-wizard and relaunching starts it again (the consent tick and the step are
+never persisted).
+
+- [ ] Step 1 — consent. Read the two panels (*What Kumiho does*, *What to keep
+      in mind*) and try **Continue** before ticking.
+
+  Expect: heading `Welcome to Kumiho`; **Continue** is disabled until the
+  **I understand** box is ticked.
+
+- [ ] Step 2 — sign in with the Firefox account that holds the VPN (email →
+      password → 2FA code, or the "check your email and open the Mozilla
+      sign-in link" page). If the daemon already holds a session, the step
+      shows `Signed in as <email>` with **Continue** and **Sign out**.
+
+  Expect: a successful sign-in advances the step; the daemon stores the tokens
+  on this PC and never the password.
+
+- [ ] Step 3 — health check. It runs automatically on first show.
+
+  Expect: heading `Health check`; rows render as
+  `Name: <status word>: <detail> — <remediation>` (remediation for
+  Warning/Failed only); **Re-run checks** repeats the run; `Continue` is
+  enabled with warnings, but a `Failed` `Kumiho service` row means fix it
+  first.
+
+- [ ] Step 4 — almost done.
+
+  Expect: heading `Almost done`; an **Autoconnect** toggle showing the daemon's
+  current value (`on` on a fresh install); click to flip it, then flip it back
+  to `on`; **Finish** advances.
+
+- [ ] Step 5 — you're all set.
+
+  Expect: heading `You're all set`; **Open Kumiho** records setup complete and
+  lands on the Dashboard. Relaunching the app now goes straight to the shell
+  (no wizard).
+
+### 16.3 Shell and Dashboard
+
+- [ ] The shell frame.
+
+  Expect: header title `Dashboard` on the left; the status word on the right
+  (`Off`/`Connected`/`Proxy only`/`Connecting`/`Reconnecting`/`Waiting for
+  network`/`Not signed in`/`Error`, or `Loading...`/`Daemon unreachable`/
+  `Status unavailable`); the rail lists `Dashboard`, `Locations`, `Settings`,
+  `Account`, `Logs`, `Diagnostics`.
+
+- [ ] Connect from the Dashboard.
+
+  Expect: click **Connect** (the button disables until the action settles; up
+  to ~90 s); on success the top chip reads `Connected` and the notice reads
+  `Connected`. The **Options** popover offers **Location** (`Saved selection`
+  plus countries as `Name (CC)`), **Proxy only** (*Keep system routing
+  untouched; SOCKS5 proxy only.*), **Kill switch** (`On`/`Off`/`Last`, seeded
+  from the setting) and its own **Connect**.
+
+- [ ] The status card.
+
+  Expect: rows appear as data arrives, in order `Uptime`, `Location` (`CC` or
+  `CC (server)`), `Exit IP` (`IP` or `IP (country)`), `Rates`, `Totals`,
+  `Kill switch` (`On`/`Off`), `Autoconnect` (`On`/`Off`), `Token expiry`,
+  `Pass expiry`, `Quota` (with a remaining-quota bar), `Quota resets`. Re-run
+  the section 8 egress check to confirm the GUI agrees:
+
+      curl.exe -4 -s https://www.cloudflare.com/cdn-cgi/trace
+
+  Expect: the `ip=` line equals the card's `Exit IP` and is not the physical
+  IP from section 8.
+
+- [ ] **Refresh** and the notice row.
+
+  Expect: **Refresh** reloads the status; the notice row shows the latest
+  daemon message, with a **Retry** button only when the first status load
+  failed on a reachable daemon.
+
+### 16.4 Locations
+
+- [ ] Open `Locations`.
+
+  Expect: **Refresh** and **Test speed**; a **Filter** box (placeholder
+  `Country or city`) that narrows the country → city → server tree live as you
+  type; the recommended region first; the persisted server marked
+  `· selected`; latency shown as `· 42 ms` or `· timeout` after a test.
+
+- [ ] Exercise the tree.
+
+  Expect: **Test speed** probes the visible servers and streams latency labels
+  (the button disables while it runs); clicking a country or city expands or
+  collapses it; clicking a server row saves the selection (status
+  `Location saved`) **without** connecting; **Refresh** reloads the list.
+
+### 16.5 Settings
+
+The screen has `Kumiho app` (per-user) and `Background service` (daemon) rows
+and a **Refresh** action.
+
+- [ ] `Kumiho app` — appearance.
+
+  Expect: **Theme** offers `Light`/`Dark`/`OLED` and **Accent** offers
+  `Blue`/`Teal`/`Green`/`Orange`/`Rose`/`Violet`; picking one rebuilds the
+  window immediately with the new palette and returns to the same screen
+  (connected state and daemon data survive). Set `Dark` then back to `Light`;
+  set `Orange` then back to `Blue`.
+
+- [ ] `Kumiho app` — start at login and update check.
+
+  Expect: **Start at login** toggles `on`/`off`; turning it off removes the
+  `Kumiho GUI` Run value, turning it on writes
+  `"C:\Program Files\Kumiho\kumiho-gui.exe" --tray-start` (status
+  `Start at login saved`). The **Version** row shows the running version;
+  **Check for updates** shows `Checking for updates...` then either
+  `Kumiho <v> is available` with **Open release page** (opens the browser) or
+  `Kumiho is up to date`. The check is manual only.
+
+- [ ] `Background service` rows.
+
+  Expect, in order: `Kill switch`, `Autoconnect`, `Log level`
+  (`debug`/`info`/`warn`/`error`), `Redact targets`, `Exit check`,
+  `DoH provider` (`automatic`/`cloudflare`/`google`/`quad9`/`off`),
+  `DNS upstream` (cue `(provider default)`), `Edge address` (cue `(resolve)`),
+  `Upstream proxy` (cue `(direct)`), `Exclude CIDRs` (cue `(none)`),
+  `Allow LAN`, `MTU`, `SOCKS port`, `Quota poll`. Set `Kill switch` to `off`
+  and confirm the Dashboard `Kill switch` row follows immediately, then set it
+  back to `on`; cycle `Log level` once (applies immediately); edit one text row
+  and **Apply** — a changed row shows an `overridden` mark and a **Reset**
+  button, and **Reset** returns it to the configured default (status
+  `<Row> reset to the configured value`).
+
+### 16.6 Logs
+
+- [ ] Open `Logs`.
+
+  Expect: action row `Level: info`, `Follow: on`, **Refresh**; a **Search** box
+  (placeholder `Tag or message`) with **Clear**, **Export** and
+  **Open log folder**; the console shows `HH:MM:SS LVL [tag] message` lines,
+  newest at the bottom, tinted by level.
+
+- [ ] Exercise the controls.
+
+  Expect: the level button cycles `debug → info → warn → error → debug` and
+  re-filters; **Follow** toggles `Follow: on`/`Follow: off`; typing in
+  **Search** filters live on tag or message; **Clear** empties the console
+  (status `Logs cleared`); **Open log folder** opens
+  `%LOCALAPPDATA%\kumiho\logs` (status `Opened <dir>`).
+
+- [ ] Export.
+
+  Expect: **Export** writes the visible entries and reports
+  `Exported to <path>`:
+
+      Get-ChildItem "$env:LOCALAPPDATA\kumiho\logs" |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 3
+
+  Expect: a fresh `kumiho-logs-<YYYYMMDD-HHMMSS>.log` file exists.
+
+### 16.7 Diagnostics
+
+- [ ] Open `Diagnostics`. The check suite runs automatically on the first
+      visit each launch.
+
+  Expect: action row **Re-run checks**, **Copy details**, **Open log folder**,
+  **Cleanup…**; the results list shows chips `OK`/`Warning`/`Failed`/`Skipped`
+  with friendly titles such as `Platform`, `Local proxy port`, `System clock`,
+  `Mozilla servers`, `Kumiho service`, `Tunnel driver`, `Windows firewall
+  service`, `Service connection`, `Tunnel adapter`, `Tunnel DNS`,
+  `Internet route`, `Administrator rights`; the summary line reports the
+  counts. Compare against the shell:
+
+      kumiho doctor
+
+  Expect: the same checks and counts (`0 fail` when the box is healthy).
+
+- [ ] **Re-run checks** and **Copy details**.
+
+  Expect: re-run shows `Checking…` then a fresh report; **Copy details** puts
+  the version plus the report JSON on the clipboard (status `Details copied to
+  the clipboard`).
+
+- [ ] The **Kumiho service** card (needs a UAC prompt).
+
+  Expect: the card shows the service chip (`Running` when healthy) with
+  **Start**/**Stop**. Click **Stop**; approve the UAC prompt; the chip goes
+  `Stopping` → `Stopped`, the header flips to `Daemon unreachable`, and the
+  notice reads `Service stopped`. Click **Start**; approve; the chip returns to
+  `Running` and the notice reads `Service started`. Decline a UAC prompt once
+  and confirm the action is cancelled with
+  `could not stop the service: administrator approval was cancelled` and no
+  partial change.
+
+- [ ] **Cleanup…** (needs a UAC prompt).
+
+  Expect: the button opens a dialog — *Remove stale network state left by a
+  crashed Kumiho run?* — with **Cancel**/**Cleanup**; approving the UAC prompt
+  then runs the full `kumiho cleanup` and reports `Cleanup finished` (or the
+  section 11 caveat wording when it is a no-op).
+
+### 16.8 Tray, close-to-tray and single instance
+
+- [ ] The tray icon and tooltip.
+
+  Expect: a fox icon in the notification area whose hover text is
+  `Kumiho — <status word>`, matching the header.
+
+- [ ] The tray menu (right-click the icon).
+
+  Expect: `Connect`/`Disconnect` (the same rule as the Dashboard button); a
+  `Location` submenu of the daemon's locations (`Name (CC)`, recommended
+  first), or a disabled `Location: (none)` when none are known; **Show
+  Kumiho**; **Diagnostics** (restores the window and opens that screen);
+  **Quit**. Picking a location persists the selection.
+
+- [ ] Close-to-tray and the one-time hint.
+
+  Expect: closing the window (the `X`) hides it and keeps the app (and the
+  tunnel) running — the tray icon stays. The **first** close shows the
+  notification *Kumiho is still running. Right-click the tray icon to connect
+  or quit.* Clicking the tray icon (**Show Kumiho**) brings the window back.
+
+- [ ] Geometry restore.
+
+  Expect: move and resize the window, **Quit** from the tray, then relaunch
+  from the Start Menu; the window reopens at the saved size and position
+  (clamped into the monitor work area).
+
+- [ ] Single instance.
+
+  With the app running, start the exe a second time:
+
+      & 'C:\Program Files\Kumiho\kumiho-gui.exe'
+
+  Expect: no second window; the existing window is restored and focused; the
+  second process exits 0.
+
+### 16.9 Account
+
+- [ ] Open `Account` (sign in first via the wizard if you signed out earlier).
+
+  Expect: rows `Email`, `UID`, `Subscription` (`Yes`/`No`/`Unknown`), `Quota`
+  (e.g. `38.0 GiB remaining of 512.0 GiB`), `Bandwidth`
+  (`Limited`/`Unlimited`), `Token expiry`; a **Refresh** action.
+
+- [ ] Sign out.
+
+  Expect: **Sign out** opens a confirmation dialog — *Sign out of Kumiho?* /
+  *The stored sign-in tokens are cleared and the tunnel disconnects.* — with
+  **Cancel** focused by default. Confirm; you **stay on the Account screen**:
+  the card disappears and the status line reads `Not signed in` (the wizard
+  does **not** reopen, since setup is already complete). To restore a session
+  for later steps, sign in again from a shell (the daemon session is shared):
+
+      kumiho login
+
+  Expect: after **Refresh**, the Account card reappears.
+
+### 16.10 Uninstall and residue
+
+Quit the app first (tray → **Quit**): a running GUI blocks its own deletion.
+
+- [ ] Uninstall, keeping state:
+
+      .\install.ps1 -Uninstall
+
+  Expect the console to report, in order: service stopped and deleted (or not
+  installed); the machine PATH entry removed; the installer copies and
+  `%ProgramFiles%\Kumiho` removed (the CLI, `kumiho-gui.exe` and `wintun.dll`);
+  the Start Menu shortcut removed; the `Kumiho GUI` login entry removed (only
+  when its data is exactly the installed command); your SID **removed** from
+  `%ProgramData%\kumiho\pipe-users`; `%ProgramData%\kumiho` **kept**. Verify:
+
+      Get-Service kumiho -ErrorAction SilentlyContinue       # nothing
+      Test-Path 'C:\Program Files\Kumiho\kumiho-gui.exe'      # False
+      Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Kumiho.lnk"   # False
+      Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Kumiho GUI' -ErrorAction SilentlyContinue   # nothing
+      Get-Content "$env:ProgramData\kumiho\pipe-users" -ErrorAction SilentlyContinue   # absent, or no line for you
+      Test-Path "$env:ProgramData\kumiho\tokens.json"          # True (kept)
+      Get-LocalGroup kumiho                                    # still exists
+
+  Expect: all as annotated — no service, GUI exe, shortcut, Run entry or pipe
+  grant; tokens and the group survive.
+
+- [ ] Purge, removing everything:
+
+      .\install.ps1 -Uninstall -Purge
+
+  Expect: `%ProgramData%\kumiho` and the local group `kumiho` are removed:
+
+      Test-Path "$env:ProgramData\kumiho"          # False
+      Get-LocalGroup kumiho -ErrorAction SilentlyContinue   # nothing
+
+  Per-user `%APPDATA%\kumiho\gui.toml` (window geometry, theme, autostart) is
+  intentionally left alone; delete it by hand for a clean slate.
+
+## 17. Results and criterion map
 
 | Spec criterion | Covered by |
 | --- | --- |
@@ -545,6 +924,11 @@ Criterion coverage and the sign-off table are at the end. Background reading:
 | 8. Docs: README/docs/PLAN Windows content, AGENTS.md, CHANGELOG.md, docs/windows-testing.md, NOTICE | 1, this file |
 | 9. Tag-triggered release builds three zips + `SHA256SUMS` | 1, 2 |
 | 10. This checklist executed on a real Windows 11 box before the tag | all; sign off below |
+| GUI 1. GUI parity + polish verified on Windows 11 hardware | 16 |
+| GUI 2. Local proof: all screens in Light/Dark/OLED via the dev harness | harness/CI (not a Windows step) |
+| GUI 3. Install experience (service, tray, autostart, pipe access without re-login) and no uninstall residue | 16.1, 16.8, 16.10 |
+| GUI 4. v0.3.0 zip ships `kumiho-gui.exe` beside `kumiho.exe` with `SHA256SUMS`; gate and CI cross-build the GUI | 16.1, the gate |
+| GUI 5. No collateral change: daemon, protocol v1, CLI and TUI behaviorally untouched | the gate |
 
 Sign-off (fill before tagging):
 
@@ -560,3 +944,11 @@ Sign-off (fill before tagging):
   (`vpn.mozilla.org`, `firefox.settings.services.mozilla.com`), which surfaces
   as `endpoints`/`connect` "no such host" failures; this is environmental, not
   a client defect.
+
+v0.3.0 GUI acceptance sign-off (fill before the `v0.3.0` tag):
+
+- Date:
+- Machine / Windows build:
+- Commit / tag SHA under test:
+- Result: PASS / FAIL
+- Notes:
