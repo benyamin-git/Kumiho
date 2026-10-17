@@ -552,10 +552,7 @@ guide is [docs/gui.md](gui.md); `<physical>` comes from section 8, and section
 > service **Start**/**Stop** buttons — the only in-app service recovery — are
 > unreachable until setup completes; recover a stopped `kumiho` service during
 > first run from a shell (`Start-Service kumiho`) or by re-running
-> `install.cmd`. Note that `install.ps1` still carries stale comments naming a
-> "Set up Kumiho button"/installer fallback (`install.ps1:90,445`); the
-> shipped UI has no such button, so those strings are leftovers, not a missing
-> feature.
+> `install.cmd`.
 
 ### 16.1 Install, pipe access and the launcher
 
