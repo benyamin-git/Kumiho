@@ -552,7 +552,10 @@ guide is [docs/gui.md](gui.md); `<physical>` comes from section 8, and section
 > service **Start**/**Stop** buttons — the only in-app service recovery — are
 > unreachable until setup completes; recover a stopped `kumiho` service during
 > first run from a shell (`Start-Service kumiho`) or by re-running
-> `install.cmd`.
+> `install.cmd`. Note that `install.ps1` still carries stale comments naming a
+> "Set up Kumiho button"/installer fallback (`install.ps1:90,445`); the
+> shipped UI has no such button, so those strings are leftovers, not a missing
+> feature.
 
 ### 16.1 Install, pipe access and the launcher
 
@@ -610,9 +613,9 @@ guide is [docs/gui.md](gui.md); `<physical>` comes from section 8, and section
       & 'C:\Program Files\Kumiho\kumiho-gui.exe' --version
 
   Expect: `kumiho gui` returns immediately (exit 0) and a `kumiho-gui` process
-  runs; `--version` prints `kumiho-gui <version>` in the console and exits
-  without opening a window. Quit the app before the wizard pass so 16.2 starts
-  clean: tray icon → **Quit** (or `Stop-Process -Name kumiho-gui`).
+  runs; `--version` prints `kumiho-gui <version> <commit>` in the console and
+  exits without opening a window. Quit the app before the wizard pass so 16.2
+  starts clean: tray icon → **Quit** (or `Stop-Process -Name kumiho-gui`).
 
 ### 16.2 First run: the setup wizard
 
@@ -714,13 +717,19 @@ never persisted).
 The screen has `Kumiho app` (per-user) and `Background service` (daemon) rows
 and a **Refresh** action.
 
-- [ ] `Kumiho app` — appearance.
+- [ ] `Kumiho app` — appearance. **Theme** offers `Light`/`Dark`/`OLED` and
+      **Accent** offers `Blue`/`Teal`/`Green`/`Orange`/`Rose`/`Violet`. Pick
+      `Dark`, then re-open `Settings` and pick `Light`; pick `Orange`, then
+      re-open `Settings` and pick `Blue`.
 
-  Expect: **Theme** offers `Light`/`Dark`/`OLED` and **Accent** offers
-  `Blue`/`Teal`/`Green`/`Orange`/`Rose`/`Violet`; picking one rebuilds the
-  window immediately with the new palette and returns to the same screen
-  (connected state and daemon data survive). Set `Dark` then back to `Light`;
-  set `Orange` then back to `Blue`.
+  Expect: the palette changes immediately with the pick, and the native title
+  bar follows the theme (`Dark` is dark, `Light` is light, `OLED` is dark on
+  black). Because the shell reloads the view to apply the theme, the reload
+  lands on the **Dashboard**, not on Settings; re-open Settings to confirm the
+  choice stuck (connected state and daemon data survive — they come from the
+  daemon). **Known divergence:** the theme reload returns to Dashboard instead
+  of the screen you were on (inventory §Settings promises "returns to the same
+  screen"); tracked for a follow-up fix.
 
 - [ ] `Kumiho app` — start at login and update check.
 
@@ -853,7 +862,9 @@ and a **Refresh** action.
 
 ### 16.9 Account
 
-- [ ] Open `Account` (sign in first via the wizard if you signed out earlier).
+- [ ] Open `Account` (if you signed out earlier, sign in again from a shell
+      with `kumiho login` — the wizard does not reopen after setup is
+      complete).
 
   Expect: rows `Email`, `UID`, `Subscription` (`Yes`/`No`/`Unknown`), `Quota`
   (e.g. `38.0 GiB remaining of 512.0 GiB`), `Bandwidth`
