@@ -48,7 +48,7 @@ func trayWord(snap State) string {
 // trayDisconnect reports whether a state word is one the action entry
 // disconnects from. An unreachable word never is: the tooltip and the label
 // both lose the stale connected word when the control pipe goes away, the
-// same way the Dashboard chip does.
+// same way the header status does.
 func trayDisconnect(word string) bool {
 	_, ok := trayDisconnectWords[word]
 	return ok

@@ -1,7 +1,7 @@
-/* The Dashboard screen (inventory §Dashboard, D13): the state chip, the
- * Connect/Disconnect + Options + Refresh action row, the Connect options
- * popover, the eleven-row status card with its quota bar, and the persistent
- * notice row with its conditional Retry.
+/* The Dashboard screen (inventory §Dashboard, D13): the Connect/Disconnect +
+ * Options + Refresh action row, the Connect options popover, the eleven-row
+ * status card with its quota bar, and the persistent notice row with its
+ * conditional Retry.
  *
  * Everything renders from the store's state envelopes (the controller
  * projection); actions go through the transport and the screen re-renders
@@ -23,10 +23,10 @@
  * per-run token path stays intact and CSP default-src 'self' allows the
  * same-origin link.
  *
- * Wording authority: the state word and its tones, the button label rule,
- * the Retry rule, and the row order come from inventory §Dashboard;
- * connectionStatus (store.js) supplies the header-identical word for the
- * pre-status and unreachable cases, so chip and header can never disagree.
+ * Wording authority: the button label rule, the Retry rule, and the row order
+ * come from inventory §Dashboard; connectionStatus (store.js) supplies the
+ * state word the header shows — the state word lives in the shell header, not
+ * on this screen.
  */
 
 import { connectionStatus } from "../store.js";
@@ -66,19 +66,6 @@ const DISCONNECT_WORDS = [
 // time, so one slot is enough).
 let cleanup = null;
 
-/** The Dashboard's toned chip word (inventory §Dashboard title row). */
-function chipStatus(snapshot, hasState) {
-  const base = connectionStatus(snapshot, hasState);
-  if (base.word === "Connected") return { word: base.word, tone: "good" };
-  if (base.word === "Off") return { word: base.word, tone: "neutral" };
-  if (base.word === "Error") return { word: base.word, tone: "bad" };
-  if (base.tone === "muted") return { word: base.word, tone: "neutral" };
-  if (base.tone === "bad" || base.tone === "warn") return { word: base.word, tone: base.tone };
-  // Proxy only, Connecting, Reconnecting, Waiting for network, Not signed
-  // in — and anything unknown the daemon projects — in the warn tone.
-  return { word: base.word, tone: "warn" };
-}
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -89,10 +76,6 @@ function el(tag, className, text) {
 /** Build the screen's DOM and return its element references. */
 function build(host) {
   const root = el("div", "dash");
-
-  const chip = el("span", "chip dash__chip", "Loading...");
-  const chipRow = el("div", "dash__header");
-  chipRow.append(chip);
 
   const primary = el("button", "button button--filled dash__primary", "Connect");
   primary.type = "button";
@@ -195,12 +178,11 @@ function build(host) {
   const noticeRow = el("div", "dash__notice-row");
   noticeRow.append(notice, retry);
 
-  root.append(chipRow, actions, card, noticeRow);
+  root.append(actions, card, noticeRow);
   host.append(root);
 
   return {
     root: root,
-    chip: chip,
     primary: primary,
     trigger: trigger,
     popover: popover,
@@ -315,22 +297,14 @@ export default {
     function render() {
       const snapshot = ctx.store.get();
       if (view.busy && fingerprint(snapshot) !== view.busyMark) endBusy();
-      renderChip(snapshot);
       renderActions(snapshot);
       renderOptions(snapshot);
       renderRows(snapshot.status || null);
       renderNotice(snapshot);
     }
 
-    function renderChip(snapshot) {
-      const chip = chipStatus(snapshot, ctx.store.hasState());
-      ui.chip.textContent = chip.word;
-      if (chip.tone === "neutral") delete ui.chip.dataset.tone;
-      else ui.chip.dataset.tone = chip.tone;
-    }
-
     function renderActions(snapshot) {
-      view.disconnect = DISCONNECT_WORDS.indexOf(chipStatus(snapshot, ctx.store.hasState()).word) >= 0;
+      view.disconnect = DISCONNECT_WORDS.indexOf(connectionStatus(snapshot, ctx.store.hasState()).word) >= 0;
       ui.primary.textContent = view.disconnect ? "Disconnect" : "Connect";
       ui.primary.disabled = view.busy;
       ui.optConnect.disabled = view.busy || view.disconnect;

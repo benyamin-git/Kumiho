@@ -547,7 +547,7 @@ func (h *host) trayStateWord() string {
 // of connects: the Dashboard button's rule (the inventory's "same rule as the
 // Dashboard button"), read off the very state word the tooltip shows. A
 // stale connected status under an unreachable daemon therefore reads
-// "Connect", exactly like the Dashboard chip.
+// "Connect", exactly like the header status.
 func (h *host) trayConnected() bool {
 	return trayDisconnect(trayWord(h.ctrl.Snapshot()))
 }

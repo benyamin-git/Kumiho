@@ -1,7 +1,7 @@
-/* Dashboard screen (T2.2). Consumes the shell's primitives (button, chip,
- * card, field/input) and the injected colour roles; geometry, type and
- * spacing come from tokens.css. No literal colours (ban 9), logical
- * properties only (ban 10), no shadows (ban 7). */
+/* Dashboard screen (T2.2). Consumes the shell's primitives (button, card,
+ * field/input) and the injected colour roles; geometry, type and spacing come
+ * from tokens.css. No literal colours (ban 9), logical properties only
+ * (ban 10), no shadows (ban 7). */
 
 .dash {
   display: flex;
@@ -13,18 +13,6 @@
 }
 
 /* ---------------------------------------------------------------- actions */
-
-.dash__header {
-  display: flex;
-  align-items: center;
-}
-
-/* The inventory's 170x28 state chip; the primitive supplies the tone fills. */
-.dash__chip {
-  min-inline-size: 170px;
-  min-block-size: 28px;
-  justify-content: center;
-}
 
 .dash__actions {
   display: flex;

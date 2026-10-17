@@ -668,8 +668,8 @@ never persisted).
 - [ ] Connect from the Dashboard.
 
   Expect: click **Connect** (the button disables until the action settles; up
-  to ~90 s); on success the top chip reads `Connected` and the notice reads
-  `Connected`. The **Options** popover offers **Location** (`Saved selection`
+  to ~90 s); on success the header status reads `Connected` and the notice
+  reads `Connected`. The **Options** popover offers **Location** (`Saved selection`
   plus countries as `Name (CC)`), **Proxy only** (*Keep system routing
   untouched; SOCKS5 proxy only.*), **Kill switch** (`On`/`Off`/`Last`, seeded
   from the setting) and its own **Connect**.

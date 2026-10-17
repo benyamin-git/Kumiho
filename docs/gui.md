@@ -107,15 +107,11 @@ The window has a header and a left rail; one screen is shown at a time.
 - **Rail.** `Dashboard`, `Locations`, `Settings`, `Account`, `Logs`,
   `Diagnostics`.
 
-The Dashboard carries the toned version of the same state chip, so the two
-never disagree.
-
 ## Dashboard
 
-**Reached:** the first rail item after setup. The state chip at the top shows
-the connection state in colour: `Connected` is good, `Off` neutral, `Error`
-bad, and `Proxy only` / `Connecting` / `Reconnecting` / `Waiting for network`
-/ `Not signed in` are shown in warning tone.
+**Reached:** the first rail item after setup. The header's status word (see
+above) is the live connection state; the screen itself holds the action row,
+the status card and the notice.
 
 The action row holds:
 

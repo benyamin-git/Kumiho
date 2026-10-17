@@ -17,8 +17,8 @@ added with the tag at release time.
   with the Microsoft Edge WebView2 Runtime, owns the tray icon and window, and
   talks to the same daemon over the same local control protocol — the daemon
   still does all the tunnel work and the app runs per logged-in user.
-- Six screens: Dashboard (state chip, connect with per-connect options, live
-  status), Locations (filter and speed test), Settings (theme, accent, start
+- Six screens: Dashboard (connect with per-connect options, live status),
+  Locations (filter and speed test), Settings (theme, accent, start
   at login, and the daemon's settings with per-setting overrides), Account,
   Logs (level filter, follow, search, export) and Diagnostics (`kumiho doctor`
   checks, service start/stop and cleanup, the last two via UAC).
