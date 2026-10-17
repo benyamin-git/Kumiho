@@ -1,6 +1,6 @@
 # Kumiho
 
-**Status:** v0.2.0 — working Linux and Windows 11 clients: daemon + TUI/CLI
+**Status:** v0.3.0 — working Linux and Windows 11 clients: daemon + TUI/CLI/GUI
 over a Unix socket (Linux) or named pipe (Windows), Firefox Accounts login
 (2FA aware), server list with ping, HTTP/2 CONNECT tunnel through Mozilla's
 Fastly edge, full-tunnel routing with a kill switch, watchdog with edge
@@ -23,8 +23,8 @@ The transport is HTTP/2 CONNECT: **TCP + DNS only**. Non-DNS UDP (QUIC/HTTP3,
 VoIP, games) is blocked on purpose so applications fall back to TCP.
 
 Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
-over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun,
-TUI/CLI over a named pipe).
+over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun, and
+TUI/CLI/GUI over a named pipe).
 
 ## Platform roadmap
 

@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-17
 
-The next release, **v0.3.0**, adds the Windows 11 GUI; the release date is
-added with the tag at release time.
+The Windows 11 desktop app: a WebView2 GUI, its installer integration and the
+release/CI packaging for it.
 
 ### Added
 
@@ -141,6 +141,7 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.3.0
 [0.2.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.1.0
