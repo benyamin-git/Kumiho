@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +50,9 @@ type Controller struct {
 	log   *logging.Ring
 	fxa   *fxa.Client
 
-	httpClient    *http.Client
-	serverListURL string
+	httpClient      *http.Client
+	serverListURL   string
+	serverListCache string
 
 	guardian     *guardian.Client
 	exitCheckURL string
@@ -123,16 +125,17 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 	ua := plat.UserAgent()
 	client.UserAgent = ua
 	c := &Controller{
-		store:         store,
-		log:           ring,
-		fxa:           client,
-		plat:          plat,
-		nc:            plat.NetConfig(),
-		userAgent:     ua,
-		httpClient:    &http.Client{Timeout: 20 * time.Second},
-		serverListURL: serverlist.RecordsURL,
-		guardian:      guardian.NewClient(),
-		exitCheckURL:  "https://www.cloudflare.com/cdn-cgi/trace",
+		store:           store,
+		log:             ring,
+		fxa:             client,
+		plat:            plat,
+		nc:              plat.NetConfig(),
+		userAgent:       ua,
+		httpClient:      &http.Client{Timeout: 20 * time.Second},
+		serverListURL:   serverlist.RecordsURL,
+		serverListCache: filepath.Join(filepath.Dir(store.Paths().State), "serverlist.json"),
+		guardian:        guardian.NewClient(),
+		exitCheckURL:    "https://www.cloudflare.com/cdn-cgi/trace",
 		dialUpstream: func(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
 			return upstream.Dial(ctx, opts)
 		},

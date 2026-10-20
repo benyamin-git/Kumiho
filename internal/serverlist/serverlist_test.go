@@ -1,7 +1,12 @@
 package serverlist
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -211,5 +216,70 @@ func TestParseRoundTripsWireJSON(t *testing.T) {
 	}
 	if len(back) != len(countries) {
 		t.Fatalf("round trip length %d != %d", len(back), len(countries))
+	}
+}
+
+func TestSaveCacheRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serverlist.json")
+	raw := []byte(fixture)
+	if err := SaveCache(path, raw); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Fatalf("cache payload = %s, want %s", got, raw)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("cache mode = %o, want 600", perm)
+	}
+}
+
+func TestSaveCacheOverwritesAtomically(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serverlist.json")
+	first := []byte(`{"data":[]}`)
+	second := []byte(fixture)
+
+	if err := SaveCache(path, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCache(path, second); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, second) {
+		t.Fatalf("cache payload = %s, want overwritten %s", got, second)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("cache mode after overwrite = %o, want 600", perm)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("temp files left behind: %v", entries)
+	}
+}
+
+func TestLoadCacheMissingFile(t *testing.T) {
+	_, err := LoadCache(filepath.Join(t.TempDir(), "absent.json"))
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("err = %v, want fs.ErrNotExist", err)
 	}
 }

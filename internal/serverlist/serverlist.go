@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -101,6 +103,17 @@ func Fetch(ctx context.Context, client *http.Client) ([]Country, error) {
 
 // FetchFrom retrieves and parses the server list from url.
 func FetchFrom(ctx context.Context, client *http.Client, url string) ([]Country, error) {
+	body, err := FetchRawFrom(ctx, client, url)
+	if err != nil {
+		return nil, err
+	}
+	return Parse(body)
+}
+
+// FetchRawFrom retrieves the unparsed Remote Settings response from url. The
+// raw payload is what the disk cache stores, so a restart can parse it again
+// without a network round trip.
+func FetchRawFrom(ctx context.Context, client *http.Client, url string) ([]byte, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
@@ -122,7 +135,39 @@ func FetchFrom(ctx context.Context, client *http.Client, url string) ([]Country,
 	if err != nil {
 		return nil, fmt.Errorf("server list: %w", err)
 	}
-	return Parse(body)
+	return body, nil
+}
+
+// SaveCache writes the raw server list payload to path atomically with mode
+// 0600, so a reader never sees a truncated file.
+func SaveCache(path string, raw []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("server list cache: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("server list cache: %w", err)
+	}
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return fmt.Errorf("server list cache: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("server list cache: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("server list cache: %w", err)
+	}
+	return nil
+}
+
+// LoadCache reads a raw server list payload previously written by SaveCache.
+func LoadCache(path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
 
 // Parse decodes a Remote Settings records response. Records may carry the
