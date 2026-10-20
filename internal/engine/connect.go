@@ -218,7 +218,7 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	c.startPassRenewal(stop, pass)
 	c.startWatchdog(stop)
 	if cfg.ExitCheck && c.exitCheckURL != "" {
-		go c.exitCheck(socksAddr.String(), cand.CountryCode)
+		go c.exitCheck(stop, socksAddr.String(), cand.CountryCode)
 	}
 	return nil
 }
@@ -899,7 +899,7 @@ func (c *Controller) startMetrics(stop <-chan struct{}) {
 
 // exitCheck fetches Cloudflare's trace through the local SOCKS listener
 // (PLAN.md §2.4: once per connect, non-fatal).
-func (c *Controller) exitCheck(socksAddr, expectedCountry string) {
+func (c *Controller) exitCheck(stop <-chan struct{}, socksAddr, expectedCountry string) {
 	proxyURL, err := url.Parse("socks5://" + socksAddr)
 	if err != nil {
 		return
@@ -937,6 +937,13 @@ func (c *Controller) exitCheck(socksAddr, expectedCountry string) {
 	}
 
 	c.mu.Lock()
+	// stopTunnel closes stop under this same mutex, so this check is ordered
+	// against teardown: an exit check from the previous connection cannot
+	// publish its address into a later session.
+	if stopped(stop) {
+		c.mu.Unlock()
+		return
+	}
 	c.exitIP, c.exitCountry = ip, country
 	c.mu.Unlock()
 	c.log.Logf(logging.Info, "exitcheck", "exit IP %s (%s)", ip, country)
