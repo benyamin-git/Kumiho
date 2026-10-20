@@ -195,6 +195,46 @@ func TestLocalDestinationsRefused(t *testing.T) {
 	}
 }
 
+func TestIsLocalDestination(t *testing.T) {
+	local := []net.IP{
+		net.ParseIP("127.0.0.1"),
+		net.ParseIP("10.1.2.3"),
+		net.ParseIP("172.16.0.1"),
+		net.ParseIP("172.31.255.255"),
+		net.ParseIP("192.168.0.5"),
+		net.ParseIP("169.254.1.1"),
+		net.ParseIP("100.64.0.1"),
+		net.ParseIP("100.127.255.255"),
+		net.ParseIP("224.0.0.1"),
+		net.ParseIP("0.0.0.0"),
+		net.ParseIP("fc00::1"),
+		net.ParseIP("fdff::1"),
+		net.ParseIP("::1"),
+		net.ParseIP("fe80::1"),
+		nil,
+	}
+	for _, ip := range local {
+		if !IsLocalDestination(ip) {
+			t.Errorf("IsLocalDestination(%v) = false, want true", ip)
+		}
+	}
+
+	global := []net.IP{
+		net.ParseIP("8.8.8.8"),
+		net.ParseIP("1.1.1.1"),
+		net.ParseIP("172.32.0.1"),
+		net.ParseIP("192.169.1.1"),
+		net.ParseIP("100.128.0.1"),
+		net.ParseIP("2001:db8::1"),
+		net.ParseIP("2001:4860:4860::8888"),
+	}
+	for _, ip := range global {
+		if IsLocalDestination(ip) {
+			t.Errorf("IsLocalDestination(%v) = true, want false", ip)
+		}
+	}
+}
+
 func TestUnsupportedCommand(t *testing.T) {
 	s := testServer(func(context.Context, string, int) (net.Conn, error) {
 		t.Fatal("must not dial")

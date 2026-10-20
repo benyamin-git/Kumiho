@@ -330,7 +330,7 @@ func (s *Server) handleConnect(client net.Conn, atyp byte) {
 		return
 	}
 
-	if !target.domain && isLocalDestination(target.ip) {
+	if !target.domain && IsLocalDestination(target.ip) {
 		s.logf(logging.Debug, "socks", "refusing %s: local-network address", targetKey(target))
 		_ = writeReply(client, replyNotAllowed, nil)
 		return
@@ -439,9 +439,10 @@ func replyCodeFor(err error) byte {
 	return replyGeneralFailure
 }
 
-// isLocalDestination reports whether ip must never leave the device
+// IsLocalDestination reports whether ip must never leave the device
 // (loopback, RFC1918, link-local, multicast, CGNAT, ULA; PLAN.md §2.4).
-func isLocalDestination(ip net.IP) bool {
+// The HTTP proxy shares this policy with SOCKS.
+func IsLocalDestination(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
