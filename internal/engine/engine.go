@@ -404,6 +404,19 @@ func (c *Controller) clearSession(reason string) {
 	c.email = ""
 	c.state = StateUnauthenticated
 	c.since = time.Now()
+	// Signing out wipes the account and usage view: an unauthenticated
+	// snapshot must not expose the previous session's quota, exit, totals,
+	// rates or pass (v0.4.0 spec). stopTunnel already clears the exit and
+	// rate fields; resetting the full set here keeps that guarantee local to
+	// session clearing rather than dependent on tunnel teardown details.
+	c.quota = nil
+	c.exitIP = ""
+	c.exitCountry = ""
+	c.totalsUp = 0
+	c.totalsDown = 0
+	c.ratesUp = 0
+	c.ratesDown = 0
+	c.pass = nil
 	c.mu.Unlock()
 	if err := c.store.UpdateState(func(s *settings.State) { s.Email = "" }); err != nil {
 		c.log.Logf(logging.Warn, "auth", "could not clear stored email: %v", err)
