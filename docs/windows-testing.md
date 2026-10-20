@@ -301,8 +301,9 @@ and
       Resolve-DnsName example.com
 
   Expect: resolves; logs show the pinned DoH resolver. Change `DoH provider`
-  to `off`, reconnect, `Resolve-DnsName example.com` still resolves (the
-  fallback is DNS-over-TCP:53 through the tunnel). Set it back to
+  to `off`, reconnect, and `Resolve-DnsName example.com` must not resolve
+  (SERVFAIL): with `off` and no custom upstream there are no DoH endpoints,
+  and the in-tunnel resolver never falls back to plaintext DNS. Set it back to
   `automatic` when done.
 
 ## 10. Kill switch on/off (criterion 5)
