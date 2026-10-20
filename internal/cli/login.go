@@ -90,7 +90,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 
 		case "done":
 			if ls.Error != "" {
-				fmt.Fprintf(stderr, "kumiho login: %s\n", ls.Error)
+				// The loop head already printed the daemon's error.
 				return 1
 			}
 			fmt.Fprintf(stdout, "Signed in as %s.\n", ls.Email)
