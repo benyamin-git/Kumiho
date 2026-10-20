@@ -1053,3 +1053,77 @@ func TestStartTunnelHTTPProxyFullMode(t *testing.T) {
 	assertPortClosed(t, httpPort)
 	assertPortClosed(t, socksPort)
 }
+
+// assertKeepalive pins the full keepalive contract of one upstream.Options.
+func assertKeepalive(t *testing.T, opts upstream.Options, wantTimeout time.Duration) {
+	t.Helper()
+	if opts.KeepaliveTimeout != wantTimeout {
+		t.Errorf("KeepaliveTimeout = %s, want %s", opts.KeepaliveTimeout, wantTimeout)
+	}
+	if opts.KeepaliveIdle != 15*time.Second {
+		t.Errorf("KeepaliveIdle = %s, want 15s", opts.KeepaliveIdle)
+	}
+	if opts.KeepaliveCheck != 3*time.Second {
+		t.Errorf("KeepaliveCheck = %s, want 3s", opts.KeepaliveCheck)
+	}
+}
+
+func TestKeepaliveProfiles(t *testing.T) {
+	cases := []struct {
+		name    string
+		profile string // empty leaves the default config untouched
+		timeout time.Duration
+	}{
+		{name: "default", timeout: 10 * time.Second},
+		{name: "standard", profile: "standard", timeout: 10 * time.Second},
+		{name: "slow", profile: "slow", timeout: 25 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl, _ := newTestController(t, loginOKHandler(t))
+			// Keep the edge resolution off the network.
+			ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
+			if tc.profile != "" {
+				if err := ctrl.store.SetOverride("keepalive_profile", tc.profile); err != nil {
+					t.Fatalf("set keepalive_profile=%s: %v", tc.profile, err)
+				}
+			}
+
+			opts, err := ctrl.upstreamOptions(context.Background(),
+				serverlist.Candidate{Host: "p.m1.example.net", Port: 2499}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertKeepalive(t, opts, tc.timeout)
+			if opts.PinnedIP != "203.0.113.7" {
+				t.Errorf("PinnedIP = %q, want the bootstrap address", opts.PinnedIP)
+			}
+		})
+	}
+}
+
+func TestKeepaliveProfileReadAtConnectTime(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
+	cand := serverlist.Candidate{Host: "p.m1.example.net", Port: 2499}
+
+	before, err := ctrl.upstreamOptions(context.Background(), cand, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertKeepalive(t, before, 10*time.Second)
+
+	if err := ctrl.store.SetOverride("keepalive_profile", "slow"); err != nil {
+		t.Fatalf("set keepalive_profile=slow: %v", err)
+	}
+
+	after, err := ctrl.upstreamOptions(context.Background(), cand, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertKeepalive(t, after, 25*time.Second)
+	if after.KeepaliveIdle != before.KeepaliveIdle || after.KeepaliveCheck != before.KeepaliveCheck {
+		t.Fatalf("idle/check changed with the profile: before=%s/%s after=%s/%s",
+			before.KeepaliveIdle, before.KeepaliveCheck, after.KeepaliveIdle, after.KeepaliveCheck)
+	}
+}

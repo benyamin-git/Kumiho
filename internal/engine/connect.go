@@ -710,6 +710,27 @@ func (c *Controller) currentTokens() *fxa.Tokens {
 	return c.tokens
 }
 
+// Keepalive contract (PLAN.md §8, D14): the ping is sent after 15 s idle and
+// the session fails when no answer arrives within the profile's timeout.
+// standard (and any empty/unknown value) keeps the reference client's 10 s;
+// slow stretches it to 25 s for lossy links.
+const (
+	keepaliveIdle        = 15 * time.Second
+	keepaliveCheck       = 3 * time.Second
+	keepaliveTimeout     = 10 * time.Second
+	keepaliveTimeoutSlow = 25 * time.Second
+)
+
+// keepaliveTimeoutFor maps the effective keepalive_profile to the ping
+// timeout. The fallback is standard so an empty or unrecognised value can
+// never disable the liveness check.
+func keepaliveTimeoutFor(profile string) time.Duration {
+	if profile == "slow" {
+		return keepaliveTimeoutSlow
+	}
+	return keepaliveTimeout
+}
+
 // upstreamOptions builds the data-plane dial options for one edge candidate.
 // With upstream_proxy set, the edge dial goes through the proxy: resolveEdge
 // is skipped entirely (the proxy resolves the hostname remotely, so no local
@@ -719,11 +740,17 @@ func (c *Controller) currentTokens() *fxa.Tokens {
 // proxy URL (validation should already reject it) returns a *proxyConfigError
 // instead of dialing direct or panicking; callers surface it.
 func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candidate, pass *guardian.Pass) (upstream.Options, error) {
+	// Read the effective config on every call so a keepalive profile change
+	// applies to the next connect or watchdog redial without a restart
+	// (D31).
 	cfg := c.store.EffectiveConfig()
 	mode := c.tlsSplitMode()
 	opts := upstream.Options{
-		Host: cand.Host,
-		Port: cand.Port,
+		Host:             cand.Host,
+		Port:             cand.Port,
+		KeepaliveCheck:   keepaliveCheck,
+		KeepaliveIdle:    keepaliveIdle,
+		KeepaliveTimeout: keepaliveTimeoutFor(cfg.KeepaliveProfile),
 		// The marked direct dialer stays wired for the direct path and as
 		// the dialer that reaches the proxy itself.
 		Dialer: c.upstreamDialer,
