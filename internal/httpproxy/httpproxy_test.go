@@ -28,6 +28,22 @@ type pipeTunnel struct{ net.Conn }
 
 func (p *pipeTunnel) CloseWrite() error { return p.Conn.Close() }
 
+// signalConn reports when the proxy closes the connection.
+type signalConn struct {
+	net.Conn
+	once   sync.Once
+	closed chan struct{}
+}
+
+func newSignalConn(c net.Conn) *signalConn {
+	return &signalConn{Conn: c, closed: make(chan struct{})}
+}
+
+func (c *signalConn) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	return c.Conn.Close()
+}
+
 func testServer(dial func(context.Context, string, int) (net.Conn, error)) *Server {
 	return &Server{
 		Bind:             "127.0.0.1",
@@ -164,6 +180,37 @@ func waitForConns(t *testing.T, s *Server, want int) {
 	}
 }
 
+func waitForTracked(t *testing.T, s *Server, conns, tunnels int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		s.mu.Lock()
+		gotConns, gotTunnels := len(s.conns), len(s.tunnels)
+		s.mu.Unlock()
+		if gotConns == conns && gotTunnels == tunnels {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tracked connections/tunnels = %d/%d, want %d/%d", gotConns, gotTunnels, conns, tunnels)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func waitForSlots(t *testing.T, s *Server, want int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if got := len(s.slots); got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("occupied slots = %d, want %d", len(s.slots), want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestDefaults(t *testing.T) {
 	s := &Server{}
 	s.normalize()
@@ -220,6 +267,28 @@ func TestStartPortConflict(t *testing.T) {
 		s.Stop()
 		t.Fatal("Start on an occupied port succeeded")
 	}
+}
+
+func TestAdmissionAfterStopRejected(t *testing.T) {
+	dial, _ := stubDial()
+	s := startServer(t, testServer(dial))
+	s.Stop()
+
+	client, serverConn := net.Pipe()
+	defer client.Close()
+	if s.admitConn(serverConn) {
+		t.Fatal("client admitted after Stop")
+	}
+	_ = serverConn.Close()
+
+	tunnel, peer := net.Pipe()
+	defer peer.Close()
+	if s.admitTunnel(tunnel) {
+		t.Fatal("tunnel admitted after Stop")
+	}
+	_ = tunnel.Close()
+
+	waitForTracked(t, s, 0, 0)
 }
 
 func TestConnectRelayEcho(t *testing.T) {
@@ -329,6 +398,58 @@ func TestConnectTargetPorts(t *testing.T) {
 			t.Fatalf("%s: dial target = %+v, want %s:%d", tc.authority, call, tc.host, tc.port)
 		}
 		_ = c.Close()
+	}
+}
+
+func TestConnectIPv4MappedIPv6(t *testing.T) {
+	dial, calls := stubDial()
+	s := startServer(t, testServer(dial))
+
+	c := dialProxy(t, s)
+	br := bufio.NewReader(c)
+	writeRaw(t, c, "CONNECT ::ffff:8.8.8.8 HTTP/1.1\r\nHost: ::ffff:8.8.8.8\r\n\r\n")
+	line, _ := readHead(t, br)
+	if line != "HTTP/1.1 200 Connection Established" {
+		t.Fatalf("status line = %q", line)
+	}
+	call := <-calls
+	if call.host != "::ffff:8.8.8.8" || call.port != 443 {
+		t.Fatalf("dial target = %+v, want ::ffff:8.8.8.8:443", call)
+	}
+}
+
+// TestConnectFragmentedRequestLine delivers the unbracketed IPv6 CONNECT
+// request line in two writes. The line must be assembled before parsing.
+func TestConnectFragmentedRequestLine(t *testing.T) {
+	dial, calls := stubDial()
+	s := testServer(dial)
+	client, serverConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		s.handleConn(serverConn)
+		close(done)
+	}()
+	defer client.Close()
+	_ = client.SetDeadline(time.Now().Add(5 * time.Second))
+
+	writeRaw(t, client, "CONNECT 2001:db8::1 HTT")
+	writeRaw(t, client, "P/1.1\r\nHost: 2001:db8::1\r\n\r\n")
+
+	br := bufio.NewReader(client)
+	line, _ := readHead(t, br)
+	if line != "HTTP/1.1 200 Connection Established" {
+		t.Fatalf("status line = %q", line)
+	}
+	call := <-calls
+	if call.host != "2001:db8::1" || call.port != 443 {
+		t.Fatalf("dial target = %+v, want 2001:db8::1:443", call)
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler did not finish")
 	}
 }
 
@@ -699,17 +820,24 @@ func TestMaxConns(t *testing.T) {
 	waitForConns(t, s, 1)
 
 	extra := dialProxy(t, s)
-	_ = extra.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = extra.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 	var buf [1]byte
-	if _, err := extra.Read(buf[:]); err == nil {
+	_, err := extra.Read(buf[:])
+	if err == nil {
 		t.Fatal("extra connection was served despite MaxConns")
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		t.Fatalf("extra connection was not closed promptly: %v", err)
 	}
 	_ = extra.Close()
 
 	_ = first.Close()
 	waitForConns(t, s, 0)
+	waitForSlots(t, s, 0)
 
 	next := dialProxy(t, s)
+	_ = next.SetReadDeadline(time.Now().Add(2 * time.Second))
 	br := bufio.NewReader(next)
 	writeRaw(t, next, "GET / HTTP/1.1\r\nHost: origin.test\r\n\r\n")
 	expectStatus(t, br, http.StatusBadRequest, "Bad Request")
@@ -792,4 +920,100 @@ func TestStopDoesNotWaitForBlockedDial(t *testing.T) {
 		t.Fatal("Stop waited for a blocked dial")
 	}
 	close(release)
+}
+
+func TestStopCancelsBlockedDial(t *testing.T) {
+	started := make(chan struct{})
+	dialDone := make(chan struct{})
+	var once sync.Once
+	s := startServer(t, testServer(func(ctx context.Context, _ string, _ int) (net.Conn, error) {
+		once.Do(func() { close(started) })
+		<-ctx.Done()
+		close(dialDone)
+		return nil, ctx.Err()
+	}))
+
+	c := dialProxy(t, s)
+	writeRaw(t, c, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("dial was not attempted")
+	}
+
+	s.Stop()
+	select {
+	case <-dialDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not cancel the blocked dial")
+	}
+	waitForTracked(t, s, 0, 0)
+}
+
+func TestStopClosesConnectTunnel(t *testing.T) {
+	tunnelCh := make(chan *signalConn, 1)
+	peerCh := make(chan net.Conn, 1)
+	s := startServer(t, testServer(func(context.Context, string, int) (net.Conn, error) {
+		tunnel, peer := net.Pipe()
+		signal := newSignalConn(tunnel)
+		tunnelCh <- signal
+		peerCh <- peer
+		return signal, nil
+	}))
+
+	c := dialProxy(t, s)
+	br := bufio.NewReader(c)
+	writeRaw(t, c, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
+	if line, _ := readHead(t, br); line != "HTTP/1.1 200 Connection Established" {
+		t.Fatalf("status line = %q", line)
+	}
+	signal := <-tunnelCh
+	peer := <-peerCh
+	defer peer.Close()
+	waitForTracked(t, s, 1, 1)
+
+	s.Stop()
+	select {
+	case <-signal.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not close the CONNECT tunnel")
+	}
+	waitForTracked(t, s, 0, 0)
+}
+
+func TestStopClosesHTTPTunnel(t *testing.T) {
+	tunnelCh := make(chan *signalConn, 1)
+	requestSeen := make(chan struct{})
+	s := startServer(t, testServer(func(context.Context, string, int) (net.Conn, error) {
+		tunnel, peer := net.Pipe()
+		signal := newSignalConn(tunnel)
+		tunnelCh <- signal
+		go func() {
+			defer peer.Close()
+			buf := make([]byte, 4096)
+			if _, err := peer.Read(buf); err == nil {
+				close(requestSeen)
+			}
+			_, _ = io.Copy(io.Discard, peer)
+		}()
+		return signal, nil
+	}))
+
+	c := dialProxy(t, s)
+	writeRaw(t, c, "GET http://origin.test/ HTTP/1.1\r\nHost: origin.test\r\n\r\n")
+	select {
+	case <-requestSeen:
+	case <-time.After(3 * time.Second):
+		t.Fatal("origin never received the request")
+	}
+	signal := <-tunnelCh
+	waitForTracked(t, s, 1, 1)
+
+	s.Stop()
+	select {
+	case <-signal.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not close the HTTP tunnel")
+	}
+	waitForTracked(t, s, 0, 0)
 }

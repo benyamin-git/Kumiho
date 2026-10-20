@@ -30,8 +30,11 @@ const (
 	DefaultOpenTimeout      = socks.DefaultOpenTimeout
 
 	relayBufferSize = 32 * 1024
+	maxRequestLine  = 8 * 1024
 	tag             = "httpproxy"
 )
+
+var errRequestLineTooLong = errors.New("httpproxy: request line too long")
 
 // Server accepts CONNECT and absolute-form HTTP clients on the loopback
 // interface.
@@ -51,11 +54,14 @@ type Server struct {
 	HalfCloseDrain   time.Duration
 	OpenTimeout      time.Duration
 
-	ln     net.Listener
-	mu     sync.Mutex
-	conns  map[net.Conn]struct{}
-	closed bool
-	slots  chan struct{}
+	ln      net.Listener
+	ctx     context.Context
+	cancel  context.CancelFunc
+	mu      sync.Mutex
+	conns   map[net.Conn]struct{}
+	tunnels map[net.Conn]struct{}
+	closed  bool
+	slots   chan struct{}
 }
 
 // Start listens and serves until Stop.
@@ -64,14 +70,19 @@ func (s *Server) Start() error {
 	if s.Dial == nil {
 		return errors.New("httpproxy: Dial is required")
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	addr := net.JoinHostPort(s.Bind, strconv.Itoa(s.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("httpproxy: listen %s: %w", addr, err)
 	}
 	s.mu.Lock()
+	s.ctx = ctx
+	s.cancel = cancel
 	s.ln = ln
 	s.conns = make(map[net.Conn]struct{})
+	s.tunnels = make(map[net.Conn]struct{})
 	s.mu.Unlock()
 	s.logf(logging.Info, "listening on %s", ln.Addr())
 	go s.acceptLoop()
@@ -88,8 +99,8 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
-// Stop closes the listener and every active client connection. It is
-// idempotent and does not wait for a handler blocked in Dial.
+// Stop closes the listener, every active client connection and every tunnel.
+// It is idempotent and does not wait for a handler blocked in Dial.
 func (s *Server) Stop() {
 	s.mu.Lock()
 	if s.closed {
@@ -98,14 +109,25 @@ func (s *Server) Stop() {
 	}
 	s.closed = true
 	ln := s.ln
+	cancel := s.cancel
 	conns := make([]net.Conn, 0, len(s.conns))
 	for c := range s.conns {
 		conns = append(conns, c)
 	}
+	tunnels := make([]net.Conn, 0, len(s.tunnels))
+	for c := range s.tunnels {
+		tunnels = append(tunnels, c)
+	}
 	s.mu.Unlock()
 
+	if cancel != nil {
+		cancel()
+	}
 	if ln != nil {
 		_ = ln.Close()
+	}
+	for _, c := range tunnels {
+		_ = c.Close()
 	}
 	for _, c := range conns {
 		_ = c.Close()
@@ -153,7 +175,11 @@ func (s *Server) acceptLoop() {
 			_ = conn.Close()
 			continue
 		}
-		s.track(conn)
+		if !s.admitConn(conn) {
+			<-s.slots
+			_ = conn.Close()
+			continue
+		}
 		go func() {
 			defer func() { <-s.slots }()
 			s.handleConn(conn)
@@ -161,19 +187,58 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-func (s *Server) track(c net.Conn) {
+// admitConn atomically rejects new clients once Stop has run and otherwise
+// tracks the connection. The accept loop closes and releases the slot when
+// admission fails, so a handler is never started for a rejected connection.
+func (s *Server) admitConn(c net.Conn) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
 	if s.conns == nil {
 		s.conns = make(map[net.Conn]struct{})
 	}
 	s.conns[c] = struct{}{}
-	s.mu.Unlock()
+	return true
 }
 
 func (s *Server) untrack(c net.Conn) {
 	s.mu.Lock()
 	delete(s.conns, c)
 	s.mu.Unlock()
+}
+
+// admitTunnel tracks an upstream stream, refusing it once Stop has run.
+func (s *Server) admitTunnel(c net.Conn) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	if s.tunnels == nil {
+		s.tunnels = make(map[net.Conn]struct{})
+	}
+	s.tunnels[c] = struct{}{}
+	return true
+}
+
+func (s *Server) untrackTunnel(c net.Conn) {
+	s.mu.Lock()
+	delete(s.tunnels, c)
+	s.mu.Unlock()
+}
+
+// dialContext derives a per-dial timeout from the server context so Stop
+// unblocks handlers waiting in Dial.
+func (s *Server) dialContext() (context.Context, context.CancelFunc) {
+	s.mu.Lock()
+	base := s.ctx
+	s.mu.Unlock()
+	if base == nil {
+		base = context.Background()
+	}
+	return context.WithTimeout(base, s.OpenTimeout)
 }
 
 func (s *Server) logf(level logging.Level, format string, args ...any) {
@@ -212,47 +277,54 @@ func (s *Server) handleConn(client net.Conn) {
 // accepts it. The returned reader keeps any payload buffered past the request
 // headers so CONNECT relays do not lose it.
 func readRequest(br *bufio.Reader) (*http.Request, *bufio.Reader, error) {
-	if line, n := rewriteUnbracketedConnect(br); n > 0 {
-		if _, err := br.Discard(n); err != nil {
-			return nil, br, err
-		}
-		br = bufio.NewReader(io.MultiReader(strings.NewReader(line), br))
+	line, err := readLineLimited(br, maxRequestLine)
+	if err != nil {
+		return nil, br, err
 	}
+	line = rewriteUnbracketedConnect(line)
+	br = bufio.NewReader(io.MultiReader(bytes.NewReader(line), br))
 	req, err := http.ReadRequest(br)
 	return req, br, err
 }
 
-// rewriteUnbracketedConnect inspects the buffered request line and returns a
-// bracketed replacement when it is a CONNECT with an unbracketed IPv6
-// authority. Long request lines that do not fit the bufio buffer are left to
-// the parser.
-func rewriteUnbracketedConnect(br *bufio.Reader) (string, int) {
-	if _, err := br.Peek(1); err != nil {
-		return "", 0
+// readLineLimited reads one full request line, draining bufio buffer-full
+// fragments, and rejects lines beyond max.
+func readLineLimited(br *bufio.Reader, max int) ([]byte, error) {
+	var line []byte
+	for {
+		fragment, err := br.ReadSlice('\n')
+		if len(line)+len(fragment) > max {
+			return nil, errRequestLineTooLong
+		}
+		line = append(line, fragment...)
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return line, nil
 	}
-	buffered, err := br.Peek(br.Buffered())
-	if err != nil {
-		return "", 0
+}
+
+// rewriteUnbracketedConnect brackets an unbracketed IPv6 authority in a
+// CONNECT request line. Any target with multiple colons that parses as an IP
+// is an IPv6 literal, including IPv4-mapped addresses.
+func rewriteUnbracketedConnect(line []byte) []byte {
+	trimmed := bytes.TrimSuffix(line, []byte("\n"))
+	trimmed = bytes.TrimSuffix(trimmed, []byte("\r"))
+	fields := bytes.Split(trimmed, []byte(" "))
+	if len(fields) != 3 || string(fields[0]) != http.MethodConnect {
+		return line
 	}
-	end := bytes.IndexByte(buffered, '\n')
-	if end < 0 {
-		return "", 0
+	target := string(fields[1])
+	if strings.HasPrefix(target, "[") || strings.Count(target, ":") < 2 {
+		return line
 	}
-	line := string(buffered[:end+1])
-	trimmed := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
-	fields := strings.Split(trimmed, " ")
-	if len(fields) != 3 || fields[0] != http.MethodConnect {
-		return "", 0
+	if net.ParseIP(target) == nil {
+		return line
 	}
-	target := fields[1]
-	if strings.HasPrefix(target, "[") || !strings.Contains(target, ":") {
-		return "", 0
-	}
-	ip := net.ParseIP(target)
-	if ip == nil || ip.To4() != nil {
-		return "", 0
-	}
-	return "CONNECT [" + target + "] " + fields[2] + "\r\n", end + 1
+	return []byte("CONNECT [" + target + "] " + string(fields[2]) + "\r\n")
 }
 
 func (s *Server) handleConnect(client net.Conn, clientReader io.Reader, req *http.Request) {
@@ -278,7 +350,7 @@ func (s *Server) handleConnect(client net.Conn, clientReader io.Reader, req *htt
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), s.OpenTimeout)
+	ctx, cancel := s.dialContext()
 	defer cancel()
 	tunnel, err := s.Dial(ctx, target.host, target.port)
 	if err != nil {
@@ -286,6 +358,11 @@ func (s *Server) handleConnect(client net.Conn, clientReader io.Reader, req *htt
 		_ = writeStatus(client, http.StatusBadGateway)
 		return
 	}
+	if !s.admitTunnel(tunnel) {
+		_ = tunnel.Close()
+		return
+	}
+	defer s.untrackTunnel(tunnel)
 
 	if _, err := io.WriteString(client, "HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
 		_ = tunnel.Close()
@@ -313,7 +390,7 @@ func (s *Server) handleHTTP(client net.Conn, req *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), s.OpenTimeout)
+	ctx, cancel := s.dialContext()
 	defer cancel()
 	tunnel, err := s.Dial(ctx, target.host, target.port)
 	if err != nil {
@@ -321,6 +398,11 @@ func (s *Server) handleHTTP(client net.Conn, req *http.Request) {
 		_ = writeStatus(client, http.StatusBadGateway)
 		return
 	}
+	if !s.admitTunnel(tunnel) {
+		_ = tunnel.Close()
+		return
+	}
+	defer s.untrackTunnel(tunnel)
 	defer tunnel.Close()
 
 	// The client is waiting for the interim response before sending the body;
