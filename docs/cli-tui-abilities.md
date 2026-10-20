@@ -323,37 +323,38 @@ Shows 19 rows (label, value; `*` marks a key whose effective value comes from
 a persisted runtime override, i.e. differs from `config.toml`), with the
 cursor `>`, and the current row's hint line. The list is a viewport over the
 terminal content height (height − 9 lines of header/title/hint/footer, minus
-2 for an error line or notice when present; a row budget of at least 3 lines,
-at most 19); when rows are clipped it prints a dim `↑ more` line above the
-list and/or a `↓ more` line below it (no native scrollbar). An unknown
+2 for an error line and 2 more for a notice when present; a row budget of at
+least 3 lines, at most 19); when rows are clipped it prints a dim `↑ more`
+line above the list and/or a `↓ more` line below it (no native scrollbar). An unknown
 terminal height (no `WindowSizeMsg` yet) shows every row. `loading
 settings...` before the first fetch; `* changed from config` appended to the
 footer legibly when any override exists. Footer: `enter change • d reset to
 default • r refresh • esc back • ? help • q quit`.
 
 Rows and edit behavior (all persisted daemon-side as overrides in
-`state.json`; values shown are **effective**):
-| key | label | editor | accepted values |
-|---|---|---|---|
-| `kill_switch` | kill switch | enum cycles on/off (`enter`/`space`) | on/off (effective bool shown; `last` not offered here) |
-| `autoconnect` | autoconnect | enum cycles on/off | on/off |
-| `log_level` | log level | enum cycles debug→info→warn→error | debug/info/warn/error |
-| `redact_targets` | redact targets | bool toggle | on/off |
-| `exit_check` | exit check | bool toggle | on/off |
-| `doh_provider` | DoH provider | enum cycles automatic→cloudflare→google→quad9→off | same |
-| `dns_upstream` | DNS upstream | inline text edit | any IP; empty = provider default |
-| `edge_address` | edge address | inline text edit | any IP; empty = resolve normally |
-| `upstream_proxy` | upstream proxy | inline text edit | proxy URL; empty = direct |
-| `exclude_cidrs` | exclude CIDRs | inline text edit, comma-separated | CIDRs; empty = none |
-| `allow_lan` | allow LAN | bool toggle | on/off |
-| `mtu` | MTU | inline number edit | 576–65535 |
-| `socks_port` | SOCKS port | inline number edit | 1–65535 |
-| `quota_poll_minutes` | quota poll | inline number edit | 1–1440 |
-| `tls_split` | TLS split | enum cycles off→first-byte→sni | off/first-byte/sni |
-| `http_proxy` | HTTP proxy | bool toggle | on/off |
-| `http_proxy_port` | HTTP proxy port | inline number edit | 1–65535 |
-| `solve_challenges` | solve challenges | bool toggle | on/off |
-| `keepalive_profile` | keepalive profile | enum cycles standard→slow | standard/slow |
+`state.json`; values shown are **effective**; the last column is the hint
+line shown under the list for the focused row, verbatim):
+| key | label | editor | accepted values | hint |
+|---|---|---|---|---|
+| `kill_switch` | kill switch | enum cycles on/off (`enter`/`space`) | on/off (effective bool shown; `last` not offered here) | block all tunnel traffic while the tunnel is down; applies immediately |
+| `autoconnect` | autoconnect | enum cycles on/off | on/off | connect automatically when the daemon starts |
+| `log_level` | log level | enum cycles debug→info→warn→error | debug/info/warn/error | minimum level recorded into the log ring; applies immediately |
+| `redact_targets` | redact targets | bool toggle | on/off | mask hostnames and IPs in log messages; applies immediately |
+| `exit_check` | exit check | bool toggle | on/off | probe the public exit IP after connecting; next connect |
+| `doh_provider` | DoH provider | enum cycles automatic→cloudflare→google→quad9→off | same | in-tunnel DNS-over-HTTPS resolver; next connect |
+| `dns_upstream` | DNS upstream | inline text edit | any IP; empty = provider default | resolver IP for DoH; empty = provider default; next connect |
+| `edge_address` | edge address | inline text edit | any IP; empty = resolve normally | pin the Fastly edge IP; empty = resolve normally; next connect |
+| `upstream_proxy` | upstream proxy | inline text edit | proxy URL; empty = direct | chain the edge connection through a proxy URL; empty = direct; next connect |
+| `exclude_cidrs` | exclude CIDRs | inline text edit, comma-separated | CIDRs; empty = none | comma-separated ranges that bypass the tunnel; next connect |
+| `allow_lan` | allow LAN | bool toggle | on/off | keep the local subnet outside the tunnel; next connect |
+| `mtu` | MTU | inline number edit | 576–65535 | tun device MTU; next connect |
+| `socks_port` | SOCKS port | inline number edit | 1–65535 | loopback SOCKS5 listener; next connect |
+| `quota_poll_minutes` | quota poll | inline number edit | 1–1440 | minutes between quota refreshes while connected; next connect |
+| `tls_split` | TLS split | enum cycles off→first-byte→sni | off/first-byte/sni | split the TLS ClientHello across records; next connect |
+| `http_proxy` | HTTP proxy | bool toggle | on/off | loopback HTTP/CONNECT proxy through the tunnel; next connect |
+| `http_proxy_port` | HTTP proxy port | inline number edit | 1–65535 | loopback HTTP proxy listener; next connect |
+| `solve_challenges` | solve challenges | bool toggle | on/off | solve FxA and edge challenges automatically; applies immediately |
+| `keepalive_profile` | keepalive profile | enum cycles standard→slow | standard/slow | keepalive ping timeout profile; next connect |
 
 Display specials: empty `dns_upstream` → `(provider default)`, empty
 `edge_address` → `(resolve)`, empty `upstream_proxy` → `(direct)`, empty

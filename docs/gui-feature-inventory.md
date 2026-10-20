@@ -15,13 +15,16 @@ Conventions in this document: quoted text in backticks is an **exact
 user-visible string** (mind the `...` vs `…` differences — they are real).
 "House" refers to the design system summarized later.
 
-> **Post-rewrite note (v0.3.0).** The shipped WebView2 app follows this
+> **Post-rewrite note (v0.4.0).** The shipped WebView2 app follows this
 > inventory as its behavioral authority with one deliberate delta: the
 > Dashboard's **state chip** was dropped. The Connect/Disconnect row, the
 > Connect options, the status card and the notice are unchanged; the shell
 > header's status word (§Shell) is now the single state display, which also
-> settles the header-tone issue in the list at the end. Everything else below
-> describes the app as it exists at `282d63c`.
+> settles the header-tone issue in the list at the end. The **Background
+> service** section now also carries the five v0.4.0 rows (TLS split, HTTP
+> proxy, HTTP proxy port, Solve challenges, Keepalive profile), in the same
+> order, kinds and enum cycles as the TUI. Everything else below describes
+> the app as it exists at `282d63c`.
 
 ---
 
@@ -34,7 +37,7 @@ tray icon is the Kumiho fox artwork.
 
 1. **Header (64-unit bar).**
    - Left: `Kumiho` (heading size, bold) and, next to it, the app version
-     string (small, e.g. `v0.3.0` or `dev`; hidden only if empty).
+     string (small, e.g. `v0.4.0` or `dev`; hidden only if empty).
    - Right-aligned: the **daemon status word**, driven by the shared status
      model on every UI tick:
      - `Loading...` until the first status snapshot arrives (neutral);
@@ -278,10 +281,11 @@ rows (heading size, bold):
 
 ### `Background service` (daemon rows, from the daemon)
 
-Order and controls (tooltips in parentheses):
+Order and controls (the row tooltips are tabulated after the list):
 
 1. `Kill switch` — on/off toggle. Flip → applies immediately.
-2. `Autoconnect` — on/off toggle. Flip → applied (daemon side).
+2. `Autoconnect` — on/off toggle. Flip → saved daemon-side; takes effect on
+   the next daemon start / autoconnect decision (not applied immediately).
 3. `Log level` — cycling button showing the current value; click advances
    `debug → info → warn → error → debug`; applies immediately.
 4. `Redact targets` — on/off toggle; applies immediately.
@@ -306,11 +310,33 @@ Order and controls (tooltips in parentheses):
 19. `Keepalive profile` — cycling button; `standard → slow → standard`; next
     connect.
 
+Tooltips (every row's hover text, verbatim; each states the row's effect and
+when it applies):
+
+| Row | Tooltip |
+| --- | --- |
+| `Kill switch` | `Block all tunnel traffic while the tunnel is down; applies immediately` |
+| `Autoconnect` | `Connect automatically when the daemon starts` |
+| `Log level` | `Minimum level recorded into the log ring; applies immediately` |
+| `Redact targets` | `Mask hostnames and IPs in log messages; applies immediately` |
+| `Exit check` | `Probe the public exit IP after connecting; next connect` |
+| `DoH provider` | `In-tunnel DNS-over-HTTPS resolver; next connect` |
+| `DNS upstream` | `Resolver IP for DoH; empty = provider default; next connect` |
+| `Edge address` | `Pin the Fastly edge IP; empty = resolve normally; next connect` |
+| `Upstream proxy` | `Chain the edge connection through a proxy URL; empty = direct; next connect` |
+| `Exclude CIDRs` | `Comma-separated ranges that bypass the tunnel; next connect` |
+| `Allow LAN` | `Keep the local subnet outside the tunnel; next connect` |
+| `MTU` | `Tun device MTU; next connect` |
+| `SOCKS port` | `Loopback SOCKS5 listener; next connect` |
+| `Quota poll` | `Minutes between quota refreshes while connected; next connect` |
+| `TLS split` | `Split the TLS ClientHello across records; next connect` |
+| `HTTP proxy` | `Loopback HTTP/CONNECT proxy through the tunnel; next connect` |
+| `HTTP proxy port` | `Loopback HTTP proxy listener; next connect` |
+| `Solve challenges` | `Solve FxA and edge challenges automatically; applies immediately` |
+| `Keepalive profile` | `Keepalive ping timeout profile; next connect` |
+
 Details of the daemon rows:
 
-- Tooltips describe each row, e.g. Kill switch: `Block all tunnel traffic
-  while the tunnel is down; applies immediately`; MTU: `Tun device MTU; next
-  connect`.
 - A daemon row whose key is reported as overridden gains a small
   `overridden` mark and a tonal `Reset` button (80 wide). `Reset` drops the
   override so the administrator value applies again; the notice reads
@@ -616,6 +642,10 @@ Steps (exact strings):
   >   account.
   >
   > Tick "I understand" below to unlock Continue.
+
+  *Note (v0.4.0): the consent text is verbatim from `onboarding.js`. The
+  tunnel's DNS support includes the local UDP relay, while non-DNS UDP
+  remains blocked.*
 
 - `I understand` checkbox (house-drawn box + label; Space toggles while
   focused; clicking the box or the label toggles; the label is the
@@ -959,11 +989,12 @@ covering a missing/stopped service.
 
 **Settings behavior**
 
-- Immediate-apply rows: kill switch, autoconnect, log level, redact targets,
-  solve challenges. Next-connect rows: exit check, DoH provider, DNS upstream,
+- Immediate-apply rows: kill switch, log level, redact targets, solve
+  challenges. Next-connect rows: exit check, DoH provider, DNS upstream,
   edge address, upstream proxy, exclude CIDRs, allow LAN, MTU, SOCKS port,
   quota poll, TLS split, HTTP proxy, HTTP proxy port, keepalive profile.
-  (Tooltips state this per row.)
+  Autoconnect is saved daemon-side and takes effect on the next daemon
+  start / autoconnect decision. (Tooltips state this per row.)
 - Mutation success triggers a model status refresh **and** a settings
   reload, keeping override marks truthful; `overridden` marks and `Reset`
   never guess defaults.
