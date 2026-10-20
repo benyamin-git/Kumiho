@@ -153,6 +153,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.screen == screenSettings {
+			// Keep the cursor row inside the resized viewport.
+			m.ensureSettingsCursorVisible()
+		}
 		return m, nil
 	case statusMsg:
 		if msg.err != nil {
@@ -212,6 +216,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.st.loaded = true
 		if msg.err != nil {
 			m.st.err = msg.err.Error()
+			m.ensureSettingsCursorVisible()
 			return m, nil
 		}
 		m.st.err = ""
@@ -220,11 +225,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, key := range msg.view.Overridden {
 			m.st.pinned[key] = true
 		}
+		m.ensureSettingsCursorVisible()
 		return m, nil
 	case settingDoneMsg:
 		if msg.err != nil {
 			m.st.err = msg.err.Error()
 			m.st.notice = ""
+			m.ensureSettingsCursorVisible()
 			return m, nil
 		}
 		if msg.reset {

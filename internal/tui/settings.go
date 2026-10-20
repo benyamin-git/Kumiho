@@ -62,6 +62,18 @@ var settingItems = []settingItem{
 		hint: "loopback SOCKS5 listener; next connect"},
 	{key: "quota_poll_minutes", label: "quota poll", kind: settingInt,
 		hint: "minutes between quota refreshes while connected; next connect"},
+	{key: "tls_split", label: "TLS split", kind: settingEnum,
+		options: []string{"off", "first-byte", "sni"},
+		hint:    "split the TLS ClientHello across records; next connect"},
+	{key: "http_proxy", label: "HTTP proxy", kind: settingBool,
+		hint: "loopback HTTP/CONNECT proxy through the tunnel; next connect"},
+	{key: "http_proxy_port", label: "HTTP proxy port", kind: settingInt,
+		hint: "loopback HTTP proxy listener; next connect"},
+	{key: "solve_challenges", label: "solve challenges", kind: settingBool,
+		hint: "solve FxA and edge challenges automatically; applies immediately"},
+	{key: "keepalive_profile", label: "keepalive profile", kind: settingEnum,
+		options: []string{"standard", "slow"},
+		hint:    "keepalive ping timeout profile; next connect"},
 }
 
 // settingsState is the Settings screen state (PLAN.md §6).
@@ -70,6 +82,7 @@ type settingsState struct {
 	view    api.SettingsView
 	pinned  map[string]bool
 	cursor  int
+	offset  int // first visible row; the viewport scrolls over settingItems
 	editing bool
 	editBuf string
 	err     string
@@ -156,13 +169,138 @@ func (m *Model) handleSettingsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if s.cursor < len(settingItems)-1 {
 			s.cursor++
 		}
+	case "pgup":
+		s.cursor -= m.settingsPageSize()
+		if s.cursor < 0 {
+			s.cursor = 0
+		}
+	case "pgdown":
+		s.cursor += m.settingsPageSize()
+		if s.cursor > len(settingItems)-1 {
+			s.cursor = len(settingItems) - 1
+		}
+	case "home":
+		s.cursor = 0
+	case "end":
+		s.cursor = len(settingItems) - 1
 	case "d":
 		item := settingItems[s.cursor]
 		return m, applySetting(m.client, item.key, "", true)
 	case "enter", " ":
 		return m, m.activateSetting()
 	}
+	m.ensureSettingsCursorVisible()
 	return m, nil
+}
+
+// settingsChromeLines is the number of rendered lines around the scrolling
+// row list: the three-line app header, the "Settings" title and its following
+// blank line, the blank line before the hint, the hint itself, and the blank
+// line plus footer.
+const settingsChromeLines = 9
+
+// settingsViewHeight is the height budget for the row window, including any
+// scroll cues. An unknown terminal height shows every row.
+func (m *Model) settingsViewHeight() int {
+	total := len(settingItems)
+	if m.height <= 0 {
+		return total
+	}
+	avail := m.height - settingsChromeLines
+	if m.st.err != "" {
+		avail -= 2 // error line + blank
+	}
+	if m.st.notice != "" {
+		avail -= 2 // blank + notice
+	}
+	if avail < 3 {
+		avail = 3
+	}
+	if avail > total {
+		avail = total
+	}
+	return avail
+}
+
+// settingsWindow resolves the visible slice of settingItems for a candidate
+// first row. The returned count plus the up/down cues never exceeds the height
+// budget; the window is clamped so it never runs past the last row.
+func (m *Model) settingsWindow(offset int) (start, count int, up, down bool) {
+	total := len(settingItems)
+	if total == 0 {
+		return 0, 0, false, false
+	}
+	avail := m.settingsViewHeight()
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= total {
+		offset = total - 1
+	}
+	if avail >= total {
+		return 0, total, false, false
+	}
+
+	rows := avail
+	up = offset > 0
+	if up {
+		rows--
+	}
+	if offset+rows < total {
+		rows--
+	}
+	if rows < 1 {
+		rows = 1
+	}
+	if offset+rows > total {
+		offset = total - rows
+	}
+	up = offset > 0
+	down = offset+rows < total
+	return offset, rows, up, down
+}
+
+// settingsPageSize is how many rows a pgup/pgdown jump moves the cursor: one
+// screenful minus one row of overlap so the page boundary stays visible.
+func (m *Model) settingsPageSize() int {
+	step := m.settingsViewHeight() - 1
+	if step < 1 {
+		step = 1
+	}
+	return step
+}
+
+// ensureSettingsCursorVisible scrolls the window until the cursor row is on
+// screen and normalizes offset inside the current bounds.
+func (m *Model) ensureSettingsCursorVisible() {
+	s := &m.st
+	total := len(settingItems)
+	if total == 0 {
+		return
+	}
+	if s.cursor < 0 {
+		s.cursor = 0
+	}
+	if s.cursor >= total {
+		s.cursor = total - 1
+	}
+	offset := s.offset
+	if offset < 0 {
+		offset = 0
+	}
+	for i := 0; i <= total; i++ {
+		start, count, _, _ := m.settingsWindow(offset)
+		switch {
+		case s.cursor < start:
+			offset = s.cursor
+		case s.cursor >= start+count:
+			offset = s.cursor - count + 1
+		default:
+			s.offset = start
+			return
+		}
+	}
+	s.offset = offset
 }
 
 // activateSetting cycles enums and toggles booleans; text and number rows
@@ -194,6 +332,10 @@ func (s *settingsState) boolValue(key string) bool {
 		return s.view.ExitCheck
 	case "allow_lan":
 		return s.view.AllowLAN
+	case "http_proxy":
+		return s.view.HTTPProxy
+	case "solve_challenges":
+		return s.view.SolveChallenges
 	}
 	return false
 }
@@ -201,12 +343,17 @@ func (s *settingsState) boolValue(key string) bool {
 // currentValue is the raw editable effective value of a setting.
 func (s *settingsState) currentValue(key string) string {
 	switch key {
-	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan":
+	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan",
+		"http_proxy", "solve_challenges":
 		return onoff(s.boolValue(key))
 	case "log_level":
 		return s.view.LogLevel
 	case "doh_provider":
 		return s.view.DoHProvider
+	case "tls_split":
+		return s.view.TLSSplit
+	case "keepalive_profile":
+		return s.view.KeepaliveProfile
 	case "dns_upstream":
 		return s.view.DNSUpstream
 	case "edge_address":
@@ -219,6 +366,8 @@ func (s *settingsState) currentValue(key string) string {
 		return strconv.Itoa(s.view.MTU)
 	case "socks_port":
 		return strconv.Itoa(s.view.SocksPort)
+	case "http_proxy_port":
+		return strconv.Itoa(s.view.HTTPProxyPort)
 	case "quota_poll_minutes":
 		return strconv.Itoa(s.view.QuotaPollMinutes)
 	}
@@ -247,7 +396,8 @@ func (s *settingsState) displayValue(key string) string {
 		if raw == "" {
 			return dimStyle.Render("(none)")
 		}
-	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan":
+	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan",
+		"http_proxy", "solve_challenges":
 		return onoffLabel(s.boolValue(key))
 	}
 	return raw
@@ -278,7 +428,12 @@ func (m *Model) renderSettings(b *strings.Builder) {
 		fmt.Fprintln(b)
 	}
 
-	for i, item := range settingItems {
+	start, count, up, down := m.settingsWindow(s.offset)
+	if up {
+		fmt.Fprintln(b, dimStyle.Render("↑ more"))
+	}
+	for i := start; i < start+count && i < len(settingItems); i++ {
+		item := settingItems[i]
 		cursor := "  "
 		if i == s.cursor {
 			cursor = "> "
@@ -291,7 +446,10 @@ func (m *Model) renderSettings(b *strings.Builder) {
 		if s.editing && i == s.cursor {
 			val = s.editBuf + "_"
 		}
-		fmt.Fprintf(b, "%s%s %-16s %s\n", cursor, mark, item.label, val)
+		fmt.Fprintf(b, "%s%s %-17s %s\n", cursor, mark, item.label, val)
+	}
+	if down {
+		fmt.Fprintln(b, dimStyle.Render("↓ more"))
 	}
 
 	fmt.Fprintln(b)

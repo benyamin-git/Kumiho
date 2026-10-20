@@ -319,12 +319,17 @@ Keys:
   rows are re-evaluated live and the cursor resets to the top.
 
 ## Settings screen
-Shows 14 rows (label, value; `*` marks a key whose effective value comes from
+Shows 19 rows (label, value; `*` marks a key whose effective value comes from
 a persisted runtime override, i.e. differs from `config.toml`), with the
-cursor `>`, and the current row's hint line. `loading settings...` before the
-first fetch; `* changed from config` appended to the footer legibly when any
-override exists. Footer: `enter change • d reset to default • r refresh •
-esc back • ? help • q quit`.
+cursor `>`, and the current row's hint line. The list is a viewport over the
+terminal content height (height − 9 lines of header/title/hint/footer, minus
+2 for an error line or notice when present; a row budget of at least 3 lines,
+at most 19); when rows are clipped it prints a dim `↑ more` line above the
+list and/or a `↓ more` line below it (no native scrollbar). An unknown
+terminal height (no `WindowSizeMsg` yet) shows every row. `loading
+settings...` before the first fetch; `* changed from config` appended to the
+footer legibly when any override exists. Footer: `enter change • d reset to
+default • r refresh • esc back • ? help • q quit`.
 
 Rows and edit behavior (all persisted daemon-side as overrides in
 `state.json`; values shown are **effective**):
@@ -344,12 +349,20 @@ Rows and edit behavior (all persisted daemon-side as overrides in
 | `mtu` | MTU | inline number edit | 576–65535 |
 | `socks_port` | SOCKS port | inline number edit | 1–65535 |
 | `quota_poll_minutes` | quota poll | inline number edit | 1–1440 |
+| `tls_split` | TLS split | enum cycles off→first-byte→sni | off/first-byte/sni |
+| `http_proxy` | HTTP proxy | bool toggle | on/off |
+| `http_proxy_port` | HTTP proxy port | inline number edit | 1–65535 |
+| `solve_challenges` | solve challenges | bool toggle | on/off |
+| `keepalive_profile` | keepalive profile | enum cycles standard→slow | standard/slow |
 
 Display specials: empty `dns_upstream` → `(provider default)`, empty
 `edge_address` → `(resolve)`, empty `upstream_proxy` → `(direct)`, empty
 `exclude_cidrs` → `(none)`.
 Keys:
-- arrows / `k` `j` — move cursor (rows do not scroll: all 14 fit).
+- arrows / `k` `j` — move cursor one row; the viewport scrolls to keep the
+  cursor visible.
+- `pgup` / `pgdown` — jump the cursor one screenful (visible rows − 1) and
+  scroll the viewport with it; `home` / `end` jump to the first / last row.
 - `enter` / `space` — activate: bool toggles and enum cycles apply
   immediately; text/int rows enter inline edit mode prefilled with the
   current effective value.
@@ -363,9 +376,12 @@ Keys:
 - Apply timing (hint text and behavior): `kill_switch`, `log_level`,
   `redact_targets` apply immediately; toggling `kill_switch` on a connected
   full tunnel re-applies the live netcfg, and if that fails the change is
-  rejected (`<err>` shown) with the previous value kept. `autoconnect` takes
-  effect on the next daemon start/autoconnect decision. All other rows are
-  connection-scoped: they take effect on the **next connect**.
+  rejected (`<err>` shown) with the previous value kept. `solve_challenges` is
+  consulted per control-plane request, so it applies immediately too.
+  `autoconnect` takes effect on the next daemon start/autoconnect decision.
+  `tls_split`, `http_proxy`, `http_proxy_port` and `keepalive_profile` are
+  connection-scoped, as are all other rows: they take effect on the **next
+  connect**.
 - Errors (validation rejected by the daemon) show in the error line; server
   error codes: `bad_request`, `unsupported_setting` (e.g. `socks_bind`).
 
@@ -477,7 +493,7 @@ Requests (client → daemon), one line each:
 | `logout` | (none) → `{ok}` | clears tokens + disconnects; broadcast status |
 | `connect` | `{location_code?, city_code?, server?, proxy_only?}` → `{ok}` | can take ~30 s+; errors `bad_request` / `not_authenticated` / `internal`; broadcast status |
 | `disconnect` | (none) → `{ok}` | `bad_request "not connected"` when idle; broadcast status |
-| `settings_get` | (none) → `SettingsView{socks_port, mtu, exit_check, doh_provider, dns_upstream?, edge_address?, upstream_proxy?, exclude_cidrs?, allow_lan, log_level, redact_targets, kill_switch("last\|on\|off"), autoconnect("last\|on\|off"), kill_switch_effective, autoconnect_effective, quota_poll_minutes, overridden?[]}` | no `socks_bind`; no `proxy_only` field |
+| `settings_get` | (none) → `SettingsView{socks_port, mtu, exit_check, doh_provider, dns_upstream?, edge_address?, upstream_proxy?, exclude_cidrs?, allow_lan, log_level, redact_targets, kill_switch("last\|on\|off"), autoconnect("last\|on\|off"), kill_switch_effective, autoconnect_effective, quota_poll_minutes, tls_split("off\|first-byte\|sni"), http_proxy, http_proxy_port, solve_challenges, keepalive_profile("standard\|slow"), overridden?[]}` | no `socks_bind`; no `proxy_only` field |
 | `settings_set` | `{key, value, reset?}` → `{ok}` | keys/values below; `unsupported_setting` for unknown keys (e.g. `socks_bind`); `bad_request` on validation; `internal` if a `kill_switch` live re-apply fails (change rolled back); broadcast status |
 | `logs_snapshot` | `{level?}` → `{entries:[{ts, level: "debug"\|"info"\|"warn"\|"error", tag, msg}]}` | default level debug (all); ring capacity 2000 |
 | `logs_subscribe` | `{level?}` → `{ok}` then a live `log` event stream on this connection until unsubscribe/disconnect | default level info; a second subscribe replaces the connection's previous one |
@@ -502,13 +518,15 @@ Runtime setting keys accepted by `settings_set` (all persisted as overrides in
 `state.json`, `reset:true` drops the override):
 `kill_switch` (on|off|last), `autoconnect` (on|off|last), `proxy_only`
 (on|off|last — **hidden**: not in `SettingsView`, not in the TUI),
-`exit_check`/`redact_targets`/`allow_lan` (on|off/true/false/yes/no),
+`exit_check`/`redact_targets`/`allow_lan`/`http_proxy`/`solve_challenges`
+(on|off/true/false/yes/no),
 `log_level` (debug|info|warn|error), `doh_provider`
 (automatic|cloudflare|google|quad9|off), `dns_upstream` (IP or empty),
 `edge_address` (IP or empty), `upstream_proxy` (URL or empty),
 `exclude_cidrs` (comma-separated CIDRs), `mtu` (576–65535), `socks_port`
-(1–65535), `quota_poll_minutes` (1–1440). `socks_bind` and any other key →
-`unsupported_setting`.
+(1–65535), `quota_poll_minutes` (1–1440), `tls_split` (off|first-byte|sni),
+`http_proxy_port` (1–65535), `keepalive_profile` (standard|slow).
+`socks_bind` and any other key → `unsupported_setting`.
 
 Gap flags (daemon-side abilities beyond the IPC surface):
 - **doctor**: no request type — CLI/TUI/Windows GUI run `internal/doctor`
