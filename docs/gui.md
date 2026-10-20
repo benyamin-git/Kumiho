@@ -15,7 +15,7 @@ installing, the first-run wizard, each screen, the tray, diagnostics and
 uninstalling.
 
 > **Reading the current UI.** This guide describes the app shipping with
-> v0.3.0. The older walk-era inventory in
+> v0.4.0. The older walk-era inventory in
 > [gui-feature-inventory.md](gui-feature-inventory.md) describes an earlier
 > native build and differs in places; where they disagree, the running app is
 > authoritative.
@@ -192,6 +192,11 @@ row returns to the admin `config.toml` (or built-in) default. The rows are:
 | MTU | tun device MTU; next connect |
 | SOCKS port | loopback SOCKS5 listener; next connect |
 | Quota poll | minutes between quota refreshes while connected; next connect |
+| TLS split | `off`, `first-byte`, `sni`; splits the TLS ClientHello across records; next connect |
+| HTTP proxy | on/off; loopback HTTP/CONNECT proxy through the tunnel; next connect |
+| HTTP proxy port | loopback HTTP proxy listener; next connect |
+| Solve challenges | on/off; answers the Firefox Accounts and edge challenges automatically; applies immediately |
+| Keepalive profile | `standard`, `slow`; keepalive ping timeout profile; next connect |
 
 A status line under the rows reports the last change, including `Applying...`
 while a change is in flight. Only one change runs at a time.

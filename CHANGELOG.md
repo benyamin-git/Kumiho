@@ -10,7 +10,7 @@ and this project adheres to
 
 Backend parity with the FoxyVPN releases after the one we ported: strict DoH
 with endpoint failover, anti-censorship controls, a working upstream proxy and
-a local HTTP proxy, and the settings for all of it across the TUI, CLI and GUI.
+a local HTTP proxy, and the settings for all of it across the TUI and GUI.
 
 ### Added
 
@@ -51,7 +51,7 @@ a local HTTP proxy, and the settings for all of it across the TUI, CLI and GUI.
 - The five new runtime settings (`tls_split`, `http_proxy`, `http_proxy_port`,
   `solve_challenges`, `keepalive_profile`) in `config.toml`, `state.json`
   overrides and the control protocol, in the TUI settings screen (now
-  scrollable), in the CLI settings surface and in the Windows GUI.
+  scrollable) and in the Windows GUI.
 
 ### Changed
 

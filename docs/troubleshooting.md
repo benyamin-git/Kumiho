@@ -61,18 +61,76 @@ return as soon as the service restarts.
 
 The tunnel resolver is DoH-only and tries its endpoints in serial: the
 configured provider (or a custom `dns_upstream`), then Cloudflare `1.1.1.1`,
-then Quad9 `9.9.9.9`. A failed endpoint is skipped for 30 minutes, and if all
-of them fail queries answer SERVFAIL — there is no plaintext DNS fallback
-(the edge refuses CONNECT to port 53 anyway). Watch for `[dns]` warnings in
-the logs. Custom providers can be pinned in Settings (`doh_provider`,
-`dns_upstream`) or disabled with `off`; `off` without a custom upstream leaves
-no DoH endpoints, so in-tunnel DNS returns SERVFAIL.
+then Quad9 `9.9.9.9`. A failed endpoint is skipped for 30 minutes and the next
+query moves on to the following one. If every endpoint keeps failing, queries
+answer SERVFAIL. There is no plaintext DNS fallback: the edge refuses CONNECT
+to port 53 anyway.
+
+Symptoms of that failover are: sites that need a name lookup fail while a
+literal IP still works, and the log shows `[dns]` warnings naming the failed
+endpoint (SERVFAIL appears once the chain is exhausted). Custom providers can
+be pinned in Settings (`doh_provider`, `dns_upstream`) or disabled with `off`;
+`off` without a custom upstream leaves no DoH endpoints, so in-tunnel DNS
+returns SERVFAIL.
 
 - Linux: `resolvectl status foxy0` shows what the system is using; the
   adapter should point at the in-TUN resolver.
 - Windows: `Get-DnsClientServerAddress -InterfaceAlias foxy0` should show
   `10.8.0.2`, and `Resolve-DnsName example.com` checks resolution. An empty
   or stale list is cleared on the next connect.
+
+## You are behind a proxy or a filtered network
+
+**Upstream proxy.** Set `upstream_proxy` in Settings (`s` in the TUI, or the
+GUI's Settings screen) to a SOCKS5, SOCKS5h or HTTP proxy URL:
+
+    upstream_proxy = "socks5h://user:pass@proxy.example.net:1080"
+
+The scheme sets the default port (1080 for both `socks5` and `socks5h`, 80
+for `http`), `user:pass@` is optional, and the proxy resolves the edge
+hostname. Only Kumiho's edge connection uses the hop: the control plane,
+Remote Settings, DoH and bootstrap stay direct, and the local SOCKS5/HTTP
+listeners are unaffected. A malformed URL is rejected when you save it;
+errors at connect time name `upstream_proxy` and never echo the credentials.
+To test, save the URL, reconnect, and watch `kumiho logs -f`: a rejection or
+dial failure names `upstream_proxy` or `dial proxy <host:port>`, never the
+credentials.
+
+**Filtered TLS.** If the normal connection is reset or hangs on a network
+that inspects TLS handshakes, try `tls_split=first-byte`, then `tls_split=sni`.
+It is best effort, off by default, and applies on the next connect.
+
+## HTTP proxy does not work
+
+- Turn it on: `http_proxy=on` in Settings (or `config.toml`), then reconnect.
+  The listener starts and stops with the tunnel, so a refused connection
+  often just means the tunnel is down.
+- Check the port: `http_proxy_port` defaults to 8080, must be 1–65535 and
+  must be free; a collision is reported as a connect failure.
+- Test it with a client that honours `-x`:
+
+      curl -x http://127.0.0.1:8080 https://example.com
+
+- It is loopback-only and unauthenticated. A client on another machine
+  cannot use it, and no username or password is needed (or accepted).
+- It does not intercept TLS: HTTPS goes through `CONNECT`.
+
+## UDP or DNS in proxy-only mode
+
+The SOCKS5 listener supports `UDP ASSOCIATE` for DNS only: send DNS queries
+to port 53 through it and they are answered through the same in-tunnel DoH
+chain. Non-DNS UDP — QUIC, games, calls — is blocked on purpose, and the
+Fastly edge only accepts TCP 80 and 443, so UDP cannot be tunnelled. In full
+mode, ordinary DNS through the tunnel still works through the local resolver,
+including TCP; in proxy-only mode, HTTPS and DoH through the proxy are
+unaffected.
+
+## Connection drops on a slow link
+
+The standard keepalive profile times out an unanswered ping after 10 s, which
+a very slow or lossy link can trip. Set `keepalive_profile=slow` (25 s) and
+reconnect; it applies on the next connect. The ping schedule itself is
+unchanged: 15 s idle before the first ping, checked every 3 s.
 
 ## Traffic is blocked but the state says CONNECTED
 
@@ -84,9 +142,19 @@ kill switch off in Settings.
 
 ## Login says the account sent a challenge
 
-Mozilla's edge anti-bot challenge (`406`) is not solvable by Kumiho yet
-(PLAN.md §2.2); the error surfaces with this exact wording and retrying later
-usually succeeds. No challenge has been observed in practice.
+Mozilla's edge answers some control-plane requests with a `406` anti-bot
+challenge (Fastly's proof-of-work, `PAT` or `clientmetrics`). With
+`solve_challenges=on` (the default) Kumiho fetches the challenged origin,
+falls back to the related apex when the origin serves no challenge page,
+answers the challenge, installs the cookies and retries the request — up to
+five attempts in total. `[fastly]` lines in the log show each step.
+
+If it still fails the error is explicit: `could not solve the anti-bot
+challenge; retry or disable solve_challenges`. A captcha or an unknown
+challenge type cannot be solved and fails the same way. Setting
+`solve_challenges=off` produces the immediate
+`anti-bot challenge solving is disabled; enable solve_challenges and try
+again`; that is a diagnostic step to isolate the problem, not a fix.
 
 ## Watchdog keeps rotating edges
 

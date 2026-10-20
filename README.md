@@ -76,8 +76,8 @@ controls sit inside it.
 - **Slow keepalive profile** — `keepalive_profile` (`standard|slow`, default
   `standard`) raises the keepalive timeout from 10 s to 25 s for slow links.
 
-These settings live in `config.toml`, in per-user overrides, and in the TUI,
-CLI and Windows GUI. `tls_split`, `http_proxy`, `http_proxy_port` and
+These settings live in `config.toml`, in per-user overrides, and in the TUI
+and Windows GUI. `tls_split`, `http_proxy`, `http_proxy_port` and
 `keepalive_profile` take effect on the next connect; `solve_challenges` is
 read per control-plane request, so a change applies immediately. The full
 setting reference is in [docs/usage.md](docs/usage.md).

@@ -30,7 +30,7 @@ Done. From then on it starts by itself, even after a reboot.
 |---|---|
 | `space` | connect / disconnect |
 | `o` | pick a country/server (`enter` select, `p` test speed, `esc` back) |
-| `s` | settings (kill switch, autoconnect, DNS, MTU…) — `enter` change, `d` reset |
+| `s` | settings (kill switch, autoconnect, DNS, MTU, TLS split, proxies, challenge solving, keepalive…) — `enter` change, `d` reset |
 | `g` | live logs |
 | `a` | your account: email, subscription, data left |
 | `?` | help |
@@ -41,6 +41,37 @@ you've been connected, and how much data you have left.
 
 The default MTU is 8500. You only need to change it if a network has trouble
 with large packets; a new value takes effect on the next connect.
+
+## New settings in v0.4.0
+
+You don't need any of these to use Kumiho. They are for networks that get in
+the way. Change them in settings (`s`); most take effect the next time you
+connect, while solving challenges takes effect immediately.
+
+- **Solve challenges** (on by default) — Kumiho answers Mozilla's automated
+  "are you a robot?" check by itself. If a real picture captcha appears it
+  still fails, with a clear message. Turn it off only when you are diagnosing
+  a login problem.
+- **TLS split** (`off`, `first-byte` or `sni`) — try `first-byte`, then
+  `sni`, if a network blocks the normal connection. It is best effort and
+  nothing is guaranteed.
+- **Upstream proxy** — for people who must go through a proxy, for example
+  `socks5h://user:pass@proxy.example.net:1080`. Only Kumiho's connection to
+  the VPN servers goes through it; the rest of the machine's traffic does
+  not.
+- **HTTP proxy** (`http_proxy` and `http_proxy_port`) — starts a proxy
+  together with the tunnel:
+
+      curl -x http://127.0.0.1:8080 https://example.com
+
+  It is for this computer only (loopback), needs no password, and stops with
+  the tunnel.
+- **Keepalive profile** — choose `slow` if the connection keeps dropping on a
+  slow link.
+
+DNS stays encrypted. There is no plaintext fallback: if every encrypted
+resolver fails, names stop resolving rather than leak. The technical detail
+is in [usage.md](usage.md).
 
 ## If you prefer typing commands
 
