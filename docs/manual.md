@@ -39,6 +39,9 @@ Done. From then on it starts by itself, even after a reboot.
 The top of the screen always shows: connection state, location, how long
 you've been connected, and how much data you have left.
 
+The default MTU is 8500. You only need to change it if a network has trouble
+with large packets; a new value takes effect on the next connect.
+
 ## If you prefer typing commands
 
     kumiho connect        # connect

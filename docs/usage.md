@@ -45,6 +45,11 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   Toggling `kill_switch` on a connected tunnel re-applies the live policy; if
   that re-apply fails the change is rejected with an error and the previous
   value is kept.
+
+  The default MTU is 8500. `foxy0` feeds a gVisor userspace network stack
+  that handles packets of that size itself, and Kumiho has no mobile kernel
+  VPN path, so the reference app's mobile 1400 rationale does not apply. The
+  value is configurable (576–65535) and a change applies on the next connect.
 - **Logs** — the daemon's in-memory ring plus live streaming; `v` cycles the
   level filter, `/` searches, `c` clears, `f` toggles follow, `e` exports the
   visible entries to `~/.local/state/kumiho/kumiho-logs-<timestamp>.log`

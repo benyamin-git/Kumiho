@@ -122,7 +122,12 @@ All facts below were read directly from `Vauth/FoxyVPN` (Kotlin, MIT) and its cr
 
 - Name `foxy0`, created via `/dev/net/tun` (`IFF_TUN | IFF_NO_PI`), non-persistent (auto-destroyed on close/crash).
 - IPv4 `10.8.0.2/32`; **no IPv6 address** (FoxyVPN parity: IPv6 blackholed).
-- MTU **8500** (FoxyVPN parity); revisit to 1500 only if testing shows problems.
+- MTU **8500** (FoxyVPN parity). `foxy0` feeds the gVisor userspace netstack,
+  which handles the packet sizes itself, so the larger MTU reduces per-packet
+  overhead through that stack. Kumiho has no mobile kernel VPN path, so the
+  reference app's mobile **1400** rationale does not apply; mobile/Android
+  parity (including a 1400 default) is deliberately out of scope for v0.4.0.
+  `mtu` remains configurable (576–65535) and applies on the next connect.
 - Local DNS server binds `10.8.0.2:53` (UDP+TCP) — kernel local-delivery means DNS never traverses the tunnel stack.
 
 ### 3.2 Marking and policy routing
