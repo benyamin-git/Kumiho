@@ -401,6 +401,11 @@ function Write-DefaultConfig {
 #   mtu           = 8500
 #   allow_lan     = true
 #   log_level     = "info"
+#   tls_split         = "off"      # off | first-byte | sni
+#   http_proxy        = false      # loopback HTTP/CONNECT proxy
+#   http_proxy_port   = 8080
+#   solve_challenges  = true       # solve FxA/edge challenges
+#   keepalive_profile = "standard" # standard | slow
 '@
     [System.IO.File]::WriteAllText($configFile, $template)
     Write-Host "wrote default $configFile"

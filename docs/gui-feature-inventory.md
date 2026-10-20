@@ -355,8 +355,8 @@ Details of the daemon rows:
 
 **Other elements:** a `Refresh` button (tonal, 110) in the action row under
 the title (`Settings`); a bottom status line with this priority:
-`Applying...` → `Loading settings...` → error → 10 s notice → `Loading
-settings...` (never loaded) → empty.
+`Applying...` → `Checking for updates...` → `Loading settings...` (only when
+there are no settings and no error) → error → 10 s notice → empty.
 
 **Rows pane states:** hidden entirely until the first successful snapshot;
 after that it is scrollable. Loading/failure shows only the status line.

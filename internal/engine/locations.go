@@ -90,8 +90,7 @@ func (c *Controller) diskCacheFallback(fetchErr error) ([]serverlist.Country, er
 	return countries, nil
 }
 
-// SelectLocation persists a location choice without connecting (connect
-// arrives in M3; reconnect/auto-pick logic lives there too).
+// SelectLocation persists a location choice without connecting.
 func (c *Controller) SelectLocation(countryCode, cityCode, server string) error {
 	if countryCode == "" || server == "" {
 		return &api.RemoteError{Code: api.CodeBadRequest, Message: "country_code and server are required"}

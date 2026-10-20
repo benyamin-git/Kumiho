@@ -31,9 +31,9 @@ a local HTTP proxy, and the settings for all of it across the TUI and GUI.
   turns solving off.
 - TLS ClientHello fragmentation for the edge and control-plane handshakes:
   `tls_split=off` (default), `first-byte` writes the first byte of the record
-  separately, and `sni` splits around the first hostname byte. The bytes on the
-  wire are unchanged and the split applies per connection, so a new value
-  takes effect on the next dial.
+  separately, and `sni` splits around the first hostname byte. ClientHello
+  contents are unchanged; the record is split across two TCP writes, and the
+  split applies per connection, so a new value takes effect on the next dial.
 - A functional `upstream_proxy`: the edge dial can go through a SOCKS5,
   SOCKS5h or HTTP proxy with optional credentials (`socks5://`, `socks5h://`
   or `http://`), hands the edge hostname to the proxy unresolved so there is

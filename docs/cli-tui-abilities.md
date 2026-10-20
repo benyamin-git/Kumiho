@@ -594,8 +594,9 @@ default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
 - Effective values = admin config + override. First install kill switch and
   autoconnect are ON (`last` + null state → true).
 - Apply timing: `kill_switch` (live re-apply of netcfg; failure rejects and
-  rolls back), `log_level`, `redact_targets` immediately; `autoconnect` at the
-  next daemon start; every other connection-scoped key at the next connect.
+  rolls back), `log_level`, `redact_targets`, `solve_challenges` immediately;
+  `autoconnect` at the next daemon start; every other connection-scoped key at
+  the next connect.
 - Clients cannot edit `config.toml` through IPC; it is edited by hand/installer.
 - State also persists: selected location/city/server, email, per-server dial
   failure counts, remembered kill switch/autoconnect/proxy_only.

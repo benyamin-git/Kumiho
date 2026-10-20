@@ -192,7 +192,7 @@ row returns to the admin `config.toml` (or built-in) default. The rows are:
 | MTU | tun device MTU; next connect |
 | SOCKS port | loopback SOCKS5 listener; next connect |
 | Quota poll | minutes between quota refreshes while connected; next connect |
-| TLS split | `off`, `first-byte`, `sni`; splits the TLS ClientHello across records; next connect |
+| TLS split | `off`, `first-byte`, `sni`; splits the TLS ClientHello across writes within one record; next connect |
 | HTTP proxy | on/off; loopback HTTP/CONNECT proxy through the tunnel; next connect |
 | HTTP proxy port | loopback HTTP proxy listener; next connect |
 | Solve challenges | on/off; answers the Firefox Accounts and edge challenges automatically; applies immediately |

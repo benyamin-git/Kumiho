@@ -295,8 +295,9 @@ and
 
       kumiho logs --level debug | Select-String -Pattern 'resolver|dns|doh'
 
-  Expect: `resolver up on 10.8.0.2:53 (DoH through the tunnel)` and `[dns]`
-  activity; no `dns` errors.
+  Expect: `resolver up on 10.8.0.2:53 (DoH through the tunnel)`; no `dns`
+  errors. A successful first resolve logs no `[dns]` activity — the resolver
+  logs only failures and successful half-open probes.
 
 - [ ] Custom DNS and DoH off (TUI Settings, applies on the next connect):
       open `kumiho`, `s`, set `DoH provider` to `cloudflare`, set
@@ -306,8 +307,8 @@ and
       Clear-DnsClientCache
       Resolve-DnsName example.com
 
-  Expect: resolves; logs show the pinned DoH resolver. Then set `DoH provider`
-  to `off` and clear `DNS upstream`: `enter` on that row, erase `1.1.1.1`
+  Expect: resolves through the pinned DoH resolver; no `dns` errors. Then set
+  `DoH provider` to `off` and clear `DNS upstream`: `enter` on that row, erase `1.1.1.1`
   (empty resets to the provider default), `enter` again (`d` resets the row
   directly). Both apply on the next connect: `esc`, `space` to disconnect,
   `space` to reconnect, then:

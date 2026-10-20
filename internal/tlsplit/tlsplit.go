@@ -3,7 +3,8 @@
 //
 // Some networks shape or block TLS connections based on the plaintext
 // ClientHello. Writing the first handshake record across more than one TCP
-// segment can defeat that. The splitter never changes the bytes on the wire:
+// segment can defeat that. The splitter never changes the byte stream: it only
+// divides the same ClientHello record across TCP writes.
 //
 //   - FirstByte splits any buffer that looks like a TLS handshake record
 //     carrying a ClientHello (record type 22, major version 3, handshake type

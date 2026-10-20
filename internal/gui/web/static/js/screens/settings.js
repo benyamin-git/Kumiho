@@ -82,7 +82,7 @@ const AUTOSTART_KEY = "kumiho.gui.autostart";
 
 // The `Background service` rows in the inventory's canonical order: key,
 // label, control kind, enum order, cue and tooltip (the walk row model's
-// hints, sentence-cased; the inventory quotes the Kill switch and MTU ones).
+// hints, sentence-cased; the inventory lists all 19 rows).
 const SERVICE_ROWS = [
   { key: "kill_switch", label: "Kill switch", kind: "toggle",
     hint: "Block all tunnel traffic while the tunnel is down; applies immediately" },

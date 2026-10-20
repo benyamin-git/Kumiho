@@ -71,16 +71,17 @@ as per-user overrides and can be set as defaults in `config.toml`.
 | Setting | Values | Default | Applies |
 |---|---|---|---|
 | `tls_split` | `off`, `first-byte`, `sni` | `off` | next connect |
-| `http_proxy` | on/off | off | next connect |
+| `http_proxy` | on/off (Settings); `true`/`false` (config.toml) | off | next connect |
 | `http_proxy_port` | 1–65535 | 8080 | next connect |
-| `solve_challenges` | on/off | on | immediately |
+| `solve_challenges` | on/off (Settings); `true`/`false` (config.toml) | on | immediately |
 | `keepalive_profile` | `standard`, `slow` | `standard` | next connect |
 | `upstream_proxy` | `socks5://`, `socks5h://` or `http://` URL | empty (direct) | next connect |
 
 **`tls_split`** is best-effort TLS ClientHello fragmentation for networks
 that filter on the handshake text. `first-byte` writes the first byte of the
-record separately; `sni` splits around the first hostname byte. The bytes on
-the wire are unchanged, and a malformed or SNI-less ClientHello is not split.
+record separately; `sni` splits around the first hostname byte. ClientHello
+contents are unchanged; the record is split across two TCP writes, and a
+malformed or SNI-less ClientHello is not split.
 
 **`http_proxy`** starts a loopback HTTP proxy together with the tunnel. Point
 a client at it:
