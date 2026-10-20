@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
+	"github.com/benyamin-git/kumiho/internal/dns"
 	"github.com/benyamin-git/kumiho/internal/guardian"
+	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/upstream"
@@ -641,4 +643,171 @@ func TestRenewalDelay(t *testing.T) {
 			t.Fatalf("%s: delay = %s, want %s", tc.name, got, tc.want)
 		}
 	}
+}
+
+// dnsCapture observes the constructors startTunnel uses, so the tests can
+// assert that one resolver is shared by the local DNS listener and SOCKS.
+type dnsCapture struct {
+	resolverCalls atomic.Int32
+	listenerCalls atomic.Int32
+	resolver      *dns.Resolver
+	listenerArg   *dns.Resolver
+}
+
+func installDNSCapture(t *testing.T) *dnsCapture {
+	t.Helper()
+	oldResolver, oldListener := newDNSResolver, newDNSListener
+	t.Cleanup(func() {
+		newDNSResolver, newDNSListener = oldResolver, oldListener
+	})
+	c := &dnsCapture{}
+	newDNSResolver = func(dial dns.Dialer, provider, upstream string, logf func(level logging.Level, tag, format string, args ...any)) (*dns.Resolver, error) {
+		c.resolverCalls.Add(1)
+		r, err := oldResolver(dial, provider, upstream, logf)
+		c.resolver = r
+		return r, err
+	}
+	newDNSListener = func(r *dns.Resolver) *dns.Server {
+		c.listenerCalls.Add(1)
+		c.listenerArg = r
+		return oldListener(r)
+	}
+	return c
+}
+
+func TestStartTunnelSharesDNSResolver(t *testing.T) {
+	t.Run("proxy-only builds one resolver with no DNS listener", func(t *testing.T) {
+		ctrl, _ := newTestController(t, loginOKHandler(t))
+		ctrl.socksPortOverride = freePort(t)
+		ctrl.mu.Lock()
+		ctrl.session = newFakeSession()
+		ctrl.mu.Unlock()
+
+		capture := installDNSCapture(t)
+		res, err := ctrl.startTunnel(context.Background(), true)
+		if err != nil {
+			t.Fatalf("startTunnel(proxy-only): %v", err)
+		}
+		defer res.Close()
+
+		if got := capture.resolverCalls.Load(); got != 1 {
+			t.Fatalf("resolver constructions = %d, want exactly 1", got)
+		}
+		if got := capture.listenerCalls.Load(); got != 0 {
+			t.Fatalf("DNS listeners started = %d, want 0 in proxy-only mode", got)
+		}
+		if res.dns != nil {
+			t.Fatal("proxy-only mode started the local DNS listener")
+		}
+		if res.socks == nil || res.socks.Resolve == nil {
+			t.Fatal("proxy-only SOCKS server has no resolver wired")
+		}
+		if capture.resolver == nil {
+			t.Fatal("startTunnel did not build a resolver")
+		}
+	})
+
+	t.Run("full starts the listener with the same resolver", func(t *testing.T) {
+		ctrl, _ := newTestController(t, loginOKHandler(t))
+		fp := ctrl.plat.(*fakeProvider)
+		fp.dnsAddr = "127.0.0.1:0"
+		ctrl.socksPortOverride = freePort(t)
+		ctrl.mu.Lock()
+		ctrl.session = newFakeSession()
+		ctrl.mu.Unlock()
+
+		capture := installDNSCapture(t)
+		res, err := ctrl.startTunnel(context.Background(), false)
+		if err != nil {
+			t.Fatalf("startTunnel(full): %v", err)
+		}
+		defer res.Close()
+
+		if got := capture.resolverCalls.Load(); got != 1 {
+			t.Fatalf("resolver constructions = %d, want exactly 1", got)
+		}
+		if got := capture.listenerCalls.Load(); got != 1 {
+			t.Fatalf("DNS listener constructions = %d, want 1", got)
+		}
+		if capture.listenerArg == nil || capture.listenerArg != capture.resolver {
+			t.Fatal("the DNS listener was not built with the shared resolver")
+		}
+		if res.dns == nil {
+			t.Fatal("full mode did not start the local DNS listener")
+		}
+		if res.socks == nil || res.socks.Resolve == nil {
+			t.Fatal("full-mode SOCKS server has no resolver wired")
+		}
+	})
+
+	t.Run("DNS start failure tears the full path down", func(t *testing.T) {
+		occupied, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer occupied.Close()
+
+		ctrl, _ := newTestController(t, loginOKHandler(t))
+		fp := ctrl.plat.(*fakeProvider)
+		fp.dnsAddr = occupied.LocalAddr().String()
+		ctrl.socksPortOverride = freePort(t)
+		ctrl.mu.Lock()
+		ctrl.session = newFakeSession()
+		ctrl.mu.Unlock()
+
+		capture := installDNSCapture(t)
+		res, err := ctrl.startTunnel(context.Background(), false)
+		if err == nil || !strings.Contains(err.Error(), "start DNS resolver") {
+			t.Fatalf("startTunnel error = %v, want a DNS listener failure", err)
+		}
+		if res != nil {
+			res.Close()
+			t.Fatal("failed startTunnel returned resources")
+		}
+		if got := capture.resolverCalls.Load(); got != 1 {
+			t.Fatalf("resolver constructions = %d, want 1", got)
+		}
+		if got := capture.listenerCalls.Load(); got != 1 {
+			t.Fatalf("DNS listener constructions = %d, want 1", got)
+		}
+		if applies, cleanups := fp.nc.counts(); applies != 1 || cleanups != 1 {
+			t.Fatalf("netcfg apply/cleanup = %d/%d, want 1/1", applies, cleanups)
+		}
+		events := strings.Join(fp.eventList(), ",")
+		if !strings.Contains(events, "device.close") {
+			t.Fatalf("provider events = %v, want a device close", fp.eventList())
+		}
+		socksAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(ctrl.socksPortOverride))
+		if conn, derr := net.DialTimeout("tcp", socksAddr, 200*time.Millisecond); derr == nil {
+			_ = conn.Close()
+			t.Fatal("SOCKS listener was started despite the DNS failure")
+		}
+	})
+
+	t.Run("SOCKS listen failure still built the resolver", func(t *testing.T) {
+		held, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer held.Close()
+
+		ctrl, _ := newTestController(t, loginOKHandler(t))
+		ctrl.socksPortOverride = held.Addr().(*net.TCPAddr).Port
+		ctrl.mu.Lock()
+		ctrl.session = newFakeSession()
+		ctrl.mu.Unlock()
+
+		capture := installDNSCapture(t)
+		res, err := ctrl.startTunnel(context.Background(), true)
+		if err == nil || !strings.Contains(err.Error(), "listen") {
+			t.Fatalf("startTunnel error = %v, want a SOCKS listen failure", err)
+		}
+		if res != nil {
+			res.Close()
+			t.Fatal("failed startTunnel returned resources")
+		}
+		if got := capture.resolverCalls.Load(); got != 1 {
+			t.Fatalf("resolver constructions = %d, want 1 before the SOCKS branch", got)
+		}
+	})
 }

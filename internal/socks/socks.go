@@ -1,7 +1,7 @@
 // Package socks implements the local SOCKS5 server (PLAN.md §2.4): no-auth
 // greeting, CONNECT tunnelled through the HTTP/2 session, local-destination
-// refusals, refusal backoff for destinations the edge declines, and
-// half-close draining. DNS-only UDP ASSOCIATE lands with the M4 resolver.
+// refusals, refusal backoff for destinations the edge declines, half-close
+// draining and DNS-only UDP ASSOCIATE through the in-tunnel DoH resolver.
 package socks
 
 import (
@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	mdns "github.com/miekg/dns"
 
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/upstream"
@@ -59,6 +61,10 @@ type Server struct {
 	// upstream.Session.OpenStream). Required.
 	Dial func(ctx context.Context, host string, port int) (net.Conn, error)
 
+	// Resolve answers a DNS query through the in-tunnel DoH resolver.
+	// Nil keeps today's command-unsupported refusal for UDP ASSOCIATE.
+	Resolve func(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error)
+
 	// Logf receives operational logs (may be nil).
 	Logf func(level logging.Level, tag, format string, args ...any)
 
@@ -71,12 +77,14 @@ type Server struct {
 	// with 401/403/407 so the daemon can recycle the session (PLAN.md §2.4).
 	OnAuthRejected func()
 
-	ln       net.Listener
-	mu       sync.Mutex
-	conns    map[net.Conn]struct{}
-	closed   bool
-	refusals map[string]*refusal
-	slots    chan struct{}
+	ln        net.Listener
+	mu        sync.Mutex
+	conns     map[net.Conn]struct{}
+	closed    bool
+	refusals  map[string]*refusal
+	slots     chan struct{}
+	udpAssocs map[string]*udpAssociation
+	udpWG     sync.WaitGroup
 }
 
 type refusal struct {
@@ -99,6 +107,7 @@ func (s *Server) Start() error {
 	s.ln = ln
 	s.conns = make(map[net.Conn]struct{})
 	s.refusals = make(map[string]*refusal)
+	s.udpAssocs = make(map[string]*udpAssociation)
 	s.mu.Unlock()
 	s.logf(logging.Info, "socks", "listening on %s", ln.Addr())
 	go s.acceptLoop()
@@ -115,7 +124,8 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
-// Stop closes the listener and every active client connection.
+// Stop closes the listener, every active client connection and every UDP
+// association, then waits for the association goroutines to finish.
 func (s *Server) Stop() {
 	s.mu.Lock()
 	if s.closed {
@@ -128,6 +138,10 @@ func (s *Server) Stop() {
 	for c := range s.conns {
 		conns = append(conns, c)
 	}
+	udpConns := make([]*net.UDPConn, 0, len(s.udpAssocs))
+	for _, a := range s.udpAssocs {
+		udpConns = append(udpConns, a.conn)
+	}
 	s.mu.Unlock()
 
 	if ln != nil {
@@ -136,6 +150,10 @@ func (s *Server) Stop() {
 	for _, c := range conns {
 		_ = c.Close()
 	}
+	for _, c := range udpConns {
+		_ = c.Close()
+	}
+	s.udpWG.Wait()
 }
 
 func (s *Server) normalize() {
@@ -376,21 +394,6 @@ func (s *Server) relay(client net.Conn, tunnel net.Conn) {
 	_ = tunnel.Close()
 }
 
-func (s *Server) handleUDPAssociate(client net.Conn, atyp byte) {
-	target, err := readTarget(client, atyp)
-	if err != nil {
-		_ = writeReply(client, replyAddrUnsupported, nil)
-		return
-	}
-	if target.port != 53 && target.port != 0 {
-		_ = writeReply(client, replyNotAllowed, nil)
-		return
-	}
-	// The DNS relay needs the in-daemon resolver (PLAN.md §3.5, M4).
-	s.logf(logging.Warn, "socks", "UDP ASSOCIATE for DNS arrives with the M4 resolver; refusing")
-	_ = writeReply(client, replyCmdUnsupported, nil)
-}
-
 func targetKey(t targetAddr) string {
 	return net.JoinHostPort(t.host, strconv.Itoa(t.port))
 }
@@ -400,9 +403,13 @@ func writeReply(w io.Writer, code byte, addr net.Addr) error {
 	b = append(b, socksVersion, code, 0x00)
 	ip := net.IPv4zero
 	port := 0
-	if tcp, ok := addr.(*net.TCPAddr); ok {
-		ip = tcp.IP
-		port = tcp.Port
+	switch a := addr.(type) {
+	case *net.TCPAddr:
+		ip = a.IP
+		port = a.Port
+	case *net.UDPAddr:
+		ip = a.IP
+		port = a.Port
 	}
 	if v4 := ip.To4(); v4 != nil {
 		b = append(b, socksAtypIPv4)

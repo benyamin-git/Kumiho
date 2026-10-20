@@ -48,6 +48,14 @@ var (
 	dialRetryBackoffMax = 8 * time.Second
 )
 
+// DNS constructors are variables so tests can assert that one resolver (and
+// therefore one cache and suppression map) is shared by the DNS listener and
+// the SOCKS UDP relay.
+var (
+	newDNSResolver = dns.NewResolver
+	newDNSListener = dns.NewWithResolver
+)
+
 // Connect brings up the tunnel (PLAN.md §12): access token → Guardian pass →
 // HTTP/2 session; full mode adds TUN + netstack + netcfg + DNS, proxy-only
 // mode starts just the local SOCKS5 listener.
@@ -300,6 +308,14 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 		return nil, err
 	}
 
+	// One resolver feeds both the local DNS listener (full mode) and the
+	// SOCKS UDP relay (both modes), so the cache and suppression map are
+	// shared and proxy-only mode can answer DNS without the TUN listener.
+	resolver, err := newDNSResolver(c.openStream, cfg.DoHProvider, cfg.DNSUpstream, c.log.Logf)
+	if err != nil {
+		return fail(err)
+	}
+
 	if !proxyOnly {
 		tunDef := c.plat.TunDefaults()
 		c.log.Logf(logging.Info, "tunnel", "creating TUN %s (MTU %d)", tunDef.Name, cfg.MTU)
@@ -325,11 +341,7 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 			return fail(fmt.Errorf("apply network configuration: %w", err))
 		}
 
-		resolver, err := dns.NewResolver(c.openStream, cfg.DoHProvider, cfg.DNSUpstream, c.log.Logf)
-		if err != nil {
-			return fail(err)
-		}
-		dnsSrv := dns.NewWithResolver(resolver)
+		dnsSrv := newDNSListener(resolver)
 		dnsSrv.Addr = c.plat.DNSListenAddr()
 		if err := dnsSrv.Start(); err != nil {
 			return fail(fmt.Errorf("start DNS resolver: %w", err))
@@ -346,6 +358,7 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 		Bind:           cfg.SocksBind,
 		Port:           port,
 		Dial:           c.openStream,
+		Resolve:        resolver.Resolve,
 		OnAuthRejected: c.noteAuthRejected,
 		Logf:           c.log.Logf,
 	}
