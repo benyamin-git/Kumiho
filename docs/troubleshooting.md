@@ -102,9 +102,9 @@ It is best effort, off by default, and applies on the next connect.
 
 ## HTTP proxy does not work
 
-- Turn it on: `http_proxy=on` in Settings (or `config.toml`), then reconnect.
-  The listener starts and stops with the tunnel, so a refused connection
-  often just means the tunnel is down.
+- Turn it on: `http_proxy=on` in Settings (or `http_proxy = true` in
+  `config.toml`), then reconnect. The listener starts and stops with the
+  tunnel, so a refused connection often just means the tunnel is down.
 - Check the port: `http_proxy_port` defaults to 8080, must be 1–65535 and
   must be free; a collision is reported as a connect failure.
 - Test it with a client that honours `-x`:
