@@ -298,15 +298,29 @@ and
       `DNS upstream` to `1.1.1.1` (enter; empty resets), `esc`, `space` to
       disconnect, `space` to reconnect, then:
 
+      Clear-DnsClientCache
       Resolve-DnsName example.com
 
   Expect: resolves; logs show the pinned DoH resolver. Then set `DoH provider`
-  to `off` and also clear `DNS upstream` (enter on the row; empty resets):
-  with `off` and no custom upstream there are no DoH endpoints, while a pinned
-  upstream is still used as DoH even with `off`. `esc`, disconnect and
-  reconnect, then `Resolve-DnsName example.com` must not resolve (SERVFAIL):
-  the in-tunnel resolver never falls back to plaintext DNS. Leave `DNS
-  upstream` empty, and set `DoH provider` back to `automatic` when done.
+  to `off` and clear `DNS upstream`: `enter` on that row, erase `1.1.1.1`
+  (empty resets to the provider default), `enter` again (`d` resets the row
+  directly). Both apply on the next connect: `esc`, `space` to disconnect,
+  `space` to reconnect, then:
+
+      Clear-DnsClientCache
+      Resolve-DnsName example.com
+
+  Expect: does not resolve (SERVFAIL) — with `off` and no custom upstream
+  there are no DoH endpoints, and the in-tunnel resolver never falls back to
+  plaintext DNS; a pinned upstream would still be used as DoH even with `off`.
+  Finally set `DoH provider` back to `automatic`, `esc`, `space` to
+  disconnect, `space` to reconnect so the live resolver is rebuilt, then:
+
+      Clear-DnsClientCache
+      Resolve-DnsName example.com
+
+  Expect: resolves again; leave `DNS upstream` empty. Section 10 assumes DNS
+  works.
 
 ## 10. Kill switch on/off (criterion 5)
 
