@@ -1017,3 +1017,18 @@ func TestStopClosesHTTPTunnel(t *testing.T) {
 	}
 	waitForTracked(t, s, 0, 0)
 }
+
+func TestRedactRequestURI(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"http://user:pass@example.com/path?q=1", "http://[redacted]@example.com/path?q=1"},
+		{"http://user@example.com:8080/", "http://[redacted]@example.com:8080/"},
+		{"user:pass@example.com:443", "[redacted]@example.com:443"},
+		{"http://example.com/path?email=a@b", "http://example.com/path?email=a@b"},
+		{"example.com:443", "example.com:443"},
+	}
+	for _, tc := range cases {
+		if got := redactRequestURI(tc.in); got != tc.want {
+			t.Errorf("redactRequestURI(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

@@ -241,6 +241,23 @@ func (s *Server) dialContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(base, s.OpenTimeout)
 }
 
+// redactRequestURI removes authority userinfo before a request target is
+// logged. It handles absolute-form URLs and CONNECT authority-form targets.
+func redactRequestURI(raw string) string {
+	start := 0
+	if i := strings.Index(raw, "://"); i >= 0 {
+		start = i + 3
+	}
+	end := len(raw)
+	if i := strings.IndexAny(raw[start:], "/?#"); i >= 0 {
+		end = start + i
+	}
+	if at := strings.LastIndex(raw[start:end], "@"); at >= 0 {
+		return raw[:start] + "[redacted]@" + raw[start+at+1:]
+	}
+	return raw
+}
+
 func (s *Server) logf(level logging.Level, format string, args ...any) {
 	if s.Logf != nil {
 		s.Logf(level, tag, format, args...)
@@ -333,13 +350,13 @@ func (s *Server) handleConnect(client net.Conn, clientReader io.Reader, req *htt
 		return
 	}
 	if req.URL.Scheme != "" || req.URL.Path != "" || req.URL.RawQuery != "" || req.URL.Fragment != "" {
-		s.logf(logging.Debug, "refusing CONNECT %q: not an authority-form target", req.RequestURI)
+		s.logf(logging.Debug, "refusing CONNECT %q: not an authority-form target", redactRequestURI(req.RequestURI))
 		_ = writeStatus(client, http.StatusMethodNotAllowed)
 		return
 	}
 	target, err := parseAuthority(req.URL.Host, 443)
 	if err != nil {
-		s.logf(logging.Debug, "refusing CONNECT %q: %v", req.RequestURI, err)
+		s.logf(logging.Debug, "refusing CONNECT %q: %v", redactRequestURI(req.RequestURI), err)
 		_ = writeStatus(client, http.StatusBadRequest)
 		return
 	}
@@ -373,13 +390,13 @@ func (s *Server) handleConnect(client net.Conn, clientReader io.Reader, req *htt
 
 func (s *Server) handleHTTP(client net.Conn, req *http.Request) {
 	if req.URL == nil || req.URL.Scheme != "http" || req.URL.Host == "" {
-		s.logf(logging.Debug, "refusing %s %q: not an absolute-form http request", req.Method, req.RequestURI)
+		s.logf(logging.Debug, "refusing %s %q: not an absolute-form http request", req.Method, redactRequestURI(req.RequestURI))
 		_ = writeStatus(client, http.StatusBadRequest)
 		return
 	}
 	target, err := parseAuthority(req.URL.Host, 80)
 	if err != nil {
-		s.logf(logging.Debug, "refusing %s %q: %v", req.Method, req.RequestURI, err)
+		s.logf(logging.Debug, "refusing %s %q: %v", req.Method, redactRequestURI(req.RequestURI), err)
 		_ = writeStatus(client, http.StatusBadRequest)
 		return
 	}
