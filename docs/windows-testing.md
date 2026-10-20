@@ -992,10 +992,10 @@ v0.3.0 GUI acceptance sign-off (fill before the `v0.3.0` tag):
 
 This is the v0.4.0 delta (design spec criteria 1–11 and 13, at
 [docs/superpowers/specs/2026-10-20-v0.4.0-backend-parity-design.md](superpowers/specs/2026-10-20-v0.4.0-backend-parity-design.md)).
-It runs top to bottom in an elevated Windows PowerShell 5.1 session. The only
-required external tool is the OpenSSH client in 18.5 (that step is N/A when you
-have no proxy); Wireshark in 18.4 is optional. `<physical>` is the physical
-adapter alias from section 8.
+It runs top to bottom in an elevated Windows PowerShell 5.1 session. The
+OpenSSH client in 18.5 is the only suggested external tool; that step is N/A
+when you have no proxy, and Wireshark in 18.4 is optional. `<physical>` is the
+physical adapter alias from section 8.
 
 ### 18.1 Upgrade and version
 
@@ -1147,8 +1147,8 @@ the upgrade-specific lines below are then N/A — record that.
       best-effort result rather than failing the section.
 
 Note: the split is best effort, applies to the edge and control-plane HTTPS
-handshakes, and is never applied to DoH or bootstrap. The bytes on the wire
-are unchanged.
+handshakes, and is never applied to DoH or bootstrap. The ClientHello contents
+are unchanged; only the way the record is written is split.
 
 ### 18.5 Upstream proxy
 
@@ -1205,9 +1205,11 @@ listener, which is bound whenever the tunnel is up.
 
 `user:pass@` is accepted in the URL (for example
 `socks5h://user:pass@proxy.example.net:1080`, or an HTTP proxy such as
-`http://proxy.example.net:3128`); omit it when your proxy has no auth. If no
-proxy is available, mark this step N/A in the notes; do not invent a pass.
-Stop the proxy shell (Ctrl+C) once you are back on `(direct)`.
+`http://proxy.example.net:3128`); omit it when your proxy has no auth. This
+Windows step exercises one scheme; the gate's in-test SOCKS5 and HTTP proxies
+cover all three schemes and credentials. If no proxy is available, mark this
+step N/A in the notes; do not invent a pass. Stop the proxy shell (Ctrl+C)
+once you are back on `(direct)`.
 
 ### 18.6 HTTP proxy
 
@@ -1523,12 +1525,12 @@ Plain `kumiho disconnect` is not sign-out: it may keep the last session's
 | --- | --- |
 | 1. Strict in-tunnel DNS: no port-53 path, endpoint failover, 30-minute suppression | 9, 18.7 (failover and suppression by unit/integration tests) |
 | 2. Server-list cache: atomic write, fallback, corrupt cache ignored | unit tests; not a Windows step (needs a forced fetch failure) |
-| 3. Challenge solving: 406 handled, cookies installed, clear failure, no hang | 18.3 |
+| 3. Challenge solving: 406 handled, cookies installed, clear failure, no hang | 18.3 (when the network provides a challenge; error path in gate tests) |
 | 4. TLS fragmentation: `off`/`first-byte`/`sni`, edge and control plane, not DoH/bootstrap | 18.4; unit test for the offset |
-| 5. Upstream proxy: three schemes, credentials, edge-only, remote resolution | 18.5 |
+| 5. Upstream proxy: three schemes, credentials, edge-only, remote resolution | 18.5 (one available scheme; all three and auth in gate tests) |
 | 6. Local HTTP proxy: loopback, CONNECT + absolute-form HTTP, stops with the tunnel | 18.6 |
-| 7. DNS-only UDP ASSOCIATE: port 53/0, DoH chain, SERVFAIL when off, both modes | 18.7 |
-| 8. Keepalive profile: `standard` 10 s / `slow` 25 s, next connect | 18.8 |
+| 7. DNS-only UDP ASSOCIATE: port 53/0, DoH chain, SERVFAIL when off, both modes | 18.7 (one transport mode; both modes in gate tests) |
+| 8. Keepalive profile: `standard` 10 s / `slow` 25 s, next connect | 18.8 (profile applies; timeout values in unit tests) |
 | 9. Settings surface complete: config, overrides, TUI scrolling, GUI rows, defaults, reset | 16.5, 18.2; validation and defaults in the gate |
 | 10. Clean sign-out: quota, exit, rates, totals and pass expiry wiped | 18.9 |
 | 11. Documentation is true: CHANGELOG, README, PLAN, docs, inventories, NOTICE, AGENTS | docs review (this file); not a Windows step |
