@@ -1,6 +1,7 @@
 # Kumiho — Implementation Plan
 
-**Status: implemented — v0.1.0 released 2026-10-08.**
+**Status: implemented through v0.4.0 in source; v0.1.0–v0.3.0 are released
+(v0.4.0 is not tagged).**
 **Plan date:** 2026-10-05
 **Repo:** `github.com/benyamin-git/kumiho`
 **Binary:** `kumiho` (optional short alias `kum`)
@@ -84,22 +85,43 @@ All facts below were read directly from `Vauth/FoxyVPN` (Kotlin, MIT) and its cr
 
 ### 2.2 Fastly anti-bot solver (on HTTP 406)
 
-- Try hosts in order: `https://api.accounts.firefox.com`, `https://accounts.firefox.com`.
-- Fresh cookie jar per attempt; fetch `/`, expect page containing `/_fs-ch-` and `Client Challenge`; find prefix `/_fs-ch-…`; fetch `{prefix}/script.js?reload=true`.
-- Parse last `init([...], "token", "prefix")`; answer each challenge:
-  - `pow`: brute-force 2-char suffix over `a-zA-Z0-9` so `SHA256(base+suffix)==hash`.
-  - `pat`: `POST {prefix}/pat?token=…` with `Origin` header; empty auth on 400/401 (triggers PoW fallback server-side).
-  - `clientmetrics`: constant benign payload (`ty:"clientmetrics"`, `webdriver:false`, `bot_detected:false`, empty detector results, `v:2`).
-  - anything else → fail with clear message (captcha not solvable).
-- `POST {prefix}/fst-post-back` `{token, data:[...]}`; on `status=="success"` re-fetch `/` to verify the cookie was accepted, then copy cookies into the shared control-plane jar under `firefox.com`; else use returned `{ch, tok}` for up to 3 rounds.
-- Serialize all solves (mutex); max 5 attempts per API call; one full solve timeout 60 s; solver UA = Chrome 126 on Windows.
+`internal/fastly` is a stdlib-only port of FoxyVPN v1.0.7's
+`FastlyChallengeSolver.kt` (MIT). Kumiho never uses browser automation and has
+no interactive captcha UI.
+
+- Trigger: HTTP 406 from the Firefox Accounts or Guardian control plane; the
+  solver receives the challenged URL and works on that origin.
+- Fetches the challenged origin's `/`, and only when that origin serves no
+  challenge page retries the related apex (`api.accounts.firefox.com` →
+  `accounts.firefox.com`). An HTTP error while fetching the page is a
+  challenge-fetch failure, never "no challenge" (Ruling 16).
+- Parses `/_fs-ch-*` and the last `init([...], "token", "prefix")`; answers
+  `pow` (two-character suffix over the 62-character `a-zA-Z0-9` alphabet so
+  `SHA256(base+suffix)` matches), `pat` (`POST {prefix}/pat?token=…`, empty auth
+  accepted on 400/401) and `clientmetrics` (a static, non-bot payload).
+- `POST {prefix}/fst-post-back` `{token, data:[…]}` for up to 3 rounds; on
+  `status=="success"` it re-fetches `/` to verify the challenge is gone, then
+  installs the cookies into the shared control-plane jar used by FxA, Guardian
+  and Remote Settings.
+- Each solve uses an isolated per-solve cookie jar and proceeds serially (one
+  origin, one round at a time). One solve has a 60 s budget with 250–750 ms
+  jitter between rounds; every attempt is logged at warn under the `fastly` tag.
+- Unsupported types — captcha included — fail with a clear error naming the
+  type. FxA and Guardian retry a challenged request up to 5 times.
+  `solve_challenges` defaults on and is read per control-plane request, so it
+  applies immediately; off restores the immediate, clearly worded failure.
+- The solver sends a Chrome 126 (Windows) UA while Mozilla API requests keep the
+  MozillaVPN UA (§2.1).
 
 ### 2.3 Data plane (HTTP/2 CONNECT)
 
 - TLS 1.2/1.3, ALPN `h2`; TCP to edge `host:port`; TLS server name = server-list hostname even when dialing a pinned/resolved IP; system CA verification.
 - Client SETTINGS: initial window 16 MiB, max frame 256 KiB, push disabled.
 - Per flow: open stream, send `:method CONNECT`, `:authority host:port`, `proxy-authorization: Bearer <proxy_pass>`; 2xx → raw byte tunnel (DATA frames both ways); non-2xx → `UpstreamConnectRejectedException(status)`.
-- Keepalive: check every 3 s; if idle ≥ 15 s send PING payload `0x466F787956504E`; if no ack within 10 s → session dead. Answer server PINGs.
+- Keepalive: check every 3 s; if idle ≥ 15 s send PING payload `0x466F787956504E`; if no ack within 10 s (`standard`) or 25 s (`slow`) → session dead. Answer server PINGs.
+- `keepalive_profile` is read at connect time: `standard` (default) 10 s, `slow` 25 s; idle 15 s and the 3 s check are unchanged.
+- `upstream_proxy` wraps only the edge TCP dial, after which TLS SNI and the H2 `:authority` remain the edge hostname. `socks5://`/`socks5h://` use SOCKS5 CONNECT and `http://` uses HTTP CONNECT; URL credentials become SOCKS5 user/pass or `Proxy-Authorization: Basic`; scheme default ports are 1080/80. The proxy resolves the edge hostname remotely. With `edge_address` pinned the proxy receives that IP while SNI/authority keep the hostname. Control-plane, Remote Settings, DoH and bootstrap dials never use this hop.
+- `tls_split` (`off|first-byte|sni`, default off) is a best-effort ClientHello fragmentation wrapper applied to the final edge connection — after the proxy hop, before the TLS handshake — and to control-plane dials. DoH and bootstrap dials stay unsplit.
 - `SETTINGS_MAX_CONCURRENT_STREAMS` honored (queue new flows up to 15 s for a slot).
 - `GOAWAY` → no new streams, drain existing (idle 120 s cutoff).
 - Proxy pass renewal: delay = min(half remaining, remaining − 30 s), clamp [15 s, 30 min], fallback 4 min if no expiry, retry 30 s; **swap bearer token in place** (live session keeps running).
@@ -111,7 +133,8 @@ All facts below were read directly from `Vauth/FoxyVPN` (Kotlin, MIT) and its cr
 - Initial dial: up to 4 attempts, full-jitter backoff 2–8 s, settle 600 ms; alternate edges: same city then same country, distinct, max 3.
 - Watchdog every 2 s: on session down → redial with full-jitter 3–60 s; rotate edge every 2 failures; fatal errors stop.
 - Session health: 10 distinct destination timeouts (no success in between) ⇒ session unhealthy ⇒ redial; a 401/403/407 on a stream ⇒ session unauthenticated ⇒ refuse locally and redial; 502/503/504 ⇒ remember destination as unreachable (TTL 30 s doubling per strike, cap 10 min, 3 strikes = treat as edge policy).
-- Local SOCKS5: no-auth greeting, CONNECT, UDP ASSOCIATE only for port 53/0 (DNS); handshake timeout 10 s; max 512 connections; half-close drain 2 min; local destinations refused (loopback/RFC1918/link-local/multicast/CGNAT/ULA).
+- Local SOCKS5: no-auth greeting, CONNECT, and DNS-only UDP ASSOCIATE (target port 53 or 0). One association per client, a loopback relay, datagrams accepted only from the TCP peer (and the requested port when one was named), only port-53 payloads, 32 in-flight resolver calls, 64 KiB datagrams, an 8 s per-query budget, SERVFAIL when the resolver fails, and teardown with the TCP control connection or server stop. It shares the in-tunnel DoH resolver (§3.5) and works in proxy-only mode. Handshake timeout 10 s; max 512 connections; half-close drain 2 min; local destinations refused (loopback/RFC1918/link-local/multicast/CGNAT/ULA).
+- Optional local HTTP proxy (`http_proxy=false` by default, `http_proxy_port=8080`): loopback only, no authentication, started and stopped with SOCKS and the tunnel. CONNECT and absolute-form plain HTTP, one request per connection, 512 concurrent clients, 2 min half-close drain, and the same local-destination refusal policy as SOCKS.
 - Exit check (optional): `https://www.cloudflare.com/cdn-cgi/trace` through the tunnel; parse `ip=`/`loc=`; compare to selected country (`REC` exempt); failure is non-fatal.
 
 ---
@@ -178,12 +201,33 @@ Cleanup: rules/routes/table removed on graceful stop, `ExecStopPost` cleanup, an
 Two roles:
 
 1. **Bootstrap / edge resolution (outside tunnel, `SO_MARK 0x2`)**: DoH POST `application/dns-message` to the selected provider by IP literal; A first then AAAA; race providers; 3 s timeouts; cache 5 min; failing endpoint suppressed 30 min; fall back to system resolver (this outside-the-tunnel path keeps its TCP:53 fallback; the edge is not involved). (FoxyVPN `EdgeAddressResolver` parity.)
-2. **User DNS (inside tunnel)**: listener `10.8.0.2:53` UDP+TCP (miekg/dns). DoH only — no plaintext DNS path exists inside the tunnel. For each query:
-   - query the first available endpoint **through the tunnel** (HTTP POST over an H2 CONNECT stream to `<endpoint-ip>:443`, `https://<endpoint-ip>/dns-query`), TLS verifies the IP literal (works for CF/Google/Quad9, as FoxyVPN proves);
-   - serial failover: the configured provider (or custom upstream) first, then Cloudflare `1.1.1.1`, then Quad9 `9.9.9.9`; a failed endpoint is suppressed for 30 min, and a query that exhausts the chain gets SERVFAIL — the edge refuses CONNECT to 53, 853 and 444, so a plaintext fallback cannot work;
-   - cache with TTL (10 000 entries, min TTL 5 s); UDP truncation handled by setting TC and letting clients retry TCP;
+2. **User DNS (inside tunnel)**: listener `10.8.0.2:53` UDP+TCP (miekg/dns).
+   DoH only — the TCP:53 path is gone from this resolver and no plaintext DNS
+   path exists inside the tunnel. For each query:
+   - serial endpoint chain, de-duplicated: the configured provider, or a custom
+     `dns_upstream` as `https://<ip>/dns-query`, then Cloudflare `1.1.1.1`,
+     then Quad9 `9.9.9.9`;
+   - each endpoint is queried **through the tunnel** (HTTP POST over an H2
+     CONNECT stream to `<endpoint-ip>:443`); TLS verifies the IP literal (works
+     for CF/Google/Quad9, as FoxyVPN proves);
+   - a transport/HTTP/unpack failure suppresses that endpoint for 30 min
+     in-memory and the next one is tried within the same query budget; a valid
+     DNS message (including NXDOMAIN or SERVFAIL) is returned as-is;
+   - when every endpoint is suppressed, the one whose suppression expires first
+     gets one bounded half-open probe, so a recovered network is noticed before
+     the 30 minutes elapse (Ruling 10);
+   - a query that exhausts the chain gets SERVFAIL — the edge refuses CONNECT to
+     53, 853 and 444, so a plaintext fallback cannot work;
+   - 8 s per query, 4 s per endpoint; cache with TTL (10 000 entries, min TTL
+     5 s, max 1 h); UDP truncation handled by setting TC and letting clients
+     retry TCP;
    - AAAA answers passed through unchanged (blackhole-only decision).
-3. Custom DNS setting: a user-provided IP is always used as DoH at `https://<ip>/dns-query`, whether or not it belongs to a known DoH operator. With `doh_provider=off` and no custom upstream there are no DoH endpoints, so every in-tunnel query gets SERVFAIL.
+3. Custom DNS and provider semantics: a user-provided `dns_upstream` IP is always
+   queried as DoH at `https://<ip>/dns-query`, whether or not it belongs to a
+   known DoH operator. `doh_provider=off` with no custom upstream leaves no
+   in-tunnel endpoints, so every in-tunnel query gets SERVFAIL. The bootstrap
+   resolver outside the tunnel (role 1) keeps its legacy DoH + TCP:53 fallback
+   and is not affected by `doh_provider` semantics inside the tunnel.
 
 ### 3.6 IPv6
 
@@ -288,12 +332,43 @@ kumiho version
 | `/etc/kumiho/config.toml` | admin defaults (optional; see schema) |
 | `/var/lib/kumiho/tokens.json` | `{access_token, refresh_token, expires_at, scope}` mode 0600 |
 | `/var/lib/kumiho/state.json` | persisted location, failure counts, kill-switch/autoconnect last states, runtime settings overrides |
+| `/var/lib/kumiho/serverlist.json` | disposable raw server-list cache (0600, atomic; written after a successful fetch, read only when a fetch fails) |
 | `/run/kumiho/control.sock` | IPC |
 | `/etc/systemd/system/kumiho.service` | daemon unit |
 | `/etc/polkit-1/rules.d/50-kumiho-resolved.rules` | DNS permission |
 | `~/.config/kumiho/tui.toml` | per-user TUI prefs (theme) |
 
-`config.toml` keys: `socks_bind` (fixed `127.0.0.1` in v1), `socks_port` (1080), `proxy_only` (false), `kill_switch` (`last|on|off`), `autoconnect` (`last|on|off`), `exit_check` (true), `doh_provider` (`automatic|cloudflare|google|quad9|off`), `dns_upstream` (IP; default = provider), `edge_address` (pinned IP), `upstream_proxy` (URL), `exclude_cidrs` ([]), `allow_lan` (true), `mtu` (8500), `log_level` (`info`), `redact_targets` (true), `quota_poll_minutes` (15).
+`config.toml` keys (defaults from `internal/settings.DefaultConfig`, checked by
+`Validate`):
+
+| Key | Default | Notes |
+|---|---|---|
+| `socks_bind` | `127.0.0.1` | loopback only in v1 |
+| `socks_port` | `1080` | local SOCKS5 listener |
+| `proxy_only` | `false` | skip the TUN; SOCKS/HTTP proxy only |
+| `kill_switch` | `last` | `last\|on\|off`; first install ON |
+| `autoconnect` | `last` | `last\|on\|off`; first install ON |
+| `exit_check` | `true` | one non-fatal exit-IP check per connect |
+| `doh_provider` | `automatic` | `automatic\|cloudflare\|google\|quad9\|off` |
+| `dns_upstream` | unset | custom DoH IP; heads the in-tunnel chain |
+| `edge_address` | unset | pinned edge IP; SNI/`:authority` keep the hostname |
+| `upstream_proxy` | unset | `socks5://`, `socks5h://` or `http://`, optional URL credentials (SOCKS5 user/pass or `Proxy-Authorization: Basic`); edge dial only |
+| `exclude_cidrs` | `[]` | CIDRs that bypass the tunnel |
+| `allow_lan` | `true` | LAN and link-local stay outside the tunnel |
+| `mtu` | `8500` | TUN MTU, 576–65535, next connect |
+| `log_level` | `info` | `debug\|info\|warn\|error` |
+| `redact_targets` | `true` | redact hostnames in logs |
+| `quota_poll_minutes` | `15` | quota refresh interval while connected |
+| `tls_split` | `off` | `off\|first-byte\|sni`; next connect |
+| `http_proxy` | `false` | local HTTP proxy; next connect |
+| `http_proxy_port` | `8080` | 1–65535 |
+| `solve_challenges` | `true` | read per control-plane request |
+| `keepalive_profile` | `standard` | `standard\|slow`; next connect |
+
+The five v0.4.0 keys (`tls_split`, `http_proxy`, `http_proxy_port`,
+`solve_challenges`, `keepalive_profile`) are additive runtime overrides in
+`state.json` and optional additive `SettingsView` fields: no IPC v1 envelope,
+command or existing-field change.
 
 ---
 
@@ -301,23 +376,33 @@ kumiho version
 
 ```
 kumiho/
-  cmd/kumiho/main.go
-  internal/cli/         # subcommands, doctor, cleanup
+  cmd/kumiho/           # CLI/TUI/daemon composition root
+  cmd/kumiho-gui/       # Windows WebView2 GUI (build-tagged)
+  cmd/kumiho-gui-web/   # GUI dev harness (Linux, mock daemon)
+  cmd/kumiho-gui-probe/ # Windows support probe
+  internal/cli/         # subcommands, doctor, cleanup, service host
   internal/tui/         # bubbletea app, screens, widgets
-  internal/ipc/         # codec, client, server
-  internal/daemon/      # controller, state machine, workers, metrics
+  internal/ipc/         # protocol v1 codec, client, server
+  internal/api/         # request/response and settings view types
+  internal/engine/      # controller, state machine, workers, metrics
+  internal/platform/    # platform seam: linux/, windows/, android/, auto/, unsupported/
+  internal/daemon/      # service host and log sink
   internal/fxa/         # authPW, hawk, login, 2FA, oauth, refresh
-  internal/fastly/      # challenge solver
+  internal/fastly/      # Fastly challenge solver (pow/pat/clientmetrics, shared jar)
   internal/guardian/    # pass, status, activate, JWT + clock correction
-  internal/serverlist/  # remote settings, selection, failover, ping
+  internal/serverlist/  # remote settings, selection, failover, ping, disk cache
   internal/upstream/    # h2 framer client, streams, keepalive, bearer swap
   internal/socks/       # local SOCKS5 (CONNECT + DNS UDP associate)
+  internal/httpproxy/   # local HTTP proxy (CONNECT + absolute-form HTTP)
+  internal/tlsplit/     # TLS ClientHello fragmentation wrapper
   internal/tun/         # tun device + stack engine + proxy adapter
-  internal/dns/         # resolver roles, cache, DoH client
+  internal/dns/         # bootstrap + strict in-tunnel DoH resolver, cache
   internal/netcfg/      # routes, rules, marks, nft, resolved, cleanup
+  internal/gui/         # Windows GUI shell/tray client, mock, theme, prefs
   internal/settings/    # config + state files, defaults, validation
+  internal/doctor/      # shared preflight checks
   internal/logging/     # ring buffer, journald text, redaction
-  README.md  LICENSE  NOTICE  Makefile  install.sh  systemd/  docs/
+  README.md  LICENSE  NOTICE  Makefile  install.sh  install.ps1  systemd/  docs/
   .github/workflows/ci.yml
 ```
 
@@ -367,10 +452,15 @@ M3 is deliberately testable before any routing work, so the risky M4 can be vali
 | Risk | Mitigation |
 |---|---|
 | Mozilla changes/removes the free browser entitlement or blocks unofficial clients | protocol isolated in packages; fast update path; TUI shows exact errors |
-| Fastly challenge escalates to captcha | graceful failure with clear log; retry policy |
+| Fastly challenge escalates to captcha or an unknown type | solver fails with a clear error naming the type; no browser automation; `solve_challenges=off` restores the immediate failure |
+| A DoH provider is blocked or unavailable | serial failover (configured → Cloudflare → Quad9), 30 min endpoint suppression, half-open probe; exhausted chain → SERVFAIL, never plaintext |
+| TLS fingerprint filtering blocks the edge or control plane | best-effort `tls_split` (`first-byte`, `sni`); malformed or SNI-less ClientHellos pass through unsplit; off by default |
+| Upstream proxy misconfiguration or credential leak | validation at config load and dial time; edge-only hop; hostname resolved remotely; credentials never logged and the URL never echoed |
+| Local HTTP proxy exposed beyond loopback | loopback bind only, no authentication, same local-destination refusal as SOCKS; off by default; disable with `http_proxy=off` |
+| Server-list cache stale or corrupt | fallback only on a failed fetch, disposable 0600 file, corrupt files ignored and deleted |
 | Tailscale changes marks/rules | doctor detects drift; exclusion by CGNAT + interface fallback; never overwrite nonzero marks |
 | systemd-resolved/polkit variations | doctor diagnoses; resolved-first design; manual fallback never touches resolv.conf |
-| MTU 8500 issues on some networks | config key; tested fallback 1500 |
+| MTU 8500 issues on some networks | 8500 is the default; `mtu` is configurable (576–65535, next connect) and 1500 is a tested fallback, not the default |
 | Clock skew breaks Hawk/JWT | doctor compares to Mozilla `Date`; JWT time-correction like the reference |
 | Kubernetes/VPS missing TUN | doctor fails early with remediation; proxy-only mode still works |
 | Using an unofficial client is a ToS gray area | documented in README; users bring their own Firefox-account entitlement |
