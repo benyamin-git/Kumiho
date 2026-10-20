@@ -333,7 +333,7 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 		return errors.New("not signed in")
 	}
 	if tokens.RefreshToken == "" {
-		c.clearSession("stored session cannot be renewed")
+		c.clearSessionIf(gen, true, "stored session cannot be renewed")
 		return errors.New("stored session cannot be renewed; sign in again")
 	}
 
@@ -503,6 +503,7 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	// refresh that captured the old generation must neither publish nor save
 	// after sign-out, whichever side wins the race.
 	c.authGen++
+	clearedGen := c.authGen
 	c.tokens = nil
 	c.pending = nil
 	c.email = ""
@@ -524,13 +525,30 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 
 	c.stopTunnel("session cleared")
 
-	if err := clearTokens(c.store.Paths().Tokens); err != nil {
-		c.log.Logf(logging.Warn, "auth", "could not remove tokens: %v", err)
+	var clearErr, stateErr error
+	cleared := false
+	c.mu.Lock()
+	// A new sign-in may have completed while the tunnel was tearing down.
+	// Keep its token file and persisted email; the old generation must not
+	// delete or overwrite the newer session's credentials.
+	if c.authGen == clearedGen {
+		cleared = true
+		clearErr = clearTokens(c.store.Paths().Tokens)
+		stateErr = c.store.UpdateState(func(s *settings.State) { s.Email = "" })
 	}
-	if err := c.store.UpdateState(func(s *settings.State) { s.Email = "" }); err != nil {
-		c.log.Logf(logging.Warn, "auth", "could not clear stored email: %v", err)
+	c.mu.Unlock()
+
+	if clearErr != nil {
+		c.log.Logf(logging.Warn, "auth", "could not remove tokens: %v", clearErr)
 	}
-	c.log.Logf(logging.Info, "auth", "session cleared (%s)", reason)
+	if stateErr != nil {
+		c.log.Logf(logging.Warn, "auth", "could not clear stored email: %v", stateErr)
+	}
+	if cleared {
+		c.log.Logf(logging.Info, "auth", "session cleared (%s)", reason)
+	} else {
+		c.log.Logf(logging.Info, "auth", "session cleared (%s); a newer sign-in kept its credentials", reason)
+	}
 	c.notify()
 	return true
 }
@@ -540,10 +558,18 @@ func (c *Controller) Snapshot() api.Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	persisted := c.store.State()
+	// An unauthenticated snapshot must not expose the previous session's
+	// account or usage data, even during a short teardown window in which a
+	// live session object is still attached.
+	accountVisible := c.state != StateUnauthenticated
+	email := c.email
+	if !accountVisible {
+		email = ""
+	}
 	st := api.Status{
 		State:         string(c.state),
-		Authenticated: c.tokens != nil,
-		Email:         c.email,
+		Authenticated: c.tokens != nil && accountVisible,
+		Email:         email,
 		Since:         c.since.Unix(),
 		KillSwitch:    c.store.EffectiveKillSwitch(),
 		Autoconnect:   c.store.EffectiveAutoconnect(),
@@ -551,16 +577,16 @@ func (c *Controller) Snapshot() api.Status {
 		Server:        persisted.SelectedServer,
 		ProxyOnly:     c.state == StateProxyOnly || (persisted.ProxyOnly != nil && *persisted.ProxyOnly),
 	}
-	if c.tokens != nil {
+	if accountVisible && c.tokens != nil {
 		st.TokenExpires = c.tokens.ExpiresAt
 	}
-	if c.pass != nil {
+	if accountVisible && c.pass != nil {
 		st.PassExpires = c.pass.ExpiresAt
 	}
-	if c.quota != nil {
+	if accountVisible && c.quota != nil {
 		st.Quota = c.quota
 	}
-	if c.session != nil {
+	if accountVisible && c.session != nil {
 		st.ExitIP, st.ExitCountry = c.exitIP, c.exitCountry
 		up, down := c.session.Totals()
 		if up == 0 && down == 0 {
@@ -568,7 +594,7 @@ func (c *Controller) Snapshot() api.Status {
 		}
 		st.Totals = &api.ByteCounters{Up: up, Down: down}
 		st.Rates = &api.ByteRates{Up: c.ratesUp, Down: c.ratesDown}
-	} else if c.totalsUp > 0 || c.totalsDown > 0 {
+	} else if accountVisible && (c.totalsUp > 0 || c.totalsDown > 0) {
 		// Keep the last session's totals visible after disconnect.
 		st.Totals = &api.ByteCounters{Up: c.totalsUp, Down: c.totalsDown}
 		st.Rates = &api.ByteRates{}

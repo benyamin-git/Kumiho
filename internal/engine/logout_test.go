@@ -299,3 +299,90 @@ func TestLogoutDuringLoginDoesNotRestoreSession(t *testing.T) {
 		t.Fatalf("tokens file after racing login: stat err = %v, want not-exist", err)
 	}
 }
+
+// A sign-out that is still tearing the tunnel down must not delete the token
+// file or persisted email of a sign-in that completed in the meantime.
+func TestLogoutTeardownPreservesNewerLogin(t *testing.T) {
+	ctrl, paths := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	ctrl.LoginEmail("user@example.com")
+	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "done" {
+		t.Fatalf("first login = %+v", ls)
+	}
+
+	// Block the old sign-out inside NetConfig.Cleanup, after it has already
+	// bumped the auth generation and released c.mu.
+	fp, ok := ctrl.plat.(*fakeProvider)
+	if !ok {
+		t.Fatalf("platform provider = %T, want *fakeProvider", ctrl.plat)
+	}
+	cleanupReached := make(chan struct{})
+	release := make(chan struct{})
+	fp.nc.onCleanup = func() {
+		close(cleanupReached)
+		<-release
+	}
+	ctrl.mu.Lock()
+	ctrl.resources = &tunnelResources{nc: fp.nc}
+	ctrl.mu.Unlock()
+
+	logoutDone := make(chan error, 1)
+	go func() { logoutDone <- ctrl.Logout() }()
+	select {
+	case <-cleanupReached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("logout did not reach NetConfig.Cleanup")
+	}
+
+	// Sign in again while the old sign-out is blocked.
+	ctrl.LoginEmail("user@example.com")
+	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "done" || ls.Error != "" {
+		t.Fatalf("second login during teardown = %+v", ls)
+	}
+	close(release)
+	if err := <-logoutDone; err != nil {
+		t.Fatal(err)
+	}
+
+	st := ctrl.Snapshot()
+	if st.State != string(StateIdle) || !st.Authenticated || st.Email != "user@example.com" {
+		t.Fatalf("snapshot after concurrent logout/login = %+v, want the newer session intact", st)
+	}
+	tokens, err := loadTokens(paths.Tokens)
+	if err != nil {
+		t.Fatalf("loading tokens after concurrent logout/login: %v", err)
+	}
+	if tokens == nil || tokens.AccessToken != "access-1" {
+		t.Fatalf("tokens after concurrent logout/login = %+v, want the newer session's tokens", tokens)
+	}
+}
+
+// Even if a session object is still attached during teardown, an
+// unauthenticated snapshot must carry no account or usage fields.
+func TestUnauthenticatedSnapshotHidesAttachedSession(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	sess := newFakeSession()
+	sess.up.Store(111)
+	sess.down.Store(222)
+	limit := int64(10 << 30)
+	ctrl.mu.Lock()
+	ctrl.state = StateUnauthenticated
+	ctrl.tokens = nil
+	ctrl.email = "user@example.com"
+	ctrl.session = sess
+	ctrl.quota = &api.Quota{Limit: &limit}
+	ctrl.pass = &guardian.Pass{Token: "pass-1", ExpiresAt: 4102444800}
+	ctrl.exitIP, ctrl.exitCountry = "198.51.100.9", "DE"
+	ctrl.totalsUp, ctrl.totalsDown = 111, 222
+	ctrl.ratesUp, ctrl.ratesDown = 1.5, 2.5
+	ctrl.mu.Unlock()
+
+	st := ctrl.Snapshot()
+	if st.Authenticated || st.Email != "" || st.TokenExpires != 0 ||
+		st.Quota != nil || st.PassExpires != 0 ||
+		st.ExitIP != "" || st.ExitCountry != "" ||
+		st.Totals != nil || st.Rates != nil {
+		t.Fatalf("unauthenticated snapshot = %+v, want no account or usage data", st)
+	}
+	_ = sess.Close()
+}
