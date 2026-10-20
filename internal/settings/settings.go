@@ -84,6 +84,11 @@ type Config struct {
 	LogLevel         string   `toml:"log_level"`
 	RedactTargets    bool     `toml:"redact_targets"`
 	QuotaPollMinutes int      `toml:"quota_poll_minutes"`
+	TLSSplit         string   `toml:"tls_split"` // off|first-byte|sni
+	HTTPProxy        bool     `toml:"http_proxy"`
+	HTTPProxyPort    int      `toml:"http_proxy_port"`
+	SolveChallenges  bool     `toml:"solve_challenges"`
+	KeepaliveProfile string   `toml:"keepalive_profile"` // standard|slow
 }
 
 // DefaultConfig returns the built-in defaults (PLAN.md §8).
@@ -101,6 +106,11 @@ func DefaultConfig() Config {
 		LogLevel:         "info",
 		RedactTargets:    true,
 		QuotaPollMinutes: 15,
+		TLSSplit:         "off",
+		HTTPProxy:        false,
+		HTTPProxyPort:    8080,
+		SolveChallenges:  true,
+		KeepaliveProfile: "standard",
 	}
 }
 
@@ -112,6 +122,9 @@ func (c Config) Validate() error {
 	if c.SocksPort < 1 || c.SocksPort > 65535 {
 		return fmt.Errorf("socks_port: out of range: %d", c.SocksPort)
 	}
+	if c.HTTPProxyPort < 1 || c.HTTPProxyPort > 65535 {
+		return fmt.Errorf("http_proxy_port: out of range: %d", c.HTTPProxyPort)
+	}
 	if err := validateEnum("kill_switch", c.KillSwitch, "last", "on", "off"); err != nil {
 		return err
 	}
@@ -119,6 +132,12 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := validateEnum("doh_provider", c.DoHProvider, "automatic", "cloudflare", "google", "quad9", "off"); err != nil {
+		return err
+	}
+	if err := validateEnum("tls_split", c.TLSSplit, "off", "first-byte", "sni"); err != nil {
+		return err
+	}
+	if err := validateEnum("keepalive_profile", c.KeepaliveProfile, "standard", "slow"); err != nil {
 		return err
 	}
 	if c.DNSUpstream != "" && net.ParseIP(c.DNSUpstream) == nil {
@@ -186,6 +205,13 @@ type State struct {
 	MTU              *int      `json:"mtu,omitempty"`
 	SocksPort        *int      `json:"socks_port,omitempty"`
 	QuotaPollMinutes *int      `json:"quota_poll_minutes,omitempty"`
+
+	// v0.4.0 runtime setting overrides.
+	TLSSplit         *string `json:"tls_split,omitempty"`
+	HTTPProxy        *bool   `json:"http_proxy,omitempty"`
+	HTTPProxyPort    *int    `json:"http_proxy_port,omitempty"`
+	SolveChallenges  *bool   `json:"solve_challenges,omitempty"`
+	KeepaliveProfile *string `json:"keepalive_profile,omitempty"`
 }
 
 // Store owns the config/state pair and persists state atomically.
@@ -350,6 +376,21 @@ func (s *Store) effectiveConfigLocked() Config {
 	if st.QuotaPollMinutes != nil {
 		cfg.QuotaPollMinutes = *st.QuotaPollMinutes
 	}
+	if st.TLSSplit != nil {
+		cfg.TLSSplit = *st.TLSSplit
+	}
+	if st.HTTPProxy != nil {
+		cfg.HTTPProxy = *st.HTTPProxy
+	}
+	if st.HTTPProxyPort != nil {
+		cfg.HTTPProxyPort = *st.HTTPProxyPort
+	}
+	if st.SolveChallenges != nil {
+		cfg.SolveChallenges = *st.SolveChallenges
+	}
+	if st.KeepaliveProfile != nil {
+		cfg.KeepaliveProfile = *st.KeepaliveProfile
+	}
 	return cfg
 }
 
@@ -380,6 +421,11 @@ func (s *Store) OverriddenKeys() []string {
 	add("mtu", st.MTU != nil)
 	add("socks_port", st.SocksPort != nil)
 	add("quota_poll_minutes", st.QuotaPollMinutes != nil)
+	add("tls_split", st.TLSSplit != nil)
+	add("http_proxy", st.HTTPProxy != nil)
+	add("http_proxy_port", st.HTTPProxyPort != nil)
+	add("solve_challenges", st.SolveChallenges != nil)
+	add("keepalive_profile", st.KeepaliveProfile != nil)
 	sort.Strings(keys)
 	return keys
 }
@@ -430,7 +476,7 @@ func (s *Store) SetOverride(key, value string) error {
 		s.state = st
 		return s.saveStateLocked()
 
-	case "exit_check", "redact_targets", "allow_lan":
+	case "exit_check", "redact_targets", "allow_lan", "http_proxy", "solve_challenges":
 		v, err := parseOnOff(value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", key, err)
@@ -445,6 +491,12 @@ func (s *Store) SetOverride(key, value string) error {
 		case "allow_lan":
 			cand.AllowLAN = v
 			st.AllowLAN = &v
+		case "http_proxy":
+			cand.HTTPProxy = v
+			st.HTTPProxy = &v
+		case "solve_challenges":
+			cand.SolveChallenges = v
+			st.SolveChallenges = &v
 		}
 
 	case "log_level":
@@ -453,6 +505,12 @@ func (s *Store) SetOverride(key, value string) error {
 	case "doh_provider":
 		cand.DoHProvider = value
 		st.DoHProvider = &value
+	case "tls_split":
+		cand.TLSSplit = value
+		st.TLSSplit = &value
+	case "keepalive_profile":
+		cand.KeepaliveProfile = value
+		st.KeepaliveProfile = &value
 	case "dns_upstream":
 		cand.DNSUpstream = value
 		st.DNSUpstream = &value
@@ -472,7 +530,7 @@ func (s *Store) SetOverride(key, value string) error {
 		cand.ExcludeCIDRs = list
 		st.ExcludeCIDRs = &list
 
-	case "mtu", "socks_port", "quota_poll_minutes":
+	case "mtu", "socks_port", "quota_poll_minutes", "http_proxy_port":
 		n, err := strconv.Atoi(value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", key, err)
@@ -487,6 +545,9 @@ func (s *Store) SetOverride(key, value string) error {
 		case "quota_poll_minutes":
 			cand.QuotaPollMinutes = n
 			st.QuotaPollMinutes = &n
+		case "http_proxy_port":
+			cand.HTTPProxyPort = n
+			st.HTTPProxyPort = &n
 		}
 
 	default:
@@ -536,6 +597,16 @@ func (s *Store) ClearOverride(key string) error {
 		st.SocksPort = nil
 	case "quota_poll_minutes":
 		st.QuotaPollMinutes = nil
+	case "tls_split":
+		st.TLSSplit = nil
+	case "http_proxy":
+		st.HTTPProxy = nil
+	case "http_proxy_port":
+		st.HTTPProxyPort = nil
+	case "solve_challenges":
+		st.SolveChallenges = nil
+	case "keepalive_profile":
+		st.KeepaliveProfile = nil
 	default:
 		return ErrUnknownSetting
 	}

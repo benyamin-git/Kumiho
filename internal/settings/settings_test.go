@@ -56,18 +56,22 @@ func TestValidateRejects(t *testing.T) {
 		return c
 	}
 	cases := map[string]Config{
-		"socks_bind":     mutate(func(c *Config) { c.SocksBind = "0.0.0.0" }),
-		"socks_port":     mutate(func(c *Config) { c.SocksPort = 0 }),
-		"kill_switch":    mutate(func(c *Config) { c.KillSwitch = "sometimes" }),
-		"autoconnect":    mutate(func(c *Config) { c.Autoconnect = "always" }),
-		"doh_provider":   mutate(func(c *Config) { c.DoHProvider = "yandex" }),
-		"dns_upstream":   mutate(func(c *Config) { c.DNSUpstream = "not-an-ip" }),
-		"edge_address":   mutate(func(c *Config) { c.EdgeAddress = "edge.example.com" }),
-		"upstream_proxy": mutate(func(c *Config) { c.UpstreamProxy = "socks5://" }),
-		"exclude_cidrs":  mutate(func(c *Config) { c.ExcludeCIDRs = []string{"10.0.0.1"} }),
-		"mtu":            mutate(func(c *Config) { c.MTU = 100 }),
-		"log_level":      mutate(func(c *Config) { c.LogLevel = "verbose" }),
-		"quota_poll":     mutate(func(c *Config) { c.QuotaPollMinutes = 0 }),
+		"socks_bind":         mutate(func(c *Config) { c.SocksBind = "0.0.0.0" }),
+		"socks_port":         mutate(func(c *Config) { c.SocksPort = 0 }),
+		"kill_switch":        mutate(func(c *Config) { c.KillSwitch = "sometimes" }),
+		"autoconnect":        mutate(func(c *Config) { c.Autoconnect = "always" }),
+		"doh_provider":       mutate(func(c *Config) { c.DoHProvider = "yandex" }),
+		"dns_upstream":       mutate(func(c *Config) { c.DNSUpstream = "not-an-ip" }),
+		"edge_address":       mutate(func(c *Config) { c.EdgeAddress = "edge.example.com" }),
+		"upstream_proxy":     mutate(func(c *Config) { c.UpstreamProxy = "socks5://" }),
+		"exclude_cidrs":      mutate(func(c *Config) { c.ExcludeCIDRs = []string{"10.0.0.1"} }),
+		"mtu":                mutate(func(c *Config) { c.MTU = 100 }),
+		"log_level":          mutate(func(c *Config) { c.LogLevel = "verbose" }),
+		"quota_poll":         mutate(func(c *Config) { c.QuotaPollMinutes = 0 }),
+		"tls_split":          mutate(func(c *Config) { c.TLSSplit = "middle" }),
+		"keepalive":          mutate(func(c *Config) { c.KeepaliveProfile = "fast" }),
+		"http_proxy_port":    mutate(func(c *Config) { c.HTTPProxyPort = 0 }),
+		"http_proxy_port_hi": mutate(func(c *Config) { c.HTTPProxyPort = 65536 }),
 	}
 	for name, cfg := range cases {
 		if err := cfg.Validate(); err == nil {
@@ -249,4 +253,139 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestV040SettingsDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.TLSSplit != "off" {
+		t.Errorf("TLSSplit = %q, want off", cfg.TLSSplit)
+	}
+	if cfg.HTTPProxy {
+		t.Error("HTTPProxy should default to false")
+	}
+	if cfg.HTTPProxyPort != 8080 {
+		t.Errorf("HTTPProxyPort = %d, want 8080", cfg.HTTPProxyPort)
+	}
+	if !cfg.SolveChallenges {
+		t.Error("SolveChallenges should default to true")
+	}
+	if cfg.KeepaliveProfile != "standard" {
+		t.Errorf("KeepaliveProfile = %q, want standard", cfg.KeepaliveProfile)
+	}
+}
+
+func TestV040SettingsConfigFile(t *testing.T) {
+	paths := testPaths(t)
+	content := "tls_split = \"sni\"\nhttp_proxy = true\nhttp_proxy_port = 3128\n" +
+		"solve_challenges = false\nkeepalive_profile = \"slow\"\n"
+	if err := os.WriteFile(paths.Config, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := st.Config()
+	if cfg.TLSSplit != "sni" || !cfg.HTTPProxy || cfg.HTTPProxyPort != 3128 || cfg.SolveChallenges || cfg.KeepaliveProfile != "slow" {
+		t.Fatalf("config = %+v", cfg)
+	}
+}
+
+func TestV040SettingsConfigFileKeepsDefaults(t *testing.T) {
+	paths := testPaths(t)
+	if err := os.WriteFile(paths.Config, []byte("socks_port = 1081\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := st.Config()
+	want := DefaultConfig()
+	if cfg.TLSSplit != want.TLSSplit || cfg.HTTPProxy != want.HTTPProxy ||
+		cfg.HTTPProxyPort != want.HTTPProxyPort || cfg.SolveChallenges != want.SolveChallenges ||
+		cfg.KeepaliveProfile != want.KeepaliveProfile {
+		t.Fatalf("config = %+v, want the v0.4.0 defaults %+v", cfg, want)
+	}
+}
+
+func TestV040SettingsRoundTrip(t *testing.T) {
+	paths := testPaths(t)
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range [][2]string{
+		{"tls_split", "first-byte"},
+		{"http_proxy", "on"},
+		{"http_proxy_port", "3128"},
+		{"solve_challenges", "off"},
+		{"keepalive_profile", "slow"},
+	} {
+		if err := st.SetOverride(kv[0], kv[1]); err != nil {
+			t.Fatalf("SetOverride(%q, %q): %v", kv[0], kv[1], err)
+		}
+	}
+
+	cfg := st.EffectiveConfig()
+	if cfg.TLSSplit != "first-byte" || !cfg.HTTPProxy || cfg.HTTPProxyPort != 3128 || cfg.SolveChallenges || cfg.KeepaliveProfile != "slow" {
+		t.Fatalf("effective config = %+v", cfg)
+	}
+	admin := st.Config()
+	if admin.TLSSplit != "off" || admin.HTTPProxy || admin.HTTPProxyPort != 8080 || !admin.SolveChallenges || admin.KeepaliveProfile != "standard" {
+		t.Fatalf("admin config must stay untouched: %+v", admin)
+	}
+
+	reopened, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rcfg := reopened.EffectiveConfig()
+	if rcfg.TLSSplit != "first-byte" || !rcfg.HTTPProxy || rcfg.HTTPProxyPort != 3128 || rcfg.SolveChallenges || rcfg.KeepaliveProfile != "slow" {
+		t.Fatalf("overrides did not survive reopen: %+v", rcfg)
+	}
+	want := []string{"http_proxy", "http_proxy_port", "keepalive_profile", "solve_challenges", "tls_split"}
+	if got := reopened.OverriddenKeys(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("OverriddenKeys = %v, want %v", got, want)
+	}
+
+	for _, key := range want {
+		if err := reopened.ClearOverride(key); err != nil {
+			t.Fatalf("ClearOverride(%q): %v", key, err)
+		}
+	}
+	if got := reopened.OverriddenKeys(); len(got) != 0 {
+		t.Fatalf("overrides after reset = %v, want none", got)
+	}
+	def := reopened.EffectiveConfig()
+	if def.TLSSplit != "off" || def.HTTPProxy || def.HTTPProxyPort != 8080 || !def.SolveChallenges || def.KeepaliveProfile != "standard" {
+		t.Fatalf("reset did not restore the defaults: %+v", def)
+	}
+}
+
+func TestV040SetOverrideRejects(t *testing.T) {
+	paths := testPaths(t)
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ key, value string }{
+		{"tls_split", "middle"},
+		{"tls_split", ""},
+		{"keepalive_profile", "fast"},
+		{"keepalive_profile", ""},
+		{"http_proxy_port", "0"},
+		{"http_proxy_port", "65536"},
+		{"http_proxy_port", "abc"},
+		{"http_proxy", "maybe"},
+		{"solve_challenges", "maybe"},
+	} {
+		if err := st.SetOverride(tc.key, tc.value); err == nil {
+			t.Errorf("SetOverride(%q, %q): expected error", tc.key, tc.value)
+		}
+	}
+	// A failed set must not persist anything.
+	if keys := st.OverriddenKeys(); len(keys) != 0 {
+		t.Fatalf("overrides after failures = %v", keys)
+	}
 }
