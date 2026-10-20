@@ -479,6 +479,11 @@ func (c *Controller) Settings() api.SettingsView {
 		KillSwitchEffective:  c.store.EffectiveKillSwitch(),
 		AutoconnectEffective: c.store.EffectiveAutoconnect(),
 		QuotaPollMinutes:     cfg.QuotaPollMinutes,
+		TLSSplit:             cfg.TLSSplit,
+		HTTPProxy:            cfg.HTTPProxy,
+		HTTPProxyPort:        cfg.HTTPProxyPort,
+		SolveChallenges:      cfg.SolveChallenges,
+		KeepaliveProfile:     cfg.KeepaliveProfile,
 		Overridden:           c.store.OverriddenKeys(),
 	}
 }

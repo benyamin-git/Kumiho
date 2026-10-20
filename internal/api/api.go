@@ -115,7 +115,8 @@ type ByteRates struct {
 	Down float64 `json:"down"`
 }
 
-// SettingsView is the daemon's runtime settings snapshot.
+// SettingsView is the daemon's runtime settings snapshot. The v0.4.0
+// settings are additive: an older client ignores the unknown fields.
 type SettingsView struct {
 	SocksPort            int      `json:"socks_port"`
 	MTU                  int      `json:"mtu"`
@@ -134,6 +135,11 @@ type SettingsView struct {
 	AutoconnectEffective bool     `json:"autoconnect_effective"`
 	QuotaPollMinutes     int      `json:"quota_poll_minutes"`
 	Overridden           []string `json:"overridden,omitempty"`
+	TLSSplit             string   `json:"tls_split"`
+	HTTPProxy            bool     `json:"http_proxy"`
+	HTTPProxyPort        int      `json:"http_proxy_port"`
+	SolveChallenges      bool     `json:"solve_challenges"`
+	KeepaliveProfile     string   `json:"keepalive_profile"`
 }
 
 // SettingsSetPayload changes one runtime setting. Reset drops the persisted

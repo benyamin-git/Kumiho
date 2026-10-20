@@ -410,6 +410,97 @@ func TestSetSetting(t *testing.T) {
 	}
 }
 
+// The v0.4.0 keys reach the clients like every other runtime setting: the
+// view carries the effective value, the key is listed as overridden while
+// the override is persisted, and a reset restores the default.
+func TestSetV040Settings(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
+
+	cases := []struct {
+		key   string
+		value string
+		want  any // effective value in the view after the set
+		def   any // effective value in the view after the reset
+		get   func(api.SettingsView) any
+	}{
+		{"tls_split", "sni", "sni", "off", func(v api.SettingsView) any { return v.TLSSplit }},
+		{"http_proxy", "on", true, false, func(v api.SettingsView) any { return v.HTTPProxy }},
+		{"http_proxy_port", "9090", 9090, 8080, func(v api.SettingsView) any { return v.HTTPProxyPort }},
+		{"solve_challenges", "off", false, true, func(v api.SettingsView) any { return v.SolveChallenges }},
+		{"keepalive_profile", "slow", "slow", "standard", func(v api.SettingsView) any { return v.KeepaliveProfile }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			// The built-in default reaches the view before any override.
+			if got := tc.get(ctrl.Settings()); got != tc.def {
+				t.Fatalf("%s default = %v, want %v", tc.key, got, tc.def)
+			}
+
+			if err := ctrl.SetSetting(tc.key, tc.value); err != nil {
+				t.Fatal(err)
+			}
+			view := ctrl.Settings()
+			if got := tc.get(view); got != tc.want {
+				t.Fatalf("%s = %v, want %v", tc.key, got, tc.want)
+			}
+			if !containsString(view.Overridden, tc.key) {
+				t.Fatalf("%s not listed as overridden: %v", tc.key, view.Overridden)
+			}
+
+			if err := ctrl.ApplySetting(api.SettingsSetPayload{Key: tc.key, Reset: true}); err != nil {
+				t.Fatal(err)
+			}
+			view = ctrl.Settings()
+			if got := tc.get(view); got != tc.def {
+				t.Fatalf("%s after reset = %v, want %v", tc.key, got, tc.def)
+			}
+			if containsString(view.Overridden, tc.key) {
+				t.Fatalf("%s still listed as overridden: %v", tc.key, view.Overridden)
+			}
+		})
+	}
+}
+
+// The v0.4.0 wire names are part of control protocol v1: the five keys are
+// additive, so an older client that ignores unknown fields keeps working.
+func TestV040SettingsWireNames(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
+
+	sets := map[string]string{
+		"tls_split":         "sni",
+		"http_proxy":        "on",
+		"http_proxy_port":   "9090",
+		"solve_challenges":  "off",
+		"keepalive_profile": "slow",
+	}
+	for key, value := range sets {
+		if err := ctrl.SetSetting(key, value); err != nil {
+			t.Fatalf("set %s: %v", key, err)
+		}
+	}
+
+	data, err := json.Marshal(ctrl.Settings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{
+		"tls_split":         "sni",
+		"http_proxy":        true,
+		"http_proxy_port":   float64(9090),
+		"solve_challenges":  false,
+		"keepalive_profile": "slow",
+	}
+	for key, wantValue := range want {
+		if got := raw[key]; got != wantValue {
+			t.Fatalf("%s = %v, want %v", key, got, wantValue)
+		}
+	}
+}
+
 func containsString(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {
