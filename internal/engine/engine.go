@@ -470,10 +470,14 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	c.email = email
 	c.pending = nil
 	c.since = time.Now()
+	// Persist the email under the same lock as the token publish, so a
+	// sign-out cannot clear state.json and then have a delayed login write
+	// restore the old account.
+	stateErr := c.store.UpdateState(func(s *settings.State) { s.Email = email })
 	c.mu.Unlock()
 
-	if err := c.store.UpdateState(func(s *settings.State) { s.Email = email }); err != nil {
-		c.log.Logf(logging.Warn, "auth", "could not persist account email: %v", err)
+	if stateErr != nil {
+		c.log.Logf(logging.Warn, "auth", "could not persist account email: %v", stateErr)
 	}
 	c.log.Logf(logging.Info, "auth", "signed in as %s", email)
 	c.notify()
