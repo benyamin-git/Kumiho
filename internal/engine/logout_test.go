@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/guardian"
@@ -51,6 +55,12 @@ func TestLogoutWipesAccountAndUsageState(t *testing.T) {
 	}
 
 	st := ctrl.Snapshot()
+	if st.State != string(StateUnauthenticated) || st.Authenticated || st.Email != "" {
+		t.Errorf("snapshot after logout = %+v, want UNAUTHENTICATED with no account", st)
+	}
+	if st.TokenExpires != 0 {
+		t.Errorf("token expiry after logout = %d, want 0", st.TokenExpires)
+	}
 	if st.Quota != nil {
 		t.Errorf("quota after logout = %+v, want nil", st.Quota)
 	}
@@ -185,5 +195,107 @@ func TestLogoutDuringRedialKeepsSnapshotClean(t *testing.T) {
 	st := ctrl.Snapshot()
 	if st.Quota != nil || st.PassExpires != 0 || st.Totals != nil {
 		t.Fatalf("snapshot after racing logout = %+v, want no account/usage state", st)
+	}
+}
+
+// A sign-out during an in-flight token refresh must win: the refresh may
+// finish, but it must neither republish the account nor recreate tokens.json.
+func TestLogoutDuringTokenRefreshKeepsSnapshotClean(t *testing.T) {
+	var oauthCalls atomic.Int32
+	reached := make(chan struct{})
+	var reachedOnce sync.Once
+	release := make(chan struct{})
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/login":
+			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
+		case "/v1/oauth/token":
+			if oauthCalls.Add(1) == 1 {
+				fmt.Fprint(w, `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`)
+				return
+			}
+			reachedOnce.Do(func() { close(reached) })
+			<-release
+			fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"refresh-2","expires_in":7200}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}
+	ctrl, paths := newTestController(t, handler)
+	ctx := context.Background()
+	ctrl.LoginEmail("user@example.com")
+	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "done" {
+		t.Fatalf("login = %+v", ls)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- ctrl.refreshAccessToken(ctx) }()
+	select {
+	case <-reached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresh request did not reach the fake FxA endpoint")
+	}
+
+	if err := ctrl.Logout(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+
+	if err := <-done; !errors.Is(err, errRefreshSessionChanged) {
+		t.Fatalf("refresh after logout = %v, want errRefreshSessionChanged", err)
+	}
+	st := ctrl.Snapshot()
+	if st.State != string(StateUnauthenticated) || st.Authenticated || st.Email != "" || st.TokenExpires != 0 {
+		t.Fatalf("snapshot after racing logout = %+v, want UNAUTHENTICATED with no account", st)
+	}
+	if _, err := os.Stat(paths.Tokens); !os.IsNotExist(err) {
+		t.Fatalf("tokens file after racing logout: stat err = %v, want not-exist", err)
+	}
+}
+
+// The same fence must cover sign-in: a login that was in flight when the user
+// signed out cannot publish its tokens afterwards.
+func TestLogoutDuringLoginDoesNotRestoreSession(t *testing.T) {
+	loginReached := make(chan struct{})
+	var reachedOnce sync.Once
+	release := make(chan struct{})
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/login":
+			reachedOnce.Do(func() { close(loginReached) })
+			<-release
+			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
+		case "/v1/oauth/token":
+			fmt.Fprint(w, `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}
+	ctrl, paths := newTestController(t, handler)
+	ctrl.LoginEmail("user@example.com")
+
+	done := make(chan api.LoginState, 1)
+	go func() { done <- ctrl.LoginPassword(context.Background(), "pw") }()
+	select {
+	case <-loginReached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("login request did not reach the fake FxA endpoint")
+	}
+
+	if err := ctrl.Logout(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+
+	ls := <-done
+	if ls.Step != "done" || ls.Error != errLoginSessionChanged.Error() {
+		t.Fatalf("login after logout = %+v, want the cancelled-session error", ls)
+	}
+	st := ctrl.Snapshot()
+	if st.State != string(StateUnauthenticated) || st.Authenticated || st.Email != "" || st.TokenExpires != 0 {
+		t.Fatalf("snapshot after racing login = %+v, want UNAUTHENTICATED with no account", st)
+	}
+	if _, err := os.Stat(paths.Tokens); !os.IsNotExist(err) {
+		t.Fatalf("tokens file after racing login: stat err = %v, want not-exist", err)
 	}
 }

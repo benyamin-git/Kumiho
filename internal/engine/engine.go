@@ -47,6 +47,15 @@ type pendingLogin struct {
 	sessionToken string
 }
 
+var (
+	// errRefreshSessionChanged reports that a token refresh finished after
+	// the account session it started under had already changed.
+	errRefreshSessionChanged = errors.New("the account session changed while the access token was being renewed")
+	// errLoginSessionChanged reports that a sign-in finished after the
+	// account session it started under had already changed.
+	errLoginSessionChanged = errors.New("the account session changed while signing in")
+)
+
 // Controller owns the daemon session state and login state machine.
 type Controller struct {
 	store *settings.Store
@@ -86,11 +95,15 @@ type Controller struct {
 	dialUpstream      func(ctx context.Context, opts upstream.Options) (upstreamSession, error)
 	socksPortOverride int
 
-	mu       sync.Mutex
-	state    State
-	since    time.Time
-	email    string
-	tokens   *fxa.Tokens
+	mu     sync.Mutex
+	state  State
+	since  time.Time
+	email  string
+	tokens *fxa.Tokens
+	// authGen fences network work that started under one account session
+	// from publishing into the next. It is bumped on every sign-in and
+	// sign-out, under mu.
+	authGen  uint64
 	pending  *pendingLogin
 	onChange []func()
 
@@ -312,7 +325,10 @@ func (c *Controller) EnsureFreshToken(ctx context.Context) error {
 // refreshAccessToken force-renews the access token (also used when Guardian
 // rejects it mid-session).
 func (c *Controller) refreshAccessToken(ctx context.Context) error {
-	tokens := c.currentTokens()
+	c.mu.Lock()
+	tokens := c.tokens
+	gen := c.authGen
+	c.mu.Unlock()
 	if tokens == nil {
 		return errors.New("not signed in")
 	}
@@ -325,14 +341,22 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 	if err != nil {
 		var apiErr *fxa.APIError
 		if errors.As(err, &apiErr) && apiErr.PermanentRefreshRejection() {
-			c.clearSession("refresh token rejected")
+			c.clearSessionIf(gen, true, "refresh token rejected")
 		}
 		return err
 	}
+
+	c.mu.Lock()
+	if c.authGen != gen {
+		c.mu.Unlock()
+		return errRefreshSessionChanged
+	}
+	// Persist while still holding mu so a sign-out cannot bump the
+	// generation and delete tokens.json between the check and the write.
 	if err := saveTokens(c.store.Paths().Tokens, refreshed); err != nil {
+		c.mu.Unlock()
 		return err
 	}
-	c.mu.Lock()
 	c.tokens = refreshed
 	c.mu.Unlock()
 	c.log.Logf(logging.Info, "auth", "renewed FxA access token")
@@ -361,6 +385,7 @@ func (c *Controller) LoginEmail(email string) api.LoginState {
 func (c *Controller) LoginPassword(ctx context.Context, password string) api.LoginState {
 	c.mu.Lock()
 	pending := c.pending
+	gen := c.authGen
 	c.mu.Unlock()
 	if pending == nil || pending.email == "" {
 		return api.LoginState{Step: "email", Error: "enter your email first"}
@@ -376,6 +401,10 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 	}
 	if !res.Verified {
 		c.mu.Lock()
+		if c.authGen != gen || c.pending != pending {
+			c.mu.Unlock()
+			return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
+		}
 		c.pending.sessionToken = res.SessionToken
 		c.mu.Unlock()
 		c.log.Logf(logging.Info, "auth", "verification required (%s) for %s", res.VerificationMethod, pending.email)
@@ -386,7 +415,7 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 			VerificationReason: res.VerificationReason,
 		}
 	}
-	return c.completeLogin(ctx, pending.email, res.SessionToken)
+	return c.completeLogin(ctx, pending.email, res.SessionToken, gen)
 }
 
 // Login2FA verifies the emailed code, or with an empty code re-checks the
@@ -394,6 +423,7 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
 	c.mu.Lock()
 	pending := c.pending
+	gen := c.authGen
 	c.mu.Unlock()
 	if pending == nil || pending.sessionToken == "" {
 		return api.LoginState{Step: "email", Error: "sign-in was interrupted; start again"}
@@ -414,19 +444,27 @@ func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
 	} else if err := c.fxa.VerifyCode(ctx, pending.sessionToken, strings.TrimSpace(code)); err != nil {
 		return api.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
 	}
-	return c.completeLogin(ctx, pending.email, pending.sessionToken)
+	return c.completeLogin(ctx, pending.email, pending.sessionToken, gen)
 }
 
-func (c *Controller) completeLogin(ctx context.Context, email, sessionToken string) api.LoginState {
+func (c *Controller) completeLogin(ctx context.Context, email, sessionToken string, gen uint64) api.LoginState {
 	tokens, err := c.fxa.OAuthToken(ctx, sessionToken)
 	if err != nil {
 		return api.LoginState{Step: "2fa", Email: email, Error: "could not fetch OAuth tokens: " + friendlyLoginError(err)}
 	}
-	if err := saveTokens(c.store.Paths().Tokens, tokens); err != nil {
-		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting tokens failed: " + err.Error()}
-	}
 
 	c.mu.Lock()
+	if c.authGen != gen {
+		c.mu.Unlock()
+		return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
+	}
+	// Persist and publish under one lock so a sign-out cannot interleave
+	// between the generation check, the token write and the in-memory swap.
+	if err := saveTokens(c.store.Paths().Tokens, tokens); err != nil {
+		c.mu.Unlock()
+		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting tokens failed: " + err.Error()}
+	}
+	c.authGen++
 	c.tokens = tokens
 	c.state = StateIdle
 	c.email = email
@@ -449,11 +487,22 @@ func (c *Controller) Logout() error {
 }
 
 func (c *Controller) clearSession(reason string) {
-	c.stopTunnel("session cleared")
-	if err := clearTokens(c.store.Paths().Tokens); err != nil {
-		c.log.Logf(logging.Warn, "auth", "could not remove tokens: %v", err)
-	}
+	c.clearSessionIf(0, false, reason)
+}
+
+// clearSessionIf resets the controller to UNAUTHENTICATED. When requireMatch
+// is set it only clears if the auth generation still equals gen, so a stale
+// in-flight refresh cannot sign out a newer session.
+func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string) bool {
 	c.mu.Lock()
+	if requireMatch && c.authGen != gen {
+		c.mu.Unlock()
+		return false
+	}
+	// Bump the generation before clearing the token file below: an in-flight
+	// refresh that captured the old generation must neither publish nor save
+	// after sign-out, whichever side wins the race.
+	c.authGen++
 	c.tokens = nil
 	c.pending = nil
 	c.email = ""
@@ -461,9 +510,8 @@ func (c *Controller) clearSession(reason string) {
 	c.since = time.Now()
 	// Signing out wipes the account and usage view: an unauthenticated
 	// snapshot must not expose the previous session's quota, exit, totals,
-	// rates or pass (v0.4.0 spec). stopTunnel already clears the exit and
-	// rate fields; resetting the full set here keeps that guarantee local to
-	// session clearing rather than dependent on tunnel teardown details.
+	// rates or pass (v0.4.0 spec). Clear the full set before the tunnel
+	// teardown so a slow teardown cannot leave account data visible.
 	c.quota = nil
 	c.exitIP = ""
 	c.exitCountry = ""
@@ -473,11 +521,18 @@ func (c *Controller) clearSession(reason string) {
 	c.ratesDown = 0
 	c.pass = nil
 	c.mu.Unlock()
+
+	c.stopTunnel("session cleared")
+
+	if err := clearTokens(c.store.Paths().Tokens); err != nil {
+		c.log.Logf(logging.Warn, "auth", "could not remove tokens: %v", err)
+	}
 	if err := c.store.UpdateState(func(s *settings.State) { s.Email = "" }); err != nil {
 		c.log.Logf(logging.Warn, "auth", "could not clear stored email: %v", err)
 	}
 	c.log.Logf(logging.Info, "auth", "session cleared (%s)", reason)
 	c.notify()
+	return true
 }
 
 // Snapshot returns the current status for TUI/CLI clients.
