@@ -425,6 +425,16 @@ func (c *Controller) UseBypassDialer() {
 	c.httpClient = newClient(20 * time.Second)
 	c.fxa.HTTP = newClient(30 * time.Second)
 	c.guardian.HTTP = newClient(30 * time.Second)
+	// Re-attach the one shared jar to the rebuilt clients and re-point the
+	// solver at the rebuilt control-plane client, so a challenge solved
+	// after the bypass dialer landed still installs cookies the retrying
+	// client will send. UseBypassDialer runs once at engine start, before
+	// any request path can invoke the solver, so the re-point is not
+	// concurrent with Solve.
+	c.httpClient.Jar = c.jar
+	c.fxa.HTTP.Jar = c.jar
+	c.guardian.HTTP.Jar = c.jar
+	c.solver.HTTP = c.httpClient
 	c.upstreamDialer = dial
 
 	// Bootstrap resolvers for edge hostnames (PLAN.md §3.5 role 1): marked
@@ -642,7 +652,9 @@ func (c *Controller) acquirePass(ctx context.Context) (*guardian.Pass, error) {
 		}
 		return pass, nil
 	case guardian.IsChallenge(err):
-		return nil, errors.New("could not solve the anti-bot challenge; retry or disable solve_challenges")
+		// The joined error distinguishes a disabled solver (no retries, no
+		// I/O) from an enabled solve that failed; the wording differs.
+		return nil, errors.New(challengeFailureMessage(err))
 	default:
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -901,5 +902,244 @@ func TestUseBypassDialerTLSSplitControlPlane(t *testing.T) {
 				t.Fatalf("body = %q", body)
 			}
 		})
+	}
+}
+
+// A challenged login (HTTP 406) runs the real fastly solver against a
+// fixture challenge page: the solve succeeds, the login retry carries the
+// solved cookie, and that cookie lands in the ONE shared jar used by every
+// control-plane client and by the solver itself.
+func TestChallengeSolverEndToEndInstallsSharedCookie(t *testing.T) {
+	const prefix = "/_fs-ch-abc123"
+	var loginHits, solverHits atomic.Int32
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/account/login":
+			loginHits.Add(1)
+			if _, err := r.Cookie("fk"); err != nil {
+				w.WriteHeader(http.StatusNotAcceptable)
+				fmt.Fprint(w, "Client Challenge")
+				return
+			}
+			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
+		case r.URL.Path == "/v1/oauth/token":
+			fmt.Fprint(w, `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`)
+		case r.URL.Path == "/":
+			// The solver's isolated jar carries the challenge cookie, so
+			// the verification re-fetch must come back clean.
+			solverHits.Add(1)
+			if _, err := r.Cookie("fk"); err == nil {
+				fmt.Fprint(w, "<html>verified</html>")
+				return
+			}
+			w.Header().Set("Set-Cookie", "fk=1; Path=/")
+			fmt.Fprintf(w, `<html><body>Client Challenge <script src="%s/script.js"></script></body></html>`, prefix)
+		case r.URL.Path == prefix+"/script.js":
+			solverHits.Add(1)
+			fmt.Fprintf(w, `init([{"ty":"clientmetrics"}], "tok-1", %q)`, prefix)
+		case r.URL.Path == prefix+"/fst-post-back":
+			solverHits.Add(1)
+			fmt.Fprint(w, `{"status":"success","tok":"tok-1"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}
+	ctrl, _ := newTestController(t, handler)
+	ctx := context.Background()
+
+	// New attaches one shared jar to every control-plane client and the
+	// solver, and wires the solver into both challenge callbacks.
+	if ctrl.httpClient.Jar == nil {
+		t.Fatal("httpClient.Jar is nil")
+	}
+	if ctrl.fxa.HTTP.Jar != ctrl.httpClient.Jar || ctrl.guardian.HTTP.Jar != ctrl.httpClient.Jar {
+		t.Fatal("the three control-plane clients must share one cookie jar")
+	}
+	if ctrl.solver == nil || ctrl.solver.SharedJar != ctrl.httpClient.Jar {
+		t.Fatal("the solver must share the controller's jar")
+	}
+	if ctrl.solver.HTTP != ctrl.httpClient {
+		t.Fatal("the solver must use the engine's control-plane client")
+	}
+	if ctrl.fxa.Solver == nil || ctrl.guardian.OnChallenge == nil {
+		t.Fatal("the solver must be wired as fxa.Solver and guardian.OnChallenge")
+	}
+
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "done" || ls.Error != "" {
+		t.Fatalf("challenged login = %+v", ls)
+	}
+	if got := loginHits.Load(); got != 2 {
+		t.Fatalf("login calls = %d, want 2 (406, then the solved retry)", got)
+	}
+	if got := solverHits.Load(); got < 4 {
+		t.Fatalf("solver fixture hits = %d, want >= 4 (page, script, post-back, verify)", got)
+	}
+
+	// The solved cookie is visible for the challenged URL on every jar.
+	base := strings.TrimSuffix(ctrl.fxa.BaseURL, "/v1")
+	challengedURL, err := url.Parse(base + "/v1/account/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookiesPresent := func(j http.CookieJar) bool {
+		for _, c := range j.Cookies(challengedURL) {
+			if c.Name == "fk" && c.Value == "1" {
+				return true
+			}
+		}
+		return false
+	}
+	for name, j := range map[string]http.CookieJar{
+		"httpClient": ctrl.httpClient.Jar,
+		"fxa":        ctrl.fxa.HTTP.Jar,
+		"guardian":   ctrl.guardian.HTTP.Jar,
+		"solverJar":  ctrl.solver.SharedJar,
+	} {
+		if !cookiesPresent(j) {
+			t.Fatalf("%s jar has no solved cookie for the challenged URL", name)
+		}
+	}
+}
+
+// solve_challenges is consulted on every Solve call (D31): toggling it
+// between attempts changes the outcome immediately; off does no solver I/O
+// and fails the first 406, and the two user-facing messages must differ.
+func TestChallengeSolveSettingConsultedPerCall(t *testing.T) {
+	var loginHits, solverHits atomic.Int32
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/account/login" {
+			loginHits.Add(1)
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		solverHits.Add(1) // anything outside /v1 is the solver probing the fixture
+		http.NotFound(w, r)
+	}
+	ctrl, _ := newTestController(t, handler)
+	ctx := context.Background()
+
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	login := func() string {
+		t.Helper()
+		ls := ctrl.LoginPassword(ctx, "pw")
+		if ls.Step != "password" {
+			t.Fatalf("login step = %+v", ls)
+		}
+		return ls.Error
+	}
+
+	const (
+		enabledMsg  = "could not solve the anti-bot challenge; retry or disable solve_challenges"
+		disabledMsg = "anti-bot challenge solving is disabled; enable solve_challenges and try again"
+	)
+
+	// Off: the first 406 fails immediately, before any solver I/O.
+	if err := ctrl.SetSetting("solve_challenges", "off"); err != nil {
+		t.Fatal(err)
+	}
+	if msg := login(); !strings.Contains(msg, disabledMsg) {
+		t.Fatalf("disabled message = %q, want %q", msg, disabledMsg)
+	}
+	if gotL, gotS := loginHits.Load(), solverHits.Load(); gotL != 1 || gotS != 0 {
+		t.Fatalf("off: login hits = %d, solver hits = %d; want 1 and 0", gotL, gotS)
+	}
+
+	// On (same controller, next attempt): the solver runs and fails with
+	// the enabled wording.
+	if err := ctrl.SetSetting("solve_challenges", "on"); err != nil {
+		t.Fatal(err)
+	}
+	enabled := login()
+	if !strings.Contains(enabled, enabledMsg) {
+		t.Fatalf("enabled message = %q, want %q", enabled, enabledMsg)
+	}
+	if solverHits.Load() == 0 {
+		t.Fatal("on: the solver must do I/O against the fixture")
+	}
+	solverAfterEnabled := solverHits.Load()
+
+	// Toggling back off applies immediately: no further solver I/O.
+	if err := ctrl.SetSetting("solve_challenges", "off"); err != nil {
+		t.Fatal(err)
+	}
+	disabled := login()
+	if !strings.Contains(disabled, disabledMsg) {
+		t.Fatalf("disabled message = %q, want %q", disabled, disabledMsg)
+	}
+	if got := solverHits.Load(); got != solverAfterEnabled {
+		t.Fatalf("off: solver I/O happened: hits = %d, want %d", got, solverAfterEnabled)
+	}
+	if got := loginHits.Load(); got != 3 {
+		t.Fatalf("login hits = %d, want 3 (one per attempt; no retries)", got)
+	}
+	if enabled == disabled {
+		t.Fatalf("enabled and disabled messages must differ, both %q", enabled)
+	}
+}
+
+// With solve_challenges=off the Guardian path also fails on the first 406
+// (no retries) and renders the disabled wording, not the enabled one.
+func TestAcquirePassChallengeDisabledMessage(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+	if err := ctrl.SetSetting("solve_challenges", "off"); err != nil {
+		t.Fatal(err)
+	}
+
+	var challengeHits atomic.Int32
+	challengeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		challengeHits.Add(1)
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	t.Cleanup(challengeSrv.Close)
+	ctrl.guardian.BaseURL = challengeSrv.URL
+
+	_, err := ctrl.acquirePass(ctx)
+	const want = "anti-bot challenge solving is disabled; enable solve_challenges and try again"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("acquirePass err = %v, want %q", err, want)
+	}
+	if strings.Contains(err.Error(), "could not solve the anti-bot challenge") {
+		t.Fatalf("acquirePass err = %v, want the disabled wording, not the enabled one", err)
+	}
+	if got := challengeHits.Load(); got != 1 {
+		t.Fatalf("challenge hits = %d, want 1 (fail on the first 406)", got)
+	}
+}
+
+// UseBypassDialer rebuilds the control-plane clients: the one shared jar
+// must survive on all of them, and the solver must follow the rebuilt
+// control-plane client while keeping the same jar.
+func TestUseBypassDialerKeepsSharedJarAndSolver(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	jar := ctrl.httpClient.Jar
+	if jar == nil || ctrl.fxa.HTTP.Jar != jar || ctrl.guardian.HTTP.Jar != jar {
+		t.Fatal("New must attach one shared jar to all three clients")
+	}
+	if ctrl.solver == nil || ctrl.solver.HTTP != ctrl.httpClient || ctrl.solver.SharedJar != jar {
+		t.Fatal("New must point the solver at the control-plane client and the shared jar")
+	}
+
+	ctrl.UseBypassDialer()
+
+	if ctrl.httpClient.Jar != jar || ctrl.fxa.HTTP.Jar != jar || ctrl.guardian.HTTP.Jar != jar {
+		t.Fatal("UseBypassDialer must re-attach the same jar to the rebuilt clients")
+	}
+	if ctrl.solver.HTTP != ctrl.httpClient {
+		t.Fatal("the solver must follow the rebuilt control-plane client")
+	}
+	if ctrl.solver.SharedJar != jar {
+		t.Fatal("the solver must keep the controller's shared jar")
 	}
 }

@@ -176,11 +176,18 @@ func TestChallengeWithoutSolver(t *testing.T) {
 	}
 }
 
-type fakeSolver struct{ calls int }
+// fakeSolver records the challenged URL it was handed and optionally fails
+// with err, so tests can pin the callback contract and the error shape.
+type fakeSolver struct {
+	calls   int
+	lastURL string
+	err     error
+}
 
-func (f *fakeSolver) Solve(ctx context.Context) error {
+func (f *fakeSolver) Solve(_ context.Context, challengedURL string) error {
 	f.calls++
-	return nil
+	f.lastURL = challengedURL
+	return f.err
 }
 
 func TestChallengeWithSolverRetries(t *testing.T) {
@@ -206,5 +213,71 @@ func TestChallengeWithSolverRetries(t *testing.T) {
 	}
 	if solver.calls != 1 || calls != 2 || !got.Verified {
 		t.Fatalf("solver calls=%d, http calls=%d, result=%+v", solver.calls, calls, got)
+	}
+	if want := srv.URL + "/v1/account/login"; solver.lastURL != want {
+		t.Fatalf("challenged URL = %q, want %q", solver.lastURL, want)
+	}
+}
+
+// A solver failure keeps the *ChallengeError marker AND the solver error
+// itself, so callers can errors.As the 406 and errors.Is the cause — the
+// same joined shape guardian uses for OnChallenge failures.
+func TestChallengeSolverFailureKeepsMarker(t *testing.T) {
+	solverErr := errors.New("solver exploded")
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	solver := &fakeSolver{err: solverErr}
+	c.Solver = solver
+
+	_, err := c.Login(context.Background(), "test@example.com", "password")
+	var chErr *ChallengeError
+	if !errors.As(err, &chErr) {
+		t.Fatalf("error = %v, want *ChallengeError", err)
+	}
+	if chErr.StatusCode != http.StatusNotAcceptable {
+		t.Fatalf("ChallengeError.StatusCode = %d, want 406", chErr.StatusCode)
+	}
+	if !errors.Is(err, solverErr) {
+		t.Fatalf("error = %v, want errors.Is(err, solverErr)", err)
+	}
+	if calls != 1 || solver.calls != 1 {
+		t.Fatalf("http calls = %d, solver calls = %d; want 1 and 1 (the failure ends the loop)",
+			calls, solver.calls)
+	}
+}
+
+// A solver-disabled error (fastly.ErrDisabled in production; a local
+// sentinel here so package fxa need not import internal/fastly) reaches the
+// caller unchanged through the join, so the engine can render the disabled
+// wording.
+func TestChallengeSolverDisabledReachesCaller(t *testing.T) {
+	disabled := errors.New("challenge solving is disabled")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	solver := &fakeSolver{err: disabled}
+	c.Solver = solver
+
+	_, err := c.Login(context.Background(), "test@example.com", "password")
+	if !errors.Is(err, disabled) {
+		t.Fatalf("error = %v, want errors.Is(err, disabled)", err)
+	}
+	var chErr *ChallengeError
+	if !errors.As(err, &chErr) {
+		t.Fatalf("error = %v, want *ChallengeError", err)
+	}
+	if solver.calls != 1 {
+		t.Fatalf("solver calls = %d, want 1", solver.calls)
 	}
 }

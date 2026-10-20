@@ -22,7 +22,7 @@ type Client struct {
 	HTTP      *http.Client
 	Now       func() time.Time // injectable clock for tests
 	Rand      io.Reader        // injectable nonce source for tests
-	Solver    ChallengeSolver  // optional anti-bot solver (M3)
+	Solver    ChallengeSolver  // optional anti-bot solver (internal/fastly)
 	UserAgent string           // platform UA; empty uses the package default
 }
 
@@ -249,8 +249,10 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 			if c.Solver == nil || challengeTries >= 5 {
 				return nil, &ChallengeError{StatusCode: resp.StatusCode}
 			}
-			if err := c.Solver.Solve(ctx); err != nil {
-				return nil, fmt.Errorf("anti-bot challenge: %w", err)
+			// Mirror guardian's shape: the returned error is both a
+			// *ChallengeError marker and errors.Is the solver's error.
+			if err := c.Solver.Solve(ctx, req.URL.String()); err != nil {
+				return nil, errors.Join(&ChallengeError{StatusCode: resp.StatusCode}, err)
 			}
 			continue
 		}

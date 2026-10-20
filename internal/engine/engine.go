@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
+	"github.com/benyamin-git/kumiho/internal/fastly"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
@@ -54,6 +56,15 @@ type Controller struct {
 	httpClient      *http.Client
 	serverListURL   string
 	serverListCache string
+
+	// jar is the one cookie jar shared by every control-plane HTTP client
+	// (httpClient, fxa.HTTP, guardian.HTTP) and the challenge solver for
+	// the controller's lifetime, so a solved challenge cookie reaches all
+	// of them.
+	jar http.CookieJar
+	// solver is the Fastly anti-bot challenge solver, wired as fxa.Solver
+	// and guardian.OnChallenge.
+	solver *fastly.Solver
 
 	guardian     *guardian.Client
 	exitCheckURL string
@@ -152,6 +163,36 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 	if ls, ok := c.nc.(netcfgLogfSetter); ok {
 		ls.SetLogf(ringLogf(ring))
 	}
+
+	// One cookie jar for the controller's lifetime, shared by every
+	// control-plane client and the challenge solver: a cookie installed by
+	// a solved challenge must be seen by all of them.
+	jar, _ := cookiejar.New(nil) // cannot fail with nil options
+	c.jar = jar
+	c.httpClient.Jar = jar
+	if client.HTTP == nil {
+		client.HTTP = &http.Client{Timeout: 30 * time.Second}
+	}
+	c.fxa.HTTP.Jar = jar
+	c.guardian.HTTP.Jar = jar
+
+	// Wire the Fastly anti-bot solver into both challenge callbacks. Enabled
+	// reads the effective config on every call (D31: solve_challenges applies
+	// immediately, not at connect time). Logf is the ring's warn logger with
+	// the solver's "fastly" tag; a nil ring must stay a no-op because
+	// (*logging.Ring).Logf panics on a nil receiver.
+	c.solver = &fastly.Solver{
+		HTTP:      c.httpClient,
+		SharedJar: jar,
+		Enabled: func() bool {
+			return c.store.EffectiveConfig().SolveChallenges
+		},
+	}
+	if ring != nil {
+		c.solver.Logf = ring.Logf
+	}
+	c.fxa.Solver = c.solver
+	c.guardian.OnChallenge = c.solver.Solve
 	return c
 }
 
@@ -632,6 +673,18 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 	return info
 }
 
+// challengeFailureMessage renders the user-facing wording for a failed
+// anti-bot challenge. The two cases are deliberately different: with
+// solve_challenges off the challenge never got a solver (fastly.ErrDisabled
+// joined by the FxA/Guardian clients), while an enabled solve that failed
+// suggests retrying or turning the setting off.
+func challengeFailureMessage(err error) string {
+	if errors.Is(err, fastly.ErrDisabled) {
+		return "anti-bot challenge solving is disabled; enable solve_challenges and try again"
+	}
+	return "could not solve the anti-bot challenge; retry or disable solve_challenges"
+}
+
 func friendlyLoginError(err error) string {
 	var apiErr *fxa.APIError
 	if errors.As(err, &apiErr) {
@@ -639,7 +692,7 @@ func friendlyLoginError(err error) string {
 	}
 	var chErr *fxa.ChallengeError
 	if errors.As(err, &chErr) {
-		return "Mozilla's edge sent an anti-bot challenge; automatic solving arrives in M3. Try again later or from a different network."
+		return challengeFailureMessage(err)
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "the request timed out; check the host clock and network"

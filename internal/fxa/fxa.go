@@ -65,18 +65,22 @@ func (e *APIError) PermanentRefreshRejection() bool {
 	return false
 }
 
-// ChallengeError is returned when the edge demands a Fastly anti-bot
-// challenge and no solver is available. The solver lands in milestone M3.
+// ChallengeError marks a Fastly anti-bot challenge (HTTP 406) that the
+// request could not get past. It is returned when no solver is configured
+// or when the solver gave up; when a solver fails, its own error is joined
+// with this marker (errors.Join), so callers can both errors.As the 406
+// and errors.Is the underlying cause.
 type ChallengeError struct {
 	StatusCode int
 }
 
 func (e *ChallengeError) Error() string {
-	return fmt.Sprintf("anti-bot challenge (HTTP %d); the challenge solver is not wired up yet", e.StatusCode)
+	return fmt.Sprintf("anti-bot challenge (HTTP %d)", e.StatusCode)
 }
 
 // ChallengeSolver solves an anti-bot challenge so a retried request can
-// succeed. Implemented in internal/fastly (M3).
+// succeed; challengedURL is the URL that returned 406. Implemented by
+// internal/fastly.Solver and wired by the engine.
 type ChallengeSolver interface {
-	Solve(ctx context.Context) error
+	Solve(ctx context.Context, challengedURL string) error
 }
