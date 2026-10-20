@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -76,6 +77,60 @@ func TestValidateRejects(t *testing.T) {
 	for name, cfg := range cases {
 		if err := cfg.Validate(); err == nil {
 			t.Errorf("%s: expected validation error", name)
+		}
+	}
+}
+
+func TestValidateUpstreamProxy(t *testing.T) {
+	valid := []string{
+		"socks5://127.0.0.1:1080",
+		"socks5://127.0.0.1", // port optional (default 1080)
+		"SOCKS5://127.0.0.1", // scheme is case-insensitive
+		"socks5h://proxy.example.net:1080",
+		"socks5h://proxy.example.net",
+		"socks5://user:pass@127.0.0.1:1080", // credentials allowed
+		"socks5://us%40er:p%40ss@127.0.0.1", // URL-escaped credentials
+		"http://127.0.0.1:8080",
+		"http://proxy.example.net", // port optional (default 80)
+		"HTTP://proxy.example.net",
+		"http://user:pass@proxy.example.net:3128",
+		"socks5://[::1]:1080",
+		"socks5://[::1]",
+	}
+	for _, raw := range valid {
+		cfg := DefaultConfig()
+		cfg.UpstreamProxy = raw
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("%q: unexpected validation error: %v", raw, err)
+		}
+	}
+
+	invalid := []string{
+		"https://127.0.0.1:1080",   // wrong scheme
+		"socks4://127.0.0.1:1080",  // unsupported scheme
+		"SOCKS4://127.0.0.1",       // unsupported scheme, any case
+		"socks://127.0.0.1",        // not a supported alias
+		"",                         // handled as "not set" upstream; see below
+		"not a url",                // unparseable / no scheme
+		"%zz",                      // unparseable escape
+		"socks5://",                // missing host
+		"http://",                  // missing host
+		"socks5://user:secret@",    // missing host with credentials
+		"socks5://127.0.0.1:99999", // port out of range
+	}
+	for _, raw := range invalid {
+		if raw == "" {
+			continue // empty means "no proxy configured"
+		}
+		cfg := DefaultConfig()
+		cfg.UpstreamProxy = raw
+		err := cfg.Validate()
+		if err == nil {
+			t.Errorf("%q: expected a validation error", raw)
+			continue
+		}
+		if strings.Contains(err.Error(), "secret") {
+			t.Errorf("%q: validation error leaks credentials: %v", raw, err)
 		}
 	}
 }

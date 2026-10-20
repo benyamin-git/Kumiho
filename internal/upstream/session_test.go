@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -124,6 +125,126 @@ func TestWrapConnAppliedOnceBeforeHandshake(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(buf) != "hello" {
+		t.Fatalf("echo = %q", buf)
+	}
+}
+
+// failingDialer always fails, so a successful dial proves it was never used.
+func failingDialer() *net.Dialer {
+	return &net.Dialer{Control: func(_, _ string, _ syscall.RawConn) error {
+		return errors.New("test: dialer must not be used")
+	}}
+}
+
+// dialRecordingContext records the dial a custom DialContext performs.
+type dialRecordingContext struct {
+	network, addr string
+	dialed        bool
+}
+
+func (d *dialRecordingContext) dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	d.network, d.addr, d.dialed = network, addr, true
+	return (&net.Dialer{}).DialContext(ctx, network, addr)
+}
+
+func TestDialContextWinsOverDialer(t *testing.T) {
+	srv := startTestServer(t, serverHooks{echo: true})
+	defer srv.stop()
+
+	rec := &dialRecordingContext{}
+	sess := dialTestSession(t, srv, func(o *Options) {
+		o.DialContext = rec.dial
+		o.Dialer = failingDialer()
+	})
+	if !rec.dialed {
+		t.Fatal("DialContext was never called")
+	}
+	want := "127.0.0.1:" + strconv.Itoa(srv.port)
+	if rec.network != "tcp" || rec.addr != want {
+		t.Fatalf("DialContext called with %s %q, want tcp %q", rec.network, rec.addr, want)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := sess.OpenStream(ctx, "www.example.com", 443)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 5)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		t.Fatal(err)
+	}
+	if string(buf) != "hello" {
+		t.Fatalf("echo = %q", buf)
+	}
+}
+
+func TestDialerUsedWhenNoDialContext(t *testing.T) {
+	srv := startTestServer(t, serverHooks{echo: true})
+	defer srv.stop()
+
+	// No DialContext: the *net.Dialer still dials (production bypass path);
+	// a nil Dialer (zero dialer fallback) is what every other test here uses.
+	sess := dialTestSession(t, srv, func(o *Options) {
+		o.Dialer = &net.Dialer{}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := sess.OpenStream(ctx, "www.example.com", 443)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.Close()
+}
+
+func TestWrapConnWrapsDialContextConnOnceBeforeHandshake(t *testing.T) {
+	srv := startTestServer(t, serverHooks{echo: true})
+	defer srv.stop()
+
+	rec := &writeRecorder{}
+	dialer := &dialRecordingContext{}
+	var wraps atomic.Int32
+	var wrappedFrom net.Conn
+	sess := dialTestSession(t, srv, func(o *Options) {
+		o.DialContext = dialer.dial
+		o.WrapConn = func(conn net.Conn) net.Conn {
+			wraps.Add(1)
+			wrappedFrom = conn
+			return &recordingConn{Conn: conn, rec: rec}
+		}
+	})
+	if got := wraps.Load(); got != 1 {
+		t.Fatalf("WrapConn called %d times, want 1", got)
+	}
+	if !dialer.dialed || wrappedFrom == nil {
+		t.Fatal("the DialContext-provided connection never reached WrapConn")
+	}
+	// The wrapper saw the ClientHello: WrapConn ran after the proxy hop and
+	// before the TLS handshake.
+	first := rec.first()
+	if len(first) < 2 || first[0] != 0x16 || first[1] != 0x03 {
+		t.Fatalf("first write = %x, want a TLS handshake record (0x16 0x03)", first)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := sess.OpenStream(ctx, "www.example.com", 443)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("still-works")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, len("still-works"))
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		t.Fatal(err)
+	}
+	if string(buf) != "still-works" {
 		t.Fatalf("echo = %q", buf)
 	}
 }

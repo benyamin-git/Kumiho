@@ -213,7 +213,13 @@ func (c *Controller) redialOnce(stop <-chan struct{}) (upstreamSession, error) {
 	cand := c.cand
 	c.mu.Unlock()
 
-	sess, err := c.dialUpstream(ctx, c.upstreamOptions(ctx, cand, pass))
+	opts, err := c.upstreamOptions(ctx, cand, pass)
+	if err != nil {
+		// Proxy misconfiguration: surfaced to the watchdog loop, which logs
+		// it on every cycle rather than swallowing it.
+		return nil, err
+	}
+	sess, err := c.dialUpstream(ctx, opts)
 	if err == nil {
 		c.rememberEdgePeer(cand.Host, sess)
 	}

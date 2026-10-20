@@ -42,6 +42,12 @@ type Options struct {
 	PinnedIP string        // dial this IP while still presenting Host (optional)
 	Pass     func() string // returns the current proxy pass; may be swapped any time
 
+	// DialContext, when non-nil, dials the edge TCP connection. Dial uses it
+	// first, then Dialer, then a zero net.Dialer. The engine wires the
+	// upstream proxy hop through it (T4.1); WrapConn still applies to the
+	// connection it returns.
+	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+
 	Dialer  *net.Dialer    // optional dialer (M4 installs the SO_MARK hook here)
 	RootCAs *x509.CertPool // tests
 
@@ -126,11 +132,16 @@ func Dial(ctx context.Context, opts Options) (*Session, error) {
 	}
 	addr := net.JoinHostPort(dialHost, strconv.Itoa(opts.Port))
 
-	dialer := opts.Dialer
-	if dialer == nil {
-		dialer = &net.Dialer{}
+	var rawConn net.Conn
+	var err error
+	switch {
+	case opts.DialContext != nil:
+		rawConn, err = opts.DialContext(ctx, "tcp", addr)
+	case opts.Dialer != nil:
+		rawConn, err = opts.Dialer.DialContext(ctx, "tcp", addr)
+	default:
+		rawConn, err = (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 	}
-	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("upstream: dial %s: %w", addr, err)
 	}

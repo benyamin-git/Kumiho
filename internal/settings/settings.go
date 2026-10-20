@@ -147,9 +147,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("edge_address: not an IP address: %q", c.EdgeAddress)
 	}
 	if c.UpstreamProxy != "" {
-		u, err := url.Parse(c.UpstreamProxy)
-		if err != nil || u.Scheme == "" || u.Host == "" {
-			return fmt.Errorf("upstream_proxy: not a URL: %q", c.UpstreamProxy)
+		if err := validateUpstreamProxy(c.UpstreamProxy); err != nil {
+			return err
 		}
 	}
 	for _, cidr := range c.ExcludeCIDRs {
@@ -176,6 +175,33 @@ func validateEnum(key, value string, allowed ...string) error {
 		}
 	}
 	return fmt.Errorf("%s: %q is not one of %s", key, value, strings.Join(allowed, "|"))
+}
+
+// validateUpstreamProxy restricts upstream_proxy to SOCKS5/HTTP proxies with
+// a host (T4.1). The scheme is matched case-insensitively; URL credentials
+// are allowed; the port is optional (default 1080 for socks5/socks5h, 80 for
+// http — Ruling 18). Errors never echo the raw URL because it may carry
+// credentials; the scheme alone is safe to name.
+func validateUpstreamProxy(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return errors.New("upstream_proxy: not a valid URL (want e.g. socks5://host[:port])")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "socks5", "socks5h", "http":
+	default:
+		return fmt.Errorf("upstream_proxy: unsupported scheme %q (want socks5|socks5h|http)", u.Scheme)
+	}
+	if u.Host == "" {
+		return errors.New("upstream_proxy: missing host")
+	}
+	// url.Parse rejects non-numeric ports, but not out-of-range ones.
+	if port := u.Port(); port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return errors.New("upstream_proxy: port out of range")
+		}
+	}
+	return nil
 }
 
 // State is persisted to /var/lib/kumiho/state.json (PLAN.md §8). Pointer

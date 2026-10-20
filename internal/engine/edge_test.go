@@ -77,16 +77,22 @@ func TestUpstreamOptionsPinsBootstrappedEdge(t *testing.T) {
 	ctrl, _ := newTestController(t, loginOKHandler(t))
 	ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
 
-	opts := ctrl.upstreamOptions(context.Background(),
+	opts, err := ctrl.upstreamOptions(context.Background(),
 		serverlist.Candidate{Host: "p.m1.example.net", Port: 2499}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if opts.Host != "p.m1.example.net" || opts.Port != 2499 || opts.PinnedIP != "203.0.113.7" {
 		t.Fatalf("opts = %+v", opts)
 	}
 
 	// The cache keeps the pin across redials with no resolvers left.
 	ctrl.bootstrap = nil
-	opts = ctrl.upstreamOptions(context.Background(),
+	opts, err = ctrl.upstreamOptions(context.Background(),
 		serverlist.Candidate{Host: "p.m1.example.net", Port: 2499}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if opts.PinnedIP != "203.0.113.7" {
 		t.Fatalf("cached PinnedIP = %q", opts.PinnedIP)
 	}
@@ -94,8 +100,11 @@ func TestUpstreamOptionsPinsBootstrappedEdge(t *testing.T) {
 
 func TestUpstreamOptionsWithoutAnyResolution(t *testing.T) {
 	ctrl, _ := newTestController(t, loginOKHandler(t))
-	opts := ctrl.upstreamOptions(context.Background(),
+	opts, err := ctrl.upstreamOptions(context.Background(),
 		serverlist.Candidate{Host: "edge.invalid", Port: 2499}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if opts.PinnedIP != "" {
 		t.Fatalf("PinnedIP = %q, want empty (system resolver fallback)", opts.PinnedIP)
 	}

@@ -94,7 +94,14 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	var lastErr error
 	for attempt := 1; attempt <= 4; attempt++ {
 		next := sequence[(attempt-1)%len(sequence)]
-		sess, err = c.dialUpstream(ctx, c.upstreamOptions(ctx, next, pass))
+		opts, optErr := c.upstreamOptions(ctx, next, pass)
+		if optErr != nil {
+			// A proxy misconfiguration cannot heal by retrying; surface it
+			// without burning attempts or backing off.
+			lastErr = optErr
+			break
+		}
+		sess, err = c.dialUpstream(ctx, opts)
 		if err == nil {
 			cand = next
 			break
@@ -666,22 +673,26 @@ func (c *Controller) currentTokens() *fxa.Tokens {
 	return c.tokens
 }
 
-func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candidate, pass *guardian.Pass) upstream.Options {
+// upstreamOptions builds the data-plane dial options for one edge candidate.
+// With upstream_proxy set, the edge dial goes through the proxy: resolveEdge
+// is skipped entirely (the proxy resolves the hostname remotely, so no local
+// DNS lookup and no bootstrap race happens), except that an explicit
+// edge_address still pins the dial target — the proxy then receives the IP
+// literal while TLS SNI and the HTTP/2 :authority keep cand.Host. A malformed
+// proxy URL (validation should already reject it) returns a *proxyConfigError
+// instead of dialing direct or panicking; callers surface it.
+func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candidate, pass *guardian.Pass) (upstream.Options, error) {
 	cfg := c.store.EffectiveConfig()
 	mode := c.tlsSplitMode()
-	pinned := cfg.EdgeAddress
-	if pinned == "" {
-		// Resolve edge names outside the tunnel: the system resolver points
-		// at the in-tunnel server while connected and cannot answer during
-		// an outage (PLAN.md §3.5 role 1).
-		pinned = c.resolveEdge(ctx, cand.Host)
-	}
-	return upstream.Options{
-		Host:     cand.Host,
-		Port:     cand.Port,
-		PinnedIP: pinned,
-		Dialer:   c.upstreamDialer,
+	opts := upstream.Options{
+		Host: cand.Host,
+		Port: cand.Port,
+		// The marked direct dialer stays wired for the direct path and as
+		// the dialer that reaches the proxy itself.
+		Dialer: c.upstreamDialer,
 		WrapConn: func(conn net.Conn) net.Conn {
+			// Applied by upstream.Dial after the proxy hop, exactly once,
+			// before the TLS handshake (T2.2 handoff).
 			return tlsplit.Wrap(conn, mode)
 		},
 		Pass: func() string {
@@ -694,6 +705,26 @@ func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candid
 		},
 		Logf: c.log.Logf,
 	}
+
+	if cfg.UpstreamProxy == "" {
+		pinned := cfg.EdgeAddress
+		if pinned == "" {
+			// Resolve edge names outside the tunnel: the system resolver
+			// points at the in-tunnel server while connected and cannot
+			// answer during an outage (PLAN.md §3.5 role 1).
+			pinned = c.resolveEdge(ctx, cand.Host)
+		}
+		opts.PinnedIP = pinned
+		return opts, nil
+	}
+
+	proxy, err := newProxyDialer(cfg.UpstreamProxy, c.upstreamDialer, c.log.Logf)
+	if err != nil {
+		return upstream.Options{}, err
+	}
+	opts.PinnedIP = cfg.EdgeAddress // empty = remote resolution by the proxy
+	opts.DialContext = proxy.DialContext
+	return opts, nil
 }
 
 // resolveCandidate picks the connect target from the request, the persisted

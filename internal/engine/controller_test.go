@@ -641,7 +641,10 @@ func TestUpstreamOptionsCarriesTLSSplitMode(t *testing.T) {
 		if err := ctrl.store.SetOverride("tls_split", "off"); err != nil {
 			t.Fatal(err)
 		}
-		opts := ctrl.upstreamOptions(context.Background(), cand, nil)
+		opts, err := ctrl.upstreamOptions(context.Background(), cand, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if opts.WrapConn == nil {
 			t.Fatal("WrapConn is nil")
 		}
@@ -655,7 +658,10 @@ func TestUpstreamOptionsCarriesTLSSplitMode(t *testing.T) {
 		if err := ctrl.store.SetOverride("tls_split", "first-byte"); err != nil {
 			t.Fatal(err)
 		}
-		opts := ctrl.upstreamOptions(context.Background(), cand, nil)
+		opts, err := ctrl.upstreamOptions(context.Background(), cand, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 		rec := &recordingConn{}
 		wrapped := opts.WrapConn(rec)
 		n, err := wrapped.Write(hello)
@@ -678,7 +684,10 @@ func TestUpstreamOptionsCarriesTLSSplitMode(t *testing.T) {
 		if err := ctrl.store.SetOverride("tls_split", "sni"); err != nil {
 			t.Fatal(err)
 		}
-		opts := ctrl.upstreamOptions(context.Background(), cand, nil)
+		opts, err := ctrl.upstreamOptions(context.Background(), cand, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 		rec := &recordingConn{}
 		wrapped := opts.WrapConn(rec)
 		n, err := wrapped.Write(hello)
