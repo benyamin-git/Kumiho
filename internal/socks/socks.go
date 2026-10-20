@@ -151,7 +151,9 @@ func (s *Server) Stop() {
 		_ = c.Close()
 	}
 	for _, c := range udpConns {
-		_ = c.Close()
+		if c != nil {
+			_ = c.Close()
+		}
 	}
 	s.udpWG.Wait()
 }

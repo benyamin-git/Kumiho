@@ -605,6 +605,63 @@ func TestUDPAssociateControlCloseTearsDown(t *testing.T) {
 	}
 }
 
+func TestServerStopWithNilRelaySocket(t *testing.T) {
+	// An association registers before its UDP socket is bound, so Stop can
+	// observe a nil conn. It must skip it (and the handler's release must
+	// still complete the teardown) instead of calling Close on nil.
+	s := &Server{}
+	ctx, cancel := context.WithCancel(context.Background())
+	assoc := &udpAssociation{
+		srv:      s,
+		clientIP: net.IPv4(127, 0, 0, 1),
+		ctx:      ctx,
+		cancel:   cancel,
+		slots:    make(chan struct{}, udpMaxInflight),
+	}
+	if !s.registerUDPAssociation(assoc) {
+		t.Fatal("could not register the association")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		s.Stop()
+		close(stopped)
+	}()
+
+	// Stop sets closed under s.mu before snapshotting the sockets, so once it
+	// is visible the nil conn has been collected.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		s.mu.Lock()
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Server.Stop did not mark the server closed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	s.releaseUDPAssociation(assoc)
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Server.Stop hung after observing a nil relay socket")
+	}
+	if ctx.Err() == nil {
+		t.Fatal("release did not cancel the association context")
+	}
+	s.mu.Lock()
+	remaining := len(s.udpAssocs)
+	s.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("%d association(s) left after teardown", remaining)
+	}
+}
+
 func TestServerStopClosesUDPAssociations(t *testing.T) {
 	started := make(chan struct{}, 1)
 	cancelled := make(chan struct{}, 1)
