@@ -242,6 +242,29 @@ func TestSaveCacheRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveCacheCreatesParentDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state", "serverlist.json")
+	raw := []byte(fixture)
+
+	if err := SaveCache(path, raw); err != nil {
+		t.Fatalf("SaveCache into a missing directory: %v", err)
+	}
+	got, err := LoadCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Fatalf("cache payload = %s, want %s", got, raw)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("cache mode = %o, want 600", perm)
+	}
+}
+
 func TestSaveCacheOverwritesAtomically(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "serverlist.json")

@@ -9,12 +9,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/fxa"
+	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
 // RecordsURL is the Remote Settings collection carrying the VPN server list.
@@ -139,27 +139,9 @@ func FetchRawFrom(ctx context.Context, client *http.Client, url string) ([]byte,
 }
 
 // SaveCache writes the raw server list payload to path atomically with mode
-// 0600, so a reader never sees a truncated file.
+// 0600, creating the parent directory when needed.
 func SaveCache(path string, raw []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("server list cache: %w", err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return fmt.Errorf("server list cache: %w", err)
-	}
-	if _, err := tmp.Write(raw); err != nil {
-		tmp.Close()
-		return fmt.Errorf("server list cache: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("server list cache: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := settings.WriteFileAtomic(path, raw, 0o600); err != nil {
 		return fmt.Errorf("server list cache: %w", err)
 	}
 	return nil
