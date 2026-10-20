@@ -298,6 +298,13 @@ Order and controls (tooltips in parentheses):
 12. `MTU` — number input + `Apply`; next connect.
 13. `SOCKS port` — number input + `Apply`; next connect.
 14. `Quota poll` — number input + `Apply`; next connect.
+15. `TLS split` — cycling button; `off → first-byte → sni → off`; next
+    connect.
+16. `HTTP proxy` — on/off toggle; next connect.
+17. `HTTP proxy port` — number input + `Apply`; next connect.
+18. `Solve challenges` — on/off toggle; applies immediately.
+19. `Keepalive profile` — cycling button; `standard → slow → standard`; next
+    connect.
 
 Details of the daemon rows:
 
@@ -341,7 +348,8 @@ controls; `Enter`/`Space` activate buttons; `Enter` in an edit field applies.
 rows from the daemon snapshot (`kill_switch`, `autoconnect`, `log_level`,
 `redact_targets`, `exit_check`, `doh_provider`, `dns_upstream`,
 `edge_address`, `upstream_proxy`, `exclude_cidrs`, `allow_lan`, `mtu`,
-`socks_port`, `quota_poll_minutes`).
+`socks_port`, `quota_poll_minutes`, `tls_split`, `http_proxy`,
+`http_proxy_port`, `solve_challenges`, `keepalive_profile`).
 
 ---
 
@@ -951,9 +959,10 @@ covering a missing/stopped service.
 
 **Settings behavior**
 
-- Immediate-apply rows: kill switch, autoconnect, log level, redact targets.
-  Next-connect rows: exit check, DoH provider, DNS upstream, edge address,
-  upstream proxy, exclude CIDRs, allow LAN, MTU, SOCKS port, quota poll.
+- Immediate-apply rows: kill switch, autoconnect, log level, redact targets,
+  solve challenges. Next-connect rows: exit check, DoH provider, DNS upstream,
+  edge address, upstream proxy, exclude CIDRs, allow LAN, MTU, SOCKS port,
+  quota poll, TLS split, HTTP proxy, HTTP proxy port, keepalive profile.
   (Tooltips state this per row.)
 - Mutation success triggers a model status refresh **and** a settings
   reload, keeping override marks truthful; `overridden` marks and `Reset`

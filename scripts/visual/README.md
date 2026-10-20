@@ -41,7 +41,7 @@ refuses a `KUMIHO_CAPTURES_DIR` inside the repository.
 ## Run
 
     scripts/dev-gui-web.sh start
-    node scripts/visual/capture.mjs                # the full 57-capture run
+    node scripts/visual/capture.mjs                # the full 68-capture run
     node scripts/visual/capture.mjs --only dashboard
     node scripts/visual/capture.mjs --list         # manifest + planned files
     scripts/dev-gui-web.sh stop
@@ -118,6 +118,7 @@ States, all driven through the harness (dark theme, blue accent):
 | `welcome`, `login`, `health-check`, `autoconnect`, `finish` | wizard-step hints on `#/onboarding?state=…`, dark and light; `prefs_set {"onboarded":false}` arms the real first-run gate (restored after each capture) |
 | `login-signed-in` | wizard hint `login` with the default authenticated scenario (the already-signed-in variant) |
 | `login-password`, `login-2fa` | wizard hint `login` on the `signed-out` scenario, submitting an email (the password page; the 2FA page via the mock's `2fa@…` rule) |
+| `settings-bottom` | the settings rows pane scrolled to its bottom (the pane draws no scrollbar, so the capture scrolls it directly), light/dark/oled — the five v0.4.0 rows live at the end of the list |
 | `latency-3s` | `/dev/latency 3000` + `connect` action in flight |
 | `injected-failure` | `/dev/fail` armed, then `connect` fails through it |
 

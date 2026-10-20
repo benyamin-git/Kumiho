@@ -99,6 +99,8 @@ const ACCENTS = ["blue", "teal", "green", "orange", "rose", "violet"];
 //   fill        {selector, value} typed into a screen control after the action
 //   click       selectors clicked in order after the action/fill (screen
 //               controls like the logs level button)
+//   scrollBottom selector of a scrollable element scrolled to its bottom
+//               before the capture (the settings rows pane)
 //   afterMs     extra wait after the capture (in-flight daemon calls)
 //
 // Order matters only through the notices actions leave behind: the
@@ -322,6 +324,29 @@ const STATES = [
     hint: "finish",
     theme: "light",
     prefs: { onboarded: false },
+  },
+  {
+    // The settings rows pane scrolled to its bottom (T0.4): the five v0.4.0
+    // rows live at the end of the list, and the pane draws no scrollbar, so
+    // the capture scrolls it directly. One per theme. They run before the
+    // `saved` state below, so the status line is empty and the capture shows
+    // the rows alone.
+    name: "settings-bottom",
+    screen: "settings",
+    theme: "light",
+    scrollBottom: ".set__rows",
+  },
+  {
+    name: "settings-bottom",
+    screen: "settings",
+    theme: "dark",
+    scrollBottom: ".set__rows",
+  },
+  {
+    name: "settings-bottom",
+    screen: "settings",
+    theme: "oled",
+    scrollBottom: ".set__rows",
   },
   {
     // A completed daemon-setting change on Settings: the MTU success notice
@@ -774,6 +799,46 @@ async function main() {
       console.log(`  ${item.file} (${bytes} bytes)`);
     };
 
+    // Scroll a scrollable element to its bottom and check that its last row
+    // ended up in view. The settings rows pane draws no scrollbar (inventory
+    // §Settings), so the capture scrolls it directly instead of driving the
+    // wheel. A failed scroll is a problem, not a crash: the run finishes and
+    // exits non-zero, and the capture is still written for review.
+    const scrollToBottom = async (selector) => {
+      try {
+        await page.waitForSelector(selector, {
+          state: "visible",
+          timeout: WAIT_TIMEOUT_MS,
+        });
+      } catch {
+        const why = `${selector} never became visible`;
+        problems.push(`[${currentLabel}] ${why}`);
+        console.error(`  ! [${currentLabel}] ${why}`);
+        return;
+      }
+      const result = await page.evaluate((sel) => {
+        const pane = document.querySelector(sel);
+        if (!pane) return { ok: false, why: "the element is gone" };
+        pane.scrollTop = pane.scrollHeight;
+        const rows = pane.querySelectorAll(".set__row");
+        if (rows.length === 0) return { ok: false, why: "the pane has no rows" };
+        const paneBox = pane.getBoundingClientRect();
+        const lastBox = rows[rows.length - 1].getBoundingClientRect();
+        const inView =
+          lastBox.top >= paneBox.top - 1 && lastBox.bottom <= paneBox.bottom + 1;
+        return {
+          ok: inView,
+          why: inView ? "" : "the last row is not in view after scrolling",
+          rows: rows.length,
+        };
+      }, selector);
+      if (!result.ok) {
+        const why = `${selector}: ${result.why}`;
+        problems.push(`[${currentLabel}] ${why}`);
+        console.error(`  ! [${currentLabel}] ${why}`);
+      }
+    };
+
     const resetDevState = async () => {
       await postJSON("dev/latency", { ms: 0 });
       await postJSON("dev/fail", { on: false });
@@ -822,6 +887,9 @@ async function main() {
         }
         if (state.waitAfter) {
           await page.waitForSelector(state.waitAfter, { timeout: WAIT_TIMEOUT_MS });
+        }
+        if (state.scrollBottom) {
+          await scrollToBottom(state.scrollBottom);
         }
         await capture(item);
         if (state.prefs) {

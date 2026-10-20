@@ -156,6 +156,11 @@ func settingsView() api.SettingsView {
 		KillSwitchEffective:  true,
 		AutoconnectEffective: false,
 		QuotaPollMinutes:     15,
+		TLSSplit:             "off",
+		HTTPProxy:            false,
+		HTTPProxyPort:        8080,
+		SolveChallenges:      true,
+		KeepaliveProfile:     "standard",
 		Overridden:           []string{"kill_switch"},
 	}
 }

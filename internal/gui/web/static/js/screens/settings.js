@@ -1,6 +1,6 @@
 /* The Settings screen (inventory §Settings): the `Kumiho app` rows (theme,
  * accent, start at login, and the version row's manual update check per
- * D9/A3) above the fourteen `Background service` rows with their
+ * D9/A3) above the nineteen `Background service` rows with their
  * immediate-vs-next-connect tooltips, `overridden` marks and Reset buttons,
  * the Refresh action row, and the status line.
  *
@@ -26,6 +26,11 @@
  * controller's UpdateInfo.Current, the check is manual, its result is the
  * controller's settings notice, and the release link goes through the frozen
  * open_external action.
+ *
+ * The five v0.4.0 rows (TLS split, HTTP proxy, HTTP proxy port, Solve
+ * challenges, Keepalive profile) follow the TUI's row model
+ * (internal/tui/settings.go): the same order, kinds and enum orders, with the
+ * same hints, sentence-cased like the others.
  *
  * Current-choice marks read the appearance the page actually renders — the
  * server-injected theme block — not State.Theme/State.Accent, which hold the
@@ -108,6 +113,18 @@ const SERVICE_ROWS = [
     hint: "Loopback SOCKS5 listener; next connect" },
   { key: "quota_poll_minutes", label: "Quota poll", kind: "number",
     hint: "Minutes between quota refreshes while connected; next connect" },
+  { key: "tls_split", label: "TLS split", kind: "cycle",
+    options: ["off", "first-byte", "sni"],
+    hint: "Split the TLS ClientHello across records; next connect" },
+  { key: "http_proxy", label: "HTTP proxy", kind: "toggle",
+    hint: "Loopback HTTP/CONNECT proxy through the tunnel; next connect" },
+  { key: "http_proxy_port", label: "HTTP proxy port", kind: "number",
+    hint: "Loopback HTTP proxy listener; next connect" },
+  { key: "solve_challenges", label: "Solve challenges", kind: "toggle",
+    hint: "Solve FxA and edge challenges automatically; applies immediately" },
+  { key: "keepalive_profile", label: "Keepalive profile", kind: "cycle",
+    options: ["standard", "slow"],
+    hint: "Keepalive ping timeout profile; next connect" },
 ];
 
 // The six house accents, as the sRGB hue of their primary colour (the house
@@ -285,6 +302,16 @@ function settingValue(settings, key) {
       return String(settings.socks_port);
     case "quota_poll_minutes":
       return String(settings.quota_poll_minutes);
+    case "tls_split":
+      return settings.tls_split || "";
+    case "http_proxy":
+      return settings.http_proxy ? "on" : "off";
+    case "http_proxy_port":
+      return String(settings.http_proxy_port);
+    case "solve_challenges":
+      return settings.solve_challenges ? "on" : "off";
+    case "keepalive_profile":
+      return settings.keepalive_profile || "";
   }
   return "";
 }

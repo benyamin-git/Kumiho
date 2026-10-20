@@ -1497,6 +1497,11 @@ var settingLabels = map[string]string{
 	"mtu":                "MTU",
 	"socks_port":         "SOCKS port",
 	"quota_poll_minutes": "Quota poll",
+	"tls_split":          "TLS split",
+	"http_proxy":         "HTTP proxy",
+	"http_proxy_port":    "HTTP proxy port",
+	"solve_challenges":   "Solve challenges",
+	"keepalive_profile":  "Keepalive profile",
 }
 
 func settingLabel(key string) string {
