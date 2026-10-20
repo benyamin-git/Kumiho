@@ -1,11 +1,15 @@
 # Kumiho
 
-**Status:** v0.3.0 — working Linux and Windows 11 clients: daemon + TUI/CLI/GUI
+**Status:** v0.4.0 — working Linux and Windows 11 clients: daemon + TUI/CLI/GUI
 over a Unix socket (Linux) or named pipe (Windows), Firefox Accounts login
-(2FA aware), server list with ping, HTTP/2 CONNECT tunnel through Mozilla's
-Fastly edge, full-tunnel routing with a kill switch, watchdog with edge
-rotation, runtime settings, log viewer, account screen, and a systemd
-(`install.sh`) or Windows service (`install.ps1`) install.
+(2FA aware), server list with ping and an on-disk cache, HTTP/2 CONNECT tunnel
+through Mozilla's Fastly edge, full-tunnel routing with a kill switch, watchdog
+with edge rotation, runtime settings, log viewer, account screen, and a
+systemd (`install.sh`) or Windows service (`install.ps1`) install. v0.4.0 adds
+backend parity with later FoxyVPN releases: strict DoH failover, anti-bot
+challenge solving, TLS ClientHello fragmentation, an upstream proxy, a local
+HTTP proxy, DNS over SOCKS5 UDP ASSOCIATE, a server-list cache and a slow
+keepalive profile.
 
 Kumiho is an unofficial Linux and Windows CLI/TUI client for the free
 Firefox-account VPN proxy — the same entitlement FoxyVPN for Android uses. It
@@ -22,7 +26,11 @@ and a LocalSystem service.
 The transport is TCP over HTTP/2 CONNECT to the Fastly edge, which accepts
 ports 80 and 443 only. Non-DNS UDP (QUIC/HTTP3, VoIP, games) is blocked on
 purpose so applications fall back to TCP, and DNS travels as DoH over HTTPS
-inside the tunnel — there is no separate plaintext DNS path.
+inside the tunnel — there is no separate plaintext DNS path. The in-tunnel
+resolver is strict: it tries the configured provider (or a custom
+`dns_upstream`) first, then Cloudflare, then Quad9; a failed endpoint is
+skipped for 30 minutes, and if every endpoint fails the query answers
+SERVFAIL instead of falling back to plaintext.
 
 Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
 over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun, and
@@ -38,6 +46,69 @@ before release:
 - **Windows 11 amd64** — Windows service + Wintun, TUI client over a named pipe.
 - **Android** — planned: VpnService app with the engine embedded in-process, simple GUI.
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
+
+## What's new in v0.4.0
+
+v0.4.0 brings the tunnel in line with the later FoxyVPN releases. The
+transport is unchanged — HTTP/2 CONNECT to the Fastly edge — and the new
+controls sit inside it.
+
+- **Strict DoH with failover** — the resolver uses the configured provider
+  (or a custom `dns_upstream`), then Cloudflare `1.1.1.1`, then Quad9
+  `9.9.9.9`. A failed endpoint is skipped for 30 minutes; when all of them
+  fail the query answers SERVFAIL, never plaintext DNS.
+- **Anti-bot challenge solving** — Fastly's proof-of-work, PAT and
+  clientmetrics challenges on the Firefox Accounts and Guardian control
+  planes are answered automatically (`solve_challenges`, default `on`).
+  Captchas are not solved; see the limitations.
+- **TLS ClientHello fragmentation** — `tls_split` (`off|first-byte|sni`,
+  default `off`) splits the first ClientHello across TCP segments to defeat
+  naive TLS fingerprinting.
+- **Upstream proxy** — `upstream_proxy` can carry the edge connection through
+  a SOCKS5, SOCKS5h or HTTP proxy with optional credentials.
+- **Local HTTP proxy** — `http_proxy` (default `off`) and `http_proxy_port`
+  (default `8080`) add a loopback HTTP proxy next to SOCKS5.
+- **DNS over SOCKS5 UDP ASSOCIATE** — the relay is DNS-only: datagrams reach
+  the same DoH chain, so proxy-only mode can answer DNS without the TUN
+  listener. Non-DNS datagrams are dropped.
+- **Server-list cache** — the last good server list is saved as
+  `serverlist.json` beside the state file and served if a later fetch fails.
+- **Slow keepalive profile** — `keepalive_profile` (`standard|slow`, default
+  `standard`) raises the keepalive timeout from 10 s to 25 s for slow links.
+
+These settings live in `config.toml`, in per-user overrides, and in the TUI,
+CLI and Windows GUI. `tls_split`, `http_proxy`, `http_proxy_port` and
+`keepalive_profile` take effect on the next connect; `solve_challenges` is
+read per control-plane request, so a change applies immediately. The full
+setting reference is in [docs/usage.md](docs/usage.md).
+
+### Upstream proxy
+
+Set `upstream_proxy` in `config.toml` (or in the TUI settings) to carry the
+edge connection through a proxy:
+
+    upstream_proxy = "socks5://user:pass@proxy.example.net:1080"
+
+The scheme can be `socks5://`, `socks5h://` or `http://`, the `user:pass@`
+credentials are optional, and the port defaults to 1080 for SOCKS and 80 for
+HTTP. The proxy carries the edge connection only: the control plane, Remote
+Settings, bootstrap and DoH stay direct, and the proxy resolves the edge
+hostname (no local DNS lookup). It does not affect the local SOCKS5 or HTTP
+listeners that applications use.
+
+### HTTP proxy
+
+Enable the local HTTP proxy in `config.toml`:
+
+    http_proxy = true
+    http_proxy_port = 8080
+
+Then point a client at it:
+
+    curl -x http://127.0.0.1:8080 https://example.com
+
+It listens on loopback only, has no authentication, accepts `CONNECT` and
+absolute-form plain HTTP, and starts and stops with the tunnel.
 
 ## Quick start
 
@@ -70,9 +141,20 @@ for common issues.
 
 ## Known limitations
 
-- No anti-bot challenge solver yet; a `406` from Mozilla surfaces as a clear
-  error (retry later).
-- Non-DNS UDP is intentionally blocked inside the tunnel.
+- Non-DNS UDP (QUIC/HTTP3, VoIP, games) is intentionally blocked inside the
+  tunnel; applications must fall back to TCP.
+- The anti-bot solver handles the Fastly proof-of-work/PAT/clientmetrics
+  challenge, but an interactive captcha is not supported — it fails with a
+  clear error instead of hanging.
+- TLS fragmentation is best-effort: `first-byte` and `sni` only split the
+  first ClientHello on a connection, and malformed or SNI-less hellos pass
+  through unsplit.
+- The local HTTP proxy is loopback-only and has no authentication; any local
+  process can use it while the tunnel is up.
+- The default TUN MTU is 8500, configurable from 576 to 65535 and applied on
+  the next connect: the TUN device feeds a gVisor userspace network stack that
+  handles packets of that size itself, so the usual mobile 1400 rationale
+  does not apply.
 - On Windows, connecting may reset existing sessions: there is no per-socket
   bypass equivalent to Linux `fwmark` policy routing, so connections opened
   before the tunnel comes up can be dropped. LAN and exclude-CIDR traffic
@@ -123,7 +205,7 @@ development or alternative locations on either OS, override with
 
 ## Windows GUI
 
-Kumiho's Windows 11 desktop app (v0.3.0), `kumiho-gui.exe`, is a small native
+Kumiho's Windows 11 desktop app (v0.4.0), `kumiho-gui.exe`, is a small native
 shell that renders the interface with the Microsoft Edge WebView2 Runtime,
 owns the tray icon and the window, and talks to the same daemon over the same
 control pipe. The daemon still does all the tunnel work; the app is a client
