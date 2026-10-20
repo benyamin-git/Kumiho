@@ -1251,6 +1251,9 @@ func (c *Controller) mergeLogin(st api.LoginState) bool {
 			c.notice = newNotice(0, "Signed in", toneInfo)
 		}
 	}
+	// A done+error reply is still terminal: refreshing the status lets an
+	// "already signed in" refusal resolve against the live session, while the
+	// error stays on the login view and suppresses the success notice above.
 	return st.Step == "done"
 }
 

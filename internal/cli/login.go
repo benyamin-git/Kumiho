@@ -89,6 +89,10 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 			ls = loginCall(ctx, client, ipc.TypeLoginEmail, api.LoginEmailPayload{Email: addr}, stderr)
 
 		case "done":
+			if ls.Error != "" {
+				fmt.Fprintf(stderr, "kumiho login: %s\n", ls.Error)
+				return 1
+			}
 			fmt.Fprintf(stdout, "Signed in as %s.\n", ls.Email)
 			return 0
 

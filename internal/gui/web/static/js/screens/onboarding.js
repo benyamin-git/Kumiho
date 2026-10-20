@@ -548,7 +548,7 @@ export default {
     function autoAdvance(snapshot) {
       if (currentStep === STEP_LOGIN && view.submitted) {
         const login = snapshot.login || null;
-        if (login && login.step === "done") {
+        if (login && login.step === "done" && !login.error) {
           view.submitted = false;
           currentStep = STEP_HEALTH;
         }
