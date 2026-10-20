@@ -2,10 +2,20 @@
 // dialers.
 //
 // Some networks shape or block TLS connections based on the plaintext
-// ClientHello. Writing the first handshake record in more than one TCP
-// segment can defeat that; the splitter never changes the bytes on the wire
-// and falls back to a single write whenever the buffer is not a parseable TLS
-// ClientHello.
+// ClientHello. Writing the first handshake record across more than one TCP
+// segment can defeat that. The splitter never changes the bytes on the wire:
+//
+//   - FirstByte splits any buffer that looks like a TLS handshake record
+//     carrying a ClientHello (record type 22, major version 3, handshake type
+//     1 at byte 5) into its first byte and the remainder, without parsing the
+//     handshake.
+//   - SNI parses the full ClientHello and splits around the first hostname
+//     byte; a malformed, truncated or SNI-less hello falls back to a single
+//     logical write.
+//
+// Empty segments are skipped, so a hostname that is the final byte of the
+// record produces two writes rather than three. Buffers that do not look like
+// a ClientHello are written unchanged.
 package tlsplit
 
 import (
@@ -71,19 +81,20 @@ type splitConn struct {
 }
 
 // Write inspects and possibly fragments the first write. Later writes are
-// forwarded in a single call. Writes are serialized so concurrent callers
-// cannot interleave bytes inside a split record.
+// forwarded without splitting and with short writes completed. Writes are
+// serialized so concurrent callers cannot interleave bytes inside a split
+// record.
 func (c *splitConn) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if !c.first {
-		return c.Conn.Write(p)
+		return writeFull(c.Conn, p)
 	}
 	c.first = false
 
 	if !isClientHello(p) {
-		return c.Conn.Write(p)
+		return writeFull(c.Conn, p)
 	}
 
 	switch c.mode {
@@ -92,7 +103,7 @@ func (c *splitConn) Write(p []byte) (int, error) {
 	case SNI:
 		start, ok := sniHostOffset(p)
 		if !ok {
-			return c.Conn.Write(p)
+			return writeFull(c.Conn, p)
 		}
 		return writeSegments(c.Conn, p, []segment{
 			{0, start},
@@ -100,7 +111,7 @@ func (c *splitConn) Write(p []byte) (int, error) {
 			{start + 1, len(p)},
 		})
 	default:
-		return c.Conn.Write(p)
+		return writeFull(c.Conn, p)
 	}
 }
 
@@ -128,7 +139,8 @@ func writeSegments(conn net.Conn, p []byte, segments []segment) (int, error) {
 }
 
 // writeFull completes short writes, returning the number of bytes written
-// from p and the first error encountered.
+// from p and the first error encountered. An empty buffer returns (0, nil)
+// without calling conn.
 func writeFull(conn net.Conn, p []byte) (int, error) {
 	written := 0
 	for written < len(p) {

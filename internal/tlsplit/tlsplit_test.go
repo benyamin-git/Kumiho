@@ -48,10 +48,12 @@ func TestParseMode(t *testing.T) {
 	}
 }
 
-func TestWrapOff(t *testing.T) {
-	raw := &recordingConn{}
-	if got := Wrap(raw, Off); got != raw {
-		t.Fatalf("Wrap(conn, Off) = %T, want the original conn", got)
+func TestWrapOffAndUnknownMode(t *testing.T) {
+	for _, mode := range []Mode{Off, Mode(99), Mode(-1)} {
+		raw := &recordingConn{}
+		if got := Wrap(raw, mode); got != raw {
+			t.Fatalf("Wrap(conn, %v) = %T, want the original conn", mode, got)
+		}
 	}
 }
 
@@ -114,6 +116,40 @@ func TestSNIExtensionScanning(t *testing.T) {
 	assertWrites(t, rec, hello[:start], hello[start:start+1], hello[start+1:])
 }
 
+func TestSNIOneByteHostname(t *testing.T) {
+	hello := hostClientHello("a")
+	start, ok := sniHostOffset(hello)
+	if !ok {
+		t.Fatal("parser did not find the one-byte hostname")
+	}
+	if start != len(hello)-1 {
+		t.Fatalf("hostname offset = %d, want the final byte %d", start, len(hello)-1)
+	}
+
+	rec := &recordingConn{}
+	n, err := Wrap(rec, SNI).Write(hello)
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if n != len(hello) {
+		t.Fatalf("Write returned %d, want %d", n, len(hello))
+	}
+
+	// The split tail is empty and therefore skipped: two writes, not three.
+	writes := rec.recorded()
+	if len(writes) != 2 {
+		t.Fatalf("underlying writes = %d, want 2", len(writes))
+	}
+	assertWrites(t, rec, hello[:start], hello[start:])
+	if writes[1][0] != 'a' {
+		t.Fatalf("split byte = %q, want %q", writes[1], "a")
+	}
+	reassembled := append(append([]byte(nil), writes[0]...), writes[1]...)
+	if !bytes.Equal(reassembled, hello) {
+		t.Fatal("split writes do not reassemble the ClientHello")
+	}
+}
+
 func TestSNIFallback(t *testing.T) {
 	valid := hostClientHello("example.com")
 	mutate := func(off int, b ...byte) []byte {
@@ -163,6 +199,12 @@ func TestSNIFallback(t *testing.T) {
 			if n != len(tt.p) {
 				t.Fatalf("Write returned %d, want %d", n, len(tt.p))
 			}
+			if len(tt.p) == 0 {
+				if got := rec.recorded(); len(got) != 0 {
+					t.Fatalf("empty write made %d underlying calls, want 0", len(got))
+				}
+				return
+			}
 			assertWrites(t, rec, tt.p)
 		})
 	}
@@ -180,8 +222,14 @@ func TestEveryTruncatedPrefixFallsBack(t *testing.T) {
 		if n != len(p) {
 			t.Fatalf("prefix %d: Write returned %d, want %d", i, n, len(p))
 		}
-		if got := rec.recorded(); len(got) != 1 {
-			t.Fatalf("prefix %d: %d underlying writes, want 1", i, len(got))
+		want := 1
+		if i == 0 {
+			// An empty write consumes the split opportunity without touching
+			// the underlying connection.
+			want = 0
+		}
+		if got := rec.recorded(); len(got) != want {
+			t.Fatalf("prefix %d: %d underlying writes, want %d", i, len(got), want)
 		}
 	}
 }
@@ -305,12 +353,48 @@ func TestEmptyFirstWriteConsumesSplit(t *testing.T) {
 	if n, err := conn.Write(nil); err != nil || n != 0 {
 		t.Fatalf("empty Write = %d, %v; want 0, nil", n, err)
 	}
+	if got := rec.recorded(); len(got) != 0 {
+		t.Fatalf("empty Write made %d underlying calls, want 0", len(got))
+	}
+
 	hello := hostClientHello("example.com")
 	if n, err := conn.Write(hello); err != nil || n != len(hello) {
 		t.Fatalf("second Write = %d, %v; want %d, nil", n, err, len(hello))
 	}
 	// The empty first write consumes the split; the ClientHello passes as one.
-	assertWrites(t, rec, nil, hello)
+	assertWrites(t, rec, hello)
+}
+
+func TestLaterWriteShortWritesComplete(t *testing.T) {
+	preface := []byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+	second := []byte("HELLO")
+	conn := &scriptedConn{steps: []writeStep{
+		{len(preface), nil},
+		{len(second) - 1, nil},
+		{1, nil},
+	}}
+	wrapped := Wrap(conn, FirstByte)
+
+	if n, err := wrapped.Write(preface); err != nil || n != len(preface) {
+		t.Fatalf("first Write = %d, %v; want %d, nil", n, err, len(preface))
+	}
+	n, err := wrapped.Write(second)
+	if err != nil {
+		t.Fatalf("later Write: %v", err)
+	}
+	if n != len(second) {
+		t.Fatalf("later Write returned %d, want %d", n, len(second))
+	}
+
+	wantCalls := []int{len(preface), len(second), 1}
+	if len(conn.calls) != len(wantCalls) {
+		t.Fatalf("underlying calls = %d, want %d", len(conn.calls), len(wantCalls))
+	}
+	for i, want := range wantCalls {
+		if len(conn.calls[i]) != want {
+			t.Fatalf("call %d wrote a %d-byte slice, want %d", i, len(conn.calls[i]), want)
+		}
+	}
 }
 
 func TestWriteErrorAccounting(t *testing.T) {
@@ -318,6 +402,7 @@ func TestWriteErrorAccounting(t *testing.T) {
 	start := bytes.Index(hello, []byte("example.com"))
 	boom := errors.New("boom")
 	preface := []byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+	malformed := hello[:len(hello)-1]
 
 	type testCase struct {
 		name      string
@@ -397,6 +482,27 @@ func TestWriteErrorAccounting(t *testing.T) {
 			name: "sni zero write without error", mode: SNI, p: hello,
 			steps: []writeStep{{start, nil}, {0, nil}}, wantN: start, wantErr: io.ErrShortWrite,
 			wantCalls: []int{start, 1},
+		},
+		{
+			name: "first-byte non-tls short writes complete", mode: FirstByte, p: preface,
+			steps: []writeStep{{len(preface) - 1, nil}, {1, nil}},
+			wantN: len(preface), wantCalls: []int{len(preface), 1},
+		},
+		{
+			name: "non-tls zero write without error", mode: FirstByte, p: preface,
+			steps: []writeStep{{0, nil}}, wantN: 0, wantErr: io.ErrShortWrite,
+			wantCalls: []int{len(preface)},
+		},
+		{
+			name: "sni malformed fallback short writes complete", mode: SNI, p: malformed,
+			steps: []writeStep{{len(malformed) - 1, nil}, {1, nil}},
+			wantN: len(malformed), wantCalls: []int{len(malformed), 1},
+		},
+		{
+			name: "fallback short then error", mode: SNI, p: preface,
+			steps: []writeStep{{len(preface) - 1, nil}, {0, boom}},
+			wantN: len(preface) - 1, wantErr: boom,
+			wantCalls: []int{len(preface), 1},
 		},
 		{
 			name: "fallback single write error", mode: SNI, p: preface,
