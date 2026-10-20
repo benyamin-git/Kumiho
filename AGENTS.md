@@ -72,6 +72,14 @@ gate green:
   list, HTTP/2 CONNECT edge session, SOCKS, watchdog, exit check. It consumes
   the frozen `platform.Provider` seam (`internal/platform/platform.go`); do
   not add OS branches to it — platform behavior goes through the provider.
+- **v0.4.0 engine helpers**: `internal/fastly` (Fastly challenge solver,
+  stdlib only; isolated per-solve jar, cookies installed into the shared
+  control-plane jar), `internal/tlsplit` (best-effort ClientHello
+  fragmentation; `off|first-byte|sni`), and `internal/httpproxy` (loopback
+  HTTP/CONNECT proxy). The engine owns their lifecycle: the SOCKS5 listener
+  also serves the DNS-only `UDP ASSOCIATE` relay, and `http_proxy=on` starts
+  the local HTTP proxy alongside the tunnel; both start and stop with the
+  tunnel and stay out of the `internal/platform` seam.
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
