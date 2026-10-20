@@ -11,7 +11,9 @@ Third-party attributions
 FoxyVPN (https://github.com/Vauth/FoxyVPN)
     MIT License. Kumiho's implementation of the Firefox VPN protocol
     (Firefox Accounts login, Guardian proxy pass, HTTP/2 CONNECT data
-    plane) is based on this project's behavior.
+    plane) is based on this project's behavior. The Fastly challenge
+    solver (FastlyChallengeSolver.kt, v1.0.7) is a Go port of this
+    project's algorithm.
 
 UjuiUjuMandan/firefox-vpn-client
     No license granted; used as a behavioral reference only. No code from
