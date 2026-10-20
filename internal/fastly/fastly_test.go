@@ -314,12 +314,16 @@ func requireCookie(t *testing.T, jar http.CookieJar, rawURL string) {
 	if err != nil {
 		t.Fatalf("parse %q: %v", rawURL, err)
 	}
+	matches := 0
 	for _, c := range jar.Cookies(u) {
 		if c.Name == cookieName && c.Value == cookieValue {
-			return
+			matches++
 		}
 	}
-	t.Errorf("jar has no %s=%s cookie for %s (got %v)", cookieName, cookieValue, rawURL, jar.Cookies(u))
+	if matches != 1 {
+		t.Errorf("jar has %d %s=%s cookies for %s, want 1 (got %v)",
+			matches, cookieName, cookieValue, rawURL, jar.Cookies(u))
+	}
 }
 
 func requireNoCookie(t *testing.T, jar http.CookieJar, rawURL string) {

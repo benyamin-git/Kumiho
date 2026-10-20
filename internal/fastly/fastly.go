@@ -466,16 +466,19 @@ func installCookies(from, to http.CookieJar, targets []string) (int, error) {
 		}
 		urls = append(urls, u)
 		for _, c := range from.Cookies(u) {
-			// net/http/cookiejar returns only Name and Value. Dropping the
-			// attributes keeps the installed cookie host-only for each
-			// target URL, mirroring the reference implementation's
-			// normalize-to-apex behavior.
+			// net/http/cookiejar returns only Name and Value. Installing
+			// with an explicit root path collapses the derived per-URL
+			// paths into one entry per host; without it the challenged URL
+			// (whose default path is /v1) sees the same cookie twice.
+			// Dropping the other attributes keeps the installed cookie
+			// host-only for each target URL, mirroring the reference
+			// implementation's normalize-to-apex behavior.
 			key := c.Name + "\x00" + c.Value
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			union = append(union, &http.Cookie{Name: c.Name, Value: c.Value})
+			union = append(union, &http.Cookie{Name: c.Name, Value: c.Value, Path: "/"})
 		}
 	}
 	if len(union) == 0 {
