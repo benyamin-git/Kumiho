@@ -12,7 +12,7 @@
 
 Kumiho is an unofficial Linux CLI/TUI client for the free Firefox-account VPN proxy (the same entitlement FoxyVPN for Android uses). It signs into Firefox Accounts, mints a Guardian proxy pass, resolves the Mozilla server list, and tunnels system traffic over **HTTP/2 CONNECT streams to a Fastly edge** with a local SOCKS5 server in front. On Linux it adds a TUN device + userspace TCP/IP stack (gVisor via `xjasonlyu/tun2socks`), policy routing that cannot kill an existing SSH/Tailscale session, optional nftables kill switch, and a Bubble Tea TUI plus a systemd daemon so the tunnel survives SSH logouts.
 
-**It is not WireGuard.** No WireGuard config exists for this entitlement. The transport is the same HTTP/2 CONNECT proxy FoxyVPN implements. Consequence: **TCP + DNS only**; all other UDP (QUIC/HTTP3, VoIP, games) is blocked on purpose so applications fall back to TCP.
+**It is not WireGuard.** No WireGuard config exists for this entitlement. The transport is the same HTTP/2 CONNECT proxy FoxyVPN implements, and the live Fastly edge accepts **TCP 80 and 443 only** — CONNECT to 53, 853 and 444 is refused. Consequence: **TCP only on those two ports**; DNS is carried as DoH over HTTPS inside the tunnel, never as a separate plaintext DNS path, and all other UDP (QUIC/HTTP3, VoIP, games) is blocked on purpose so applications fall back to TCP.
 
 ---
 
@@ -172,13 +172,13 @@ Cleanup: rules/routes/table removed on graceful stop, `ExecStopPost` cleanup, an
 
 Two roles:
 
-1. **Bootstrap / edge resolution (outside tunnel, `SO_MARK 0x2`)**: DoH POST `application/dns-message` to the selected provider by IP literal; A first then AAAA; race providers; 3 s timeouts; cache 5 min; failing endpoint suppressed 30 min; fall back to system resolver. (FoxyVPN `EdgeAddressResolver` parity.)
-2. **User DNS (inside tunnel)**: listener `10.8.0.2:53` UDP+TCP (miekg/dns). For each query:
-   - resolve via selected provider's DoH **through the tunnel** (HTTP POST over an H2 CONNECT stream to `<provider-ip>:443`), TLS verifies the IP literal (works for CF/Google/Quad9, as FoxyVPN proves);
-   - fallback: DNS over TCP:53 to the configured resolver **through the tunnel** (length-prefixed);
+1. **Bootstrap / edge resolution (outside tunnel, `SO_MARK 0x2`)**: DoH POST `application/dns-message` to the selected provider by IP literal; A first then AAAA; race providers; 3 s timeouts; cache 5 min; failing endpoint suppressed 30 min; fall back to system resolver (this outside-the-tunnel path keeps its TCP:53 fallback; the edge is not involved). (FoxyVPN `EdgeAddressResolver` parity.)
+2. **User DNS (inside tunnel)**: listener `10.8.0.2:53` UDP+TCP (miekg/dns). DoH only — no plaintext DNS path exists inside the tunnel. For each query:
+   - query the first available endpoint **through the tunnel** (HTTP POST over an H2 CONNECT stream to `<endpoint-ip>:443`, `https://<endpoint-ip>/dns-query`), TLS verifies the IP literal (works for CF/Google/Quad9, as FoxyVPN proves);
+   - serial failover: the configured provider (or custom upstream) first, then Cloudflare `1.1.1.1`, then Quad9 `9.9.9.9`; a failed endpoint is suppressed for 30 min, and a query that exhausts the chain gets SERVFAIL — the edge refuses CONNECT to 53, 853 and 444, so a plaintext fallback cannot work;
    - cache with TTL (10 000 entries, min TTL 5 s); UDP truncation handled by setting TC and letting clients retry TCP;
    - AAAA answers passed through unchanged (blackhole-only decision).
-3. Custom DNS setting: user-provided IP becomes the through-tunnel resolver; if the IP matches a known DoH operator it is upgraded to DoH (FoxyVPN parity).
+3. Custom DNS setting: a user-provided IP is always used as DoH at `https://<ip>/dns-query`, whether or not it belongs to a known DoH operator. With `doh_provider=off` and no custom upstream there are no DoH endpoints, so every in-tunnel query gets SERVFAIL.
 
 ### 3.6 IPv6
 

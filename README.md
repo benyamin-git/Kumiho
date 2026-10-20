@@ -19,8 +19,10 @@ survives SSH logouts. On Windows it uses a Wintun adapter, a WFP kill switch
 and a LocalSystem service.
 
 **It is not WireGuard.** No WireGuard config exists for this entitlement.
-The transport is HTTP/2 CONNECT: **TCP + DNS only**. Non-DNS UDP (QUIC/HTTP3,
-VoIP, games) is blocked on purpose so applications fall back to TCP.
+The transport is TCP over HTTP/2 CONNECT to the Fastly edge, which accepts
+ports 80 and 443 only. Non-DNS UDP (QUIC/HTTP3, VoIP, games) is blocked on
+purpose so applications fall back to TCP, and DNS travels as DoH over HTTPS
+inside the tunnel — there is no separate plaintext DNS path.
 
 Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
 over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun, and

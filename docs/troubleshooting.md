@@ -59,10 +59,14 @@ return as soon as the service restarts.
 
 ## DNS stops resolving while connected
 
-The tunnel resolver falls back to DNS-over-TCP:53 through the tunnel if its
-DoH provider is unreachable; watch for `[dns]` warnings in the logs. Custom
-providers can be pinned in Settings (`doh_provider`, `dns_upstream`) or
-disabled with `off` (then only TCP:53 is used).
+The tunnel resolver is DoH-only and tries its endpoints in serial: the
+configured provider (or a custom `dns_upstream`), then Cloudflare `1.1.1.1`,
+then Quad9 `9.9.9.9`. A failed endpoint is skipped for 30 minutes, and if all
+of them fail queries answer SERVFAIL — there is no plaintext DNS fallback
+(the edge refuses CONNECT to port 53 anyway). Watch for `[dns]` warnings in
+the logs. Custom providers can be pinned in Settings (`doh_provider`,
+`dns_upstream`) or disabled with `off`; `off` without a custom upstream leaves
+no DoH endpoints, so in-tunnel DNS returns SERVFAIL.
 
 - Linux: `resolvectl status foxy0` shows what the system is using; the
   adapter should point at the in-TUN resolver.

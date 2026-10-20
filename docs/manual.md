@@ -76,9 +76,10 @@ On Windows the log file is `%ProgramData%\kumiho\logs\kumiho.log`.
 
 ## Three things to know
 
-1. **Only TCP and DNS traffic uses the VPN.** Some things (games, video
-   calls, QUIC) intentionally don't work; apps fall back to normal
-   connections.
+1. **Only TCP traffic uses the VPN, on ports 80 and 443.** DNS is answered
+   too, but as encrypted DoH inside the tunnel — never as a separate plaintext
+   DNS connection. Some things (games, video calls, QUIC) intentionally don't
+   work; apps fall back to normal connections.
 2. **Kill switch is ON by default**: if the VPN drops, nothing leaks out —
    traffic just stops until it reconnects.
 3. **On Linux, SSH and Tailscale never get interrupted** by connecting or

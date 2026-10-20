@@ -22,7 +22,7 @@ Linux and the named pipe `\\.\pipe\kumiho\control` on Windows. Start it with
 
 `--proxy-only` keeps system routing untouched and only starts the SOCKS5
 listener on `127.0.0.1:1080`; the full tunnel also creates `foxy0` and routes
-TCP + DNS through it.
+TCP through it, with DNS carried as DoH over HTTPS inside the tunnel.
 
 ## TUI
 
@@ -84,10 +84,15 @@ overrides work the same as on Linux, except that on Windows
 
 ## Transport notes
 
-Kumiho is **not WireGuard**. Traffic is TCP + DNS only, tunneled as HTTP/2
-CONNECT streams to Mozilla's Fastly edge. Non-DNS UDP (including QUIC/HTTP3)
-is dropped inside the tunnel on purpose, so applications fall back to TCP.
-While connected, DNS is served through the tunnel by the daemon's resolver:
-systemd-resolved points `foxy0` at it on Linux (Tailscale's MagicDNS split
-domains left intact), and Windows sets the adapter-scoped DNS server to
-`10.8.0.2` without touching system-wide settings.
+Kumiho is **not WireGuard**. Traffic is TCP over HTTP/2 CONNECT streams to
+Mozilla's Fastly edge, which accepts ports 80 and 443 only (CONNECT to 53, 853
+and 444 is refused). Non-DNS UDP (including QUIC/HTTP3) is dropped inside the
+tunnel on purpose, so applications fall back to TCP.
+While connected, DNS is served through the tunnel by the daemon's resolver as
+DNS-over-HTTPS on 443 — never as plaintext DNS. It tries the configured
+provider (or custom upstream) first, then Cloudflare `1.1.1.1`, then Quad9
+`9.9.9.9`; a failed endpoint is skipped for 30 minutes, and when all of them
+fail the query gets SERVFAIL instead of a plaintext fallback. systemd-resolved
+points `foxy0` at that resolver on Linux (Tailscale's MagicDNS split domains
+left intact), and Windows sets the adapter-scoped DNS server to `10.8.0.2`
+without touching system-wide settings.
