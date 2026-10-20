@@ -317,10 +317,11 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 			return fail(fmt.Errorf("apply network configuration: %w", err))
 		}
 
-		dnsSrv, err := dns.New(c.openStream, cfg.DoHProvider, cfg.DNSUpstream, c.log.Logf)
+		resolver, err := dns.NewResolver(c.openStream, cfg.DoHProvider, cfg.DNSUpstream, c.log.Logf)
 		if err != nil {
 			return fail(err)
 		}
+		dnsSrv := dns.NewWithResolver(resolver)
 		dnsSrv.Addr = c.plat.DNSListenAddr()
 		if err := dnsSrv.Start(); err != nil {
 			return fail(fmt.Errorf("start DNS resolver: %w", err))

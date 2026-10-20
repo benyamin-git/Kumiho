@@ -1,7 +1,17 @@
 // Package dns implements the in-daemon resolver (PLAN.md §3.5): a local
 // listener on 10.8.0.2:53 (UDP+TCP) whose queries are resolved through the
-// tunnel via DoH to a provider IP, falling back to DNS-over-TCP:53 through
-// the same tunnel.
+// tunnel via DoH by IP literal.
+//
+// The in-tunnel path is strict: NewResolver builds a Resolver that fails
+// over between DoH endpoints (the configured provider, Cloudflare and
+// Quad9) and never sends plaintext DNS. NewWithResolver attaches a Resolver
+// to the local listener.
+//
+// New remains as the legacy bootstrap/test constructor for the
+// outside-the-tunnel bootstrap resolvers in internal/engine/edge.go, which
+// intentionally keep their DNS-over-TCP:53 fallback on the marked path;
+// tcpQuery exists only for that bootstrap/test path and must never be called
+// by the in-tunnel resolver.
 package dns
 
 import (
@@ -50,6 +60,8 @@ const (
 	minTTL            = 5 * time.Second
 	maxTTL            = time.Hour
 	queryTimeout      = 8 * time.Second
+	endpointTimeout   = 4 * time.Second
+	suppressDuration  = 30 * time.Minute
 	maxMessageBytes   = 64 << 10
 )
 
@@ -61,8 +73,13 @@ type Server struct {
 	// Logf receives operational logs (may be nil).
 	Logf func(level logging.Level, tag, format string, args ...any)
 
-	// Resolve overrides the DoH/TCP chain (tests).
+	// Resolve overrides the DoH chain (tests).
 	Resolve func(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error)
+
+	// resolver is the strict in-tunnel DoH resolver set by NewWithResolver.
+	// When set, the listener delegates to it instead of the legacy
+	// DoH + TCP:53 fallback below.
+	resolver *Resolver
 
 	providerIP string
 	doh        bool
@@ -93,8 +110,11 @@ func ProviderFromConfig(provider, upstream string) (ip string, doh bool, err err
 	return ip, true, nil
 }
 
-// New builds a resolver server. An empty provider IP (provider "off")
-// answers SERVFAIL for everything.
+// New builds the legacy bootstrap/test resolver server: DoH by provider IP
+// with a DNS-over-TCP:53 fallback, both on the Dialer. It is kept for the
+// outside-the-tunnel bootstrap resolvers (internal/engine/edge.go); the
+// in-tunnel path uses NewResolver + NewWithResolver instead. An empty
+// provider IP (provider "off") answers SERVFAIL for everything.
 func New(dial Dialer, provider, upstream string, logf func(level logging.Level, tag, format string, args ...any)) (*Server, error) {
 	ip, doh, err := ProviderFromConfig(provider, upstream)
 	if err != nil {
@@ -111,17 +131,7 @@ func New(dial Dialer, provider, upstream string, logf func(level logging.Level, 
 	s.client = &http.Client{
 		Timeout: queryTimeout,
 		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
-				host, portStr, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, err
-				}
-				port, err := strconv.Atoi(portStr)
-				if err != nil {
-					return nil, err
-				}
-				return s.Dial(ctx, host, port)
-			},
+			DialContext: dialContextFn(dial),
 			// Quad9 answers HTTP/1.1 DoH requests with 505; ALPN h2 is
 			// negotiated end-to-end with the provider (the tunnel carries
 			// opaque TLS), so all providers accept the requests.
@@ -129,6 +139,215 @@ func New(dial Dialer, provider, upstream string, logf func(level logging.Level, 
 		},
 	}
 	return s, nil
+}
+
+// dialContextFn adapts a Dialer to an http.Transport DialContext hook.
+func dialContextFn(dial Dialer) func(ctx context.Context, _, addr string) (net.Conn, error) {
+	return func(ctx context.Context, _, addr string) (net.Conn, error) {
+		host, portStr, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return nil, err
+		}
+		return dial(ctx, host, port)
+	}
+}
+
+// endpoint is one DoH endpoint: an IP literal (PLAN.md §3.5 / D20) and the
+// https://<ip>/dns-query URL it is queried at.
+type endpoint struct {
+	ip  string
+	url string
+}
+
+// Resolver is the strict in-tunnel DNS path. It owns the DoH endpoint chain,
+// the 8 s per-query budget (4 s per endpoint), the TTL cache and the
+// in-memory per-endpoint suppression map. It never falls back to plaintext
+// DNS.
+type Resolver struct {
+	// Logf receives operational logs (may be nil).
+	Logf func(level logging.Level, tag, format string, args ...any)
+
+	dial       Dialer
+	endpoints  []endpoint
+	client     *http.Client
+	cache      *cache
+	mu         sync.Mutex
+	suppressed map[string]time.Time // endpoint IP -> suppressed until
+
+	now func() time.Time // injectable clock (tests)
+}
+
+// NewResolver builds the strict in-tunnel resolver. The chain is the custom
+// dns_upstream first when set (always DoH at https://<ip>/dns-query, D20),
+// otherwise the configured provider, followed by Cloudflare 1.1.1.1 and Quad9
+// 9.9.9.9; duplicates are dropped. Provider "off" without a custom upstream
+// yields no endpoints, so every query answers SERVFAIL.
+func NewResolver(dial Dialer, provider, upstream string, logf func(level logging.Level, tag, format string, args ...any)) (*Resolver, error) {
+	if dial == nil {
+		return nil, errors.New("dns: a Dial function is required")
+	}
+	ip, _, err := ProviderFromConfig(provider, upstream)
+	if err != nil {
+		return nil, err
+	}
+	r := &Resolver{
+		Logf:       logf,
+		dial:       dial,
+		cache:      newCache(DefaultMaxEntries),
+		suppressed: make(map[string]time.Time),
+		now:        time.Now,
+	}
+	seen := make(map[string]bool)
+	add := func(raw string) {
+		canonical := canonicalIP(raw)
+		if canonical == "" || seen[canonical] {
+			return
+		}
+		seen[canonical] = true
+		r.endpoints = append(r.endpoints, endpoint{ip: canonical, url: dohURL(canonical)})
+	}
+	primary := strings.TrimSpace(upstream)
+	if primary == "" {
+		primary = ip
+	}
+	if primary != "" {
+		add(primary)
+		add("1.1.1.1")
+		add("9.9.9.9")
+	}
+	r.client = &http.Client{
+		Transport: &http.Transport{
+			DialContext:       dialContextFn(r.dial),
+			ForceAttemptHTTP2: true,
+		},
+	}
+	return r, nil
+}
+
+// canonicalIP returns the canonical text form of an IP literal, or "".
+func canonicalIP(raw string) string {
+	ip := net.ParseIP(strings.TrimSpace(raw))
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
+}
+
+// dohURL renders the DoH endpoint URL for an IP literal, bracketing IPv6.
+func dohURL(ip string) string {
+	host := ip
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return "https://" + host + "/dns-query"
+}
+
+func (r *Resolver) logf(level logging.Level, format string, args ...any) {
+	if r.Logf != nil {
+		r.Logf(level, "dns", format, args...)
+	}
+}
+
+// Resolve answers req through the endpoint chain. Transport, HTTP and unpack
+// failures suppress that endpoint for 30 minutes and move on; a valid DNS
+// message (including NXDOMAIN or SERVFAIL) is returned as-is. The query has an
+// 8 s budget and each endpoint gets at most 4 s of it.
+func (r *Resolver) Resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+	if req == nil {
+		return nil, errors.New("dns: nil query")
+	}
+	if len(req.Question) != 1 {
+		return nil, fmt.Errorf("dns: %d questions, want exactly 1", len(req.Question))
+	}
+	key := queryKey(req.Question[0])
+	if resp, ok := r.cache.get(key); ok {
+		return resp, nil
+	}
+	if len(r.endpoints) == 0 {
+		return nil, errors.New("dns: no DoH endpoints configured")
+	}
+	packed, err := req.Pack()
+	if err != nil {
+		return nil, fmt.Errorf("dns: pack query: %w", err)
+	}
+	// The whole query gets 8 s, whatever deadline the caller supplied.
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	var lastErr error
+	now := r.now()
+	for _, ep := range r.endpoints {
+		if until, ok := r.suppressedUntil(ep.ip); ok && now.Before(until) {
+			r.logf(logging.Debug, "skipping DoH endpoint %s until %s", ep.ip, until.Format(time.RFC3339))
+			continue
+		}
+		resp, err := r.queryEndpoint(ctx, ep, packed)
+		if err != nil {
+			lastErr = fmt.Errorf("DoH %s: %w", ep.ip, err)
+			// Do not blame the endpoint when the caller or the overall query
+			// budget cancelled the attempt.
+			if ctx.Err() != nil {
+				break
+			}
+			until := r.suppress(ep.ip)
+			r.logf(logging.Warn, "DoH %s failed (%v); suppressing it for %s", ep.ip, err, until.Sub(r.now()).Round(time.Second))
+			continue
+		}
+		if resp.Rcode == mdns.RcodeSuccess {
+			if ttl, ok := cacheTTL(resp); ok {
+				r.cache.put(key, resp, ttl)
+			}
+		}
+		return resp, nil
+	}
+	if lastErr == nil {
+		return nil, errors.New("dns: every DoH endpoint is suppressed")
+	}
+	return nil, fmt.Errorf("dns: all DoH endpoints failed: %w", lastErr)
+}
+
+// queryEndpoint performs one DoH POST, bounded to endpointTimeout.
+func (r *Resolver) queryEndpoint(ctx context.Context, ep endpoint, packed []byte) (*mdns.Msg, error) {
+	ctx, cancel := context.WithTimeout(ctx, endpointTimeout)
+	defer cancel()
+	return dohExchange(ctx, r.client, ep.url, packed)
+}
+
+func (r *Resolver) suppressedUntil(ip string) (time.Time, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	until, ok := r.suppressed[ip]
+	return until, ok
+}
+
+func (r *Resolver) suppress(ip string) time.Time {
+	until := r.now().Add(suppressDuration)
+	r.mu.Lock()
+	r.suppressed[ip] = until
+	r.mu.Unlock()
+	return until
+}
+
+// NewWithResolver returns a listener that delegates resolution to r. The
+// resolver owns dialing, so the server's Dial stays nil.
+func NewWithResolver(r *Resolver) *Server {
+	s := &Server{Addr: DefaultListen, resolver: r}
+	if r != nil {
+		s.Logf = r.Logf
+		s.cache = r.cache
+	} else {
+		s.cache = newCache(DefaultMaxEntries)
+	}
+	return s
+}
+
+// queryKey builds the cache key for one question.
+func queryKey(q mdns.Question) string {
+	return strings.ToLower(q.Name) + "|" + strconv.Itoa(int(q.Qtype))
 }
 
 func (s *Server) logf(level logging.Level, format string, args ...any) {
@@ -139,8 +358,8 @@ func (s *Server) logf(level logging.Level, format string, args ...any) {
 
 // Start binds UDP and TCP and serves until Stop.
 func (s *Server) Start() error {
-	if s.Dial == nil && s.Resolve == nil {
-		return errors.New("dns: a Dial or Resolve function is required")
+	if s.Dial == nil && s.Resolve == nil && s.resolver == nil {
+		return errors.New("dns: a Dial, Resolve or Resolver is required")
 	}
 	addr := s.Addr
 	if addr == "" {
@@ -218,7 +437,7 @@ func (s *Server) HandleQuery(req *mdns.Msg, overUDP bool) *mdns.Msg {
 		return resp
 	}
 	q := req.Question[0]
-	key := strings.ToLower(q.Name) + "|" + strconv.Itoa(int(q.Qtype))
+	key := queryKey(q)
 
 	resp, ok := s.cache.get(key)
 	if !ok {
@@ -268,10 +487,14 @@ func (s *Server) HandleQuery(req *mdns.Msg, overUDP bool) *mdns.Msg {
 	return resp
 }
 
-// resolve tries DoH first (when configured) and falls back to TCP:53.
+// resolve routes one query: the test override first, then the strict
+// in-tunnel resolver, then the legacy bootstrap DoH + TCP:53 path.
 func (s *Server) resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
 	if s.Resolve != nil {
 		return s.Resolve(ctx, req)
+	}
+	if s.resolver != nil {
+		return s.resolver.Resolve(ctx, req)
 	}
 	if s.providerIP == "" {
 		return nil, errors.New("no DNS provider configured")
@@ -286,12 +509,18 @@ func (s *Server) resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) 
 	return s.tcpQuery(ctx, req)
 }
 
+// dohQuery is the legacy bootstrap/test DoH exchange against the single
+// provider IP configured on New; the strict path uses Resolver instead.
 func (s *Server) dohQuery(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
 	packed, err := req.Pack()
 	if err != nil {
 		return nil, err
 	}
-	url := "https://" + s.providerIP + "/dns-query"
+	return dohExchange(ctx, s.client, dohURL(s.providerIP), packed)
+}
+
+// dohExchange posts one DNS message to a DoH endpoint and unpacks the answer.
+func dohExchange(ctx context.Context, client *http.Client, url string, packed []byte) (*mdns.Msg, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(packed))
 	if err != nil {
 		return nil, err
@@ -299,7 +528,7 @@ func (s *Server) dohQuery(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error)
 	httpReq.Header.Set("Content-Type", "application/dns-message")
 	httpReq.Header.Set("Accept", "application/dns-message")
 
-	resp, err := s.client.Do(httpReq)
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -318,6 +547,9 @@ func (s *Server) dohQuery(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error)
 	return &msg, nil
 }
 
+// tcpQuery is the plaintext DNS-over-TCP:53 fallback. It exists only for the
+// outside-the-tunnel bootstrap resolvers (internal/engine/edge.go) and for
+// legacy tests; no in-tunnel path may call it.
 func (s *Server) tcpQuery(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
 	packed, err := req.Pack()
 	if err != nil {
