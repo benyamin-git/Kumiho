@@ -75,7 +75,7 @@ func (c *Controller) startWatchdog(stop <-chan struct{}) {
 				return
 			}
 
-			next, err := c.redialOnce()
+			next, err := c.redialOnce(stop)
 			if err != nil {
 				select {
 				case <-stop:
@@ -181,18 +181,33 @@ func (c *Controller) enterReconnecting() bool {
 	return true
 }
 
+// errSessionEnded reports that a redial attempt finished after its connection
+// generation was torn down (disconnect, logout, FATAL); the caller must not
+// publish the result or retry it.
+var errSessionEnded = errors.New("kumiho: connection generation ended")
+
 // redialOnce makes one redial attempt: a fresh Guardian pass (this also
 // surfaces quota/token fatals and heals a stale bearer), then one dial to the
 // current edge (PLAN.md §2.4).
-func (c *Controller) redialOnce() (upstreamSession, error) {
+func (c *Controller) redialOnce(stop <-chan struct{}) (upstreamSession, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	pass, err := c.acquirePass(ctx)
+	if stopped(stop) {
+		return nil, errSessionEnded
+	}
 	if err != nil {
 		return nil, err
 	}
 	c.mu.Lock()
+	// stopTunnel closes stop under this same mutex: either the publish
+	// happens before teardown (and clearSession wipes it afterwards) or it
+	// is skipped here. Never dial for a generation that has ended.
+	if stopped(stop) {
+		c.mu.Unlock()
+		return nil, errSessionEnded
+	}
 	c.pass = pass
 	c.quota = quotaFromPass(pass)
 	cand := c.cand

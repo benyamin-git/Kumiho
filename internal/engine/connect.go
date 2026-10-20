@@ -455,6 +455,12 @@ func (c *Controller) startPassRenewal(stop <-chan struct{}, initial *guardian.Pa
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			renewed, err := c.acquirePass(ctx)
 			cancel()
+			// The fetch can outlive the connection (or the login that owned
+			// it): once stop is closed the pass belongs to a dead generation
+			// and must not be published, even as a fatal error.
+			if stopped(stop) {
+				return
+			}
 			if err != nil {
 				var fatal *fatalError
 				if errors.As(err, &fatal) {
@@ -472,6 +478,13 @@ func (c *Controller) startPassRenewal(stop <-chan struct{}, initial *guardian.Pa
 				continue
 			}
 			c.mu.Lock()
+			// stopTunnel closes stop under this same mutex, so this check
+			// orders with teardown: either we publish before it and
+			// clearSession wipes the fields afterwards, or we skip.
+			if stopped(stop) {
+				c.mu.Unlock()
+				return
+			}
 			c.pass = renewed
 			c.quota = quotaFromPass(renewed)
 			c.mu.Unlock()
@@ -481,6 +494,18 @@ func (c *Controller) startPassRenewal(stop <-chan struct{}, initial *guardian.Pa
 			c.notify()
 		}
 	}()
+}
+
+// stopped reports whether the connection's stop channel is closed. stopTunnel
+// closes it under c.mu, so callers that check it while holding c.mu are
+// ordered against teardown.
+func stopped(stop <-chan struct{}) bool {
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
 }
 
 // Disconnect tears the tunnel down (idempotent for FATAL states).
@@ -722,6 +747,13 @@ func (c *Controller) startMetrics(stop <-chan struct{}) {
 				}
 			}
 			c.mu.Lock()
+			// stopTunnel closes stop under this same mutex, so a sample taken
+			// from a session that is being torn down cannot resurrect the
+			// totals clearSession just wiped.
+			if stopped(stop) {
+				c.mu.Unlock()
+				return
+			}
 			c.ratesUp = float64(up-lastUp) / 2
 			c.ratesDown = float64(down-lastDown) / 2
 			c.totalsUp, c.totalsDown = up, down

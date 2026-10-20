@@ -2,10 +2,15 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/guardian"
+	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
 // Sign-out must leave nothing account- or usage-shaped in the snapshot: the
@@ -109,5 +114,76 @@ func TestDisconnectKeepsSessionTotals(t *testing.T) {
 	}
 	if st.Totals == nil || st.Totals.Up != 111 || st.Totals.Down != 222 {
 		t.Fatalf("totals after disconnect = %+v, want 111/222", st.Totals)
+	}
+}
+
+// A sign-out that races an in-flight redial must still leave a clean snapshot:
+// the redial's pass fetch completes after the session is cleared and must not
+// publish its pass/quota into the signed-out controller.
+func TestLogoutDuringRedialKeepsSnapshotClean(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	ctrl.LoginEmail("user@example.com")
+	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "done" {
+		t.Fatalf("login = %+v", ls)
+	}
+
+	// The Guardian fetch signals that it is in flight, then blocks until the
+	// test has signed out. Quota headers make a leaked publish visible.
+	reached := make(chan struct{}, 1)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case reached <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("X-Quota-Limit", "1000")
+		w.Header().Set("X-Quota-Remaining", "900")
+		fmt.Fprint(w, `{"token":"pass-1","expires_at":4102444800}`)
+	}))
+	defer srv.Close()
+	ctrl.guardian = &guardian.Client{BaseURL: srv.URL, HTTP: srv.Client()}
+
+	// The connection's stop channel, as a live watchdog would hold it.
+	stop := make(chan struct{})
+	ctrl.mu.Lock()
+	ctrl.metricsStop = stop
+	ctrl.mu.Unlock()
+
+	dialed := make(chan struct{}, 1)
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		select {
+		case dialed <- struct{}{}:
+		default:
+		}
+		return newFakeSession(), nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ctrl.redialOnce(stop)
+		done <- err
+	}()
+
+	<-reached
+	if err := ctrl.Logout(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+
+	err := <-done
+	if !errors.Is(err, errSessionEnded) {
+		t.Fatalf("redial after logout = %v, want errSessionEnded", err)
+	}
+	select {
+	case <-dialed:
+		t.Fatal("redial dialed the edge after logout")
+	default:
+	}
+
+	st := ctrl.Snapshot()
+	if st.Quota != nil || st.PassExpires != 0 || st.Totals != nil {
+		t.Fatalf("snapshot after racing logout = %+v, want no account/usage state", st)
 	}
 }
