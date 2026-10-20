@@ -26,6 +26,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/platform"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
+	"github.com/benyamin-git/kumiho/internal/tlsplit"
 )
 
 // testSessionHex is a syntactically valid 64-byte session token.
@@ -700,6 +701,166 @@ func TestUpstreamOptionsCarriesTLSSplitMode(t *testing.T) {
 			t.Fatal("split writes do not reassemble to the ClientHello")
 		}
 	})
+}
+
+func TestControlPlaneDialReadsModePerDial(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	hello := syntheticClientHello("sni.example")
+	sniStart := bytes.Index(hello, []byte("sni.example"))
+	if sniStart < 0 {
+		t.Fatal("synthetic ClientHello does not contain the SNI hostname")
+	}
+
+	var calls int
+	var recs []*recordingConn
+	base := func(_ context.Context, network, addr string) (net.Conn, error) {
+		calls++
+		if network != "tcp" || addr != "control.example:443" {
+			t.Errorf("base dial = %q %q, want tcp control.example:443", network, addr)
+		}
+		rec := &recordingConn{}
+		recs = append(recs, rec)
+		return rec, nil
+	}
+	// Build the wrapped dial once: changing the override afterwards must
+	// affect subsequent calls, proving the mode is read inside the closure.
+	dial := ctrl.controlPlaneDial(base)
+	ctx := context.Background()
+	setMode := func(mode string) {
+		t.Helper()
+		if err := ctrl.store.SetOverride("tls_split", mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setMode("off")
+	conn, err := dial(ctx, "tcp", "control.example:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn != recs[0] {
+		t.Fatalf("off conn = %T, want the base connection", conn)
+	}
+
+	setMode("first-byte")
+	conn, err = dial(ctx, "tcp", "control.example:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%T", conn); got != "*tlsplit.splitConn" {
+		t.Fatalf("first-byte conn = %s, want *tlsplit.splitConn", got)
+	}
+	n, err := conn.Write(hello)
+	if err != nil || n != len(hello) {
+		t.Fatalf("write = %d, %v; want %d, nil", n, err, len(hello))
+	}
+	writes := recs[1].recordedWrites()
+	if len(writes) != 2 {
+		t.Fatalf("first-byte underlying writes = %d, want 2", len(writes))
+	}
+	if !bytes.Equal(writes[0], hello[:1]) || !bytes.Equal(bytes.Join(writes, nil), hello) {
+		t.Fatalf("first-byte writes do not split and reassemble the ClientHello")
+	}
+
+	setMode("sni")
+	conn, err = dial(ctx, "tcp", "control.example:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%T", conn); got != "*tlsplit.splitConn" {
+		t.Fatalf("sni conn = %s, want *tlsplit.splitConn", got)
+	}
+	n, err = conn.Write(hello)
+	if err != nil || n != len(hello) {
+		t.Fatalf("write = %d, %v; want %d, nil", n, err, len(hello))
+	}
+	writes = recs[2].recordedWrites()
+	if len(writes) != 3 {
+		t.Fatalf("sni underlying writes = %d, want 3", len(writes))
+	}
+	if !bytes.Equal(writes[0], hello[:sniStart]) ||
+		!bytes.Equal(writes[1], hello[sniStart:sniStart+1]) ||
+		!bytes.Equal(writes[2], hello[sniStart+1:]) {
+		t.Fatalf("sni writes are not split at the first hostname byte")
+	}
+	if !bytes.Equal(bytes.Join(writes, nil), hello) {
+		t.Fatal("sni writes do not reassemble to the ClientHello")
+	}
+
+	if calls != 3 {
+		t.Fatalf("base dial calls = %d, want 3", calls)
+	}
+}
+
+func TestUseBypassDialerWrapsEveryControlPlaneClient(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
+	t.Cleanup(func() {
+		_ = ln.Close()
+		<-done
+	})
+
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	ctrl.UseBypassDialer()
+	// The transports must pick this up per dial, not at UseBypassDialer time.
+	if err := ctrl.store.SetOverride("tls_split", "first-byte"); err != nil {
+		t.Fatal(err)
+	}
+
+	clients := []struct {
+		name   string
+		client *http.Client
+	}{
+		{"http", ctrl.httpClient},
+		{"fxa", ctrl.fxa.HTTP},
+		{"guardian", ctrl.guardian.HTTP},
+	}
+	for _, tc := range clients {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, ok := tc.client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("transport = %T, want *http.Transport", tc.client.Transport)
+			}
+			conn, err := tr.DialContext(context.Background(), "tcp", ln.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if got := fmt.Sprintf("%T", conn); got != "*tlsplit.splitConn" {
+				t.Fatalf("dialed conn = %s, want *tlsplit.splitConn", got)
+			}
+		})
+	}
+}
+
+func TestTLSSplitModeInvalidFallsBackToOff(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	bogus := "bogus"
+	if err := ctrl.store.UpdateState(func(st *settings.State) { st.TLSSplit = &bogus }); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctrl.tlsSplitMode(); got != tlsplit.Off {
+		t.Fatalf("tlsSplitMode = %v, want Off", got)
+	}
+	for _, e := range ctrl.log.Snapshot() {
+		if e.Level == logging.Warn && e.Tag == "tlsplit" && strings.Contains(e.Msg, "invalid tls_split") {
+			return
+		}
+	}
+	t.Fatalf("no tlsplit warning logged: %+v", ctrl.log.Snapshot())
 }
 
 func TestUseBypassDialerTLSSplitControlPlane(t *testing.T) {

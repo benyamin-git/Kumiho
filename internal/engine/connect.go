@@ -387,29 +387,37 @@ func (c *Controller) ReapplyNetcfg(ctx context.Context) error {
 	return nil
 }
 
+// controlPlaneDial returns the DialContext shared by every control-plane HTTP
+// client. It applies TCP_NODELAY best-effort and wraps the connection for TLS
+// ClientHello fragmentation, reading the effective mode on every dial so an
+// override applies to the next request without a restart. base is the marked
+// platform dialer in production and a fake in tests.
+func (c *Controller) controlPlaneDial(base func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := base(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		// Best-effort no-delay so split ClientHello writes are not coalesced;
+		// never fail the dial for it.
+		if tc, ok := conn.(interface{ SetNoDelay(bool) error }); ok {
+			_ = tc.SetNoDelay(true)
+		}
+		return tlsplit.Wrap(conn, c.tlsSplitMode()), nil
+	}
+}
+
 // UseBypassDialer tags every engine-owned socket with SO_MARK 0x2 so the
 // policy-routing mark chain never routes control-plane traffic into the
 // tunnel (PLAN.md §3.2). Called once at engine start.
 func (c *Controller) UseBypassDialer() {
 	dial := c.plat.BypassDialer()
+	dialContext := c.controlPlaneDial(dial.DialContext)
 	newClient := func(timeout time.Duration) *http.Client {
 		return &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-					conn, err := dial.DialContext(ctx, network, addr)
-					if err != nil {
-						return nil, err
-					}
-					// Best-effort no-delay so split ClientHello writes are
-					// not coalesced; never fail the dial for it.
-					if tc, ok := conn.(interface{ SetNoDelay(bool) error }); ok {
-						_ = tc.SetNoDelay(true)
-					}
-					// Read the mode per dial so a changed override applies to
-					// the next control-plane request without a restart.
-					return tlsplit.Wrap(conn, c.tlsSplitMode()), nil
-				},
+				DialContext:       dialContext,
 				ForceAttemptHTTP2: true,
 			},
 		}
