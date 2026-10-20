@@ -17,6 +17,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/dns"
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/guardian"
+	"github.com/benyamin-git/kumiho/internal/httpproxy"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/platform"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -233,6 +234,7 @@ type tunnelResources struct {
 	engine    *tun.Engine
 	dns       *dns.Server
 	socks     *socks.Server
+	httpProxy *httpproxy.Server
 }
 
 // Close tears the tunnel down in reverse order; safe to call twice.
@@ -242,8 +244,9 @@ func (r *tunnelResources) Close() {
 	}
 	r.mu.Lock()
 	dnsSrv, engine, dev, socksSrv := r.dns, r.engine, r.dev, r.socks
+	httpSrv := r.httpProxy
 	nc, ncfg, proxyOnly := r.nc, r.ncfg, r.proxyOnly
-	r.dns, r.engine, r.dev, r.socks, r.nc = nil, nil, nil, nil, nil
+	r.dns, r.engine, r.dev, r.socks, r.httpProxy, r.nc = nil, nil, nil, nil, nil, nil
 	r.mu.Unlock()
 
 	if dnsSrv != nil {
@@ -259,6 +262,11 @@ func (r *tunnelResources) Close() {
 	}
 	if dev != nil {
 		_ = dev.Close() // idempotent when the engine closed it already
+	}
+	// Reverse start order: the HTTP proxy starts after SOCKS, so it stops
+	// first. Both listeners are independent.
+	if httpSrv != nil {
+		httpSrv.Stop()
 	}
 	if socksSrv != nil {
 		socksSrv.Stop()
@@ -294,9 +302,10 @@ func (r *tunnelResources) devName() string {
 }
 
 // startTunnel builds the data path: full mode adds TUN + netstack + netcfg +
-// the DNS resolver; both modes start the local SOCKS5 listener. All stream
-// dialers go through c.openStream so a watchdog redial swaps sessions under
-// the running data path (PLAN.md §4.2).
+// the DNS resolver; both modes start the local SOCKS5 listener and, when
+// http_proxy is on, the local HTTP proxy. All stream dialers go through
+// c.openStream so a watchdog redial swaps sessions under the running data
+// path (PLAN.md §4.2).
 func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelResources, error) {
 	cfg := c.store.EffectiveConfig()
 	res := &tunnelResources{proxyOnly: proxyOnly}
@@ -366,6 +375,21 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 		return fail(err)
 	}
 	res.socks = socksSrv
+
+	if cfg.HTTPProxy {
+		httpSrv := &httpproxy.Server{
+			Bind: cfg.SocksBind,
+			Port: cfg.HTTPProxyPort,
+			Dial: c.openStream,
+			Logf: c.log.Logf,
+		}
+		if err := httpSrv.Start(); err != nil {
+			return fail(fmt.Errorf("start http proxy: %w", err))
+		}
+		// Assign only after a successful Start: a failed listener stays nil
+		// so Close has nothing to stop for it.
+		res.httpProxy = httpSrv
+	}
 	return res, nil
 }
 

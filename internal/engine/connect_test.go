@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bufio"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -810,4 +811,245 @@ func TestStartTunnelSharesDNSResolver(t *testing.T) {
 			t.Fatalf("resolver constructions = %d, want 1 before the SOCKS branch", got)
 		}
 	})
+}
+
+// twoFreePorts returns distinct free loopback ports: SOCKS first, HTTP proxy
+// second.
+func twoFreePorts(t *testing.T) (socksPort, httpPort int) {
+	t.Helper()
+	socksPort = freePort(t)
+	for httpPort = freePort(t); httpPort == socksPort; httpPort = freePort(t) {
+	}
+	return socksPort, httpPort
+}
+
+func enableHTTPProxy(t *testing.T, ctrl *Controller, port int) {
+	t.Helper()
+	if err := ctrl.store.SetOverride("http_proxy", "on"); err != nil {
+		t.Fatalf("enable http_proxy: %v", err)
+	}
+	if err := ctrl.store.SetOverride("http_proxy_port", strconv.Itoa(port)); err != nil {
+		t.Fatalf("set http_proxy_port: %v", err)
+	}
+}
+
+func setLiveSession(ctrl *Controller) *fakeSession {
+	sess := newFakeSession()
+	ctrl.mu.Lock()
+	ctrl.session = sess
+	ctrl.mu.Unlock()
+	return sess
+}
+
+func assertListening(t *testing.T, port int) net.Conn {
+	t.Helper()
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("nothing listening on %s: %v", addr, err)
+	}
+	return conn
+}
+
+func assertPortClosed(t *testing.T, port int) {
+	t.Helper()
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	if conn, err := net.DialTimeout("tcp", addr, 300*time.Millisecond); err == nil {
+		_ = conn.Close()
+		t.Fatalf("listener still accepts on %s", addr)
+	}
+}
+
+// TestStartTunnelHTTPProxyOn proves the gated listener is the HTTP proxy: an
+// origin-form request (not a proxy request) is answered with 400, and Close
+// stops both listeners.
+func TestStartTunnelHTTPProxyOn(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	socksPort, httpPort := twoFreePorts(t)
+	ctrl.socksPortOverride = socksPort
+	enableHTTPProxy(t, ctrl, httpPort)
+	setLiveSession(ctrl)
+
+	res, err := ctrl.startTunnel(context.Background(), true)
+	if err != nil {
+		t.Fatalf("startTunnel(proxy-only): %v", err)
+	}
+	if res.httpProxy == nil {
+		res.Close()
+		t.Fatal("http_proxy=on did not start the HTTP proxy")
+	}
+	wantAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(httpPort))
+	if got := res.httpProxy.Addr(); got == nil || got.String() != wantAddr {
+		res.Close()
+		t.Fatalf("HTTP proxy addr = %v, want %s", got, wantAddr)
+	}
+
+	conn := assertListening(t, httpPort)
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"); err != nil {
+		_ = conn.Close()
+		res.Close()
+		t.Fatal(err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		_ = conn.Close()
+		res.Close()
+		t.Fatalf("read proxy response: %v", err)
+	}
+	_ = resp.Body.Close()
+	_ = conn.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		res.Close()
+		t.Fatalf("origin-form response = %d, want 400", resp.StatusCode)
+	}
+
+	res.Close()
+	res.Close() // idempotent
+	assertPortClosed(t, httpPort)
+	assertPortClosed(t, socksPort)
+}
+
+// TestStartTunnelHTTPProxyOff keeps the default off: the configured port stays
+// silent even though http_proxy_port is set.
+func TestStartTunnelHTTPProxyOff(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	socksPort, httpPort := twoFreePorts(t)
+	ctrl.socksPortOverride = socksPort
+	if err := ctrl.store.SetOverride("http_proxy_port", strconv.Itoa(httpPort)); err != nil {
+		t.Fatalf("set http_proxy_port: %v", err)
+	}
+	setLiveSession(ctrl)
+
+	res, err := ctrl.startTunnel(context.Background(), true)
+	if err != nil {
+		t.Fatalf("startTunnel(proxy-only): %v", err)
+	}
+	defer res.Close()
+	if res.httpProxy != nil {
+		t.Fatal("http_proxy=off still started the HTTP proxy")
+	}
+	assertPortClosed(t, httpPort)
+}
+
+// TestStartTunnelHTTPProxyPortConflict asserts the failure is attributed to
+// the HTTP proxy and the already-started listeners are torn down.
+func TestStartTunnelHTTPProxyPortConflict(t *testing.T) {
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	httpPort := held.Addr().(*net.TCPAddr).Port
+	socksPort := freePort(t)
+	for socksPort == httpPort {
+		socksPort = freePort(t)
+	}
+
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.socksPortOverride = socksPort
+	enableHTTPProxy(t, ctrl, httpPort)
+	setLiveSession(ctrl)
+
+	res, err := ctrl.startTunnel(context.Background(), true)
+	if err == nil {
+		if res != nil {
+			res.Close()
+		}
+		t.Fatal("startTunnel succeeded despite an occupied HTTP proxy port")
+	}
+	if !strings.Contains(err.Error(), "start http proxy:") {
+		t.Fatalf("startTunnel error = %v, want the start http proxy prefix", err)
+	}
+	if res != nil {
+		res.Close()
+		t.Fatal("failed startTunnel returned resources")
+	}
+
+	// The failure path released the SOCKS listener it had already started.
+	assertPortClosed(t, socksPort)
+
+	// The held listener is untouched and still usable.
+	conn, err := net.DialTimeout("tcp", held.Addr().String(), 2*time.Second)
+	if err != nil {
+		t.Fatalf("held listener stopped accepting: %v", err)
+	}
+	tcpHeld := held.(*net.TCPListener)
+	if err := tcpHeld.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := tcpHeld.Accept()
+	if err != nil {
+		_ = conn.Close()
+		t.Fatalf("held listener accept: %v", err)
+	}
+	_ = accepted.Close()
+	_ = conn.Close()
+}
+
+// TestConnectHTTPProxyStopsOnDisconnect drives a real Connect/Disconnect and
+// asserts both listeners stop and the upstream session closes.
+func TestConnectHTTPProxyStopsOnDisconnect(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	fake := newFakeSession()
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		return fake, nil
+	}
+	ctrl.exitCheckURL = ""
+	socksPort, httpPort := twoFreePorts(t)
+	ctrl.socksPortOverride = socksPort
+	enableHTTPProxy(t, ctrl, httpPort)
+
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	for _, port := range []int{socksPort, httpPort} {
+		conn := assertListening(t, port)
+		_ = conn.Close()
+	}
+
+	if err := ctrl.Disconnect(); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+	assertPortClosed(t, socksPort)
+	assertPortClosed(t, httpPort)
+	if !fake.closed.Load() {
+		t.Fatal("session was not closed on disconnect")
+	}
+}
+
+// TestStartTunnelHTTPProxyFullMode keeps the full-tunnel lifecycle light: the
+// same resource object starts and stops the HTTP proxy.
+func TestStartTunnelHTTPProxyFullMode(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	fp := ctrl.plat.(*fakeProvider)
+	fp.dnsAddr = "127.0.0.1:0"
+	socksPort, httpPort := twoFreePorts(t)
+	ctrl.socksPortOverride = socksPort
+	enableHTTPProxy(t, ctrl, httpPort)
+	setLiveSession(ctrl)
+
+	res, err := ctrl.startTunnel(context.Background(), false)
+	if err != nil {
+		t.Fatalf("startTunnel(full): %v", err)
+	}
+	if res.httpProxy == nil {
+		res.Close()
+		t.Fatal("full mode with http_proxy=on did not start the HTTP proxy")
+	}
+	conn := assertListening(t, httpPort)
+	_ = conn.Close()
+
+	res.Close()
+	assertPortClosed(t, httpPort)
+	assertPortClosed(t, socksPort)
 }
