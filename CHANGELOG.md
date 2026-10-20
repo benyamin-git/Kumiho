@@ -6,6 +6,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-20
+
+Backend parity with the FoxyVPN releases after the one we ported: strict DoH
+with endpoint failover, anti-censorship controls, a working upstream proxy and
+a local HTTP proxy, and the settings for all of it across the TUI, CLI and GUI.
+
+### Added
+
+- In-tunnel DNS failover: a query tries the configured provider (or a custom
+  `dns_upstream`), then Cloudflare `1.1.1.1`, then Quad9 `9.9.9.9`, with a
+  failing endpoint suppressed for 30 minutes and no plaintext DNS fallback —
+  when the whole chain fails the query answers SERVFAIL.
+- A server-list cache in the state directory: a successful fetch is written
+  atomically (`serverlist.json`, mode 0600) and served when a later fetch
+  fails, including the first fetch after a daemon restart. A corrupt cache is
+  discarded with a warning and never blocks a connect that could otherwise
+  proceed.
+- A Fastly anti-bot challenge solver for the Firefox Accounts and Guardian
+  control planes: with `solve_challenges=on` (the default) a challenge page is
+  answered and its cookies are installed in a shared jar, including the
+  related origins, so the request can be retried. A captcha or an exhausted
+  budget produces a clear error instead of a silent hang; `solve_challenges=off`
+  turns solving off.
+- TLS ClientHello fragmentation for the edge and control-plane handshakes:
+  `tls_split=off` (default), `first-byte` writes the first byte of the record
+  separately, and `sni` splits around the first hostname byte. The bytes on the
+  wire are unchanged and the split applies per connection, so a new value
+  takes effect on the next dial.
+- A functional `upstream_proxy`: the edge dial can go through a SOCKS5,
+  SOCKS5h or HTTP proxy with optional credentials (`socks5://`, `socks5h://`
+  or `http://`), hands the edge hostname to the proxy unresolved so there is
+  no local DNS lookup, and composes with `edge_address` pinning. Only the edge
+  dial uses the hop; control-plane, DoH and bootstrap traffic stay direct.
+- A local HTTP proxy alongside SOCKS5: when `http_proxy=on`, a loopback
+  listener on `http_proxy_port` (default `8080`) accepts `CONNECT` and
+  absolute-form plain HTTP through the same tunnel, with the same local-target
+  refusals as SOCKS. It starts and stops with the SOCKS listener.
+- DNS over SOCKS5 `UDP ASSOCIATE`: DNS-only datagrams are relayed through the
+  same in-tunnel DoH chain, so proxy-only mode can answer DNS without the TUN
+  listener. Non-DNS and foreign datagrams are dropped.
+- `keepalive_profile=standard|slow` for slow links: the standard profile times
+  out an unanswered keepalive after 10 s, the slow profile after 25 s.
+- The five new runtime settings (`tls_split`, `http_proxy`, `http_proxy_port`,
+  `solve_challenges`, `keepalive_profile`) in `config.toml`, `state.json`
+  overrides and the control protocol, in the TUI settings screen (now
+  scrollable), in the CLI settings surface and in the Windows GUI.
+
+### Changed
+
+- DNS inside the tunnel is strict DoH: the plaintext TCP/UDP 53 fallback is
+  gone, and `doh_provider=off` without a custom `dns_upstream` disables
+  in-tunnel DNS (every query answers SERVFAIL) instead of falling back to
+  plaintext. The outside-the-tunnel bootstrap path keeps its TCP:53 fallback.
+- Documentation now matches the service: the Fastly edge accepts TCP 80 and
+  443 only (CONNECT to 53, 853 and 444 is refused), DNS is described as DoH
+  only, and the Windows acceptance checklist covers restoring DoH and
+  reconnecting afterwards.
+
+### Fixed
+
+- Guardian entitlement challenges are retried up to five times, with the
+  solver when it is enabled, before failing — matching the FxA challenge loop.
+- Signing out now wipes the account and usage view (quota, exit IP and
+  country, pass, totals and rates), and an in-flight pass renewal or redial
+  can no longer resurrect that state after teardown.
+- `upstream_proxy` is now actually used by the edge dialer instead of being
+  validated and stored but ignored.
+
 ## [0.3.0] - 2026-10-17
 
 The Windows 11 desktop app: a WebView2 GUI, its installer integration and the
@@ -141,7 +209,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.0
 [0.3.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.3.0
 [0.2.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.1.0
