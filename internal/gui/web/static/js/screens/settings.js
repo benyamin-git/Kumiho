@@ -115,7 +115,7 @@ const SERVICE_ROWS = [
     hint: "Minutes between quota refreshes while connected; next connect" },
   { key: "tls_split", label: "TLS split", kind: "cycle",
     options: ["off", "first-byte", "sni"],
-    hint: "Split the TLS ClientHello across records; next connect" },
+    hint: "Split the TLS ClientHello across writes; next connect" },
   { key: "http_proxy", label: "HTTP proxy", kind: "toggle",
     hint: "Loopback HTTP/CONNECT proxy through the tunnel; next connect" },
   { key: "http_proxy_port", label: "HTTP proxy port", kind: "number",

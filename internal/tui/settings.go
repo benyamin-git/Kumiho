@@ -64,7 +64,7 @@ var settingItems = []settingItem{
 		hint: "minutes between quota refreshes while connected; next connect"},
 	{key: "tls_split", label: "TLS split", kind: settingEnum,
 		options: []string{"off", "first-byte", "sni"},
-		hint:    "split the TLS ClientHello across records; next connect"},
+		hint:    "split the TLS ClientHello across writes; next connect"},
 	{key: "http_proxy", label: "HTTP proxy", kind: settingBool,
 		hint: "loopback HTTP/CONNECT proxy through the tunnel; next connect"},
 	{key: "http_proxy_port", label: "HTTP proxy port", kind: settingInt,

@@ -329,7 +329,7 @@ when it applies):
 | `MTU` | `Tun device MTU; next connect` |
 | `SOCKS port` | `Loopback SOCKS5 listener; next connect` |
 | `Quota poll` | `Minutes between quota refreshes while connected; next connect` |
-| `TLS split` | `Split the TLS ClientHello across records; next connect` |
+| `TLS split` | `Split the TLS ClientHello across writes; next connect` |
 | `HTTP proxy` | `Loopback HTTP/CONNECT proxy through the tunnel; next connect` |
 | `HTTP proxy port` | `Loopback HTTP proxy listener; next connect` |
 | `Solve challenges` | `Solve FxA and edge challenges automatically; applies immediately` |

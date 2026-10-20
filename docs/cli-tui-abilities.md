@@ -350,7 +350,7 @@ line shown under the list for the focused row, verbatim):
 | `mtu` | MTU | inline number edit | 576–65535 | tun device MTU; next connect |
 | `socks_port` | SOCKS port | inline number edit | 1–65535 | loopback SOCKS5 listener; next connect |
 | `quota_poll_minutes` | quota poll | inline number edit | 1–1440 | minutes between quota refreshes while connected; next connect |
-| `tls_split` | TLS split | enum cycles off→first-byte→sni | off/first-byte/sni | split the TLS ClientHello across records; next connect |
+| `tls_split` | TLS split | enum cycles off→first-byte→sni | off/first-byte/sni | split the TLS ClientHello across writes; next connect |
 | `http_proxy` | HTTP proxy | bool toggle | on/off | loopback HTTP/CONNECT proxy through the tunnel; next connect |
 | `http_proxy_port` | HTTP proxy port | inline number edit | 1–65535 | loopback HTTP proxy listener; next connect |
 | `solve_challenges` | solve challenges | bool toggle | on/off | solve FxA and edge challenges automatically; applies immediately |
