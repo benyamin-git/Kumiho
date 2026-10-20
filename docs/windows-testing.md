@@ -1,4 +1,4 @@
-# Windows 11 manual end-to-end checklist (v0.2.0 + v0.3.0 GUI)
+# Windows 11 manual end-to-end checklist (v0.2.0 + v0.3.0 GUI + v0.4.0 backend parity)
 
 This is the committed manual E2E checklist from spec criterion 10. Run it top
 to bottom on a **fresh Windows 11 amd64 machine** (or VM) before tagging
@@ -6,6 +6,11 @@ to bottom on a **fresh Windows 11 amd64 machine** (or VM) before tagging
 observed output matches "Expect"; if anything diverges, file it and stop the
 release. Sections 1–15 are the v0.2.0 release checklist; section 16 is the
 v0.3.0 GUI acceptance script (its design spec is linked there).
+
+Section 18 is the v0.4.0 backend-parity delta (its design spec is linked
+there). It can run after sections 1–17 on the same box — defer the uninstalls
+in sections 15 and 16.10 to 18.10 — or on a box with a working v0.3.0
+install; 18.1 upgrades that install rather than requiring a clean one.
 
 Everything runs in PowerShell. The machine has no prior Kumiho install; if you
 are re-running the list, finish section 15 first so the box is clean again.
@@ -769,6 +774,11 @@ and a **Refresh** action.
   button, and **Reset** returns it to the configured default (status
   `<Row> reset to the configured value`).
 
+> **v0.4.0 rows.** v0.4.0 adds `TLS split`, `HTTP proxy`, `HTTP proxy port`,
+> `Solve challenges` and `Keepalive profile` to the `Background service` rows
+> and makes `Upstream proxy` functional. They are exercised in section 18.2;
+> the steps above stay the v0.3.0 script.
+
 ### 16.6 Logs
 
 - [ ] Open `Logs`.
@@ -971,6 +981,563 @@ Sign-off (fill before tagging):
   a client defect.
 
 v0.3.0 GUI acceptance sign-off (fill before the `v0.3.0` tag):
+
+- Date:
+- Machine / Windows build:
+- Commit / tag SHA under test:
+- Result: PASS / FAIL
+- Notes:
+
+## 18. v0.4.0 backend parity acceptance
+
+This is the v0.4.0 delta (design spec criteria 1–11 and 13, at
+[docs/superpowers/specs/2026-10-20-v0.4.0-backend-parity-design.md](superpowers/specs/2026-10-20-v0.4.0-backend-parity-design.md)).
+It runs top to bottom in an elevated Windows PowerShell 5.1 session. The only
+required external tool is the OpenSSH client in 18.5 (that step is N/A when you
+have no proxy); Wireshark in 18.4 is optional. `<physical>` is the physical
+adapter alias from section 8.
+
+### 18.1 Upgrade and version
+
+Run this on a box with a working v0.3.0 install. On the sections 1–17 box,
+defer the uninstalls in 15 and 16.10 to 18.10. A clean install also works, but
+the upgrade-specific lines below are then N/A — record that.
+
+- [ ] Quit the GUI (tray → **Quit**): a running `kumiho-gui.exe` blocks its
+      own replacement. Download `kumiho-v0.4.0-windows-amd64.zip` and
+      `SHA256SUMS`, verify, and extract with Explorer (right-click → Extract
+      All, so the Mark of the Web is preserved):
+
+      (Get-FileHash .\kumiho-v0.4.0-windows-amd64.zip -Algorithm SHA256).Hash
+      Get-Content .\SHA256SUMS | Select-String windows-amd64
+      Get-ChildItem .\kumiho-v0.4.0-windows-amd64
+
+  Expect: the two hashes match (case-insensitive), and the folder holds the
+  v0.4.0 kit: `kumiho.exe`, `kumiho-gui.exe`, `wintun.dll`, `install.ps1`,
+  `install.cmd`, `LICENSE`, `NOTICE` and `third_party` (with
+  `third_party\wintun\LICENSE.txt` and
+  `third_party\webview2-loader\LICENSE.txt`).
+
+- [ ] Note the state, then run the installer from the extracted v0.4.0
+      folder (it is idempotent and upgrades over v0.3.0):
+
+      Test-Path "$env:ProgramData\kumiho\tokens.json"
+      Get-ChildItem "$env:ProgramData\kumiho" -ErrorAction SilentlyContinue | Select-Object Name
+      Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+      Unblock-File .\install.ps1, .\kumiho.exe, .\kumiho-gui.exe, .\wintun.dll
+      .\install.ps1
+
+  Expect, in order: the local group reused; `%ProgramData%\kumiho` and `logs`
+  kept, with their ACLs reapplied; `stopped service kumiho to replace the binary`
+  (absent if the service was already stopped); `copied kumiho.exe to
+  C:\Program Files\Kumiho` (and the GUI and `wintun.dll`); the installer
+  copies, shortcut and PATH refreshed; then `C:\ProgramData\kumiho\config.toml
+  exists; leaving it untouched`; `service kumiho already exists; keeping its
+  registration`; crash recovery reconfigured; group, pipe access and login
+  entry refreshed; `restarted service kumiho with the new binary` (the upgrade
+  stops the running service first; a stopped service prints `started service
+  kumiho` instead); `installed; service kumiho is running`.
+
+- [ ] Verify the upgraded install:
+
+      Get-Service kumiho | Format-List Name,Status,StartType
+      kumiho version
+      kumiho doctor
+      Test-Path "$env:ProgramData\kumiho\tokens.json"
+      $cfg = "$env:ProgramData\kumiho\config.toml"
+      $pattern = 'tls_split|http_proxy|solve_challenges|keepalive_profile'
+      Select-String -Path $cfg -Pattern $pattern
+
+  Expect: `Running`, `Automatic`; `kumiho v0.4.0 ...`; a `0 fail` doctor
+  summary; `True` if you were signed in before the upgrade (state is kept).
+  If `kumiho` is not found, open a new elevated shell first (the machine PATH
+  applies to new shells). The `Select-String` finds nothing unless you added
+  keys by hand: an existing `config.toml` is not rewritten, so the five new
+  keys appear as built-in defaults (or as overrides in `state.json`) in the
+  clients rather than being inserted into the file.
+
+### 18.2 Settings surface
+
+- [ ] Open the GUI `Settings` screen (and optionally the TUI `s` screen) and
+      find the `Background service` rows. The five v0.4.0 rows follow
+      `Quota poll`.
+
+  Expect (GUI labels): `TLS split` (`off`/`first-byte`/`sni`), `HTTP proxy`
+  (`on`/`off`), `HTTP proxy port` (number, default `8080`), `Solve
+  challenges` (`on`/`off`, default `on`) and `Keepalive profile`
+  (`standard`/`slow`). `Upstream proxy` shows the cue `(direct)` and
+  `Exclude CIDRs` shows `(none)` when unset. The TUI shows the same rows with
+  its own labels (`TLS split`, `HTTP proxy`, `HTTP proxy port`,
+  `solve challenges`, `keepalive profile`) and scrolls with `down`/`pgdown`/
+  `end`; `keepalive profile` is its last row.
+
+- [ ] Edit `TLS split` to `first-byte`.
+
+  Expect: the row shows the `overridden` mark and a **Reset** button, and
+  the settings status line reads `TLS split saved`. Click **Reset**.
+
+  Expect: the mark and button disappear; the status reads
+  `TLS split reset to the configured value`; the row returns to the
+  configured default (`off` on a stock config). In the TUI the equivalent
+  notices are `tls_split updated` then `tls_split reset to default` (the TUI
+  names the key, not the label).
+
+- [ ] Confirm the apply timing. `Solve challenges` takes effect on save; the
+      other four rows and `Upstream proxy` apply on the next connect, so a
+      connected tunnel keeps its current values until you reconnect. 18.3 and
+      18.6 exercise both paths.
+
+### 18.3 Challenge solver on/off
+
+- [ ] With `Solve challenges` on (the default), sign in and refresh the
+      Account and Locations screens. If you are signed out, run `kumiho
+      login` first.
+
+  Expect: normal sign-in and refresh, with no challenge error. The solver
+  logs `[fastly]` lines when a challenge occurred (they are warn-level, so
+  visible at the default `info` level):
+
+      kumiho logs --level debug | Select-String -Pattern 'fastly|challenge'
+
+- [ ] Set `Solve challenges` off (it applies on save), then sign out and sign
+      in again to force control-plane requests:
+
+      kumiho logout
+      kumiho login
+
+  On a network known to answer with a Fastly `406`, expect an immediate,
+  clear failure — `anti-bot challenge solving is disabled; enable
+  solve_challenges and try again` — with no silent hang and no retry loop.
+  With `Solve challenges` on again, repeat the sign-in.
+
+  Expect: the solver answers the challenge and the request succeeds; the log
+  shows `[fastly]` steps followed by the successful request.
+
+- [ ] If no challenge can be provoked on this network, record that explicitly
+      in the v0.4.0 notes and do not claim a solver success. Still verify the
+      toggle persists (leave Settings, reopen it) and that normal sign-in and
+      Account/Locations refresh work with both values.
+
+### 18.4 TLS split
+
+- [ ] Set `TLS split` to `first-byte`, disconnect and reconnect, then load a
+      page through the tunnel:
+
+      kumiho disconnect
+      kumiho connect
+      curl.exe -4 -s --max-time 20 https://www.cloudflare.com/cdn-cgi/trace
+      kumiho status
+
+  Expect: `state: CONNECTED`, and an `ip=` line equal to the status
+  `exit ip:` — the tunnel, not the physical IP.
+
+- [ ] Set `TLS split` to `sni`, reconnect, and repeat the trace and status
+      check.
+
+  Expect: the same result. Restore `TLS split` to `off` and reconnect:
+
+      # Settings: TLS split = off
+      kumiho disconnect
+      kumiho connect
+
+- [ ] Optional packet capture: with Wireshark on `$physical`, the first
+      ClientHello record is split across two TCP segments (Wireshark
+      reassembles the TLS message, so inspect the TCP segment lengths). Not
+      mandatory; if the capture shows one segment, record that as a
+      best-effort result rather than failing the section.
+
+Note: the split is best effort, applies to the edge and control-plane HTTPS
+handshakes, and is never applied to DoH or bootstrap. The bytes on the wire
+are unchanged.
+
+### 18.5 Upstream proxy
+
+A practical local SOCKS5 proxy on Windows 11 is the built-in OpenSSH client.
+If `ssh.exe` is missing, add the OpenSSH Client optional feature, or use any
+SOCKS5 or HTTP proxy you control. All three schemes are accepted:
+`socks5://`, `socks5h://` and `http://` (default ports 1080, 1080 and 80).
+Use a port other than 1080 for the test proxy: 1080 is Kumiho's own SOCKS
+listener, which is bound whenever the tunnel is up.
+
+- [ ] Start the proxy in its own elevated PowerShell window and keep it open
+      (`-v` shows each channel and the `host:443` it opens):
+
+      ssh -N -D 1081 -v user@your-ssh-host
+
+  Expect: no errors, and the window stays open. While it runs,
+  `Test-NetConnection 127.0.0.1 -Port 1081 -InformationLevel Quiet` is
+  `True`.
+
+- [ ] Set `Upstream proxy` to `socks5h://127.0.0.1:1081`, reconnect, and
+      verify the tunnel and the control plane:
+
+      kumiho disconnect
+      kumiho connect
+      curl.exe -4 -s --max-time 20 https://www.cloudflare.com/cdn-cgi/trace
+      kumiho locations
+      kumiho status
+
+  Expect: `CONNECTED`; the trace shows the tunnel exit IP; the locations list
+  still loads. In the ssh window, edge connections to the edge hostname on
+  port 443 appear — the proxy resolves the edge hostname, so there is no
+  local lookup for it. Only the edge dial uses the hop: the control plane,
+  Remote Settings, DoH and bootstrap stay direct.
+
+- [ ] Set a deliberately wrong port, then reconnect and confirm there is no
+      silent direct fallback:
+
+      # Settings: Upstream proxy = socks5h://127.0.0.1:1
+      kumiho disconnect
+      kumiho connect
+      kumiho status
+      kumiho logs --level debug | Select-String -Pattern 'upstream_proxy|dial proxy'
+
+  Expect: `kumiho connect` fails with a clear proxy/dial error (allow up to
+  ~30 s); the state is not `CONNECTED`; the log names `upstream_proxy` or
+  `dial proxy 127.0.0.1:1`, never credentials, and no direct edge dial
+  follows. Restore the empty (`(direct)`) value and reconnect:
+
+      # Settings: Upstream proxy = (empty)
+      kumiho connect
+      kumiho status
+
+  Expect: `CONNECTED` and normal tunnel traffic again.
+
+`user:pass@` is accepted in the URL (for example
+`socks5h://user:pass@proxy.example.net:1080`, or an HTTP proxy such as
+`http://proxy.example.net:3128`); omit it when your proxy has no auth. If no
+proxy is available, mark this step N/A in the notes; do not invent a pass.
+Stop the proxy shell (Ctrl+C) once you are back on `(direct)`.
+
+### 18.6 HTTP proxy
+
+- [ ] Check the port is free, then set `HTTP proxy` on and `HTTP proxy port`
+      to `8080` (or another free port), and reconnect:
+
+      Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+      # Settings: HTTP proxy = on, HTTP proxy port = 8080
+      kumiho disconnect
+      kumiho connect
+
+  Expect: `CONNECTED`. If 8080 was busy, use a free port and say so in the
+  notes; a collision is reported as a connect failure.
+
+- [ ] Verify the listener and both request forms through the tunnel:
+
+      Test-NetConnection 127.0.0.1 -Port 8080 -InformationLevel Quiet
+      Get-NetTCPConnection -LocalPort 8080 -State Listen |
+        Select-Object LocalAddress,LocalPort,OwningProcess
+      curl.exe -x http://127.0.0.1:8080 -s --max-time 30 https://www.cloudflare.com/cdn-cgi/trace
+      curl.exe -x http://127.0.0.1:8080 -s --max-time 30 http://example.com
+      kumiho status
+
+  Expect: `True`; the listener's `LocalAddress` is `127.0.0.1` (not
+  `0.0.0.0` or a LAN address, so it is loopback-only); the HTTPS trace has an
+  `ip=` line equal to the status `exit ip:` (re-run `kumiho status` after a
+  few seconds if the exit check is still empty); the plain-HTTP request
+  returns HTML.
+
+- [ ] Confirm there is no auth challenge and no TLS interception:
+
+      curl.exe -x http://user:pass@127.0.0.1:8080 -s --max-time 30 -o NUL -w "status %{http_code}\n" https://www.cloudflare.com/cdn-cgi/trace
+
+  Expect: `status 200` whether or not credentials are in the proxy URL; the
+  proxy never answers `407 Proxy Authentication Required`, and the
+  `Proxy-Authorization` header is stripped before the tunnel. HTTPS goes
+  through `CONNECT` end to end — the trace page's certificate is accepted by
+  curl with no proxy interception.
+
+- [ ] Set `HTTP proxy` off, reconnect, and confirm the listener is closed:
+
+      # Settings: HTTP proxy = off
+      kumiho disconnect
+      kumiho connect
+      Test-NetConnection 127.0.0.1 -Port 8080 -InformationLevel Quiet
+      kumiho status
+
+  Expect: `False` (a `WARNING: TCP connect ... failed` line is normal), and
+  the tunnel is still `CONNECTED`. The listener starts and stops with the
+  tunnel.
+
+Note: the HTTP proxy is loopback-only and unauthenticated, accepts `CONNECT`
+and absolute-form plain HTTP with one request per connection, and refuses
+local-network IP targets. It does not intercept TLS.
+
+### 18.7 DNS over SOCKS5 UDP
+
+The relay exists in both full and proxy-only mode. This client runs on
+Windows PowerShell 5.1, needs no module, and is copy-pasteable as one block:
+it opens a TCP control connection to the local SOCKS5 listener, requests
+`UDP ASSOCIATE`, sends one DNS A query for `example.com` to `1.1.1.1:53`
+through the relay, and parses the reply. The destination address is a marker:
+the relay answers from the same in-tunnel DoH chain, not from plaintext UDP to
+`1.1.1.1`. Start from `DoH provider = automatic` (the default; section 9
+restores it if you ran that section).
+
+- [ ] With the tunnel connected in full or proxy-only mode, confirm the
+      listener and run the client:
+
+      Test-NetConnection 127.0.0.1 -Port 1080 -InformationLevel Quiet
+
+      function Resolve-DnsViaSocksUdp {
+          param(
+              [string]$Name = 'example.com',
+              [string]$Server = '1.1.1.1',
+              [string]$Proxy = '127.0.0.1:1080'
+          )
+          $proxyHost, $proxyPort = $Proxy -split ':'
+          $proxyPort = [int]$proxyPort
+
+          # DNS query: ID 0x4b75, RD=1, one A/IN question.
+          $q = [System.Collections.Generic.List[byte]]::new()
+          foreach ($b in [byte[]](0x4b,0x75, 0x01,0x00, 0x00,0x01,
+                  0x00,0x00, 0x00,0x00, 0x00,0x00)) { $q.Add($b) }
+          foreach ($label in $Name -split '\.') {
+              $b = [System.Text.Encoding]::ASCII.GetBytes($label)
+              $q.Add([byte]$b.Length)
+              foreach ($x in $b) { $q.Add($x) }
+          }
+          foreach ($b in [byte[]](0x00, 0x00,0x01, 0x00,0x01)) { $q.Add($b) }
+
+          $tcp = [System.Net.Sockets.TcpClient]::new()
+          $tcp.Connect($proxyHost, $proxyPort)
+          $stream = $tcp.GetStream()
+          $stream.ReadTimeout = 5000
+          $stream.Write([byte[]](0x05,0x01,0x00), 0, 3)
+          $greeting = [byte[]]::new(2)
+          $got = 0
+          while ($got -lt 2) {
+              $n = $stream.Read($greeting, $got, 2 - $got)
+              if ($n -le 0) { throw 'SOCKS5 greeting was truncated' }
+              $got += $n
+          }
+          if ($greeting[0] -ne 5 -or $greeting[1] -ne 0) {
+              throw 'SOCKS5 greeting was refused'
+          }
+
+          # UDP ASSOCIATE with 0.0.0.0:0 (the relay binds its own UDP socket).
+          $stream.Write([byte[]](0x05,0x03,0x00,0x01, 0,0,0,0, 0,0), 0, 10)
+          $reply = [byte[]]::new(10)
+          $got = 0
+          while ($got -lt 10) {
+              $n = $stream.Read($reply, $got, 10 - $got)
+              if ($n -le 0) { throw 'SOCKS5 UDP ASSOCIATE reply was truncated' }
+              $got += $n
+          }
+          if ($reply[0] -ne 5 -or $reply[1] -ne 0 -or $reply[3] -ne 1) {
+              throw ('SOCKS5 UDP ASSOCIATE failed: ' +
+                  (($reply | ForEach-Object { $_.ToString('x2') }) -join ' '))
+          }
+          $relay = [System.Net.IPEndPoint]::new(
+              [System.Net.IPAddress]::new([byte[]]($reply[4..7])),
+              (($reply[8] -shl 8) -bor $reply[9]))
+
+          # RFC 1928 UDP request: RSV=0, FRAG=0, ATYP=IPv4,
+          # server:53, DNS payload.
+          $dns = $q.ToArray()
+          $packet = [byte[]]::new(10 + $dns.Length)
+          $packet[3] = 1
+          [Array]::Copy(
+              [System.Net.IPAddress]::Parse($Server).GetAddressBytes(),
+              0, $packet, 4, 4)
+          $packet[9] = 53
+          [Array]::Copy($dns, 0, $packet, 10, $dns.Length)
+
+          $udp = [System.Net.Sockets.UdpClient]::new()
+          $udp.Client.ReceiveTimeout = 15000
+          [void]$udp.Send($packet, $packet.Length, $relay)
+          $from = [System.Net.IPEndPoint]::new(
+              [System.Net.IPAddress]::Any, 0)
+          $response = $udp.Receive([ref]$from)
+          $udp.Dispose(); $stream.Dispose(); $tcp.Dispose()
+
+          if ($response.Length -lt 22 -or $response[0] -ne 0 -or
+              $response[1] -ne 0 -or $response[2] -ne 0 -or
+              $response[3] -ne 1) {
+              throw 'SOCKS5 UDP reply header was invalid'
+          }
+          $dnsLen = $response.Length - 10
+          $dnsResp = [byte[]]::new($dnsLen)
+          [Array]::Copy($response, 10, $dnsResp, 0, $dnsLen)
+          if ($dnsResp[0] -ne 0x4b -or $dnsResp[1] -ne 0x75) {
+              throw 'DNS transaction ID did not match'
+          }
+          $rcode = $dnsResp[3] -band 0x0f
+          $ancount = ($dnsResp[6] -shl 8) -bor $dnsResp[7]
+          if ($rcode -ne 0 -or $ancount -lt 1) {
+              throw "DNS response rcode=$rcode answers=$ancount"
+          }
+
+          $offset = 12
+          while ($dnsResp[$offset] -ne 0) {
+              $offset += $dnsResp[$offset] + 1
+          }
+          $offset += 5
+          $addresses = @()
+          for ($i = 0; $i -lt $ancount; $i++) {
+              if (($dnsResp[$offset] -band 0xc0) -eq 0xc0) {
+                  $offset += 2
+              } else {
+                  while ($dnsResp[$offset] -ne 0) {
+                      $offset += $dnsResp[$offset] + 1
+                  }
+                  $offset += 1
+              }
+              $type = ($dnsResp[$offset] -shl 8) -bor $dnsResp[$offset + 1]
+              $rdlen = ($dnsResp[$offset + 8] -shl 8) -bor $dnsResp[$offset + 9]
+              $offset += 10
+              if ($type -eq 1 -and $rdlen -eq 4) {
+                  $a = [System.Net.IPAddress]::new(
+                      [byte[]]($dnsResp[$offset..($offset + 3)]))
+                  $addresses += $a.ToString()
+              }
+              $offset += $rdlen
+          }
+          if ($addresses.Count -lt 1) {
+              throw 'no A record in the DNS response'
+          }
+          "UDP associate OK: $Name -> $($addresses -join ', ')"
+      }
+      Resolve-DnsViaSocksUdp
+
+  Expect: `True`, then `UDP associate OK: example.com -> <address>, ...`
+  with one or more A records. Allow up to 15 s for the DoH lookup. Repeat in
+  the other transport mode if you have time; the relay exists in both. The
+  function stays defined in this shell, so later steps can call it by name;
+  re-paste the block if you restart the shell.
+
+- [ ] Prove there is no plaintext fallback. Clear `DNS upstream` first (as in
+      section 9's corrected step), set `DoH provider` to `off`, then
+      disconnect and reconnect:
+
+      # Settings: DNS upstream = (empty), DoH provider = off
+      kumiho disconnect
+      kumiho connect
+      Resolve-DnsViaSocksUdp
+
+  Expect: the client throws a non-zero rcode — SERVFAIL is
+  `DNS response rcode=2 answers=0` — not an answer. That is the daemon's
+  no-fallback path: the relay only resolves through DoH and never dials port
+  53. Optionally set `Log level` to `debug` before reconnecting to also see
+  the daemon line `answering SERVFAIL` (the default `info` level does not
+  record it):
+
+      kumiho logs --level debug | Select-String -Pattern 'SERVFAIL'
+
+  Restore `DoH provider` to `automatic` (leave `DNS upstream` empty),
+  disconnect and reconnect, then run the client once more:
+
+      # Settings: DoH provider = automatic, DNS upstream = (empty)
+      kumiho disconnect
+      kumiho connect
+      Resolve-DnsViaSocksUdp
+
+  Expect: `UDP associate OK: example.com -> ...` again.
+
+Note: the relay is DNS-only (target port 53 or 0). Non-DNS UDP and foreign
+sources are dropped, so this is not QUIC, game or call support; a provider of
+`off` answers SERVFAIL.
+
+### 18.8 Keepalive profile
+
+- [ ] Set `Keepalive profile` to `slow`, reconnect, and leave the tunnel
+      idle past the ping window, then check traffic:
+
+      kumiho disconnect
+      kumiho connect
+      Start-Sleep -Seconds 45
+      kumiho status
+      curl.exe -4 -s --max-time 20 https://www.cloudflare.com/cdn-cgi/trace
+
+  Expect: still `CONNECTED` after the idle window, and the trace returns the
+  tunnel exit IP. Restore `standard` and reconnect:
+
+      # Settings: Keepalive profile = standard
+      kumiho disconnect
+      kumiho connect
+
+The ping schedule is unchanged in both profiles (15 s idle, then a check every
+3 s); only the unanswered-ping timeout changes: 10 s on `standard`, 25 s on
+`slow`. A true lossy-link test is optional; do not claim the 25 s timeout was
+observed unless it was.
+
+### 18.9 Sign-out residue
+
+- [ ] Connect, let some traffic flow (the trace above is enough), then sign
+      out:
+
+      kumiho logout
+      kumiho status
+      Test-Path "$env:ProgramData\kumiho\tokens.json"
+
+  Expect: `Signed out.`; the tunnel is disconnected; `state:` is
+  `UNAUTHENTICATED`; no `account:`, `token expires:`, `pass expires:`,
+  `quota:`, `exit ip:`, `totals:` or `rates:` lines; `False` for
+  `tokens.json`.
+
+- [ ] Check the GUI: `Account` shows `Not signed in` (the card is gone) and
+      `Dashboard` carries no account, quota, exit IP, totals or rates from
+      the old session. The setup wizard does not reopen.
+
+  Expect: as described (click **Refresh** if a screen still shows old data).
+  Sign in again before the next step:
+
+      kumiho login
+
+Plain `kumiho disconnect` is not sign-out: it may keep the last session's
+`totals:` until you sign out.
+
+### 18.10 Uninstall and residue
+
+- [ ] Disconnect and confirm the v0.4.0 listeners are gone:
+
+      kumiho disconnect
+      Get-NetTCPConnection -LocalPort 1080,8080 -State Listen -ErrorAction SilentlyContinue
+
+  Expect: nothing for either port (adjust 1080 and 8080 if you changed the
+  SOCKS or HTTP proxy port). The SOCKS listener exists in both full and
+  proxy-only mode; the HTTP proxy listens only on `http_proxy_port`; both
+  stop with the tunnel.
+
+- [ ] Quit the GUI (tray → **Quit**), then run the section 15 uninstall
+      path (section 16.10 when the GUI is installed) from the extracted
+      v0.4.0 kit, keeping state, then repeat the listener check and the
+      residue checks by reference:
+
+      .\install.ps1 -Uninstall
+      Get-NetTCPConnection -LocalPort 1080,8080 -State Listen -ErrorAction SilentlyContinue
+      Get-Service kumiho -ErrorAction SilentlyContinue
+      Test-Path 'C:\Program Files\Kumiho'
+      Test-Path "$env:ProgramData\kumiho\tokens.json"
+
+  Expect: the section 15/16.10 console lines and residue results (service,
+  binaries, PATH, shortcut/login entry, adapter, metric-9999 routes,
+  group/pipe grant), plus no listener on either port and `%ProgramData%\kumiho`
+  kept with its tokens. `-Purge` additionally removes state/tokens and the
+  group; per-user `%APPDATA%\kumiho\gui.toml` and `tui.toml` are
+  intentionally left.
+
+### 18.11 Results and sign-off
+
+| v0.4.0 spec criterion | Covered by |
+| --- | --- |
+| 1. Strict in-tunnel DNS: no port-53 path, endpoint failover, 30-minute suppression | 9, 18.7 (failover and suppression by unit/integration tests) |
+| 2. Server-list cache: atomic write, fallback, corrupt cache ignored | unit tests; not a Windows step (needs a forced fetch failure) |
+| 3. Challenge solving: 406 handled, cookies installed, clear failure, no hang | 18.3 |
+| 4. TLS fragmentation: `off`/`first-byte`/`sni`, edge and control plane, not DoH/bootstrap | 18.4; unit test for the offset |
+| 5. Upstream proxy: three schemes, credentials, edge-only, remote resolution | 18.5 |
+| 6. Local HTTP proxy: loopback, CONNECT + absolute-form HTTP, stops with the tunnel | 18.6 |
+| 7. DNS-only UDP ASSOCIATE: port 53/0, DoH chain, SERVFAIL when off, both modes | 18.7 |
+| 8. Keepalive profile: `standard` 10 s / `slow` 25 s, next connect | 18.8 |
+| 9. Settings surface complete: config, overrides, TUI scrolling, GUI rows, defaults, reset | 16.5, 18.2; validation and defaults in the gate |
+| 10. Clean sign-out: quota, exit, rates, totals and pass expiry wiped | 18.9 |
+| 11. Documentation is true: CHANGELOG, README, PLAN, docs, inventories, NOTICE, AGENTS | docs review (this file); not a Windows step |
+| 13. GUI proof: new rows in the dev harness under Light/Dark/OLED; accessibility floor | harness/Playwright (not a Windows step); 18.2 on Windows |
+
+Criteria 12 (gate green) and 14 (release framing) are release hygiene, not
+Windows steps.
+
+v0.4.0 backend parity acceptance sign-off (fill before the `v0.4.0` tag):
 
 - Date:
 - Machine / Windows build:
