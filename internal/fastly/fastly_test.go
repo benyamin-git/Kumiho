@@ -138,6 +138,9 @@ type scenario struct {
 	pending int
 	// successWithoutCookie omits the success Set-Cookie.
 	successWithoutCookie bool
+	// hostOnlyCookie omits the Domain attribute, so the cookie is host-only
+	// for the host that served the post-back (the apex in the fallback test).
+	hostOnlyCookie bool
 	// clearOnSuccess makes the page clean after a success response even
 	// without a cookie.
 	clearOnSuccess bool
@@ -224,12 +227,15 @@ func (sc scenario) handler(t *testing.T) http.HandlerFunc {
 				return
 			}
 			if !sc.successWithoutCookie {
-				http.SetCookie(w, &http.Cookie{
-					Name:   cookieName,
-					Value:  cookieValue,
-					Path:   "/",
-					Domain: apexHost,
-				})
+				cookie := &http.Cookie{
+					Name:  cookieName,
+					Value: cookieValue,
+					Path:  "/",
+				}
+				if !sc.hostOnlyCookie {
+					cookie.Domain = apexHost
+				}
+				http.SetCookie(w, cookie)
 			}
 			if sc.clearOnSuccess {
 				cleared.Store(true)
@@ -458,48 +464,60 @@ func TestPowSuccess(t *testing.T) {
 }
 
 func TestApexFallback(t *testing.T) {
-	sc := scenario{
-		challenges: []map[string]any{powChallenge("base-apex", "aa")},
-		token:      "tok-apex",
-		challenged: func(r *http.Request) bool {
-			if r.Host == originHost {
-				return false
+	cases := []struct {
+		name     string
+		hostOnly bool
+	}{
+		{name: "domain cookie"},
+		{name: "host-only apex cookie", hostOnly: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := scenario{
+				challenges:     []map[string]any{powChallenge("base-apex", "aa")},
+				token:          "tok-apex",
+				hostOnlyCookie: tc.hostOnly,
+				challenged: func(r *http.Request) bool {
+					if r.Host == originHost {
+						return false
+					}
+					_, err := r.Cookie(cookieName)
+					return err != nil
+				},
 			}
-			_, err := r.Cookie(cookieName)
-			return err != nil
-		},
-	}
-	f := newFixture(t, sc.handler(t))
-	shared := newJar(t)
-	s := f.newSolver(shared)
+			f := newFixture(t, sc.handler(t))
+			shared := newJar(t)
+			s := f.newSolver(shared)
 
-	if err := s.Solve(context.Background(), challengedURL); err != nil {
-		t.Fatalf("Solve: %v", err)
-	}
+			if err := s.Solve(context.Background(), challengedURL); err != nil {
+				t.Fatalf("Solve: %v", err)
+			}
 
-	if got := len(f.requestsFor("GET", originHost, "/")); got != 1 {
-		t.Errorf("origin page requests = %d, want 1", got)
-	}
-	if got := len(f.requestsFor("GET", originHost, testPrefix+"/script.js")); got != 0 {
-		t.Errorf("origin script requests = %d, want 0", got)
-	}
-	if got := len(f.requestsFor("GET", apexHost, "/")); got != 2 {
-		t.Errorf("apex page requests = %d, want 2 (challenge + verification)", got)
-	}
-	if got := len(f.requestsFor("GET", apexHost, testPrefix+"/script.js")); got != 1 {
-		t.Errorf("apex script requests = %d, want 1", got)
-	}
-	posts := f.requestsFor("POST", apexHost, testPrefix+"/fst-post-back")
-	if len(posts) != 1 {
-		t.Fatalf("apex post-back requests = %d, want 1", len(posts))
-	}
-	if got := posts[0].Header.Get("Origin"); got != apexBase {
-		t.Errorf("apex post-back Origin = %q, want %q", got, apexBase)
-	}
+			if got := len(f.requestsFor("GET", originHost, "/")); got != 1 {
+				t.Errorf("origin page requests = %d, want 1", got)
+			}
+			if got := len(f.requestsFor("GET", originHost, testPrefix+"/script.js")); got != 0 {
+				t.Errorf("origin script requests = %d, want 0", got)
+			}
+			if got := len(f.requestsFor("GET", apexHost, "/")); got != 2 {
+				t.Errorf("apex page requests = %d, want 2 (challenge + verification)", got)
+			}
+			if got := len(f.requestsFor("GET", apexHost, testPrefix+"/script.js")); got != 1 {
+				t.Errorf("apex script requests = %d, want 1", got)
+			}
+			posts := f.requestsFor("POST", apexHost, testPrefix+"/fst-post-back")
+			if len(posts) != 1 {
+				t.Fatalf("apex post-back requests = %d, want 1", len(posts))
+			}
+			if got := posts[0].Header.Get("Origin"); got != apexBase {
+				t.Errorf("apex post-back Origin = %q, want %q", got, apexBase)
+			}
 
-	requireCookie(t, shared, originBase+"/")
-	requireCookie(t, shared, apexBase+"/")
-	requireCookie(t, shared, challengedURL)
+			requireCookie(t, shared, originBase+"/")
+			requireCookie(t, shared, apexBase+"/")
+			requireCookie(t, shared, challengedURL)
+		})
+	}
 }
 
 func TestNoChallenge(t *testing.T) {

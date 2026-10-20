@@ -449,24 +449,42 @@ func clientMetricsAnswer() map[string]any {
 
 // installCookies copies the isolated jar's cookies into the shared jar for
 // every target URL. It fails when no cookies were issued at all.
+//
+// Cookies are collected as a union across the targets and then installed for
+// every target. This is what lets an apex fallback authenticate the original
+// challenged host: a host-only cookie issued by the apex does not apply to the
+// api host in the isolated jar, so copying per-target applicability alone
+// would leave the control plane challenged.
 func installCookies(from, to http.CookieJar, targets []string) (int, error) {
-	n := 0
+	urls := make([]*url.URL, 0, len(targets))
+	seen := make(map[string]bool)
+	var union []*http.Cookie
 	for _, target := range targets {
 		u, err := url.Parse(target)
 		if err != nil {
 			return 0, fmt.Errorf("fastly: parse cookie target %q: %w", target, err)
 		}
-		cookies := from.Cookies(u)
-		if len(cookies) == 0 {
-			continue
+		urls = append(urls, u)
+		for _, c := range from.Cookies(u) {
+			// net/http/cookiejar returns only Name and Value. Dropping the
+			// attributes keeps the installed cookie host-only for each
+			// target URL, mirroring the reference implementation's
+			// normalize-to-apex behavior.
+			key := c.Name + "\x00" + c.Value
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			union = append(union, &http.Cookie{Name: c.Name, Value: c.Value})
 		}
-		to.SetCookies(u, cookies)
-		n += len(cookies)
 	}
-	if n == 0 {
+	if len(union) == 0 {
 		return 0, errors.New("fastly: challenge completed but no cookies were issued")
 	}
-	return n, nil
+	for _, u := range urls {
+		to.SetCookies(u, union)
+	}
+	return len(union), nil
 }
 
 // apexOrigin returns the challenged origin with a leading api. or www. label
