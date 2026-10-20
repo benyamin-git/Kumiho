@@ -254,8 +254,11 @@ func (r *Resolver) logf(level logging.Level, format string, args ...any) {
 
 // Resolve answers req through the endpoint chain. Transport, HTTP and unpack
 // failures suppress that endpoint for 30 minutes and move on; a valid DNS
-// message (including NXDOMAIN or SERVFAIL) is returned as-is. The query has an
-// 8 s budget and each endpoint gets at most 4 s of it.
+// message (including NXDOMAIN or SERVFAIL) is returned as-is. When every
+// endpoint is suppressed, the one with the earliest suppression expiry is
+// tried as a bounded half-open probe so a recovered network is noticed before
+// the 30 minutes elapse. The query has an 8 s budget and each endpoint gets at
+// most 4 s of it.
 func (r *Resolver) Resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
 	if req == nil {
 		return nil, errors.New("dns: nil query")
@@ -278,12 +281,22 @@ func (r *Resolver) Resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	var lastErr error
 	now := r.now()
+	// A failure burst can suppress every endpoint at once; probing the one
+	// whose suppression ends first recovers from transient outages instead of
+	// blacking out DNS for the whole 30 minutes.
+	probe := r.probeTarget(now)
+	if probe != "" {
+		r.logf(logging.Debug, "all DoH endpoints are suppressed; probing %s", probe)
+	}
+
+	var lastErr error
 	for _, ep := range r.endpoints {
-		if until, ok := r.suppressedUntil(ep.ip); ok && now.Before(until) {
-			r.logf(logging.Debug, "skipping DoH endpoint %s until %s", ep.ip, until.Format(time.RFC3339))
-			continue
+		if ep.ip != probe {
+			if until, ok := r.suppressedUntil(ep.ip); ok && now.Before(until) {
+				r.logf(logging.Debug, "skipping DoH endpoint %s until %s", ep.ip, until.Format(time.RFC3339))
+				continue
+			}
 		}
 		resp, err := r.queryEndpoint(ctx, ep, packed)
 		if err != nil {
@@ -295,7 +308,16 @@ func (r *Resolver) Resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error
 			}
 			until := r.suppress(ep.ip)
 			r.logf(logging.Warn, "DoH %s failed (%v); suppressing it for %s", ep.ip, err, until.Sub(r.now()).Round(time.Second))
+			if ep.ip == probe {
+				// A failed probe must not spend the budget on the other
+				// still-suppressed endpoints.
+				break
+			}
 			continue
+		}
+		if ep.ip == probe {
+			r.unsuppress(ep.ip)
+			r.logf(logging.Info, "DoH probe %s recovered; endpoint restored", ep.ip)
 		}
 		if resp.Rcode == mdns.RcodeSuccess {
 			if ttl, ok := cacheTTL(resp); ok {
@@ -305,7 +327,7 @@ func (r *Resolver) Resolve(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error
 		return resp, nil
 	}
 	if lastErr == nil {
-		return nil, errors.New("dns: every DoH endpoint is suppressed")
+		return nil, errors.New("dns: no DoH endpoint answered")
 	}
 	return nil, fmt.Errorf("dns: all DoH endpoints failed: %w", lastErr)
 }
@@ -330,6 +352,32 @@ func (r *Resolver) suppress(ip string) time.Time {
 	r.suppressed[ip] = until
 	r.mu.Unlock()
 	return until
+}
+
+// unsuppress clears an endpoint's suppression after a successful probe.
+func (r *Resolver) unsuppress(ip string) {
+	r.mu.Lock()
+	delete(r.suppressed, ip)
+	r.mu.Unlock()
+}
+
+// probeTarget returns the endpoint with the earliest suppression expiry when
+// every endpoint is suppressed at now, and "" otherwise.
+func (r *Resolver) probeTarget(now time.Time) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	target := ""
+	var earliest time.Time
+	for _, ep := range r.endpoints {
+		until, ok := r.suppressed[ep.ip]
+		if !ok || !now.Before(until) {
+			return ""
+		}
+		if target == "" || until.Before(earliest) {
+			target, earliest = ep.ip, until
+		}
+	}
+	return target
 }
 
 // NewWithResolver returns a listener that delegates resolution to r. The

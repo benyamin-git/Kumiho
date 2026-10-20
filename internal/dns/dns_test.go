@@ -482,26 +482,145 @@ func TestResolverSuppressionWindow(t *testing.T) {
 }
 
 func TestResolverAllEndpointsFail(t *testing.T) {
+	current := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	quad9Up := false
+	var hosts []string
+
 	r, err := NewResolver(unusedDial, "automatic", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.client = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+	r.now = func() time.Time { return current }
+	r.client = &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		hosts = append(hosts, req.URL.Hostname())
+		if quad9Up && req.URL.Hostname() == "9.9.9.9" {
+			return dohAnswer(t, req), nil
+		}
 		return nil, errors.New("connection refused")
 	})}
+	resolveErr := func(name string) error {
+		t.Helper()
+		_, err := r.Resolve(context.Background(), question(name))
+		return err
+	}
+	suppressedAt := func(ip string) time.Time {
+		t.Helper()
+		until, ok := r.suppressedUntil(ip)
+		if !ok {
+			t.Fatalf("%s is not suppressed", ip)
+		}
+		return until
+	}
 
-	if _, err := r.Resolve(context.Background(), question("down.example.com.")); err == nil {
+	// A burst suppresses every endpoint.
+	if err := resolveErr("down.example.com."); err == nil {
 		t.Fatal("expected an error when every endpoint fails")
 	} else if !strings.Contains(err.Error(), "all DoH endpoints failed") {
 		t.Fatalf("error = %v, want an all-endpoints-failed error", err)
 	}
-
-	// Both endpoints are now suppressed: the next query fails without dialing.
-	if _, err := r.Resolve(context.Background(), question("down2.example.com.")); err == nil {
-		t.Fatal("expected an error while every endpoint is suppressed")
-	} else if !strings.Contains(err.Error(), "suppressed") {
-		t.Fatalf("error = %v, want a suppression error", err)
+	if got := strings.Join(hosts, ","); got != "1.1.1.1,9.9.9.9" {
+		t.Fatalf("burst endpoints = %s, want both endpoints", got)
 	}
+	firstUntil := suppressedAt("1.1.1.1")
+	if firstUntil != current.Add(suppressDuration) || suppressedAt("9.9.9.9") != firstUntil {
+		t.Fatalf("burst suppression = %v / %v, want both until %v", firstUntil, suppressedAt("9.9.9.9"), current.Add(suppressDuration))
+	}
+
+	// The next query probes exactly one endpoint (the earliest expiry; ties
+	// keep chain order) instead of blacking out for 30 minutes.
+	hosts = nil
+	current = current.Add(5 * time.Minute)
+	if err := resolveErr("down2.example.com."); err == nil {
+		t.Fatal("expected the probe to fail too")
+	} else if !strings.Contains(err.Error(), "all DoH endpoints failed") {
+		t.Fatalf("probe error = %v, want an all-endpoints-failed error", err)
+	}
+	if got := strings.Join(hosts, ","); got != "1.1.1.1" {
+		t.Fatalf("probe used %s, want only the earliest-expiry endpoint 1.1.1.1", got)
+	}
+	if until := suppressedAt("1.1.1.1"); !until.Equal(current.Add(suppressDuration)) {
+		t.Fatalf("probe failure suppression = %v, want a refreshed %v", until, current.Add(suppressDuration))
+	}
+	if until := suppressedAt("9.9.9.9"); !until.Equal(firstUntil) {
+		t.Fatalf("probe failure changed the other endpoint: %v, want %v", until, firstUntil)
+	}
+
+	// Once the other endpoint's window expires it is tried again, so recovery
+	// never has to wait for the refreshed probe suppression.
+	quad9Up = true
+	hosts = nil
+	current = firstUntil.Add(time.Minute)
+	if err := resolveErr("down3.example.com."); err != nil {
+		t.Fatalf("resolve after the window: %v", err)
+	}
+	if got := strings.Join(hosts, ","); got != "9.9.9.9" {
+		t.Fatalf("recovered query used %s, want 9.9.9.9", got)
+	}
+}
+
+func TestResolverProbeEarliestEndpoint(t *testing.T) {
+	newResolver := func(t *testing.T, current time.Time) *Resolver {
+		t.Helper()
+		r, err := NewResolver(unusedDial, "automatic", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.now = func() time.Time { return current }
+		// Distinct expiries: 1.1.1.1 is the earliest.
+		r.suppressed["1.1.1.1"] = current.Add(10 * time.Minute)
+		r.suppressed["9.9.9.9"] = current.Add(20 * time.Minute)
+		return r
+	}
+
+	t.Run("success restores the earliest endpoint", func(t *testing.T) {
+		current := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+		r := newResolver(t, current)
+		var hosts []string
+		r.client = &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			hosts = append(hosts, req.URL.Hostname())
+			return dohAnswer(t, req), nil
+		})}
+
+		resp, err := r.Resolve(context.Background(), question("probe.example.com."))
+		if err != nil {
+			t.Fatalf("probe resolve: %v", err)
+		}
+		if resp.Rcode != mdns.RcodeSuccess || len(resp.Answer) != 1 {
+			t.Fatalf("probe response = %+v", resp)
+		}
+		if got := strings.Join(hosts, ","); got != "1.1.1.1" {
+			t.Fatalf("probe used %s, want only 1.1.1.1", got)
+		}
+		if _, ok := r.suppressedUntil("1.1.1.1"); ok {
+			t.Fatal("successful probe did not clear the endpoint's suppression")
+		}
+		if until, ok := r.suppressedUntil("9.9.9.9"); !ok || !until.Equal(current.Add(20*time.Minute)) {
+			t.Fatalf("other endpoint suppression = %v (present=%v), want %v", until, ok, current.Add(20*time.Minute))
+		}
+	})
+
+	t.Run("failure refreshes suppression without trying others", func(t *testing.T) {
+		current := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+		r := newResolver(t, current)
+		var hosts []string
+		r.client = &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			hosts = append(hosts, req.URL.Hostname())
+			return nil, errors.New("connection refused")
+		})}
+
+		if _, err := r.Resolve(context.Background(), question("probe.example.com.")); err == nil {
+			t.Fatal("expected the probe to fail")
+		}
+		if got := strings.Join(hosts, ","); got != "1.1.1.1" {
+			t.Fatalf("failed probe used %s, want only 1.1.1.1", got)
+		}
+		if until, ok := r.suppressedUntil("1.1.1.1"); !ok || !until.Equal(current.Add(suppressDuration)) {
+			t.Fatalf("probe suppression = %v (present=%v), want a refreshed %v", until, ok, current.Add(suppressDuration))
+		}
+		if until, ok := r.suppressedUntil("9.9.9.9"); !ok || !until.Equal(current.Add(20*time.Minute)) {
+			t.Fatalf("other endpoint suppression = %v (present=%v), want %v", until, ok, current.Add(20*time.Minute))
+		}
+	})
 }
 
 func TestResolverReturnsErrorResponses(t *testing.T) {
