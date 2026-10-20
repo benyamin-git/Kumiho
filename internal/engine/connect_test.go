@@ -444,6 +444,29 @@ func TestConnectQuotaFatal(t *testing.T) {
 	}
 }
 
+func TestAcquirePassChallengeMessage(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+
+	challengeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	t.Cleanup(challengeSrv.Close)
+	ctrl.guardian.BaseURL = challengeSrv.URL
+
+	_, err := ctrl.acquirePass(ctx)
+	const want = "could not solve the anti-bot challenge; retry or disable solve_challenges"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("acquirePass err = %v, want %q", err, want)
+	}
+}
+
 func TestConnectRefreshesOnGuardianRejection(t *testing.T) {
 	ctrl, _ := newTestController(t, loginOKHandler(t))
 	ctx := context.Background()

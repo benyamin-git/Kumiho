@@ -595,7 +595,7 @@ func (c *Controller) acquirePass(ctx context.Context) (*guardian.Pass, error) {
 		}
 		return pass, nil
 	case guardian.IsChallenge(err):
-		return nil, errors.New("Mozilla's edge sent an anti-bot challenge to Guardian; the solver is not implemented yet (PLAN.md §2.2)")
+		return nil, errors.New("could not solve the anti-bot challenge; retry or disable solve_challenges")
 	default:
 		return nil, err
 	}

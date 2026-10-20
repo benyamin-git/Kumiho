@@ -77,9 +77,10 @@ type Client struct {
 	HTTP    *http.Client
 	// UserAgent overrides the package default when set (platform provider).
 	UserAgent string
-	// OnChallenge, when set, is invoked once to solve a Fastly anti-bot
-	// challenge before the request is retried (PLAN.md §2.2).
-	OnChallenge func(ctx context.Context) error
+	// OnChallenge, when set, is invoked with the challenged URL to solve a
+	// Fastly anti-bot challenge before the request is retried (PLAN.md §2.2).
+	// It is called at most four times per request.
+	OnChallenge func(ctx context.Context, challengedURL string) error
 }
 
 // NewClient returns a Client with production defaults.
@@ -198,7 +199,9 @@ func rawInt64(raw json.RawMessage) *int64 {
 	return nil
 }
 
-// do sends an authorized request, retrying once through OnChallenge on 406.
+// do sends an authorized request, retrying through OnChallenge on 406: five
+// total request attempts with at most four solver calls, matching the FxA
+// client's challenge loop.
 func (c *Client) do(ctx context.Context, method, path, accessToken string) (http.Header, []byte, error) {
 	endpoint := strings.TrimRight(c.baseURL(), "/") + path
 
@@ -222,7 +225,8 @@ func (c *Client) do(ctx context.Context, method, path, accessToken string) (http
 		return req, nil
 	}
 
-	for attempt := 0; ; attempt++ {
+	challengeTries := 0
+	for {
 		req, err := build()
 		if err != nil {
 			return nil, nil, err
@@ -238,11 +242,13 @@ func (c *Client) do(ctx context.Context, method, path, accessToken string) (http
 		}
 
 		if resp.StatusCode == http.StatusNotAcceptable {
-			if c.OnChallenge == nil || attempt > 0 {
-				return nil, nil, &HTTPError{Status: resp.StatusCode, Message: "anti-bot challenge (Fastly)"}
+			challengeTries++
+			challengeErr := &HTTPError{Status: resp.StatusCode, Message: "anti-bot challenge (Fastly)"}
+			if c.OnChallenge == nil || challengeTries >= 5 {
+				return nil, nil, challengeErr
 			}
-			if err := c.OnChallenge(ctx); err != nil {
-				return nil, nil, fmt.Errorf("anti-bot challenge: %w", err)
+			if err := c.OnChallenge(ctx, req.URL.String()); err != nil {
+				return nil, nil, errors.Join(challengeErr, err)
 			}
 			continue
 		}

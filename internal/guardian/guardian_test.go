@@ -201,6 +201,7 @@ func TestErrorClassification(t *testing.T) {
 func TestChallengeSolverRetriesOnce(t *testing.T) {
 	solves := 0
 	calls := 0
+	var challengedURL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if calls == 1 {
@@ -213,8 +214,9 @@ func TestChallengeSolverRetriesOnce(t *testing.T) {
 
 	c := NewClient()
 	c.BaseURL = srv.URL
-	c.OnChallenge = func(context.Context) error {
+	c.OnChallenge = func(_ context.Context, url string) error {
 		solves++
+		challengedURL = url
 		return nil
 	}
 	if _, err := c.FetchPass(context.Background(), "t"); err != nil {
@@ -222,6 +224,78 @@ func TestChallengeSolverRetriesOnce(t *testing.T) {
 	}
 	if solves != 1 || calls != 2 {
 		t.Fatalf("solves = %d, calls = %d", solves, calls)
+	}
+	if want := srv.URL + "/api/v1/fpn/token"; challengedURL != want {
+		t.Fatalf("challenged URL = %q, want %q", challengedURL, want)
+	}
+}
+
+func TestChallengeSolverGivesUpAfterFiveAttempts(t *testing.T) {
+	solves := 0
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL
+	c.OnChallenge = func(context.Context, string) error {
+		solves++
+		return nil
+	}
+	_, err := c.FetchPass(context.Background(), "t")
+	if !IsChallenge(err) {
+		t.Fatalf("err = %v, want a challenge error", err)
+	}
+	if calls != 5 || solves != 4 {
+		t.Fatalf("calls = %d, solves = %d; want 5 and 4", calls, solves)
+	}
+}
+
+func TestChallengeWithoutSolverIsTerminal(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL
+	_, err := c.FetchPass(context.Background(), "t")
+	if !IsChallenge(err) {
+		t.Fatalf("err = %v, want a challenge error", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1", calls)
+	}
+}
+
+func TestChallengeSolverFailureKeepsChallenge(t *testing.T) {
+	solverErr := errors.New("solver exploded")
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL
+	c.OnChallenge = func(context.Context, string) error {
+		return solverErr
+	}
+	_, err := c.FetchPass(context.Background(), "t")
+	if !IsChallenge(err) {
+		t.Fatalf("err = %v, want a challenge error", err)
+	}
+	if !errors.Is(err, solverErr) {
+		t.Fatalf("err = %v, want errors.Is(err, solverErr)", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1", calls)
 	}
 }
 
