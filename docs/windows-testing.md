@@ -300,11 +300,13 @@ and
 
       Resolve-DnsName example.com
 
-  Expect: resolves; logs show the pinned DoH resolver. Change `DoH provider`
-  to `off`, reconnect, and `Resolve-DnsName example.com` must not resolve
-  (SERVFAIL): with `off` and no custom upstream there are no DoH endpoints,
-  and the in-tunnel resolver never falls back to plaintext DNS. Set it back to
-  `automatic` when done.
+  Expect: resolves; logs show the pinned DoH resolver. Then set `DoH provider`
+  to `off` and also clear `DNS upstream` (enter on the row; empty resets):
+  with `off` and no custom upstream there are no DoH endpoints, while a pinned
+  upstream is still used as DoH even with `off`. `esc`, disconnect and
+  reconnect, then `Resolve-DnsName example.com` must not resolve (SERVFAIL):
+  the in-tunnel resolver never falls back to plaintext DNS. Leave `DNS
+  upstream` empty, and set `DoH provider` back to `automatic` when done.
 
 ## 10. Kill switch on/off (criterion 5)
 
