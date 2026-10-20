@@ -45,6 +45,11 @@ type Options struct {
 	Dialer  *net.Dialer    // optional dialer (M4 installs the SO_MARK hook here)
 	RootCAs *x509.CertPool // tests
 
+	// WrapConn optionally wraps the raw connection after dialing (and after
+	// any future proxy hop) and before the TLS handshake. It installs TLS
+	// ClientHello fragmentation; nil leaves the connection untouched.
+	WrapConn func(net.Conn) net.Conn
+
 	KeepaliveCheck    time.Duration // default 3s
 	KeepaliveIdle     time.Duration // default 15s
 	KeepaliveTimeout  time.Duration // default 10s
@@ -130,7 +135,18 @@ func Dial(ctx context.Context, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("upstream: dial %s: %w", addr, err)
 	}
 
-	tlsConn := tls.Client(rawConn, &tls.Config{
+	// TCP_NODELAY keeps fragmented ClientHello writes from being coalesced
+	// by Nagle. Go's TCP connections already default to no-delay, so this is
+	// a best-effort belt-and-braces guard and must never fail the dial.
+	if tc, ok := rawConn.(interface{ SetNoDelay(bool) error }); ok {
+		_ = tc.SetNoDelay(true)
+	}
+	conn := rawConn
+	if opts.WrapConn != nil {
+		conn = opts.WrapConn(conn)
+	}
+
+	tlsConn := tls.Client(conn, &tls.Config{
 		ServerName: opts.Host,
 		NextProtos: []string{"h2"},
 		MinVersion: tls.VersionTLS12,
@@ -139,7 +155,7 @@ func Dial(ctx context.Context, opts Options) (*Session, error) {
 	hsCtx, cancel := context.WithTimeout(ctx, opts.ConnectTimeout)
 	defer cancel()
 	if err := tlsConn.HandshakeContext(hsCtx); err != nil {
-		_ = rawConn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("upstream: TLS handshake with %s: %w", addr, err)
 	}
 	if proto := tlsConn.ConnectionState().NegotiatedProtocol; proto != "h2" {

@@ -21,6 +21,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/socks"
+	"github.com/benyamin-git/kumiho/internal/tlsplit"
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
@@ -201,6 +202,19 @@ func (c *Controller) openStream(ctx context.Context, host string, port int) (net
 		return nil, errors.New("kumiho: not connected")
 	}
 	return sess.OpenStream(ctx, host, port)
+}
+
+// tlsSplitMode reads the effective TLS fragmentation mode. Config validation
+// rejects unknown values, so the error path only guards against a config that
+// bypassed it; a bad value disables fragmentation instead of failing dials.
+func (c *Controller) tlsSplitMode() tlsplit.Mode {
+	cfg := c.store.EffectiveConfig()
+	mode, err := tlsplit.ParseMode(cfg.TLSSplit)
+	if err != nil {
+		c.log.Logf(logging.Warn, "tlsplit", "invalid tls_split, disabling fragmentation: %v", err)
+		return tlsplit.Off
+	}
+	return mode
 }
 
 // noteAuthRejected recycles the session after the edge refused the proxy

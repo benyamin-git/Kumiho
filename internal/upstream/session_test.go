@@ -5,11 +5,48 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"golang.org/x/net/http2"
 )
+
+// writeRecorder captures the raw writes a wrapper saw before the TLS stack
+// handed them to the socket.
+type writeRecorder struct {
+	mu     sync.Mutex
+	writes [][]byte
+}
+
+func (r *writeRecorder) record(p []byte) {
+	r.mu.Lock()
+	r.writes = append(r.writes, append([]byte(nil), p...))
+	r.mu.Unlock()
+}
+
+func (r *writeRecorder) first() []byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.writes) == 0 {
+		return nil
+	}
+	return append([]byte(nil), r.writes[0]...)
+}
+
+// recordingConn records every write before delegating to the wrapped conn.
+type recordingConn struct {
+	net.Conn
+	rec *writeRecorder
+}
+
+func (c *recordingConn) Write(p []byte) (int, error) {
+	c.rec.record(p)
+	return c.Conn.Write(p)
+}
 
 func dialTestSession(t *testing.T, srv *testServer, tweak func(*Options)) *Session {
 	t.Helper()
@@ -46,6 +83,129 @@ func waitMaxConcurrent(t *testing.T, s *Session, want int) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("maxConcurrent never became %d", want)
+}
+
+func TestWrapConnAppliedOnceBeforeHandshake(t *testing.T) {
+	srv := startTestServer(t, serverHooks{echo: true})
+	defer srv.stop()
+
+	rec := &writeRecorder{}
+	var wraps atomic.Int32
+	sess := dialTestSession(t, srv, func(o *Options) {
+		o.WrapConn = func(conn net.Conn) net.Conn {
+			wraps.Add(1)
+			return &recordingConn{Conn: conn, rec: rec}
+		}
+	})
+	if got := wraps.Load(); got != 1 {
+		t.Fatalf("WrapConn called %d times, want 1", got)
+	}
+
+	// The wrapper saw the ClientHello, so it was installed before the
+	// handshake rather than only for stream traffic.
+	first := rec.first()
+	if len(first) < 2 || first[0] != 0x16 || first[1] != 0x03 {
+		t.Fatalf("first write = %x, want a TLS handshake record (0x16 0x03)", first)
+	}
+
+	// The session still works end to end through the wrapper.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := sess.OpenStream(ctx, "www.example.com", 443)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 5)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		t.Fatal(err)
+	}
+	if string(buf) != "hello" {
+		t.Fatalf("echo = %q", buf)
+	}
+}
+
+func TestWrapConnSameConnIsHarmless(t *testing.T) {
+	srv := startTestServer(t, serverHooks{echo: true})
+	defer srv.stop()
+
+	sess := dialTestSession(t, srv, func(o *Options) {
+		o.WrapConn = func(conn net.Conn) net.Conn { return conn }
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := sess.OpenStream(ctx, "www.example.com", 443)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("still-works")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, len("still-works"))
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		t.Fatal(err)
+	}
+	if string(buf) != "still-works" {
+		t.Fatalf("echo = %q", buf)
+	}
+}
+
+// closeRecordingConn counts Close calls on the wrapper the dialer installed.
+type closeRecordingConn struct {
+	net.Conn
+	closed atomic.Int32
+}
+
+func (c *closeRecordingConn) Close() error {
+	c.closed.Add(1)
+	return c.Conn.Close()
+}
+
+func TestHandshakeFailureClosesWrappedConn(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		conn, err := ln.Accept()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}()
+	_, portStr, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wrapped := &closeRecordingConn{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = Dial(ctx, Options{
+		Host:           testEdgeHost,
+		PinnedIP:       "127.0.0.1",
+		Port:           port,
+		ConnectTimeout: time.Second,
+		WrapConn: func(conn net.Conn) net.Conn {
+			wrapped.Conn = conn
+			return wrapped
+		},
+	})
+	if err == nil {
+		t.Fatal("Dial succeeded against a peer that closed during the handshake")
+	}
+	if got := wrapped.closed.Load(); got != 1 {
+		t.Fatalf("wrapped conn closed %d times, want 1", got)
+	}
 }
 
 func TestConnectEchoAndHalfClose(t *testing.T) {

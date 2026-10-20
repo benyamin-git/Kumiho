@@ -1,15 +1,20 @@
 package engine
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +24,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/platform"
+	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
@@ -558,5 +564,181 @@ func TestAccountLookup(t *testing.T) {
 	info = ctrl2.Account(ctx)
 	if info.Error != "not signed in" {
 		t.Fatalf("unauth account info = %+v", info)
+	}
+}
+
+// recordingConn captures writes in memory; the splitter only calls Write, so
+// the embedded conn can stay nil.
+type recordingConn struct {
+	net.Conn
+	mu     sync.Mutex
+	writes [][]byte
+}
+
+func (c *recordingConn) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	c.writes = append(c.writes, append([]byte(nil), p...))
+	c.mu.Unlock()
+	return len(p), nil
+}
+
+func (c *recordingConn) recordedWrites() [][]byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([][]byte, len(c.writes))
+	for i := range c.writes {
+		out[i] = append([]byte(nil), c.writes[i]...)
+	}
+	return out
+}
+
+// syntheticClientHello builds a minimal, well-formed TLS ClientHello record
+// carrying one server_name extension, enough for tlsplit's split points.
+func syntheticClientHello(host string) []byte {
+	name := []byte(host)
+	serverName := []byte{
+		byte((3 + len(name)) >> 8), byte(3 + len(name)),
+		0x00, // host_name
+		byte(len(name) >> 8), byte(len(name)),
+	}
+	serverName = append(serverName, name...)
+	extensions := []byte{
+		0x00, 0x00, // server_name
+		byte(len(serverName) >> 8), byte(len(serverName)),
+	}
+	extensions = append(extensions, serverName...)
+
+	body := []byte{0x03, 0x03} // client_version
+	body = append(body, make([]byte, 32)...)
+	body = append(body, 0x00)                   // session id length
+	body = append(body, 0x00, 0x02, 0x13, 0x01) // cipher suites
+	body = append(body, 0x01, 0x00)             // compression methods
+	body = append(body, byte(len(extensions)>>8), byte(len(extensions)))
+	body = append(body, extensions...)
+
+	hello := []byte{0x01, byte(len(body) >> 16), byte(len(body) >> 8), byte(len(body))}
+	hello = append(hello, body...)
+	record := []byte{0x16, 0x03, 0x01, byte(len(hello) >> 8), byte(len(hello))}
+	return append(record, hello...)
+}
+
+func TestUpstreamOptionsCarriesTLSSplitMode(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	// Avoid any DNS lookup while building the options.
+	if err := ctrl.store.SetOverride("edge_address", "203.0.113.7"); err != nil {
+		t.Fatal(err)
+	}
+	cand := serverlist.Candidate{Host: "edge.example.net", Port: 443}
+	hello := syntheticClientHello("sni.example")
+	sniStart := bytes.Index(hello, []byte("sni.example"))
+	if sniStart < 0 {
+		t.Fatal("synthetic ClientHello does not contain the SNI hostname")
+	}
+
+	t.Run("off", func(t *testing.T) {
+		if err := ctrl.store.SetOverride("tls_split", "off"); err != nil {
+			t.Fatal(err)
+		}
+		opts := ctrl.upstreamOptions(context.Background(), cand, nil)
+		if opts.WrapConn == nil {
+			t.Fatal("WrapConn is nil")
+		}
+		rec := &recordingConn{}
+		if wrapped := opts.WrapConn(rec); wrapped != rec {
+			t.Fatalf("off wrapped the connection: %T", wrapped)
+		}
+	})
+
+	t.Run("first-byte", func(t *testing.T) {
+		if err := ctrl.store.SetOverride("tls_split", "first-byte"); err != nil {
+			t.Fatal(err)
+		}
+		opts := ctrl.upstreamOptions(context.Background(), cand, nil)
+		rec := &recordingConn{}
+		wrapped := opts.WrapConn(rec)
+		n, err := wrapped.Write(hello)
+		if err != nil || n != len(hello) {
+			t.Fatalf("write = %d, %v; want %d, nil", n, err, len(hello))
+		}
+		writes := rec.recordedWrites()
+		if len(writes) != 2 {
+			t.Fatalf("underlying writes = %d, want 2", len(writes))
+		}
+		if !bytes.Equal(writes[0], hello[:1]) {
+			t.Fatalf("first write = %x, want %x", writes[0], hello[:1])
+		}
+		if !bytes.Equal(bytes.Join(writes, nil), hello) {
+			t.Fatal("split writes do not reassemble to the ClientHello")
+		}
+	})
+
+	t.Run("sni", func(t *testing.T) {
+		if err := ctrl.store.SetOverride("tls_split", "sni"); err != nil {
+			t.Fatal(err)
+		}
+		opts := ctrl.upstreamOptions(context.Background(), cand, nil)
+		rec := &recordingConn{}
+		wrapped := opts.WrapConn(rec)
+		n, err := wrapped.Write(hello)
+		if err != nil || n != len(hello) {
+			t.Fatalf("write = %d, %v; want %d, nil", n, err, len(hello))
+		}
+		writes := rec.recordedWrites()
+		if len(writes) != 3 {
+			t.Fatalf("underlying writes = %d, want 3", len(writes))
+		}
+		if !bytes.Equal(writes[0], hello[:sniStart]) {
+			t.Fatalf("first write = %x, want %x", writes[0], hello[:sniStart])
+		}
+		if !bytes.Equal(writes[1], hello[sniStart:sniStart+1]) {
+			t.Fatalf("second write = %x, want %x", writes[1], hello[sniStart:sniStart+1])
+		}
+		if !bytes.Equal(writes[2], hello[sniStart+1:]) {
+			t.Fatalf("third write = %x, want %x", writes[2], hello[sniStart+1:])
+		}
+		if !bytes.Equal(bytes.Join(writes, nil), hello) {
+			t.Fatal("split writes do not reassemble to the ClientHello")
+		}
+	})
+}
+
+func TestUseBypassDialerTLSSplitControlPlane(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "control-plane-ok")
+	}))
+	defer srv.Close()
+
+	for _, mode := range []string{"first-byte", "off"} {
+		t.Run(mode, func(t *testing.T) {
+			ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+			ctrl.UseBypassDialer()
+			// DialContext reads the mode per dial, so setting it after the
+			// clients were built must still affect the next request.
+			if err := ctrl.store.SetOverride("tls_split", mode); err != nil {
+				t.Fatal(err)
+			}
+			tr, ok := ctrl.httpClient.Transport.(*http.Transport)
+			if !ok {
+				t.Fatalf("transport = %T", ctrl.httpClient.Transport)
+			}
+			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // test server certificate
+			defer tr.CloseIdleConnections()
+
+			resp, err := ctrl.httpClient.Get(srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			if string(body) != "control-plane-ok" {
+				t.Fatalf("body = %q", body)
+			}
+		})
 	}
 }

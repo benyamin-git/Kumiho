@@ -22,6 +22,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/socks"
+	"github.com/benyamin-git/kumiho/internal/tlsplit"
 	"github.com/benyamin-git/kumiho/internal/tun"
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
@@ -395,7 +396,20 @@ func (c *Controller) UseBypassDialer() {
 		return &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext:       dial.DialContext,
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					conn, err := dial.DialContext(ctx, network, addr)
+					if err != nil {
+						return nil, err
+					}
+					// Best-effort no-delay so split ClientHello writes are
+					// not coalesced; never fail the dial for it.
+					if tc, ok := conn.(interface{ SetNoDelay(bool) error }); ok {
+						_ = tc.SetNoDelay(true)
+					}
+					// Read the mode per dial so a changed override applies to
+					// the next control-plane request without a restart.
+					return tlsplit.Wrap(conn, c.tlsSplitMode()), nil
+				},
 				ForceAttemptHTTP2: true,
 			},
 		}
@@ -634,6 +648,7 @@ func (c *Controller) currentTokens() *fxa.Tokens {
 
 func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candidate, pass *guardian.Pass) upstream.Options {
 	cfg := c.store.EffectiveConfig()
+	mode := c.tlsSplitMode()
 	pinned := cfg.EdgeAddress
 	if pinned == "" {
 		// Resolve edge names outside the tunnel: the system resolver points
@@ -646,6 +661,9 @@ func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candid
 		Port:     cand.Port,
 		PinnedIP: pinned,
 		Dialer:   c.upstreamDialer,
+		WrapConn: func(conn net.Conn) net.Conn {
+			return tlsplit.Wrap(conn, mode)
+		},
 		Pass: func() string {
 			c.mu.Lock()
 			defer c.mu.Unlock()
