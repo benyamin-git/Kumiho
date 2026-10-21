@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-10-21
+
+Test-only patch: the Windows test job now matches the platform's file-mode
+behavior. The shipped runtime is unchanged from v0.4.0.
+
+### Fixed
+
+- The server-list cache tests no longer assert Unix `0600` permission bits on
+  Windows, where `os.Stat` reports `0666`; payload and atomic-overwrite checks
+  still run on every platform.
+
 ## [0.4.0] - 2026-10-20
 
 Backend parity with the FoxyVPN releases after the one we ported: strict DoH
@@ -209,7 +220,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
 [0.4.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.0
 [0.3.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.3.0
 [0.2.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.2.0

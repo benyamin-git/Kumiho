@@ -1,6 +1,6 @@
 # Kumiho
 
-**Status:** v0.4.0 — working Linux and Windows 11 clients: daemon + TUI/CLI/GUI
+**Status:** v0.4.1 — working Linux and Windows 11 clients: daemon + TUI/CLI/GUI
 over a Unix socket (Linux) or named pipe (Windows), Firefox Accounts login
 (2FA aware), server list with ping and an on-disk cache, HTTP/2 CONNECT tunnel
 through Mozilla's Fastly edge, full-tunnel routing with a kill switch, watchdog
@@ -9,7 +9,8 @@ systemd (`install.sh`) or Windows service (`install.ps1`) install. v0.4.0 adds
 backend parity with later FoxyVPN releases: strict DoH failover, anti-bot
 challenge solving, TLS ClientHello fragmentation, an upstream proxy, a local
 HTTP proxy, DNS over SOCKS5 UDP ASSOCIATE, a server-list cache and a slow
-keepalive profile.
+keepalive profile. v0.4.1 fixes the Windows test-job assumptions for the
+server-list cache; the runtime is unchanged from v0.4.0.
 
 Kumiho is an unofficial Linux and Windows CLI/TUI client for the free
 Firefox-account VPN proxy — the same entitlement FoxyVPN for Android uses. It

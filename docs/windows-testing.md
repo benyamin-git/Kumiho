@@ -994,6 +994,8 @@ v0.3.0 GUI acceptance sign-off (fill before the `v0.3.0` tag):
 
 This is the v0.4.0 delta (design spec criteria 1–11 and 13, at
 [docs/superpowers/specs/2026-10-20-v0.4.0-backend-parity-design.md](superpowers/specs/2026-10-20-v0.4.0-backend-parity-design.md)).
+Run this pass with the v0.4.1 kit; it carries the same runtime as v0.4.0 plus
+the Windows test fix.
 It runs top to bottom in an elevated Windows PowerShell 5.1 session. The
 OpenSSH client in 18.5 is the only suggested external tool; that step is N/A
 when you have no proxy, and Wireshark in 18.4 is optional. `<physical>` is the
@@ -1006,21 +1008,21 @@ defer the uninstalls in 15 and 16.10 to 18.10. A clean install also works, but
 the upgrade-specific lines below are then N/A — record that.
 
 - [ ] Quit the GUI (tray → **Quit**): a running `kumiho-gui.exe` blocks its
-      own replacement. Download `kumiho-v0.4.0-windows-amd64.zip` and
+      own replacement. Download `kumiho-v0.4.1-windows-amd64.zip` and
       `SHA256SUMS`, verify, and extract with Explorer (right-click → Extract
       All, so the Mark of the Web is preserved):
 
-      (Get-FileHash .\kumiho-v0.4.0-windows-amd64.zip -Algorithm SHA256).Hash
+      (Get-FileHash .\kumiho-v0.4.1-windows-amd64.zip -Algorithm SHA256).Hash
       Get-Content .\SHA256SUMS | Select-String windows-amd64
-      Get-ChildItem .\kumiho-v0.4.0-windows-amd64
+      Get-ChildItem .\kumiho-v0.4.1-windows-amd64
 
   Expect: the two hashes match (case-insensitive), and the folder holds the
-  v0.4.0 kit: `kumiho.exe`, `kumiho-gui.exe`, `wintun.dll`, `install.ps1`,
+  v0.4.1 kit: `kumiho.exe`, `kumiho-gui.exe`, `wintun.dll`, `install.ps1`,
   `install.cmd`, `LICENSE`, `NOTICE` and `third_party` (with
   `third_party\wintun\LICENSE.txt` and
   `third_party\webview2-loader\LICENSE.txt`).
 
-- [ ] Note the state, then run the installer from the extracted v0.4.0
+- [ ] Note the state, then run the installer from the extracted v0.4.1
       folder (it is idempotent and upgrades over v0.3.0):
 
       Test-Path "$env:ProgramData\kumiho\tokens.json"
@@ -1050,7 +1052,7 @@ the upgrade-specific lines below are then N/A — record that.
       $pattern = 'tls_split|http_proxy|solve_challenges|keepalive_profile'
       Select-String -Path $cfg -Pattern $pattern
 
-  Expect: `Running`, `Automatic`; `kumiho v0.4.0 ...`; a `0 fail` doctor
+  Expect: `Running`, `Automatic`; `kumiho v0.4.1 ...`; a `0 fail` doctor
   summary; `True` if you were signed in before the upgrade (state is kept).
   If `kumiho` is not found, open a new elevated shell first (the machine PATH
   applies to new shells). The `Select-String` finds nothing unless you added
@@ -1505,7 +1507,7 @@ Plain `kumiho disconnect` is not sign-out: it may keep the last session's
 
 - [ ] Quit the GUI (tray → **Quit**), then run the section 15 uninstall
       path (section 16.10 when the GUI is installed) from the extracted
-      v0.4.0 kit, keeping state, then repeat the listener check and the
+      v0.4.1 kit, keeping state, then repeat the listener check and the
       residue checks by reference:
 
       .\install.ps1 -Uninstall
@@ -1541,8 +1543,7 @@ Plain `kumiho disconnect` is not sign-out: it may keep the last session's
 Criteria 12 (gate green) and 14 (release framing) are release hygiene, not
 Windows steps.
 
-v0.4.0 backend parity acceptance sign-off (complete with the v0.4.1 bug-fix
-pass):
+v0.4.0 backend parity acceptance sign-off (manual pass still pending):
 
 - Date:
 - Machine / Windows build:
@@ -1550,5 +1551,5 @@ pass):
 - Result: PASS / FAIL
 - Notes:
 
-v0.4.0 was tagged before this Windows pass; the results here are completed
-with the v0.4.1 fixes.
+v0.4.0 was tagged before this Windows pass; it remains pending. v0.4.1 is a
+test-only CI fix and does not replace this manual acceptance.
