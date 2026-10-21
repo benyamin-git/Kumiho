@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the Android toolchain for kumiho: JDK 17, SDK 36, NDK 28.2,
+# Install the Android toolchain for kumiho: JDK 17, SDK 36 + 37.2, NDK 28.2,
 # gomobile and the Gradle 9.6.0 bootstrap used by T2 to generate the wrapper.
 #
 #   bash scripts/android-setup.sh           install anything missing
@@ -17,6 +17,11 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/android-env.sh"
 
 SDK_PLATFORM="android-36"
+# The app compiles against API 37.2 because the approved Compose BOM 2026.09.00,
+# Core, Lifecycle and Navigation pins require minCompileSdk 37 (controller
+# ruling R9); targetSdk stays 36. android-36 stays installed for the emulator
+# system image and the T1 contract.
+COMPILE_SDK_PLATFORM="android-37.2"
 BUILD_TOOLS="36.0.0"
 NDK_VER="28.2.13676358"
 GOMOBILE_REF="golang.org/x/mobile/cmd/gomobile@v0.0.0-20261011034528-197770444867"
@@ -186,7 +191,7 @@ pkg_installed() {
 ensure_sdk_packages() {
 	local missing=()
 	local pkg
-	for pkg in platform-tools "platforms;$SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
+	for pkg in platform-tools "platforms;$SDK_PLATFORM" "platforms;$COMPILE_SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
 		if pkg_installed "$pkg"; then
 			ok "installed: $pkg"
 		else
@@ -276,7 +281,7 @@ check_mode() {
 	if [ "$sdkmgr_found" = 1 ]; then
 		report 0 "sdkmanager: $v"
 		local pkg
-		for pkg in platform-tools "platforms;$SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
+		for pkg in platform-tools "platforms;$SDK_PLATFORM" "platforms;$COMPILE_SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
 			if pkg_installed "$pkg"; then
 				report 0 "sdk package: $pkg"
 			else
