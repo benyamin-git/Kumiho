@@ -206,4 +206,48 @@
     <string name="dashboard_lockdown_text">Android blocks all traffic while Kumiho is disconnected. Until you connect again, apps on this phone have no network access.</string>
     <string name="dashboard_lockdown_confirm">Disconnect</string>
     <string name="dashboard_lockdown_cancel">Keep connected</string>
+
+    <!-- Locations (T12). -->
+    <string name="locations_loading">Loading locations…</string>
+    <string name="locations_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="locations_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="locations_search_label">Search locations</string>
+    <string name="locations_search_clear">Clear search</string>
+    <string name="locations_refresh">Refresh locations</string>
+    <string name="locations_refresh_action">Refresh</string>
+    <string name="locations_test_speed">Test speed</string>
+    <string name="locations_testing">Testing…</string>
+    <string name="locations_test_helper_none">No servers are shown</string>
+    <plurals name="locations_test_helper">
+        <item quantity="one">Tests the %1$d server shown</item>
+        <item quantity="other">Tests the %1$d servers shown</item>
+    </plurals>
+    <string name="locations_selected">Selected</string>
+    <string name="locations_summary_label">Current selection</string>
+    <string name="locations_selection_none">No server selected yet — the dashboard uses Recommended</string>
+    <string name="locations_selection_separator" translatable="false">" · "</string>
+    <string name="locations_recommended">Recommended</string>
+    <string name="locations_connected_hint">This location is saved for your next connection. Disconnect on Home, then connect again; the current session keeps its server and exit IP.</string>
+    <string name="locations_quarantined">Quarantined</string>
+    <string name="locations_expand">Expand</string>
+    <string name="locations_collapse">Collapse</string>
+    <string name="locations_server_protocols">%1$s · port %2$d</string>
+    <string name="locations_server_port">port %1$d</string>
+    <plurals name="locations_city_servers">
+        <item quantity="one">%1$d server</item>
+        <item quantity="other">%1$d servers</item>
+    </plurals>
+    <string name="locations_latency">%1$d ms</string>
+    <string name="locations_latency_timeout">timeout</string>
+    <string name="locations_latency_none" translatable="false">—</string>
+    <string name="locations_retry">Retry</string>
+    <string name="locations_dismiss">Dismiss</string>
+    <string name="locations_empty_title">No locations</string>
+    <string name="locations_empty_message">The engine returned no locations. Refresh to try again.</string>
+    <string name="locations_no_match_title">No matches</string>
+    <string name="locations_no_match_message">No country, city or server matches “%1$s”.</string>
+    <string name="locations_load_failed_title">Locations did not load</string>
+    <string name="locations_message_refresh_failed">The refresh failed. The list below is the last one that loaded.</string>
+    <string name="locations_message_select_failed">The location could not be saved.</string>
+    <string name="locations_message_test_failed">The speed test could not start.</string>
 </resources>

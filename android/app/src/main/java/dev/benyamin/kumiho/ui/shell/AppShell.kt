@@ -46,6 +46,7 @@ fun AppShell(
     nav: ShellNavigation,
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
+    locations: @Composable () -> Unit = { LocationsPlaceholder() },
 ) {
     val state by nav.state.collectAsStateWithLifecycle()
     AppShell(
@@ -55,13 +56,15 @@ fun AppShell(
         onBack = nav::back,
         modifier = modifier,
         home = home,
+        locations = locations,
     )
 }
 
 /**
  * The stateless shell, so the navigation holder can be faked in tests. [home]
- * is the Home destination's content; it defaults to the T7 placeholder so the
- * shell tests keep compiling, and the app passes the dashboard.
+ * and [locations] are the Home and Locations destinations' content; both
+ * default to the T7 placeholders so the shell tests keep compiling, and the app
+ * passes the dashboard and the real locations screen.
  */
 @Composable
 fun AppShell(
@@ -71,6 +74,7 @@ fun AppShell(
     onBack: () -> Boolean,
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
+    locations: @Composable () -> Unit = { LocationsPlaceholder() },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
@@ -143,7 +147,7 @@ fun AppShell(
                             .widthIn(max = Dimens.ContentMaxWidth)
                             .fillMaxSize(),
                     ) {
-                        ScreenHost(state, home)
+                        ScreenHost(state, home, locations)
                     }
                 }
             }
@@ -200,7 +204,11 @@ private fun NavRail(
 }
 
 @Composable
-private fun ScreenHost(state: ShellNavState, home: @Composable () -> Unit) {
+private fun ScreenHost(
+    state: ShellNavState,
+    home: @Composable () -> Unit,
+    locations: @Composable () -> Unit,
+) {
     val more = state.moreRoute
     if (more != null) {
         PlaceholderScreen(
@@ -212,11 +220,7 @@ private fun ScreenHost(state: ShellNavState, home: @Composable () -> Unit) {
     }
     when (state.tab) {
         Destination.Home -> home()
-        Destination.Locations -> PlaceholderScreen(
-            title = Destination.Locations.label,
-            message = "Not connected. Location data arrives with the engine client.",
-            icon = destinationIcon(Destination.Locations),
-        )
+        Destination.Locations -> locations()
         Destination.Account -> PlaceholderScreen(
             title = Destination.Account.label,
             message = "Not connected. Account details arrive with the engine client.",
@@ -229,4 +233,14 @@ private fun ScreenHost(state: ShellNavState, home: @Composable () -> Unit) {
         )
         Destination.More -> Unit
     }
+}
+
+/** The pre-T12 Locations placeholder; the app passes the real screen. */
+@Composable
+private fun LocationsPlaceholder() {
+    PlaceholderScreen(
+        title = Destination.Locations.label,
+        message = "Not connected. Location data arrives with the engine client.",
+        icon = destinationIcon(Destination.Locations),
+    )
 }

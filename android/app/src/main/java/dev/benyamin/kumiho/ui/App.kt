@@ -30,6 +30,7 @@ import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.dashboard.DashboardRoute
+import dev.benyamin.kumiho.ui.locations.LocationsRoute
 import dev.benyamin.kumiho.ui.setup.SetupRoute
 import dev.benyamin.kumiho.ui.shell.AppShell
 import dev.benyamin.kumiho.ui.shell.ShellNavigation
@@ -58,7 +59,11 @@ fun KumihoApp(container: AppContainer) {
             when (setupComplete) {
                 null -> SetupGateLoading()
                 false -> SetupRoute(container)
-                true -> AppShell(nav = nav, home = { DashboardRoute(container) })
+                true -> AppShell(
+                    nav = nav,
+                    home = { DashboardRoute(container) },
+                    locations = { LocationsRoute(container) },
+                )
             }
         }
     }
