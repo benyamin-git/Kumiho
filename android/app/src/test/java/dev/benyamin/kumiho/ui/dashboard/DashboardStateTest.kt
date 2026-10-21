@@ -7,6 +7,7 @@ import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.Notice
 import dev.benyamin.kumiho.engine.Quota
+import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.vpn.ConnectRequest
 import dev.benyamin.kumiho.vpn.ServiceState
 import org.junit.Assert.assertEquals
@@ -353,7 +354,26 @@ class DashboardStateTest {
     fun anUnloadedTreeHasNoNames() {
         val state = DashboardState()
         assertNull(state.countryName("us"))
+        assertNull(state.cityNameForServer("edge.example.net:443"))
         assertEquals(emptyList<Country>(), state.countries)
+    }
+
+    @Test
+    fun theServerHostNamesItsCityAndIgnoresThePort() {
+        val state = connected().copy(locations = LocationLoad.Ready(COUNTRIES))
+
+        assertEquals("New York", state.cityNameForServer("edge.example.net:443"))
+        assertEquals("New York", state.cityNameForServer("EDGE.Example.net:443"))
+        assertEquals("United States", state.countryName(state.status?.location))
+    }
+
+    @Test
+    fun aServerNoCityClaimsHasNoCityName() {
+        val state = connected().copy(locations = LocationLoad.Ready(COUNTRIES))
+
+        assertNull("unknown host", state.cityNameForServer("ams.example.net:443"))
+        assertNull("absent server", state.cityNameForServer(null))
+        assertNull("garbage host", state.cityNameForServer(":"))
     }
 
     // ---- options sheet ---------------------------------------------------
@@ -381,9 +401,8 @@ class DashboardStateTest {
     @Test
     fun connectIsRefusedWhileACommandIsInFlight() {
         val inflight = DashboardState(phase = DashboardPhase.OFF, inFlight = true)
-        assertFalse(inflight.optionsConnectEnabled)
-        assertEquals(SheetHint.WAITING, inflight.sheetHint)
         assertFalse("a busy off state must not submit twice", inflight.optionsConnectEnabled)
+        assertEquals(SheetHint.WAITING, inflight.sheetHint)
     }
 
     @Test
@@ -524,7 +543,18 @@ class DashboardStateTest {
                 code = "us",
                 name = "United States",
                 cities = listOf(
-                    City(code = "nyc", name = "New York", servers = emptyList()),
+                    City(
+                        code = "nyc",
+                        name = "New York",
+                        servers = listOf(
+                            Server(
+                                hostname = "edge.example.net",
+                                port = 443,
+                                quarantined = false,
+                                protocols = emptyList(),
+                            ),
+                        ),
+                    ),
                     City(code = "sfo", name = "San Francisco", servers = emptyList()),
                 ),
             ),

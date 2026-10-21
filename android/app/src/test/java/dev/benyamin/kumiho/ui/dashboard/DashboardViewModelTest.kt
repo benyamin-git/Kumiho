@@ -262,6 +262,10 @@ class DashboardViewModelTest {
                 NoticeText.Local(DashboardMessage.VPN_PERMISSION_DENIED),
                 notice?.text,
             )
+            assertFalse(
+                "the power button never opens the sheet",
+                viewModel.state.value.options.open,
+            )
             assertTrue(gateway.requests.isEmpty())
 
             viewModel.retryNotice()
@@ -463,6 +467,38 @@ class DashboardViewModelTest {
                 gateway.requests,
             )
             assertFalse("a submitted connect closes the sheet", viewModel.state.value.options.open)
+        }
+
+    @Test
+    fun `a denied consent from the sheet closes it so the notice is visible`() =
+        runTest(mainRule.testDispatcher) {
+            permissions.granted = false
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.openOptions()
+            runCurrent()
+            assertTrue(viewModel.state.value.options.open)
+
+            viewModel.connectFromOptions()
+            runCurrent()
+            assertTrue("still waiting for consent", viewModel.state.value.options.open)
+            assertTrue(gateway.requests.isEmpty())
+
+            viewModel.onVpnConsentResult(false)
+            runCurrent()
+
+            assertFalse(
+                "the denial must not hide behind the sheet's scrim",
+                viewModel.state.value.options.open,
+            )
+            val notice = viewModel.state.value.notice
+            assertEquals(
+                NoticeText.Local(DashboardMessage.VPN_PERMISSION_DENIED),
+                notice?.text,
+            )
+            assertEquals(DashboardNoticeAction.GRANT_PERMISSION, notice?.action)
+            assertTrue(gateway.requests.isEmpty())
         }
 
     @Test

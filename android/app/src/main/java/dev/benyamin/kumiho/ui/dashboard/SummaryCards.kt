@@ -91,9 +91,17 @@ private fun LocationCard(
     modifier: Modifier = Modifier,
 ) {
     val status = state.status
+    val country = if (state.locationIsRecommended) {
+        null
+    } else {
+        state.countryName(status?.location) ?: status?.location
+    }
+    val city = state.cityNameForServer(status?.server)
     val name = when {
         state.locationIsRecommended -> stringResource(R.string.dashboard_location_recommended)
-        else -> state.countryName(status?.location) ?: status?.location
+        country != null && city != null ->
+            stringResource(R.string.dashboard_location_country_city, country, city)
+        else -> country ?: DashboardFormat.DASH
     }
     val server = DashboardFormat.hostOf(status?.server)
     KumihoCard(
@@ -104,7 +112,7 @@ private fun LocationCard(
     ) {
         CardTitle(stringResource(R.string.dashboard_location_title))
         Text(
-            text = name ?: DashboardFormat.DASH,
+            text = name,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )

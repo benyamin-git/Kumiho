@@ -14,6 +14,7 @@ import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.Quota
+import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
@@ -68,7 +69,7 @@ class DashboardScreenTest {
         rule.onNodeWithTag(DashboardTags.DETAILS).assertExists()
 
         // The cards show the engine's numbers in the desktop's wording.
-        rule.onNodeWithText("United States").assertExists()
+        rule.onNodeWithText("United States · New York").assertExists()
         rule.onNodeWithText("edge.example.net").assertExists()
         rule.onNodeWithText("Netherlands").assertExists()
         rule.onNodeWithText("203.0.113.7").assertExists()
@@ -355,11 +356,24 @@ class DashboardScreenTest {
         const val GIB = 1024L * 1024L * 1024L
         const val MIB = 1024.0 * 1024.0
 
+        val SERVER = Server(
+            hostname = "edge.example.net",
+            port = 443,
+            quarantined = false,
+            protocols = emptyList(),
+        )
+
         val COUNTRIES = listOf(
             Country(
                 code = "us",
                 name = "United States",
-                cities = listOf(City(code = "nyc", name = "New York", servers = emptyList())),
+                cities = listOf(
+                    City(
+                        code = "nyc",
+                        name = "New York",
+                        servers = listOf(SERVER),
+                    ),
+                ),
             ),
             Country(
                 code = "de",

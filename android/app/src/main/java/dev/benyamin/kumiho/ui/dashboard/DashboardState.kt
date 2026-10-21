@@ -322,6 +322,20 @@ data class DashboardState(
         ?.takeUnless { it.equals(RECOMMENDED_CODE, ignoreCase = true) }
         ?.let { wanted -> countries.firstOrNull { it.code.equals(wanted, ignoreCase = true) }?.name }
 
+    /**
+     * The city whose tree entry lists this server host, or null before the tree
+     * loads, when there is no server, or when no city claims it. The engine
+     * status carries only `host:port`, so the port is dropped first.
+     */
+    fun cityNameForServer(server: String?): String? {
+        val host = DashboardFormat.hostOf(server) ?: return null
+        return countries
+            .asSequence()
+            .flatMap { it.cities.asSequence() }
+            .firstOrNull { city -> city.servers.any { it.hostname.equals(host, ignoreCase = true) } }
+            ?.name
+    }
+
     fun cityName(countryCode: String?, cityCode: String?): String? {
         if (countryCode == null || cityCode == null) return null
         return countries

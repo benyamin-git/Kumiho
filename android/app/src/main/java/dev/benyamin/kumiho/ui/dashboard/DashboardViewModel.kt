@@ -205,7 +205,14 @@ class DashboardViewModel(
             // The consent is real now; do not re-check-and-re-request in a loop.
             issueConnect(mutableState.value.connectRequest())
         } else {
-            showNotice(DashboardNotice.permissionDenied())
+            // A consent asked for from the sheet leaves it open, and the notice
+            // would land behind the scrim; close it so the denial is visible.
+            mutableState.update {
+                it.copy(
+                    options = it.options.copy(open = false),
+                    notice = DashboardNotice.permissionDenied(),
+                )
+            }
         }
     }
 

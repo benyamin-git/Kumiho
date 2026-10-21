@@ -138,6 +138,7 @@
     <!-- Dashboard cards. -->
     <string name="dashboard_location_title">Location</string>
     <string name="dashboard_location_recommended">Recommended</string>
+    <string name="dashboard_location_country_city">%1$s · %2$s</string>
     <string name="dashboard_location_default_hint">Closest server chosen for you</string>
     <string name="dashboard_location_change">Change</string>
     <string name="dashboard_exit_title">Exit IP</string>

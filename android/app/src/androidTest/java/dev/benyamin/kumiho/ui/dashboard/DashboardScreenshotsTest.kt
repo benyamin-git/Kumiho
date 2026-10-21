@@ -20,6 +20,7 @@ import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.Quota
+import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
@@ -177,11 +178,24 @@ class DashboardScreenshotsTest {
         const val GIB = 1024L * 1024L * 1024L
         const val MIB = 1024.0 * 1024.0
 
+        val SERVER = Server(
+            hostname = "edge.example.net",
+            port = 443,
+            quarantined = false,
+            protocols = emptyList(),
+        )
+
         val COUNTRIES = listOf(
             Country(
                 code = "us",
                 name = "United States",
-                cities = listOf(City(code = "nyc", name = "New York", servers = emptyList())),
+                cities = listOf(
+                    City(
+                        code = "nyc",
+                        name = "New York",
+                        servers = listOf(SERVER),
+                    ),
+                ),
             ),
             Country(
                 code = "de",
