@@ -50,6 +50,10 @@ gate green:
   mock daemon; the `/dev` panel drives scenarios, latency and failures.
 - `scripts/watchdog-retest.sh` — live watchdog heal check against a real edge
   (`ss -K`, needs root).
+- `scripts/screenshots/capture.sh` — regenerate the README's GUI and TUI
+  screenshots; builds the web harness with a release version label (default
+  `v0.4.0`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
+  TUI captures. See `scripts/screenshots/README.md`.
 
 ## CI jobs
 
