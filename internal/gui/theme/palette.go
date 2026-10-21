@@ -158,15 +158,14 @@ func values(t Theme, a Accent) map[string]string {
 	return v
 }
 
-// cssBlock renders the :root{...} block for a validated theme and accent:
+// cssBlock renders the :root{...} block for a validated theme and palette:
 // color-scheme first (light for Light, dark for Dark and OLED), then every
 // custom property in cssOrder.
-func cssBlock(t Theme, a Accent) string {
+func cssBlock(t Theme, v map[string]string) string {
 	scheme := "dark"
 	if t == Light {
 		scheme = "light"
 	}
-	v := values(t, a)
 	var b strings.Builder
 	b.WriteString(":root{color-scheme:")
 	b.WriteString(scheme)
