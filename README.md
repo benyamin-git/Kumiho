@@ -37,6 +37,34 @@ Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
 over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun, and
 TUI/CLI/GUI over a named pipe).
 
+## Screenshots
+
+Captured in the Dark theme with sample data. The Windows GUI images are
+1280×800 from the Linux dev harness; the Linux TUI views are 100×28.
+
+### Windows GUI
+
+| Dashboard | Locations |
+| --- | --- |
+| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: server tree with ping times and a timeout](screenshots/windows-gui/locations.png) |
+
+![Windows GUI settings: theme and accent controls, version, and background service rows](screenshots/windows-gui/settings.png)
+
+### Linux TUI
+
+| Dashboard | Locations |
+| --- | --- |
+| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: country and city tree with ping times](screenshots/linux-tui/locations.png) |
+
+![Linux TUI settings: all settings rows and the TLS split hint](screenshots/linux-tui/settings.png)
+
+The GUI images are the WebView2 UI assets rather than a native Windows
+desktop frame, so they do not include the title bar or tray. The TUI images
+are rendered from the real Bubble Tea views. Regenerate both sets with
+`scripts/screenshots/capture.sh`; it starts the dev harness on
+`0.0.0.0:7407` and uses Playwright. See
+[`scripts/screenshots/README.md`](scripts/screenshots/README.md).
+
 ## Platform roadmap
 
 The core is platform-pluggable behind `internal/platform` (design:
@@ -110,34 +138,6 @@ Then point a client at it:
 
 It listens on loopback only, has no authentication, accepts `CONNECT` and
 absolute-form plain HTTP, and starts and stops with the tunnel.
-
-## Screenshots
-
-Captured in the Dark theme with sample data. The Windows GUI images are
-1280×800 from the Linux dev harness; the Linux TUI views are 100×28.
-
-### Windows GUI
-
-| Dashboard | Locations |
-| --- | --- |
-| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: server tree with ping times and a timeout](screenshots/windows-gui/locations.png) |
-
-![Windows GUI settings: theme and accent controls, version, and background service rows](screenshots/windows-gui/settings.png)
-
-### Linux TUI
-
-| Dashboard | Locations |
-| --- | --- |
-| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: country and city tree with ping times](screenshots/linux-tui/locations.png) |
-
-![Linux TUI settings: all settings rows and the TLS split hint](screenshots/linux-tui/settings.png)
-
-The GUI images are the WebView2 UI assets rather than a native Windows
-desktop frame, so they do not include the title bar or tray. The TUI images
-are rendered from the real Bubble Tea views. Regenerate both sets with
-`scripts/screenshots/capture.sh`; it starts the dev harness on
-`0.0.0.0:7407` and uses Playwright. See
-[`scripts/screenshots/README.md`](scripts/screenshots/README.md).
 
 ## Quick start
 
