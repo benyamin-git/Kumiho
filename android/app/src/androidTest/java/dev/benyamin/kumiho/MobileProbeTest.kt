@@ -103,6 +103,11 @@ class MobileProbeTest {
         val bridge = RecordingBridge()
         val listener = LatchingListener()
 
+        // The app process can bind the VpnService (which starts the engine)
+        // before instrumentation runs, so the probe begins from a known state.
+        // Close is idempotent and a no-op when nothing was started.
+        runCatching { Mobile.close() }
+
         // 3. Start with app-private paths, a recording fake bridge and a listener.
         Mobile.start(paths, bridge, listener)
         try {

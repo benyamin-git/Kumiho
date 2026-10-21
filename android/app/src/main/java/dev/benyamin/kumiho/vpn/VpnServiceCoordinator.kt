@@ -48,6 +48,7 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
     private val bindLock = Any()
     private var pendingEngine = CompletableDeferred<EngineClient>()
     private var stateJob: Job? = null
+    private var binder: KumihoVpnService.LocalBinder? = null
 
     init {
         val intent = Intent(appContext, KumihoVpnService::class.java)
@@ -83,6 +84,23 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
 
     /** Disconnect and stop the started service (the binding is kept). */
     fun stop() = send(KumihoVpnService.ACTION_STOP)
+
+    /**
+     * Asks the service to re-read Android's Always-on/lockdown flags (R16) and
+     * returns the fresh snapshot, or null while the service is not bound.
+     *
+     * The setup screen calls this on resume: the flags live on the VpnService
+     * instance, so only the bound service can read what the user changed in
+     * Android's VPN settings. Nothing about the connection changes.
+     */
+    fun refreshPolicy(): ServiceState? {
+        val binder = this.binder ?: return null
+        return try {
+            binder.refreshPolicy()
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
 
     private fun send(action: String) {
         try {
@@ -122,6 +140,7 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
             return
         }
         val client = binder.engine
+        this.binder = binder
         mutableEngine.value = client
         mutableState.update { it.copy(binding = true, error = null) }
         synchronized(bindLock) {
@@ -157,6 +176,7 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
     private fun loseBinding(message: String) {
         stateJob?.cancel()
         stateJob = null
+        binder = null
         mutableEngine.value = null
         mutableState.update {
             it.copy(binding = false, engineReady = false, status = null)

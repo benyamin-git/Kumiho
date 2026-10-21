@@ -21,4 +21,95 @@
     <string name="notification_sign_in_title">Sign in to Kumiho</string>
     <string name="notification_sign_in_text">Open Kumiho and sign in to connect.</string>
     <string name="vpn_error_service_unavailable">The VPN service is unavailable</string>
+
+    <!-- Four-step setup (T10). -->
+    <string name="setup_title">Set up Kumiho</string>
+    <string name="setup_loading">Starting the local engine…</string>
+    <string name="setup_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="setup_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="setup_step_position">Step %1$d of 4</string>
+    <string name="setup_step_of_current">Step %1$d of 4: %2$s, current step</string>
+    <string name="setup_step_consent">Consent</string>
+    <string name="setup_step_sign_in">Sign in</string>
+    <string name="setup_step_permissions">Permissions</string>
+    <string name="setup_step_always_on">Always-on</string>
+    <string name="setup_back">Back</string>
+    <string name="setup_continue">Continue</string>
+    <string name="setup_finish">Finish</string>
+    <string name="setup_finish_connect">Finish and connect</string>
+    <string name="setup_finish_without_connect">Finish without connecting</string>
+    <string name="setup_error_title">Kumiho could not save the setup</string>
+
+    <!-- Step 1: consent. -->
+    <string name="consent_title">Before you connect</string>
+    <string name="consent_intro">Kumiho runs a VPN on this phone. While it is connected, the traffic of the apps that use the tunnel goes to a Kumiho proxy server, and that server reaches the sites you asked for. This is what keeps your address away from those sites and what makes the tunnel work.</string>
+    <string name="consent_future">Android asks for VPN permission in a later step. Nothing is routed until you grant it and connect.</string>
+    <string name="consent_local_title">What stays on this phone</string>
+    <string name="consent_local_tokens">Your Firefox Account tokens are written only to Kumiho\'s private app storage. Android backup and device transfer are turned off for this app, so they are never copied off the phone.</string>
+    <string name="consent_local_data">Settings, the server list and the connection logs are local files in the same private storage. A log leaves the phone only when you share it yourself.</string>
+    <string name="consent_local_no_telemetry">There is no telemetry, no analytics and no crash reporting. Nothing is sent to the Kumiho developers.</string>
+    <string name="consent_proxy_title">Local proxies</string>
+    <string name="consent_proxy_text">While the tunnel is up, Kumiho also listens on this phone\'s loopback interface for its local SOCKS5 proxy, and for its local HTTP proxy when you turn that on. Any app on this phone can use them, so treat them as device-wide. Other devices on your network cannot reach them.</string>
+    <string name="consent_accept">I understand what Kumiho routes, and that I am responsible for what I send through it.</string>
+
+    <!-- Step 2: sign in. -->
+    <string name="sign_in_intro">Kumiho uses your Firefox Account entitlement to reach the proxy network. The engine talks to Firefox Accounts directly, with no browser hand-off.</string>
+    <string name="sign_in_email_label">Firefox Account email</string>
+    <string name="sign_in_email_submit">Continue</string>
+    <string name="sign_in_password_title">Enter your password</string>
+    <string name="sign_in_password_label">Password</string>
+    <string name="sign_in_password_note">The password goes straight to Firefox Accounts and is not stored by Kumiho.</string>
+    <string name="sign_in_password_submit">Sign in</string>
+    <string name="sign_in_code_title">Enter the code</string>
+    <string name="sign_in_code_label">Verification code</string>
+    <string name="sign_in_code_note">Enter the code Firefox Accounts sent you. A sign-in code is checked as you enter it.</string>
+    <string name="sign_in_code_submit">Verify</string>
+    <string name="sign_in_reason">Firefox Accounts asked for this verification: %1$s</string>
+    <string name="sign_in_link_title">Check your email</string>
+    <string name="sign_in_link_text">Firefox Accounts sent a confirmation link to %1$s. Open it, then come back here.</string>
+    <string name="sign_in_link_waiting">Waiting for the link to be confirmed…</string>
+    <string name="sign_in_link_polling">Kumiho checks again every 3 seconds while this screen is open.</string>
+    <string name="sign_in_recheck">Re-check</string>
+    <string name="sign_in_signed_title">Signed in</string>
+    <string name="sign_in_signed_as">Signed in as %1$s</string>
+    <string name="sign_in_signed_note">Continue to the Android permission step.</string>
+    <string name="sign_in_error_title">Sign-in failed</string>
+    <string name="sign_in_email_required">Enter the email address of your Firefox Account.</string>
+    <string name="sign_in_password_required">Enter your Firefox Account password.</string>
+    <string name="sign_in_code_required">Enter the code from the email.</string>
+    <string name="sign_in_unexpected_step">The engine answered with an unexpected sign-in step. Start again from the email address.</string>
+
+    <!-- Step 3: Android permissions. -->
+    <string name="permissions_title">Android permissions</string>
+    <string name="permissions_intro">Two Android permissions make the tunnel usable. You can finish setup without either of them; Kumiho asks again when you connect.</string>
+    <string name="permissions_vpn_title">VPN permission</string>
+    <string name="permissions_vpn_text">Android asks you to approve a VPN before any app can carry traffic. Granting it now saves a prompt on your first connect.</string>
+    <string name="permissions_vpn_action">Allow VPN</string>
+    <string name="permissions_vpn_granted">Granted</string>
+    <string name="permissions_vpn_missing">Not granted</string>
+    <string name="permissions_vpn_denied">Android did not grant the VPN permission. You can still finish setup; Kumiho asks again when you connect.</string>
+    <string name="permissions_notifications_title">Notifications</string>
+    <string name="permissions_notifications_text">Kumiho shows a status notification while the tunnel is up, with a Disconnect action. Without it the tunnel still runs; Android just cannot show the status or the action.</string>
+    <string name="permissions_notifications_action">Allow notifications</string>
+    <string name="permissions_notifications_settings">Open notification settings</string>
+    <string name="permissions_notifications_granted">Allowed</string>
+    <string name="permissions_notifications_missing">Not allowed</string>
+    <string name="permissions_notifications_denied">Notifications are turned off for Kumiho. You can allow them in Android settings at any time.</string>
+    <string name="permissions_note">Both permissions can be changed later in Android settings.</string>
+
+    <!-- Step 4: Always-on guidance. -->
+    <string name="always_on_intro">Android can start Kumiho\'s VPN on its own, including after a reboot. Kumiho never changes this for you: the switch lives in Android\'s VPN settings.</string>
+    <string name="always_on_always_title">Always-on VPN</string>
+    <string name="always_on_always_text">When Always-on VPN is on, Android starts Kumiho whenever no VPN is connected, and Kumiho connects if you are signed in. If you are signed out it asks you to sign in instead of connecting.</string>
+    <string name="always_on_lockdown_title">Lockdown</string>
+    <string name="always_on_lockdown_text">Lockdown is stricter: Android blocks all traffic while Kumiho is not connected. Kumiho shows the real state and never works around it.</string>
+    <string name="always_on_row_state">Android state</string>
+    <string name="always_on_state_on">On</string>
+    <string name="always_on_state_off">Off</string>
+    <string name="always_on_open_settings">Open Android VPN settings</string>
+    <string name="always_on_connect_hint">You are signed in and the VPN permission is granted, so Finish can connect straight away.</string>
+    <string name="always_on_connect_hint_needs_vpn">Connect now needs the VPN permission: grant it when Kumiho asks on your first connect.</string>
+    <string name="always_on_connect_hint_needs_sign_in">Connect now needs a signed-in Firefox Account. Finish, then sign in from Account.</string>
+    <string name="always_on_connect_hint_needs_both">Connect now needs the VPN permission and a signed-in Firefox Account. Finish, then grant it and sign in.</string>
+    <string name="always_on_finish_note">Finish saves the setup and opens the dashboard.</string>
 </resources>

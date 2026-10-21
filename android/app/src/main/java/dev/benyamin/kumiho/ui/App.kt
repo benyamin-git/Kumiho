@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,12 +21,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.PaletteState
+import dev.benyamin.kumiho.ui.components.KumihoLoadingState
+import dev.benyamin.kumiho.ui.setup.SetupRoute
 import dev.benyamin.kumiho.ui.shell.AppShell
 import dev.benyamin.kumiho.ui.shell.ShellNavigation
 import dev.benyamin.kumiho.ui.theme.Dimens
@@ -41,11 +45,37 @@ import dev.benyamin.kumiho.ui.theme.KumihoTypography
 @Composable
 fun KumihoApp(container: AppContainer) {
     val paletteState by container.themeRepository.state.collectAsStateWithLifecycle()
+    // null means "not read yet": a returning user must never see the setup
+    // screen flash before the stored completion arrives.
+    val setupComplete by container.appPrefs.setupComplete
+        .collectAsStateWithLifecycle(initialValue = null)
     val nav = remember { ShellNavigation() }
     when (val state = paletteState) {
         PaletteState.Loading -> KumihoLoadingSurface()
         is PaletteState.Error -> PaletteErrorSurface(state.message, container.themeRepository::retry)
-        is PaletteState.Ready -> KumihoTheme(colors = state.colors) { AppShell(nav = nav) }
+        is PaletteState.Ready -> KumihoTheme(colors = state.colors) {
+            when (setupComplete) {
+                null -> SetupGateLoading()
+                false -> SetupRoute(container)
+                true -> AppShell(nav = nav)
+            }
+        }
+    }
+}
+
+/** The themed wait while the stored setup state is read from DataStore. */
+@Composable
+private fun SetupGateLoading() {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            KumihoLoadingState(label = stringResource(R.string.setup_loading))
+        }
     }
 }
 

@@ -75,6 +75,17 @@ class KumihoVpnService : VpnService() {
     inner class LocalBinder : Binder() {
         val engine: EngineClient get() = this@KumihoVpnService.engine
         val state: StateFlow<ServiceState> get() = this@KumihoVpnService.state
+
+        /**
+         * Re-reads `isAlwaysOn()`/`isLockdownEnabled()` and returns the fresh
+         * snapshot (T10's R16 addition). The OS only exposes the flags on the
+         * service instance, so the setup screen asks the binder after the user
+         * returns from Android's VPN settings. No connection behavior changes.
+         */
+        fun refreshPolicy(): ServiceState {
+            this@KumihoVpnService.refreshOsPolicy()
+            return this@KumihoVpnService.state.value
+        }
     }
 
     override fun onCreate() {
