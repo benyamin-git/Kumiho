@@ -1541,10 +1541,14 @@ Plain `kumiho disconnect` is not sign-out: it may keep the last session's
 Criteria 12 (gate green) and 14 (release framing) are release hygiene, not
 Windows steps.
 
-v0.4.0 backend parity acceptance sign-off (fill before the `v0.4.0` tag):
+v0.4.0 backend parity acceptance sign-off (complete with the v0.4.1 bug-fix
+pass):
 
 - Date:
 - Machine / Windows build:
 - Commit / tag SHA under test:
 - Result: PASS / FAIL
 - Notes:
+
+v0.4.0 was tagged before this Windows pass; the results here are completed
+with the v0.4.1 fixes.
