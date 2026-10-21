@@ -2,6 +2,9 @@
 <resources>
     <string name="app_name">Kumiho</string>
 
+    <!-- Shared components. -->
+    <string name="power_description">Power</string>
+
     <!-- VPN service (T9). -->
     <string name="notification_channel_status">Connection status</string>
     <string name="notification_channel_status_description">Shows whether Kumiho is connected and lets you disconnect.</string>
@@ -112,4 +115,94 @@
     <string name="always_on_connect_hint_needs_sign_in">Connect now needs a signed-in Firefox Account. Finish, then sign in from Account.</string>
     <string name="always_on_connect_hint_needs_both">Connect now needs the VPN permission and a signed-in Firefox Account. Finish, then grant it and sign in.</string>
     <string name="always_on_finish_note">Finish saves the setup and opens the dashboard.</string>
+
+    <!-- Dashboard (T11). -->
+    <string name="dashboard_state_loading">Starting…</string>
+    <string name="dashboard_state_off">Off</string>
+    <string name="dashboard_state_connected">Connected</string>
+    <string name="dashboard_state_proxy_only">Proxy only</string>
+    <string name="dashboard_state_connecting">Connecting</string>
+    <string name="dashboard_state_reconnecting">Reconnecting</string>
+    <string name="dashboard_state_waiting">Waiting for network</string>
+    <string name="dashboard_state_not_signed_in">Sign in required</string>
+    <string name="dashboard_state_error">Connection error</string>
+    <string name="dashboard_state_unavailable">Service unavailable</string>
+    <string name="dashboard_state_permission_needed">VPN permission needed</string>
+    <string name="dashboard_proxy_only_chip">No VPN tunnel</string>
+    <string name="dashboard_uptime">Up for %1$s</string>
+    <string name="dashboard_connect_options">Connect options</string>
+    <string name="dashboard_loading">Connecting to the local engine…</string>
+    <string name="dashboard_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="dashboard_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+
+    <!-- Dashboard cards. -->
+    <string name="dashboard_location_title">Location</string>
+    <string name="dashboard_location_recommended">Recommended</string>
+    <string name="dashboard_location_default_hint">Closest server chosen for you</string>
+    <string name="dashboard_location_change">Change</string>
+    <string name="dashboard_exit_title">Exit IP</string>
+    <string name="dashboard_quota_title">Quota</string>
+    <string name="dashboard_quota_resets">Resets %1$s</string>
+    <string name="dashboard_session_title">Session</string>
+    <string name="dashboard_session_uptime">Up for %1$s</string>
+
+    <!-- Dashboard details. -->
+    <string name="dashboard_details_title">Details</string>
+    <string name="dashboard_details_always_on">Always-on VPN</string>
+    <string name="dashboard_details_lockdown">Lockdown</string>
+    <string name="dashboard_details_autoconnect">Autoconnect</string>
+    <string name="dashboard_details_autoconnect_follows">Follows Android\'s Always-on VPN</string>
+    <string name="dashboard_details_open_vpn_settings">Open Android VPN settings</string>
+    <string name="dashboard_details_token">Account token</string>
+    <string name="dashboard_details_pass">Subscription</string>
+    <string name="dashboard_details_expires">Expires %1$s</string>
+    <string name="dashboard_details_dns">DNS</string>
+    <string name="dashboard_details_ipv6">IPv6</string>
+    <string name="dashboard_ipv6_blackholed">Blackholed</string>
+    <string name="dashboard_on">On</string>
+    <string name="dashboard_off">Off</string>
+
+    <!-- Dashboard connect options sheet. -->
+    <string name="dashboard_options_title">Connect</string>
+    <string name="dashboard_options_connect">Connect</string>
+    <string name="dashboard_options_proxy_only">Proxy only</string>
+    <string name="dashboard_options_proxy_only_text">Start the local proxies without the VPN tunnel.</string>
+    <string name="dashboard_options_lockdown">Lockdown</string>
+    <string name="dashboard_options_lockdown_summary">Managed in Android VPN settings</string>
+    <string name="dashboard_options_disconnect_first">Disconnect first to change location</string>
+    <string name="dashboard_options_waiting">A connection command is in progress.</string>
+    <string name="dashboard_options_sign_in">Sign in to connect.</string>
+    <string name="dashboard_options_unavailable">The service is not available right now.</string>
+
+    <!-- Dashboard compact location picker. -->
+    <string name="dashboard_picker_recommended">Recommended</string>
+    <string name="dashboard_picker_recommended_text">The closest server, chosen by Kumiho</string>
+    <string name="dashboard_picker_saved">Saved location</string>
+    <string name="dashboard_picker_loading">Loading locations…</string>
+    <string name="dashboard_picker_failed_title">Locations did not load</string>
+    <string name="dashboard_picker_empty">No locations are available right now.</string>
+    <string name="dashboard_selected">Selected</string>
+    <string name="dashboard_expand">Expand</string>
+    <string name="dashboard_collapse">Collapse</string>
+
+    <!-- Dashboard notice row. -->
+    <string name="dashboard_notice_retry">Retry</string>
+    <string name="dashboard_notice_grant">Allow VPN</string>
+    <string name="dashboard_notice_reload">Reload</string>
+    <string name="dashboard_notice_dismiss">Dismiss</string>
+    <string name="dashboard_message_sign_in">Kumiho needs a signed-in Firefox Account to connect.</string>
+    <string name="dashboard_message_unavailable">The VPN service is unavailable.</string>
+    <string name="dashboard_message_permission_denied">Android did not grant the VPN permission. Kumiho cannot connect without it.</string>
+    <string name="dashboard_message_refresh_failed">The status did not refresh.</string>
+    <string name="dashboard_message_connect_failed">The connect command failed.</string>
+    <string name="dashboard_message_disconnect_failed">The disconnect command failed.</string>
+    <string name="dashboard_message_locations_failed">The location list did not load.</string>
+    <string name="dashboard_message_settings_unavailable">Android\'s VPN settings could not be opened.</string>
+    <string name="dashboard_message_engine_notice">The engine reported a problem.</string>
+
+    <!-- Dashboard lockdown disconnect explanation. -->
+    <string name="dashboard_lockdown_title">Disconnect under lockdown?</string>
+    <string name="dashboard_lockdown_text">Android blocks all traffic while Kumiho is disconnected. Until you connect again, apps on this phone have no network access.</string>
+    <string name="dashboard_lockdown_confirm">Disconnect</string>
+    <string name="dashboard_lockdown_cancel">Keep connected</string>
 </resources>

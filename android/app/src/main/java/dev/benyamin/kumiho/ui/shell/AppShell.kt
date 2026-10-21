@@ -45,6 +45,7 @@ import dev.benyamin.kumiho.ui.theme.Dimens
 fun AppShell(
     nav: ShellNavigation,
     modifier: Modifier = Modifier,
+    home: @Composable () -> Unit = { HomePlaceholder() },
 ) {
     val state by nav.state.collectAsStateWithLifecycle()
     AppShell(
@@ -53,10 +54,15 @@ fun AppShell(
         onOpenMoreRoute = nav::openMoreRoute,
         onBack = nav::back,
         modifier = modifier,
+        home = home,
     )
 }
 
-/** The stateless shell, so the navigation holder can be faked in tests. */
+/**
+ * The stateless shell, so the navigation holder can be faked in tests. [home]
+ * is the Home destination's content; it defaults to the T7 placeholder so the
+ * shell tests keep compiling, and the app passes the dashboard.
+ */
 @Composable
 fun AppShell(
     state: ShellNavState,
@@ -64,6 +70,7 @@ fun AppShell(
     onOpenMoreRoute: (MoreRoute) -> Unit,
     onBack: () -> Boolean,
     modifier: Modifier = Modifier,
+    home: @Composable () -> Unit = { HomePlaceholder() },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
@@ -136,7 +143,7 @@ fun AppShell(
                             .widthIn(max = Dimens.ContentMaxWidth)
                             .fillMaxSize(),
                     ) {
-                        ScreenHost(state)
+                        ScreenHost(state, home)
                     }
                 }
             }
@@ -193,7 +200,7 @@ private fun NavRail(
 }
 
 @Composable
-private fun ScreenHost(state: ShellNavState) {
+private fun ScreenHost(state: ShellNavState, home: @Composable () -> Unit) {
     val more = state.moreRoute
     if (more != null) {
         PlaceholderScreen(
@@ -204,7 +211,7 @@ private fun ScreenHost(state: ShellNavState) {
         return
     }
     when (state.tab) {
-        Destination.Home -> HomePlaceholder()
+        Destination.Home -> home()
         Destination.Locations -> PlaceholderScreen(
             title = Destination.Locations.label,
             message = "Not connected. Location data arrives with the engine client.",

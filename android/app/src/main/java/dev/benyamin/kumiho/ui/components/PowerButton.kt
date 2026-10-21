@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -49,6 +50,7 @@ fun KumihoPowerButton(
     val motion = rememberMotion()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val label = stringResource(R.string.power_description)
     val scale by animateFloatAsState(
         targetValue = if (pressed && enabled && !busy) 0.94f else 1f,
         animationSpec = motion.expressive,
@@ -81,7 +83,7 @@ fun KumihoPowerButton(
                 onClick = onToggle,
             )
             .semantics {
-                contentDescription = "Power"
+                contentDescription = label
                 stateDescription = stateLabel
             },
         contentAlignment = Alignment.Center,
