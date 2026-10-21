@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -233,12 +234,14 @@ func TestSaveCacheRoundTrip(t *testing.T) {
 	if !bytes.Equal(got, raw) {
 		t.Fatalf("cache payload = %s, want %s", got, raw)
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("cache mode = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := fi.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("cache mode = %o, want 600", perm)
+		}
 	}
 }
 
@@ -256,12 +259,14 @@ func TestSaveCacheCreatesParentDirectory(t *testing.T) {
 	if !bytes.Equal(got, raw) {
 		t.Fatalf("cache payload = %s, want %s", got, raw)
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("cache mode = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := fi.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("cache mode = %o, want 600", perm)
+		}
 	}
 }
 
@@ -284,12 +289,14 @@ func TestSaveCacheOverwritesAtomically(t *testing.T) {
 	if !bytes.Equal(got, second) {
 		t.Fatalf("cache payload = %s, want overwritten %s", got, second)
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("cache mode after overwrite = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := fi.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("cache mode after overwrite = %o, want 600", perm)
+		}
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {

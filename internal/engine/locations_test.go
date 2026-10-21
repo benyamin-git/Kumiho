@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,12 +66,14 @@ func TestLocationsWritesDiskCache(t *testing.T) {
 	if string(raw) != testServerListJSON {
 		t.Fatalf("cache payload = %s, want the raw response %s", raw, testServerListJSON)
 	}
-	fi, err := os.Stat(want)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("cache mode = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := fi.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("cache mode = %o, want 600", perm)
+		}
 	}
 }
 
