@@ -6,6 +6,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,7 +41,7 @@ sealed interface PaletteState {
  * Dark, and an empty accent is always blue.
  */
 class ThemeRepository(
-    private val prefs: AppPrefs,
+    private val prefs: ThemePreferences,
     private val scope: CoroutineScope,
     private val defaultTheme: () -> ThemeId,
     private val loadPaletteJson: suspend (theme: String, accent: String) -> String = { theme, accent ->
@@ -95,18 +96,19 @@ class ThemeRepository(
             stateFlow.value = PaletteState.Ready(it)
             return
         }
-        val result = runCatching {
+        val result = try {
             val json = withContext(Dispatchers.Default) { loadPaletteJson(theme.id, accent.id) }
             PaletteMapping.fromJson(json, theme, accent)
+        } catch (cancelled: CancellationException) {
+            // collectLatest cancels superseded loads; that is not a palette failure.
+            throw cancelled
+        } catch (error: Throwable) {
+            stateFlow.value = PaletteState.Error(
+                error.message ?: error::class.simpleName ?: "palette unavailable",
+            )
+            return
         }
-        stateFlow.value = result.fold(
-            onSuccess = { colors ->
-                cache[key] = colors
-                PaletteState.Ready(colors)
-            },
-            onFailure = { error ->
-                PaletteState.Error(error.message ?: error::class.simpleName ?: "palette unavailable")
-            },
-        )
+        cache[key] = result
+        stateFlow.value = PaletteState.Ready(result)
     }
 }

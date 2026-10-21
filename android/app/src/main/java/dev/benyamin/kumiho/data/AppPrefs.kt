@@ -18,26 +18,42 @@ import kotlinx.coroutines.flow.map
 private val Context.kumihoDataStore: DataStore<Preferences> by preferencesDataStore(name = "kumiho")
 
 /**
+ * The preferences [ThemeRepository] needs. [AppPrefs] is the DataStore-backed
+ * implementation; tests supply a plain in-memory fake.
+ */
+interface ThemePreferences {
+    /** The stored theme id, or null when the user has not chosen one. */
+    val theme: Flow<String?>
+
+    /** The stored accent id, or null when the user has not chosen one. */
+    val accent: Flow<String?>
+
+    suspend fun setTheme(id: String)
+
+    suspend fun setAccent(id: String)
+}
+
+/**
  * Typed access to the app preferences. Empty values mean "follow the system"
  * for the theme and "blue" for the accent; the caller resolves them.
  */
-class AppPrefs(context: Context) {
+class AppPrefs(context: Context) : ThemePreferences {
     private val store = context.applicationContext.kumihoDataStore
 
     /** The stored theme id, or null when the user has not chosen one. */
-    val theme: Flow<String?> = store.data.map { it[KEY_THEME] }
+    override val theme: Flow<String?> = store.data.map { it[KEY_THEME] }
 
     /** The stored accent id, or null when the user has not chosen one. */
-    val accent: Flow<String?> = store.data.map { it[KEY_ACCENT] }
+    override val accent: Flow<String?> = store.data.map { it[KEY_ACCENT] }
 
     /** Whether the four-step setup finished. */
     val setupComplete: Flow<Boolean> = store.data.map { it[KEY_SETUP_COMPLETE] ?: false }
 
-    suspend fun setTheme(id: String) {
+    override suspend fun setTheme(id: String) {
         store.edit { it[KEY_THEME] = id }
     }
 
-    suspend fun setAccent(id: String) {
+    override suspend fun setAccent(id: String) {
         store.edit { it[KEY_ACCENT] = id }
     }
 
