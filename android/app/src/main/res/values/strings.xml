@@ -55,14 +55,14 @@
     <!-- Step 2: sign in. -->
     <string name="sign_in_intro">Kumiho uses your Firefox Account entitlement to reach the proxy network. The engine talks to Firefox Accounts directly, with no browser hand-off.</string>
     <string name="sign_in_email_label">Firefox Account email</string>
-    <string name="sign_in_email_submit">Continue</string>
+    <string name="sign_in_email_submit">Continue with email</string>
     <string name="sign_in_password_title">Enter your password</string>
     <string name="sign_in_password_label">Password</string>
     <string name="sign_in_password_note">The password goes straight to Firefox Accounts and is not stored by Kumiho.</string>
     <string name="sign_in_password_submit">Sign in</string>
     <string name="sign_in_code_title">Enter the code</string>
     <string name="sign_in_code_label">Verification code</string>
-    <string name="sign_in_code_note">Enter the code Firefox Accounts sent you. A sign-in code is checked as you enter it.</string>
+    <string name="sign_in_code_note">Enter the code Firefox Accounts sent you, then tap Verify. The field clears after each attempt.</string>
     <string name="sign_in_code_submit">Verify</string>
     <string name="sign_in_reason">Firefox Accounts asked for this verification: %1$s</string>
     <string name="sign_in_link_title">Check your email</string>
