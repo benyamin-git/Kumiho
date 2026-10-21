@@ -6,14 +6,16 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The five shell destinations. Everything but More maps to a route; More opens
- * a sheet and has no route of its own.
+ * a sheet and has no route of its own, so its route is the empty sentinel.
  */
 enum class Destination(val route: String, val label: String) {
     Home("home", "Home"),
     Locations("locations", "Locations"),
     Account("account", "Account"),
     Settings("settings", "Settings"),
-    More("more", "More"),
+
+    /** A sheet trigger, never a tab and never a route: the sentinel is empty. */
+    More("", "More"),
     ;
 
     companion object {

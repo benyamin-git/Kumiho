@@ -40,9 +40,11 @@ class ShellNavigationTest {
     @Test
     fun `routes are the shell routes plus the two More routes`() {
         assertEquals(
-            listOf("home", "locations", "account", "settings", "more"),
-            Destination.tabs.map { it.route },
+            listOf("home", "locations", "account", "settings"),
+            Destination.tabs.filter { it != Destination.More }.map { it.route },
         )
+        // More opens a sheet, so it has no route of its own: the sentinel is empty.
+        assertEquals("", Destination.More.route)
         // The More routes are routes, not navigation items.
         assertEquals(listOf("logs", "diagnostics"), MoreRoute.entries.map { it.route })
         assertTrue(Destination.tabs.none { it.route == "logs" || it.route == "diagnostics" })
