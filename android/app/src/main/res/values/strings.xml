@@ -1,4 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kumiho</string>
+
+    <!-- VPN service (T9). -->
+    <string name="notification_channel_status">Connection status</string>
+    <string name="notification_channel_status_description">Shows whether Kumiho is connected and lets you disconnect.</string>
+    <string name="notification_title">Kumiho</string>
+    <string name="notification_state_off">Not connected</string>
+    <string name="notification_state_connected">Connected</string>
+    <string name="notification_state_proxy_only">Proxy only</string>
+    <string name="notification_state_connecting">Connecting…</string>
+    <string name="notification_state_reconnecting">Reconnecting…</string>
+    <string name="notification_state_waiting">Waiting for network</string>
+    <string name="notification_state_not_signed_in">Sign in required</string>
+    <string name="notification_state_error">Connection error</string>
+    <string name="notification_state_unavailable">Service unavailable</string>
+    <string name="notification_state_permission_needed">VPN permission needed</string>
+    <string name="notification_action_disconnect">Disconnect</string>
+    <string name="notification_action_open">Open</string>
+    <string name="notification_sign_in_title">Sign in to Kumiho</string>
+    <string name="notification_sign_in_text">Open Kumiho and sign in to connect.</string>
+    <string name="vpn_error_service_unavailable">The VPN service is unavailable</string>
 </resources>
