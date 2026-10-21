@@ -9,6 +9,23 @@ package dev.benyamin.kumiho.vpn
  * the tunnel is down before the engine has spoken.
  */
 object VpnStateReducer {
+    /**
+     * The notification's view of the service's own state.
+     *
+     * [ServiceState.binding] says whether an Activity is bound, which is false
+     * during the startForegroundService/null-intent boot window even though the
+     * service is very much alive; the raw reducer would read that as
+     * SERVICE_UNAVAILABLE. The notification is only ever showing during a
+     * connect attempt, so a service that has no status yet is Connecting, not
+     * unavailable.
+     */
+    fun reduceForService(state: ServiceState): VpnUiState =
+        if (state.status == null && !state.permissionNeeded && state.error == null) {
+            VpnUiState.CONNECTING
+        } else {
+            reduce(state.copy(binding = true))
+        }
+
     fun reduce(state: ServiceState): VpnUiState {
         if (state.permissionNeeded) return VpnUiState.PERMISSION_NEEDED
         if (state.error != null) return VpnUiState.ERROR

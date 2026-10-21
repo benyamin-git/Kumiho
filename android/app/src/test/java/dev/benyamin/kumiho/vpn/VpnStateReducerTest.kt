@@ -95,6 +95,49 @@ class VpnStateReducerTest {
     }
 
     @Test
+    fun serviceViewIsAvailableDuringTheBootWindow() {
+        // The UI reducer reads an unbound service as unavailable; during the
+        // boot auto-connect no Activity is bound yet.
+        val boot = ServiceState(
+            binding = false,
+            engineReady = false,
+            status = status(EngineStates.CONNECTING),
+        )
+        assertEquals(VpnUiState.SERVICE_UNAVAILABLE, VpnStateReducer.reduce(boot))
+        // The service's own notification reports the connect attempt instead.
+        assertEquals(VpnUiState.CONNECTING, VpnStateReducer.reduceForService(boot))
+        assertEquals(
+            VpnUiState.WAITING,
+            VpnStateReducer.reduceForService(
+                boot.copy(status = status(EngineStates.WAITING_NETWORK)),
+            ),
+        )
+    }
+
+    @Test
+    fun serviceViewWithNoStatusIsConnecting() {
+        assertEquals(
+            VpnUiState.CONNECTING,
+            VpnStateReducer.reduceForService(
+                ServiceState(binding = false, engineReady = false, status = null),
+            ),
+        )
+        // A real error or a missing permission still outranks the boot view.
+        assertEquals(
+            VpnUiState.ERROR,
+            VpnStateReducer.reduceForService(
+                ServiceState(binding = false, status = null, error = "the engine failed"),
+            ),
+        )
+        assertEquals(
+            VpnUiState.PERMISSION_NEEDED,
+            VpnStateReducer.reduceForService(
+                ServiceState(binding = false, status = null, permissionNeeded = true),
+            ),
+        )
+    }
+
+    @Test
     fun signedOutMapsToNotSignedIn() {
         assertEquals(
             VpnUiState.NOT_SIGNED_IN,

@@ -6,6 +6,7 @@ import android.net.VpnService
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.ServiceCompat
 import dev.benyamin.kumiho.KumihoApplication
 import dev.benyamin.kumiho.engine.EngineClient
@@ -96,7 +97,7 @@ class KumihoVpnService : VpnService() {
                 if (foreground) {
                     notifications.update(
                         NotificationFactory.FOREGROUND_ID,
-                        VpnStateReducer.reduce(snapshot),
+                        VpnStateReducer.reduceForService(snapshot),
                     )
                 }
             }
@@ -272,9 +273,7 @@ class KumihoVpnService : VpnService() {
             if (EngineStates.isActive(status.state) ||
                 !connectInFlight.compareAndSet(false, true)
             ) {
-                beginForeground(
-                    VpnStateReducer.reduce(mutableState.value.copy(binding = true)),
-                )
+                beginForeground(VpnStateReducer.reduceForService(mutableState.value))
                 return@launch
             }
             mutableState.update { it.copy(permissionNeeded = false, error = null) }
@@ -366,14 +365,19 @@ class KumihoVpnService : VpnService() {
         false
     }
 
-    /** Refreshes status and mirrors it; null on failure (state.error is set). */
+    /**
+     * Refreshes and mirrors the engine status. A failed refresh keeps the last
+     * known status (the engine also pushes updates continuously) and is only
+     * logged: a transient poll failure is not an engine failure. [ServiceState.error]
+     * stays reserved for a failed engine start or connect.
+     */
     private suspend fun refreshStatus(): EngineStatus? = try {
         engine.refreshStatus()
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Exception) {
-        mutableState.update { it.copy(error = messageOf(error)) }
-        null
+        Log.w(TAG, "status refresh failed; keeping the last known status", error)
+        mutableState.value.status
     }
 
     private fun failAndStop() {
@@ -426,6 +430,8 @@ class KumihoVpnService : VpnService() {
     )
 
     companion object {
+        private const val TAG = "KumihoVpnService"
+
         const val ACTION_CONNECT = "dev.benyamin.kumiho.action.CONNECT"
         const val ACTION_DISCONNECT = "dev.benyamin.kumiho.action.DISCONNECT"
         const val ACTION_STOP = "dev.benyamin.kumiho.action.STOP"
