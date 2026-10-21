@@ -1,0 +1,10 @@
+# Gradle/Android local state. Never commit build outputs, the engine AAR or
+# signing material.
+/app/libs/*.aar
+/.gradle/
+/.kotlin/
+/build/
+/app/build/
+/local.properties
+/keystore.properties
+/captures/

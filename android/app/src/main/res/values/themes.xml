@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Placeholder theme for the skeleton. No dynamic color and no Material You:
+      T7 replaces this with the splash/theme pair driven by the house palette.
+    -->
+    <style name="Theme.Kumiho" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kumiho_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
