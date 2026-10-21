@@ -220,11 +220,26 @@ ensure_gomobile() {
 	ok "gomobile: $gv"
 }
 
+# Find the gradle wrapper after T2 commits it. The Gradle root is `android/`
+# (the wrapper is expected at android/gradlew); also accept a legacy wrapper
+# at the repository root.
+find_gradlew() {
+	local w
+	for w in "$REPO_DIR/android/gradlew" "$REPO_DIR/gradlew"; do
+		if [ -x "$w" ]; then
+			printf '%s\n' "$w"
+			return 0
+		fi
+	done
+	return 1
+}
+
 # Bootstrap Gradle into $TOOLS_DIR only while the repository has no wrapper;
 # T2 generates and commits the wrapper, after which this is a no-op.
 ensure_gradle() {
-	if [ -x "$REPO_DIR/gradlew" ]; then
-		ok "gradle wrapper present ($REPO_DIR/gradlew); bootstrap skipped"
+	local wrapper
+	if wrapper=$(find_gradlew); then
+		ok "gradle wrapper present ($wrapper); bootstrap skipped"
 		return 0
 	fi
 	if [ -x "$GRADLE_BIN" ]; then
@@ -251,18 +266,27 @@ check_mode() {
 	else
 		report 1 "JDK 17 not found (JAVA_HOME=$JAVA_HOME)"
 	fi
-	local v
-	v=$(sdkmanager --version 2>/dev/null | head -1 || true)
-	[ -n "$v" ] || v="not found"
-	report 0 "sdkmanager: $v"
-	local pkg
-	for pkg in platform-tools "platforms;$SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
-		if pkg_installed "$pkg"; then
-			report 0 "sdk package: $pkg"
-		else
-			report 1 "sdk package missing: $pkg"
-		fi
-	done
+	local v wrapper
+	local sdkmgr_found=1
+	command -v sdkmanager >/dev/null 2>&1 || sdkmgr_found=0
+	if [ "$sdkmgr_found" = 1 ]; then
+		v=$(sdkmanager --version 2>/dev/null | head -1 || true)
+		[ -n "$v" ] || sdkmgr_found=0
+	fi
+	if [ "$sdkmgr_found" = 1 ]; then
+		report 0 "sdkmanager: $v"
+		local pkg
+		for pkg in platform-tools "platforms;$SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
+			if pkg_installed "$pkg"; then
+				report 0 "sdk package: $pkg"
+			else
+				report 1 "sdk package missing: $pkg"
+			fi
+		done
+	else
+		report 1 "sdkmanager: not found"
+		report 1 "sdk packages not checked without sdkmanager"
+	fi
 	if command -v gomobile >/dev/null 2>&1; then
 		v=$(go version -m "$(command -v gomobile)" 2>/dev/null | awk '$1=="mod" && $2=="golang.org/x/mobile" {print $3}')
 		if [[ "$v" == *"$GOMOBILE_REV"* && -n "$v" ]]; then
@@ -278,10 +302,11 @@ check_mode() {
 	else
 		report 1 "adb: not on PATH"
 	fi
+	wrapper=$(find_gradlew || true)
 	if [ -x "$GRADLE_BIN" ]; then
 		report 0 "gradle bootstrap: $GRADLE_BIN"
-	elif [ -x "$REPO_DIR/gradlew" ]; then
-		report 0 "gradle wrapper: $REPO_DIR/gradlew"
+	elif [ -n "$wrapper" ]; then
+		report 0 "gradle wrapper: $wrapper"
 	else
 		report 1 "gradle 9.6.0 bootstrap missing"
 	fi
