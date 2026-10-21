@@ -7,7 +7,6 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.semantics.getOrNull
@@ -73,7 +72,7 @@ class SetupFlowTest {
         // Step 1: consent is required.
         rule.onNodeWithTag(SetupTags.CONSENT_STEP).assertExists()
         rule.onNodeWithTag(SetupTags.CONTINUE).assertIsNotEnabled()
-        rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performScrollTo().performClick()
+        rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performClick()
         rule.waitUntil(TIMEOUT) { viewModel.state.value.canContinue }
         rule.onNodeWithTag(SetupTags.CONTINUE).assertIsEnabled()
         rule.onNodeWithTag(SetupTags.CONTINUE).performClick()
@@ -175,7 +174,7 @@ class SetupFlowTest {
     // ---- helpers ----------------------------------------------------------
 
     private fun walkToSignIn(viewModel: SetupViewModel) {
-        rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performScrollTo().performClick()
+        rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performClick()
         rule.waitUntil(TIMEOUT) { viewModel.state.value.canContinue }
         rule.onNodeWithTag(SetupTags.CONTINUE).performClick()
         rule.waitUntil(TIMEOUT) { viewModel.state.value.step == SetupStep.SIGN_IN }

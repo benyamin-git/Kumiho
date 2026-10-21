@@ -26,8 +26,6 @@ import dev.benyamin.kumiho.ui.theme.Dimens
  */
 @Composable
 fun ConsentStep(
-    accepted: Boolean,
-    onAcceptedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -71,29 +69,43 @@ fun ConsentStep(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
+    }
+}
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = Dimens.TouchTarget)
-                .padding(vertical = Dimens.Space1)
-                .toggleable(
-                    value = accepted,
-                    role = Role.Checkbox,
-                    onValueChange = onAcceptedChange,
-                )
-                .testTag(SetupTags.CONSENT_ACCEPT),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
-        ) {
-            // The row owns the toggle semantics; the box is the visible glyph.
-            Checkbox(checked = accepted, onCheckedChange = null)
-            Text(
-                text = stringResource(R.string.consent_accept),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+/**
+ * The required consent tick. It is pinned above the wizard's bottom action, so
+ * it is on screen on first paint instead of below the scrollable copy: a
+ * disabled Continue must always sit next to the tick that enables it.
+ *
+ * The whole row is the toggle target (48dp minimum), the box is the visible
+ * glyph and the row owns the checkbox semantics.
+ */
+@Composable
+fun ConsentTickRow(
+    accepted: Boolean,
+    onAcceptedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.TouchTarget)
+            .padding(vertical = Dimens.Space1)
+            .toggleable(
+                value = accepted,
+                role = Role.Checkbox,
+                onValueChange = onAcceptedChange,
             )
-        }
+            .testTag(SetupTags.CONSENT_ACCEPT),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
+    ) {
+        Checkbox(checked = accepted, onCheckedChange = null)
+        Text(
+            text = stringResource(R.string.consent_accept),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

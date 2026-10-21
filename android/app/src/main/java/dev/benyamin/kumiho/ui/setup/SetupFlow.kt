@@ -257,10 +257,7 @@ fun SetupFlow(
                         .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space4),
                 ) {
                     when (state.step) {
-                        SetupStep.CONSENT -> ConsentStep(
-                            accepted = state.consentAccepted,
-                            onAcceptedChange = viewModel::setConsentAccepted,
-                        )
+                        SetupStep.CONSENT -> ConsentStep()
                         SetupStep.SIGN_IN -> SignInStep(
                             state = state.signIn,
                             onSubmitEmail = viewModel::submitEmail,
@@ -284,8 +281,24 @@ fun SetupFlow(
                         )
                     }
                 }
+                // The required tick is part of the fixed bottom action, not
+                // the scrollable copy, so a disabled Continue is never shown
+                // without the tick that enables it in view.
+                val consentRow: (@Composable () -> Unit)? =
+                    if (state.step == SetupStep.CONSENT) {
+                        {
+                            ConsentTickRow(
+                                accepted = state.consentAccepted,
+                                onAcceptedChange = viewModel::setConsentAccepted,
+                                modifier = Modifier.padding(bottom = Dimens.Space2),
+                            )
+                        }
+                    } else {
+                        null
+                    }
                 SetupActions(
                     state = state,
+                    consentRow = consentRow,
                     onContinue = viewModel::next,
                     onFinish = { viewModel.finish(connectNow = false) },
                     onConnectNow = { viewModel.finish(connectNow = true) },
@@ -446,6 +459,7 @@ private fun SetupActions(
     onContinue: () -> Unit,
     onFinish: () -> Unit,
     onConnectNow: () -> Unit,
+    consentRow: (@Composable () -> Unit)? = null,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -457,6 +471,7 @@ private fun SetupActions(
                 .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space3),
             verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
         ) {
+            consentRow?.invoke()
             val failure = state.error
             if (failure != null) {
                 Surface(
