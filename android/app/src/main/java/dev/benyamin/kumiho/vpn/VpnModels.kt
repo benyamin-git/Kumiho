@@ -160,6 +160,22 @@ internal object EngineStates {
     const val WAITING_NETWORK = "WAITING_NETWORK"
     const val PROXY_ONLY = "PROXY_ONLY"
     const val FATAL = "FATAL"
+
+    /**
+     * A tunnel that is up, coming up, re-establishing or waiting for a link.
+     * A connect request that arrives in any of these states is a duplicate and
+     * must not touch the live session (T12 changes location by disconnecting
+     * first).
+     */
+    fun isActive(state: String?): Boolean = when (state) {
+        CONNECTING,
+        CONNECTED,
+        RECONNECTING,
+        WAITING_NETWORK,
+        PROXY_ONLY,
+        -> true
+        else -> false
+    }
 }
 
 /** A short, non-empty message for a failure; never a stack trace. */

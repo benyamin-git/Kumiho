@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The one VpnService in the process. It owns the engine session and the
@@ -61,6 +62,13 @@ class KumihoVpnService : VpnService() {
 
     @Volatile
     private var bound = false
+
+    /**
+     * True while a connect command is being dispatched. A second ACTION_CONNECT
+     * in that window (a fast double tap, before the engine has published
+     * CONNECTING) must be a no-op rather than a concurrent connect.
+     */
+    private val connectInFlight = AtomicBoolean(false)
 
     /** The local binder: no AIDL, no IPC, same process (C6). */
     inner class LocalBinder : Binder() {
@@ -141,7 +149,7 @@ class KumihoVpnService : VpnService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (isActive(mutableState.value.status?.state)) {
+        if (EngineStates.isActive(mutableState.value.status?.state)) {
             // Never tear down a live tunnel just because the task went away.
             super.onTaskRemoved(rootIntent)
             return
@@ -222,7 +230,7 @@ class KumihoVpnService : VpnService() {
                     stopSelf()
                 }
                 AlwaysOnDecision.NONE -> {
-                    if (!isActive(status.state)) {
+                    if (!EngineStates.isActive(status.state)) {
                         detachForeground()
                         stopSelf()
                     }
@@ -257,6 +265,18 @@ class KumihoVpnService : VpnService() {
                 stopSelf()
                 return@launch
             }
+            // A duplicate tap, or a connect while the tunnel is up or coming
+            // up, is a no-op: the live session and its notification stay
+            // untouched. T12 changes location with an explicit disconnect
+            // first, never as a second connect.
+            if (EngineStates.isActive(status.state) ||
+                !connectInFlight.compareAndSet(false, true)
+            ) {
+                beginForeground(
+                    VpnStateReducer.reduce(mutableState.value.copy(binding = true)),
+                )
+                return@launch
+            }
             mutableState.update { it.copy(permissionNeeded = false, error = null) }
             try {
                 engine.connect(
@@ -274,6 +294,8 @@ class KumihoVpnService : VpnService() {
                 mutableState.update { it.copy(error = messageOf(error)) }
                 detachForeground()
                 stopSelf()
+            } finally {
+                connectInFlight.set(false)
             }
         }
     }
@@ -390,17 +412,11 @@ class KumihoVpnService : VpnService() {
     }
 
     private fun stickyIfActive(): Int =
-        if (isActive(mutableState.value.status?.state)) START_STICKY else START_NOT_STICKY
-
-    private fun isActive(state: String?): Boolean = when (state) {
-        EngineStates.CONNECTING,
-        EngineStates.CONNECTED,
-        EngineStates.RECONNECTING,
-        EngineStates.WAITING_NETWORK,
-        EngineStates.PROXY_ONLY,
-        -> true
-        else -> false
-    }
+        if (EngineStates.isActive(mutableState.value.status?.state)) {
+            START_STICKY
+        } else {
+            START_NOT_STICKY
+        }
 
     private fun connectRequestOf(intent: Intent): ConnectRequest = ConnectRequest(
         locationCode = intent.getStringExtra(EXTRA_LOCATION_CODE),
