@@ -4,30 +4,37 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
+import dev.benyamin.kumiho.ui.KumihoApp
+import kotlinx.coroutines.launch
 
 /**
- * Single activity host. The skeleton only paints a placeholder: the Compose
- * shell, theme and navigation are added in T7.
+ * Single activity host. It holds the splash screen until the stored palette has
+ * loaded, so a dark or OLED session never flashes the light theme, then hands
+ * the shell the application-scoped container.
+ *
+ * The order matters: `installSplashScreen()` runs before `super.onCreate()` so
+ * it can swap in `postSplashScreenTheme`, and before `enableEdgeToEdge()` so the
+ * window decor is not created while the platform default theme (which carries
+ * an ActionBar) is still applied.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        val container = (application as KumihoApplication).container
+        var themeReady = false
+        splash.setKeepOnScreenCondition { !themeReady }
+        lifecycleScope.launch {
+            container.themeRepository.awaitReady()
+            themeReady = true
+        }
+
         setContent {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeDrawingPadding(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(text = "Kumiho")
-            }
+            KumihoApp(container)
         }
     }
 }

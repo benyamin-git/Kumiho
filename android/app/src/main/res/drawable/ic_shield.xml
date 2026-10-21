@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shield glyph for the read-only kill-switch state. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,2.6 L19.6,5.3 V11.2 C19.6,15.9 16.3,19.9 12,21.5 C7.7,19.9 4.4,15.9 4.4,11.2 V5.3 Z" />
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M8.7,11.8 L11.2,14.3 L15.5,10.0" />
+</vector>
