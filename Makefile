@@ -4,7 +4,7 @@ COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X $(MODULE)/internal/version.Version=$(VERSION) -X $(MODULE)/internal/version.Commit=$(COMMIT) -X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: all build build-arm64 build-windows build-gui build-probe build-web android-setup test test-integration vet fmt lint clean
+.PHONY: all build build-arm64 build-windows build-gui build-probe build-web android-setup android-aar android-aar-emulator test test-integration vet fmt lint clean
 
 all: build
 
@@ -35,6 +35,14 @@ build-web:
 
 android-setup:
 	bash scripts/android-setup.sh
+
+# Gomobile AAR for the Android app. The output is git-ignored build state that
+# Gradle consumes from android/app/libs/.
+android-aar:
+	bash scripts/android-build-aar.sh
+
+android-aar-emulator:
+	bash scripts/android-build-aar.sh --emulator
 
 test:
 	go test ./...

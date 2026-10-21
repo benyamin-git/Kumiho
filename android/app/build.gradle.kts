@@ -122,6 +122,11 @@ kotlin {
 }
 
 dependencies {
+    // The gomobile AAR built by scripts/android-build-aar.sh. Gradle never runs
+    // Go; the toolchain script produces libs/kumiho.aar for real devices or
+    // libs/kumiho-emulator.aar (android/amd64) for the x86_64 emulator.
+    implementation(files("libs/" + if (emulatorBuild) "kumiho-emulator.aar" else "kumiho.aar"))
+
     implementation(platform(libs.compose.bom))
     androidTestImplementation(platform(libs.compose.bom))
 
