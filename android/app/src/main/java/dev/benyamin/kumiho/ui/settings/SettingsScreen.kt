@@ -202,12 +202,15 @@ private fun Context.isIgnoringBatteryOptimizations(): Boolean {
 }
 
 /**
- * The stateless Settings screen: notices, then one grouped list. All nineteen
- * engine keys are reachable exactly once, Advanced starts collapsed, and the
- * kill-switch/autoconnect rows show Android's own state.
+ * The stateless Settings screen: notices, a compact engine status when there is
+ * no snapshot, then one grouped list. All nineteen engine keys are reachable
+ * exactly once, Advanced starts collapsed, and the kill-switch/autoconnect rows
+ * show Android's own state.
  *
- * It makes no engine or Android call, so a Compose test renders it from fake
- * state and asserts callbacks instead.
+ * The app section and those Android-owned rows do not read the engine snapshot,
+ * so they stay usable while the engine settings load or fail; only the engine
+ * groups wait for a snapshot. A Compose test renders it from fake state and
+ * asserts callbacks instead.
  */
 @Composable
 fun SettingsScreen(
@@ -246,23 +249,25 @@ fun SettingsScreen(
                 ),
             )
         }
+        if (state.showLoading) {
+            LoadingContent()
+        }
+        if (state.showError) {
+            ErrorContent(
+                error = state.loadError.orEmpty(),
+                onRetry = actions.onRetryLoad,
+            )
+        }
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            when {
-                state.showLoading -> LoadingContent()
-                state.showError -> ErrorContent(
-                    error = state.loadError.orEmpty(),
-                    onRetry = actions.onRetryLoad,
-                )
-                else -> SettingsList(
-                    state = state,
-                    appState = appState,
-                    actions = actions,
-                    onEdit = { spec ->
-                        actions.onClearError(spec.key)
-                        editing = spec
-                    },
-                )
-            }
+            SettingsList(
+                state = state,
+                appState = appState,
+                actions = actions,
+                onEdit = { spec ->
+                    actions.onClearError(spec.key)
+                    editing = spec
+                },
+            )
         }
     }
 
@@ -332,11 +337,13 @@ private fun SettingsList(
             )
         }
 
-        item(key = "header_connection") {
-            GroupHeader(R.string.settings_group_connection, SettingsTags.GROUP_CONNECTION)
-        }
-        items(SettingsCatalog.specsIn(SettingsGroup.CONNECTION), key = { it.key }) { spec ->
-            EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+        if (state.hasSnapshot) {
+            item(key = "header_connection") {
+                GroupHeader(R.string.settings_group_connection, SettingsTags.GROUP_CONNECTION)
+            }
+            items(SettingsCatalog.specsIn(SettingsGroup.CONNECTION), key = { it.key }) { spec ->
+                EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+            }
         }
 
         item(key = "header_android") {
@@ -357,15 +364,17 @@ private fun SettingsList(
             AndroidVpnRow(spec = spec, appState = appState, actions = actions)
         }
 
-        item(key = "advanced_header") {
-            AdvancedHeader(
-                expanded = state.advancedExpanded,
-                onToggle = actions.onToggleAdvanced,
-            )
-        }
-        if (state.advancedExpanded) {
-            items(SettingsCatalog.specsIn(SettingsGroup.ADVANCED), key = { it.key }) { spec ->
-                EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+        if (state.hasSnapshot) {
+            item(key = "advanced_header") {
+                AdvancedHeader(
+                    expanded = state.advancedExpanded,
+                    onToggle = actions.onToggleAdvanced,
+                )
+            }
+            if (state.advancedExpanded) {
+                items(SettingsCatalog.specsIn(SettingsGroup.ADVANCED), key = { it.key }) { spec ->
+                    EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+                }
             }
         }
     }
@@ -791,7 +800,12 @@ private fun noticeMessage(message: SettingsMessage): Int = when (message) {
 }
 @Composable
 private fun LoadingContent() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space3),
+        contentAlignment = Alignment.Center,
+    ) {
         KumihoLoadingState(
             label = stringResource(R.string.settings_loading),
             modifier = Modifier.testTag(SettingsTags.LOADING),
@@ -803,8 +817,8 @@ private fun LoadingContent() {
 private fun ErrorContent(error: String, onRetry: () -> Unit) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(Dimens.ScreenPadding),
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space3),
         contentAlignment = Alignment.TopCenter,
     ) {
         KumihoErrorState(

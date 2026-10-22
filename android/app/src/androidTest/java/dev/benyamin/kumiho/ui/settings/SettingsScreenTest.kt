@@ -384,20 +384,28 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun theLoadingStateShowsNoList() {
+    fun theLoadingStateKeepsTheAppSectionAvailable() {
         show(state(loading = true, loaded = false, snapshot = null))
 
         rule.onNodeWithTag(SettingsTags.LOADING).assertExists()
-        rule.onNodeWithTag(SettingsTags.LIST).assertDoesNotExist()
+        rule.onNodeWithTag(SettingsTags.LIST).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_APP).assertExists()
+        rule.onNodeWithTag(SettingsTags.THEME_CONTROL).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
+        rule.onNodeWithTag(SettingsTags.GROUP_ADVANCED).assertDoesNotExist()
     }
 
     @Test
-    fun theInitialErrorOffersARetry() {
+    fun theInitialErrorKeepsTheAppSectionAndOffersARetry() {
         show(state(loading = false, loaded = false, snapshot = null, loadError = "daemon offline"))
 
         rule.onNodeWithTag(SettingsTags.ERROR).assertExists()
         rule.onNodeWithText("daemon offline").assertExists()
         rule.onNodeWithText(text(R.string.settings_load_failed_title)).assertExists()
+        rule.onNodeWithTag(SettingsTags.LIST).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_APP).assertExists()
+        rule.onNodeWithTag(SettingsTags.THEME_CONTROL).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
         rule.onNodeWithText(text(R.string.settings_retry)).performClick()
 
         assertEquals(listOf("retry-load"), calls)
