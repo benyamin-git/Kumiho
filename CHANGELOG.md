@@ -67,10 +67,14 @@ release.
 
 ### Release status
 
-The Android app's unit, lint, assemble and emulator suites pass, but the
-**physical first-connect/acceptance pass and the signing/release automation
-are still pending**. No Android APK or Android `SHA256SUMS` has been published
-yet; build from source per [docs/android-testing.md](docs/android-testing.md).
+The Android app's unit, lint, assemble and emulator suites pass. Physical
+first-connect/DNS/browsing/exit-IP acceptance passed on a Galaxy S25 FE; the
+remaining checklist items are user-accepted exceptions, so this is a partial
+acceptance rather than a full pass. The signing/release automation is
+implemented and was tested locally with a throwaway key. The production key,
+`v0.5.0` tag and published APK are still pending; no Android APK or Android
+`SHA256SUMS` has been published yet. See
+[docs/android-testing.md](docs/android-testing.md).
 
 ## [0.4.1] - 2026-10-21
 

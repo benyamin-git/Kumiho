@@ -6,12 +6,14 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
 > tree: **423 JVM tests / 124 connected tests / lint 0 errors + 6 warnings**.
-> The **physical acceptance** below has **not** been run, and the **release
-> automation (T17) is not implemented** — there is no Android CI job, release
-> workflow, signing script, published APK or `SHA256SUMS` yet. Everything
-> marked *(planned)* describes the approved release plan and does not exist in
-> the repository. Do not report the checklist as passed or the app as released
-> until the boxes are ticked and the sign-off table is filled in.
+> Physical acceptance is a **partial pass with user-accepted exceptions** on a
+> Galaxy S25 FE; the sign-off is recorded below. The release automation is
+> implemented: `android-verify-apk.sh`, `android-release.sh`, the five Makefile
+> targets, an Android CI job and Android signing steps in the release workflow.
+> The scripts were exercised end to end with a throwaway signing key. The
+> production key, GitHub Actions secrets, tag and published APK are still
+> user-owned and pending; no Android APK or `SHA256SUMS` has been published yet.
+> Do not report the app as released until the tagged release workflow succeeds.
 
 ## Versions
 
@@ -85,8 +87,10 @@ Both targets call `scripts/android-build-aar.sh`, which:
 
 Expected release layout: `classes.jar`, `jni/armeabi-v7a/libgojni.so`,
 `jni/arm64-v8a/libgojni.so`. The emulator archive carries
-`jni/x86_64/libgojni.so` instead and is **never** part of a release. The
-release APKs must contain only arm ABIs and no x86/x86_64.
+`jni/x86_64/libgojni.so` instead and is **never** part of a release. Device and
+release packaging excludes `lib/x86/**` and `lib/x86_64/**`; the universal
+release APK contains both arm ABIs and no x86 engine or dependency libraries.
+The verifier enforces this on every release APK.
 
 If you do not want to use `make`:
 
@@ -101,7 +105,17 @@ emulator AAR it fails to resolve `libs/kumiho.aar`.
 
 All commands run from `android/` after sourcing the environment. Add
 `--offline` once the Gradle cache is warm; the first resolve needs network
-access. The unit/lint/assemble gate:
+access. The Makefile wrappers run from the repository root and build the AAR
+first:
+
+    make android-debug
+    make android-test                 # JVM tests + lint + debug APK
+    make android-emulator-test        # connected suite; emulator must be running
+    make android-release KUMIHO_VERSION=0.5.0
+    make android-verify               # verify every dist/kumiho-*-android-*.apk
+
+Pass `GRADLE_FLAGS=--offline` to any of the Gradle-backed targets once the
+cache is warm. The unit/lint/assemble gate directly:
 
     source scripts/android-env.sh
     cd android
@@ -179,8 +193,25 @@ files when it finishes.
 
 ## APK verification
 
-These commands work on the current local APKs. Use the build-tools directory
-because `aapt2`/`zipalign` are not always on `PATH`.
+`scripts/android-verify-apk.sh` is the release gate. It checks the badging
+(package, version, min/target SDK), the exact ABI contents, absence of
+x86/x86_64 native libraries, `zipalign -c -P 16 -v 4`, the arm64 `libgojni.so`
+`p_align >= 0x4000`, the signature via `apksigner`, and the universal size cap:
+
+    source scripts/android-env.sh
+    scripts/android-verify-apk.sh dist/kumiho-v0.5.0-android-universal.apk
+
+    # Unsigned output from a compile-check assembleRelease:
+    KUMIHO_ALLOW_UNSIGNED=1 scripts/android-verify-apk.sh \
+      android/app/build/outputs/apk/release/app-universal-release-unsigned.apk
+
+Use `--help` for the `KUMIHO_EXPECT_*` overrides and the default 60 MiB
+universal cap. The verifier is release-focused; it rejects the x86_64 emulator
+build, and a debug APK needs the `dev.benyamin.kumiho.debug` package override.
+`make android-verify` runs it over every `dist/kumiho-*-android-*.apk`.
+
+The equivalent manual commands (use the build-tools directory because
+`aapt2`/`zipalign` are not always on `PATH`):
 
     source scripts/android-env.sh
     BT="$ANDROID_HOME/build-tools/36.0.0"
@@ -193,54 +224,45 @@ because `aapt2`/`zipalign` are not always on `PATH`.
 Expect `aapt2` to report `package: name='dev.benyamin.kumiho.debug'`,
 `versionCode='500'`, `versionName='0.5.0-debug'`, `minSdkVersion:'26'` and
 `targetSdkVersion:'36'`; `zipalign` to say `Verification successful`; and the
-archive to contain only the expected ABI(s). For a release APK, replace
-`debug` with the release path and check that there is no `x86`/`x86_64`
-library. The check sequence above is the same one the planned
-`scripts/android-verify-apk.sh` would wrap *(planned)*; that script does not
-exist yet.
-
-For a signed APK the signature check is:
+archive to contain only the expected ABI(s). For a signed APK the signature
+check is:
 
     "$BT/apksigner" verify --print-certs "$APK"
 
-This only makes sense once the APK has been signed (below).
-
 ## Signing and release
 
-### What exists today
+### Signing configuration
 
 - `android/app/build.gradle.kts` reads `android/keystore.properties` **only if
   it is present**; keys: `storeFile`, `storePassword`, `keyAlias`,
   `keyPassword`. The file is git-ignored (`android/.gitignore`), as are
-  `*.jks`/`*.keystore` at the repository root.
+  `*.jks`/`*.keystore` at the repository root. The committed
+  `android/keystore.properties.example` shows the shape.
 - With the file absent, `:app:assembleRelease` stays unsigned — a compile
   check, not a release.
 - With the file present, the release build type uses the `release` signing
   config and the APKs are signed.
-- Gradle can emit the per-ABI and universal APKs, but **no release script,
-  signature/ABI/size gate, CI job or GitHub release step exists**. The
-  approved T17 plan is blocked by the T11 physical first-connect gate.
+- `scripts/android-release.sh` requires the file and refuses to start without
+  a non-empty value for all four keys and an existing `storeFile`.
 
-### What is planned (do not claim it is implemented)
+### Signed release build
 
-The approved plan adds `scripts/android-release.sh` and
-`scripts/android-verify-apk.sh`, `android/keystore.properties.example`, the
-final Makefile targets (`android-debug`, `android-test`,
-`android-emulator-test`, `android-release`, `android-verify`), an Android CI
-job and Android steps in the release workflow. None of those targets, scripts
-or jobs exist today; `make android-test`, `make android-release`,
-`make android-verify` and `scripts/android-release.sh` will fail with "No
-rule"/"No such file". Do not document or run them as if they were current.
+    cp android/keystore.properties.example android/keystore.properties
+    # edit the four values; use an absolute storeFile path
+    make android-release KUMIHO_VERSION=0.5.0
+    make android-verify
 
-The planned release asset names are:
+`android-release.sh` validates the semantic version, builds the arm/arm64 AAR
+with the release label, runs `:app:assembleRelease`, copies the three APKs to
+`dist/`, verifies each one and prints its SHA-256. It refuses a dirty worktree
+unless `KUMIHO_ALLOW_DIRTY=1` is set for a local experiment. The outputs are:
 
-    kumiho-v<version>-android-arm64-v8a.apk
-    kumiho-v<version>-android-armeabi-v7a.apk
-    kumiho-v<version>-android-universal.apk
+    dist/kumiho-v<version>-android-arm64-v8a.apk
+    dist/kumiho-v<version>-android-armeabi-v7a.apk
+    dist/kumiho-v<version>-android-universal.apk
 
-They would be copied to `dist/`, added to the existing `SHA256SUMS`, and
-attached to the GitHub release. No Android APK or Android checksum has been
-published.
+The per-ABI names are the release assets; the universal APK is capped at 60 MiB
+by the verifier. No Android APK or Android checksum has been published yet.
 
 ### Creating a release keystore (offline, once)
 
@@ -257,43 +279,50 @@ recovery beyond uninstalling, which erases app data.
 Never commit the keystore or passwords. For a local signed build, create
 `android/keystore.properties` (untracked):
 
-    storeFile=../kumiho-android-release.jks
+    storeFile=/home/you/kumiho-android-release.jks
     storePassword=<store password>
     keyAlias=kumiho
     keyPassword=<key password>
 
-`storeFile` is resolved with `rootProject.file(...)`, i.e. relative to
-`android/`. Then:
+`storeFile` is resolved with `rootProject.file(...)`: an absolute path is used
+as-is; a relative path is relative to `android/`. Then run
+`make android-release KUMIHO_VERSION=0.5.0`.
 
-    cd android && ./gradlew :app:assembleRelease
+### GitHub Actions secrets and tagged release
 
-The outputs are `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk` and
-`app-universal-release.apk` under
-`android/app/build/outputs/apk/release/`.
+The release workflow expects four repository secrets:
 
-### GitHub Actions secrets (planned)
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0` of the release keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias (`kumiho` in the example) |
+| `ANDROID_KEY_PASSWORD` | key password |
 
-The T17 plan calls for four repository secrets — `ANDROID_KEYSTORE_BASE64`
-(the base64-encoded keystore) plus the store password, key alias and key
-password — decoded into a temporary keystore in the release job and removed in
-an `always()` step. **The exact names of the three companion secrets and the
-workflow itself do not exist yet**; set none of them until the workflow lands.
+`.github/workflows/release.yml` decodes the keystore into `$RUNNER_TEMP`,
+writes `android/keystore.properties` with mode 600, runs
+`scripts/android-release.sh`, appends the three APKs to `SHA256SUMS`, and
+attaches them to the GitHub release. An `always()` step removes the temporary
+keystore and properties. The workflow is wired but has not been triggered:
+there is no `v0.5.0` tag yet. Do not claim a release until the tag workflow
+succeeds and the assets appear on GitHub.
 
-### Release checks (planned)
+### Release checks
 
-Before any future release, the plan gates on: `aapt2` badging
-(package/version/min/target), an ABI check (arm only; no x86 in release),
-`zipalign -c -P 16 -v 4`, `llvm-readelf` `p_align >= 0x4000` on the arm64
-`libgojni.so`, `apksigner verify --print-certs`, and a universal APK at or
-under 60 MB with per-ABI sizes recorded. The same checks should be runnable
-locally with the verify script once T17 exists.
+Before any release, the local script and CI gate on: `aapt2` badging
+(package/version/min/target), an ABI check (arm only; no x86/x86_64 native
+libraries), `zipalign -c -P 16 -v 4`, `llvm-readelf` `p_align >= 0x4000` on
+the arm64 `libgojni.so`, `apksigner verify --print-certs`, and a universal APK
+at or under 60 MiB with per-ABI sizes recorded. `make android-verify` reruns
+the checks over `dist/`.
 
 ## Physical acceptance checklist
 
-The checklist has been partially run on a physical S25 FE; the sign-off table
-is still blank. It is the release gate and the T11 first-connect gate; any
-P0/P1 failure stops the release. Record one result per device and leave the
-sign-off table blank until every applicable box is ticked.
+The checklist has been partially run on a physical S25 FE. The user explicitly
+accepted the remaining untested items as exceptions on 2026-10-22; the
+exception sign-off is recorded below. This is not a full checklist pass. It is
+the release gate and the T11 first-connect gate; any P0/P1 failure stops the
+release. Record one result per device.
 
 ### Recorded evidence (not a sign-off)
 
@@ -485,19 +514,21 @@ sign-off table remain open.
 
 ## Sign-off
 
-Leave this table blank until the checklist has actually been run. One row per
-device; attach the logs/screenshots elsewhere. A pass requires every applicable
-box above and no P0/P1 failure.
+The user accepted the remaining unchecked boxes as release exceptions on
+2026-10-22. The row below is a **partial pass**, not a full checklist pass;
+future releases should complete the open boxes. Attach logs/screenshots
+elsewhere.
 
 | Date | Device | Android version / API | App version / build | Tester | Result |
 |---|---|---|---|---|---|
-|  |  |  |  |  |  |
+| 2026-10-22 | Samsung SM-S731B (Galaxy S25 FE) | SDK 37 | 0.5.0-debug (500), source 78237c9 | user | Partial pass with exceptions: connect/DNS/browse/exit IP verified; remaining checklist waived; no P0/P1 reported |
 |  |  |  |  |  |  |
 |  |  |  |  |  |  |
 
-The T11 physical first-connect gate and this T18 acceptance are `[user]`
-steps. T17 (release signing/CI/release workflow) stays blocked until they
-pass.
+The T11 physical first-connect gate is passed on this device. T18 is accepted
+with the exceptions above; T17 (release signing/CI/release workflow) is
+implemented. The production keystore, GitHub secrets, `v0.5.0` tag and
+published release remain user-owned follow-ups.
 
 ## Rollback and uninstall
 
@@ -520,10 +551,10 @@ Go gate are unaffected. To roll back:
   `mobile/` and the real `internal/platform/android` provider; the previous
   compile-only stub and the desktop gate remain. AARs and APKs are untracked
   build outputs, so there is no artifact to migrate.
-- **Release rollback (planned)** — if a signed release is bad, unpublish or
-  mark the release and publish a new `versionCode` built from a fixed tree;
-  never re-sign with a different key. Restore the keystore from its offline
-  backup only.
+- **Release rollback** — if a signed release is bad, unpublish or mark the
+  release and publish a new `versionCode` built from a fixed tree; never
+  re-sign with a different key. Restore the keystore from its offline backup
+  only.
 
 ## Related documentation
 

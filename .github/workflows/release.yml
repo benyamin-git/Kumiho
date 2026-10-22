@@ -10,6 +10,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -22,6 +23,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
       - name: Build binaries
         run: |
           mkdir -p dist
@@ -30,6 +38,30 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-linux-arm64 ./cmd/kumiho
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/kumiho-windows-amd64.exe ./cmd/kumiho
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS -H=windowsgui" -o dist/kumiho-gui-windows-amd64.exe ./cmd/kumiho-gui
+
+      - name: Set up Android toolchain
+        run: bash scripts/android-setup.sh --ci
+
+      - name: Build signed Android APKs
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          source scripts/android-env.sh
+          keystore="$RUNNER_TEMP/kumiho-android-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          {
+            printf 'storeFile=%s\n' "$keystore"
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > android/keystore.properties
+          chmod 600 android/keystore.properties
+          KUMIHO_VERSION="${GITHUB_REF_NAME#v}" bash scripts/android-release.sh
 
       - name: Package zips and checksums
         run: |
@@ -56,6 +88,7 @@ jobs:
           (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe kumiho-gui.exe wintun.dll install.ps1 install.cmd LICENSE NOTICE third_party/wintun/LICENSE.txt third_party/webview2-loader/LICENSE.txt)
 
           sha256sum "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" > SHA256SUMS
+          (cd dist && sha256sum kumiho-${GITHUB_REF_NAME}-android-*.apk) >> SHA256SUMS
           cat SHA256SUMS
 
       - name: Create release
@@ -68,4 +101,11 @@ jobs:
             "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" \
             "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" \
             "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" \
+            "dist/kumiho-${GITHUB_REF_NAME}-android-arm64-v8a.apk" \
+            "dist/kumiho-${GITHUB_REF_NAME}-android-armeabi-v7a.apk" \
+            "dist/kumiho-${GITHUB_REF_NAME}-android-universal.apk" \
             SHA256SUMS
+
+      - name: Remove Android signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kumiho-android-release.jks" android/keystore.properties

@@ -6,8 +6,9 @@ Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
 kill switch, watchdog with edge rotation, runtime settings, log viewer, account
 screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
-install. v0.5.0 adds the Android client (sideload-only; its physical acceptance
-and signed release are still pending — see
+install. v0.5.0 adds the Android client (sideload-only; physical acceptance is
+a partial pass with user-accepted exceptions, and the signed release is pending
+the `v0.5.0` tag — see
 [docs/android-testing.md](docs/android-testing.md)). v0.4.0 adds backend
 parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
 solving, TLS ClientHello fragmentation, an upstream proxy, a local HTTP proxy,
@@ -81,8 +82,9 @@ before release:
 
 - **Windows 11 amd64** — Windows service + Wintun, TUI client over a named pipe.
 - **Android 8.0+** — implemented as a sideloaded VpnService app with the
-  engine embedded in-process; the physical acceptance pass and signed release
-  are still pending (see [docs/android-testing.md](docs/android-testing.md)).
+  engine embedded in-process; physical acceptance is a partial pass with
+  user-accepted exceptions and the signed release is pending the `v0.5.0` tag
+  (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
 ## What's new in v0.4.0
@@ -175,9 +177,8 @@ binary in `dist\` and `wintun.dll` under `third_party\wintun\amd64\`.
 Android 8.0+, from a checkout (sideload; no Play/F-Droid):
 
     bash scripts/android-setup.sh    # JDK 17, SDK 36 + 37.2, NDK 28.2, gomobile
-    make android-aar                 # android/app/libs/kumiho.aar (git-ignored)
-    cd android && ./gradlew :app:assembleDebug
-    adb install -r app/build/outputs/apk/debug/app-debug.apk
+    make android-debug               # AAR + debug APK
+    adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 
 See [docs/android.md](docs/android.md) for the app itself and
 [docs/android-testing.md](docs/android-testing.md) for the toolchain,
@@ -215,8 +216,9 @@ for common issues.
   is English-only, there is no home-screen widget or launcher shortcut (the
   Quick Settings tile covers fast access), no browser/captcha sign-in and no
   auto-update. Always-on and lockdown are Android settings and some OEM
-  battery managers delay or refuse Always-on starts. The physical acceptance
-  pass and signed release are still pending; see
+  battery managers delay or refuse Always-on starts. Physical acceptance is a
+  partial pass with user-accepted exceptions, and the signed release is
+  pending the `v0.5.0` tag; see
   [docs/android.md](docs/android.md#limitations).
 - Using an unofficial client is a ToS gray area (see PLAN.md §13); Kumiho
   never sees or stores your Firefox password, only the resulting tokens.
@@ -234,14 +236,20 @@ Cross-compile from any OS with Go >= 1.27:
     make android-setup  # install JDK 17, SDK 36 + 37.2, NDK 28.2, gomobile
     make android-aar    # android/app/libs/kumiho.aar (arm + arm64, git-ignored)
     make android-aar-emulator  # x86_64 AAR for the emulator
+    make android-debug  # AAR + debug APK
+    make android-test   # JVM tests + lint + debug APK
+    make android-emulator-test  # connected tests (emulator running)
+    make android-release KUMIHO_VERSION=0.5.0  # signed per-ABI + universal
+    make android-verify # verify the APKs in dist/
     make test           # unit tests (run on any OS)
     make vet
 
-The Android app itself is built with its Gradle wrapper after the AAR exists
-(`cd android && ./gradlew :app:assembleDebug`); see
-[docs/android-testing.md](docs/android-testing.md) for unit/lint/connected
-commands and the physical checklist. The AAR is a build output and is never
-committed.
+The Android app is normally built through the Makefile targets above, which
+build the AAR first; the raw Gradle equivalent is
+`cd android && ./gradlew :app:assembleDebug`. See
+[docs/android-testing.md](docs/android-testing.md) for unit/lint/connected,
+signing, verification and the physical checklist. The AAR is a build output
+and is never committed.
 
 Module dependencies are vendored in `vendor/`, so no network access is
 needed to build or test. The Android Gradle dependencies are not vendored;
@@ -338,9 +346,12 @@ diagnostics and proxy-only mode (local SOCKS5/HTTP without a VPN interface)
 are all there too.
 
 > **Release status.** The app builds and its unit, lint, assemble and
-> emulator suites pass, but the physical first-connect/acceptance pass and the
-> signing/release automation are **not done**. Build it locally for now; do
-> not treat a local APK as a published release.
+> emulator suites pass. Physical first-connect/DNS/browsing/exit-IP acceptance
+> passed on a Galaxy S25 FE; the remaining checklist items are user-accepted
+> exceptions (a partial acceptance, not a full pass). The signing/release
+> automation is implemented and tested with a throwaway key, but the production
+> key, `v0.5.0` tag and published APK are still pending. Do not treat a local
+> APK as a published release.
 
 Build it with the toolchain and AAR commands in
 [docs/android-testing.md](docs/android-testing.md); the user guide, including

@@ -10,14 +10,14 @@ This guide describes the app as implemented for **v0.5.0**
 (`versionCode` 500). Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
-> green. The **physical first-connect acceptance** (real phone, real edge, real
-> DNS) and the full physical checklist in
-> [android-testing.md](android-testing.md) have **not** been run yet, and the
-> signing/release automation is still pending. There is therefore **no
-> published Android APK or `SHA256SUMS` on GitHub Releases at the time of
-> writing**; build the app locally with
-> [android-testing.md](android-testing.md) and treat a local build as a test
-> build, not a release.
+> green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
+> Galaxy S25 FE; the remaining checklist items were explicitly accepted by the
+> user as exceptions, so this is a **partial acceptance**, not a full pass. The
+> signing/release automation is implemented, but the production key, `v0.5.0`
+> tag and GitHub release are still pending. There is therefore **no published
+> Android APK or `SHA256SUMS` at the time of writing**; build the app locally
+> with [android-testing.md](android-testing.md) and treat a local build as a
+> test build, not a release.
 
 ## Requirements
 
@@ -33,8 +33,9 @@ This guide describes the app as implemented for **v0.5.0**
   or F-Droid. Android asks you to allow installs from your file manager or
   `adb` the first time.
 - **16 KB page-size devices** are supported by the pinned NDK and the AAR
-  build, which checks the arm64 shared object's `p_align`. The physical
-  16 KB check is part of the acceptance list, not yet run.
+  build, which checks the arm64 shared object's `p_align`; the release
+  verifier also checks `zipalign -P 16` on every APK. A physical 16 KB device
+  run remains an unticked acceptance item.
 
 The app is English-only, uses logical start/end layout, and needs no Google
 Play services.
@@ -43,21 +44,20 @@ Play services.
 
 ### From a local build (current path)
 
-Until the release automation lands, build the app from a checkout:
+For a local test build, build the app from a checkout:
 
     bash scripts/android-setup.sh
-    make android-aar
-    cd android && ./gradlew :app:assembleDebug
-    adb install -r app/build/outputs/apk/debug/app-debug.apk
+    make android-debug
+    adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 
 The debug build installs side by side with a release build: its package is
 `dev.benyamin.kumiho.debug` (version name suffixed `-debug`), while a release
 build is `dev.benyamin.kumiho`. The full toolchain, emulator and release
 instructions are in [android-testing.md](android-testing.md).
 
-### From a release (planned)
+### From a release (pending the v0.5.0 tag)
 
-When the release process exists, each GitHub release is planned to carry three
+When the v0.5.0 release workflow succeeds, each GitHub release carries three
 APKs and the usual `SHA256SUMS`:
 
 | Asset | ABI | Use |
@@ -66,10 +66,11 @@ APKs and the usual `SHA256SUMS`:
 | `kumiho-v<version>-android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
 | `kumiho-v<version>-android-universal.apk` | both | One file if unsure |
 
-Those names come from the approved release plan; **they are not published
-yet**. Never install an APK from an untrusted mirror: when a release exists,
-download it from the project's GitHub Releases and check it against the
-`SHA256SUMS` published with it.
+Those names are produced by `scripts/android-release.sh` and attached by
+`.github/workflows/release.yml`; **the v0.5.0 release is not published yet**.
+Never install an APK from an untrusted mirror: when a release exists, download
+it from the project's GitHub Releases and check it against the `SHA256SUMS`
+published with it.
 
 ### Updating
 
@@ -610,9 +611,10 @@ daemon or your Firefox Account.
   loopback-only, unauthenticated and device-wide.
 - **Non-DNS UDP is blocked** inside the tunnel (QUIC/HTTP3 falls back to TCP;
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
-- **Physical acceptance and the signed release are pending.** Treat the
-  current build as a test build until the checklist in
-  [android-testing.md](android-testing.md) is signed.
+- **Physical acceptance is a partial pass with user-accepted exceptions, and
+  the signed release is pending.** Treat the current build as a test build
+  until the `v0.5.0` release workflow succeeds; see
+  [android-testing.md](android-testing.md).
 
 ## Desktop parity
 

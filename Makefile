@@ -3,8 +3,10 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X $(MODULE)/internal/version.Version=$(VERSION) -X $(MODULE)/internal/version.Commit=$(COMMIT) -X $(MODULE)/internal/version.Date=$(DATE)
+GRADLE ?= ./gradlew
+GRADLE_FLAGS ?=
 
-.PHONY: all build build-arm64 build-windows build-gui build-probe build-web android-setup android-aar android-aar-emulator test test-integration vet fmt lint clean
+.PHONY: all build build-arm64 build-windows build-gui build-probe build-web android-setup android-aar android-aar-emulator android-debug android-test android-emulator-test android-release android-verify test test-integration vet fmt lint clean
 
 all: build
 
@@ -43,6 +45,35 @@ android-aar:
 
 android-aar-emulator:
 	bash scripts/android-build-aar.sh --emulator
+
+android-debug:
+	bash scripts/android-build-aar.sh
+	cd android && $(GRADLE) $(GRADLE_FLAGS) :app:assembleDebug
+
+android-test:
+	bash scripts/android-build-aar.sh
+	cd android && $(GRADLE) $(GRADLE_FLAGS) :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+android-emulator-test:
+	bash scripts/android-build-aar.sh --emulator
+	cd android && $(GRADLE) $(GRADLE_FLAGS) -PkumihoEmulator=true :app:connectedDebugAndroidTest
+
+android-release:
+	@test -n "$(KUMIHO_VERSION)" || { echo "usage: make android-release KUMIHO_VERSION=0.5.0" >&2; exit 2; }
+	KUMIHO_VERSION="$(KUMIHO_VERSION)" bash scripts/android-release.sh
+
+android-verify:
+	@if [ -n "$(APK)" ]; then \
+		bash scripts/android-verify-apk.sh "$(APK)"; \
+	else \
+		found=0; \
+		for apk in dist/kumiho-v*-android-*.apk; do \
+			[ -f "$$apk" ] || continue; \
+			found=1; \
+			bash scripts/android-verify-apk.sh "$$apk" || exit 1; \
+		done; \
+		[ "$$found" = 1 ] || { echo "no release APKs in dist/; run make android-release KUMIHO_VERSION=<version>" >&2; exit 2; }; \
+	fi
 
 test:
 	go test ./...

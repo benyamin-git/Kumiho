@@ -111,6 +111,12 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = false
+            // The app ships only arm ABIs. Dependency AARs carry x86 copies of
+            // their own .so files; keep them for the x86_64 emulator build and
+            // strip them from every device/release APK.
+            if (!emulatorBuild) {
+                excludes += setOf("lib/x86/**", "lib/x86_64/**")
+            }
         }
     }
 }
