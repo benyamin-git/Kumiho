@@ -317,7 +317,7 @@ and again by the Go route computation at connect:
   blackhole the device.
 - The computed lists are capped at 256 prefixes, which bounds the
   `VpnService.Builder` work.
-- **C1:** the tunnel DNS host `10.8.0.2` is subtracted from the exclusions.
+- The tunnel DNS host `10.8.0.2` is subtracted from the exclusions.
   It stays routed to the in-tunnel resolver even when `allow_lan` or a user
   CIDR covers its range, so DNS cannot be blackholed by a legitimate
   exclusion.
@@ -485,8 +485,8 @@ DoH there. If lookups fail while the tunnel is up:
 2. Check the split selection and `exclude_cidrs`. The app protects
    `10.8.0.2/32` from `allow_lan` and user exclusions, so a correctly built
    interface should still reach the resolver; a failure here is exactly the
-   `[user]` STOP/GO gate in the acceptance list, not something to paper over
-   by switching to Private DNS or another resolver.
+   stop condition in the physical acceptance checklist, not something to paper
+   over by switching to Private DNS or another resolver.
 3. Collect **Share**d logs (and `adb logcat` if you are at a computer) before
    changing anything.
 
@@ -502,7 +502,7 @@ system may prefer that encrypted resolver for some lookups, which can make a
 DNS problem look like a tunnel problem. Compare the diagnostic's Private DNS
 row with the VPN link's DNS, then test with Private DNS set to Automatic if you
 are diagnosing a failure — and put it back afterwards. Do not treat a Private
-DNS change as a fix for the T11 DNS gate.
+DNS change as a fix for the tunnel DNS path.
 
 ### Battery optimization and OEMs
 
