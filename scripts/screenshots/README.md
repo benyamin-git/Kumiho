@@ -14,7 +14,7 @@ Run from the repository root:
 
     scripts/screenshots/capture.sh
 
-The script rebuilds the web harness with `Version=v0.4.0` (override with
+The script rebuilds the web harness with `Version=v0.5.1` (override with
 `KUMIHO_CAPTURE_VERSION`), starts it on `0.0.0.0:7407`, and restarts it before
 each screen so a notice from one state cannot leak into the next. It stops the
 harness when done.
@@ -26,7 +26,15 @@ harness when done.
   `scripts/visual/capture.mjs`; the TUI renderer uses `npx playwright
   screenshot`. The resolution order and cache setup are documented in
   `scripts/visual/README.md`.
-- No root and no system changes; the harness serves the mock daemon only.
+- Noto Color Emoji, so country flags render as flags instead of fallback
+  letters:
+
+      sudo apt-get install -y fonts-noto-color-emoji
+      fc-cache -f
+      fc-list : family | grep -i 'Noto Color Emoji'
+
+  The script fails early when `fc-list` cannot find the font. The harness
+  itself serves the mock daemon only and needs no other system change.
 
 ## How it works
 
