@@ -30,6 +30,7 @@
  */
 
 import { connectionStatus } from "../store.js";
+import { flagFor } from "../flags.js";
 
 // The busy guard's settle: an action whose signals repeat byte-for-byte (an
 // identical repeat failure) stops blocking after this long (see the file
@@ -338,7 +339,9 @@ export default {
       const options = [el("option", null, "Saved selection")];
       options[0].value = "";
       for (const country of view.locations) {
-        const option = el("option", null, country.name + " (" + country.code + ")");
+        const flag = flagFor(country.code);
+        const option = el("option", null,
+          (flag ? flag + " " : "") + country.name + " (" + country.code + ")");
         option.value = country.code;
         if (country.code === view.options.location) found = true;
         options.push(option);

@@ -18,6 +18,7 @@
 .loc__actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -27,6 +28,14 @@
 
 .loc__test {
   min-inline-size: 140px;
+}
+
+.loc__ping-all {
+  min-inline-size: 110px;
+}
+
+.loc__toggle {
+  min-inline-size: 130px;
 }
 
 /* ----------------------------------------------------------------- filter */
@@ -86,6 +95,11 @@
   flex: none;
   margin-inline-end: var(--space-1);
   color: var(--on-surface);
+}
+
+.loc__flag {
+  flex: none;
+  margin-inline-end: var(--space-1);
 }
 
 .loc__label {

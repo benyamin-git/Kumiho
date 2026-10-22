@@ -1,7 +1,8 @@
 /* The Locations screen (inventory §Locations): the live filter, the
  * country → city → server tree (REC first as served, drawn carets, the
- * `· selected` and `· 42 ms`/`· timeout` marks), the Refresh and Test-speed
- * action row, and the tone-coloured status line.
+ * `· selected` and `· 42 ms`/`· timeout` marks), the Refresh, Test-speed,
+ * Ping-all and Expand-all/Collapse-all action row, and the tone-coloured
+ * status line.
  *
  * Everything renders from the store's state envelopes (the controller
  * projection); actions go through the transport and the screen re-renders
@@ -16,8 +17,9 @@
  * Ping labels are the controller's: State.RTTs maps host:port to the label
  * rttLabel() formatted (`42 ms` / `timeout`, controller.go) and this screen
  * renders them as-is; the same projection owns the "Speed test failed: …"
- * notice. The busy guard around a Test-speed run is screen-side for the same
- * reason as the dashboard's: the state carries no ping-in-flight signal. It
+ * notice. The busy guard around a Test-speed or Ping-all run is screen-side
+ * for the same reason as the dashboard's: the state carries no ping-in-flight
+ * signal. It
  * ends when the run shows any completion evidence — the locations notice
  * moved (a failure, or a cleared stale failure), or every requested host
  * gained a label if not every host had one at the click — and otherwise at
@@ -42,6 +44,8 @@
  * §Locations (including the ellipsis/period quirks documented there).
  */
 
+import { flagFor } from "../flags.js";
+
 // One Test-speed run probes at most this many visible server rows (inventory
 // §Locations "up to the first 16 visible server rows").
 const MAX_PING_HOSTS = 16;
@@ -52,9 +56,12 @@ const ROW_PX = 36;
 const WHEEL_NOTCH_MIN = 40; // smaller deltas are trackpad-scale: scroll natively
 const WHEEL_ROWS = 3;
 
-// The Test-speed guard's settle (the dashboard's T2.2 pattern): a repeat run
-// whose results change nothing visible stops blocking after this long.
+// The ping run's settle window: at least this long, and longer for a big
+// target list (the daemon probes 24 hosts at a time with a 1.5 s deadline).
 const PING_SETTLE_MS = 3000;
+const PING_CONCURRENCY = 24;
+const PING_PROBE_MS = 1500;
+const PING_MARGIN_MS = 1500;
 
 // The filter field / list padding (inventory: the filter is 260 wide; the
 // walk-era list padded its rows by 8).
@@ -147,8 +154,12 @@ function build(host) {
   refresh.type = "button";
   const test = el("button", "button button--tonal loc__test", "Test speed");
   test.type = "button";
+  const pingAll = el("button", "button button--tonal loc__ping-all", "Ping all");
+  const toggle = el("button", "button button--tonal loc__toggle", "Expand all");
+  pingAll.type = "button";
+  toggle.type = "button";
   const actions = el("div", "loc__actions");
-  actions.append(refresh, test);
+  actions.append(refresh, test, pingAll, toggle);
 
   const filterLabel = el("label", "field__label", "Filter");
   filterLabel.htmlFor = "loc-filter";
@@ -182,6 +193,8 @@ function build(host) {
     root: root,
     refresh: refresh,
     test: test,
+    pingAll: pingAll,
+    toggle: toggle,
     filter: filter,
     tree: tree,
     empty: empty,
@@ -209,8 +222,10 @@ export default {
       // Selection reveal (the walk model's setSelection): re-runs when the
       // served data or the persisted selection changes.
       revealKey: null,
-      // Test-speed run state.
+      // Test-speed / Ping-all run state.
       pingBusy: false,
+      pingMode: "",
+      pingCount: 0,
       pingHosts: [],
       pingAllLabelledAtStart: false,
       pingNoticeMark: "",
@@ -339,6 +354,60 @@ export default {
     }
 
     /**
+     * Every connectable server address in the loaded tree (including REC),
+     * regardless of filter or expansion; quarantined and target-less servers
+     * are skipped and duplicates keep the first spelling.
+     */
+    function allTargets() {
+      const seen = {};
+      const hosts = [];
+      for (const country of view.locations) {
+        for (const city of country.cities || []) {
+          for (const server of city.servers || []) {
+            if (server.quarantined) continue;
+            const address = connectTarget(server);
+            if (!address) continue;
+            const key = address.toLowerCase();
+            if (seen[key]) continue;
+            seen[key] = true;
+            hosts.push(address);
+          }
+        }
+      }
+      return hosts;
+    }
+
+    function anyExpanded() {
+      for (const code in view.expandedCountries) {
+        if (view.expandedCountries[code]) return true;
+      }
+      for (const key in view.expandedCities) {
+        if (view.expandedCities[key]) return true;
+      }
+      return false;
+    }
+
+    /** Open every country and city, or close them all if any is open. */
+    function toggleAll() {
+      if (view.filter !== "" || view.locations.length === 0) return;
+      if (anyExpanded()) {
+        view.expandedCountries = {};
+        view.expandedCities = {};
+        return;
+      }
+      const countries = {};
+      const cities = {};
+      for (const country of view.locations) {
+        countries[country.code] = true;
+        for (const city of country.cities || []) {
+          cities[country.code + "/" + city.code] = true;
+        }
+      }
+      view.expandedCountries = countries;
+      view.expandedCities = cities;
+    }
+
+    /**
      * The persisted selection's server row (the walk model: both the
      * selected country code, case-insensitively, and the host:port match).
      */
@@ -349,6 +418,11 @@ export default {
         status.server === row.address &&
         String(status.location || "").toLowerCase() === String(row.countryCode).toLowerCase()
       );
+    }
+
+    /** The decorative flag for country rows only (never cities or servers). */
+    function rowFlag(row) {
+      return row.kind === "country" ? flagFor(row.countryCode) : "";
     }
 
     /** The row's single display line (the walk model's Text()). */
@@ -388,12 +462,15 @@ export default {
           rowEl.setAttribute("aria-expanded", row.expanded ? "true" : "false");
           rowEl.append(caret(row.expanded));
         }
+        const flag = el("span", "loc__flag");
+        flag.setAttribute("aria-hidden", "true");
+        rowEl.append(flag);
         const label = el("span", "loc__label");
         rowEl.append(label);
         rowEl.id = "loc-row-" + index;
         rowEl.dataset.index = String(index);
         frag.append(rowEl);
-        els.push({ el: rowEl, label: label });
+        els.push({ el: rowEl, flag: flag, label: label });
       });
       ui.tree.replaceChildren(frag);
       view.rowEls = els;
@@ -414,6 +491,9 @@ export default {
         const entry = view.rowEls[i];
         const text = rowText(row, snapshot);
         if (entry.label.textContent !== text) entry.label.textContent = text;
+        const flag = rowFlag(row);
+        if (entry.flag.textContent !== flag) entry.flag.textContent = flag;
+        if (entry.flag.hidden !== (flag === "")) entry.flag.hidden = flag === "";
         if (row.kind === "server") {
           const want = isSelected(row, snapshot) ? "true" : "false";
           if (entry.el.getAttribute("aria-selected") !== want) {
@@ -457,7 +537,12 @@ export default {
       const notice = snapshot.locations_notice;
       if (!snapshot.locations_loaded && !error) return { text: "Loading locations...", tone: "" };
       if (error) return { text: error, tone: "bad" };
-      if (view.pingBusy) return { text: "Testing speed...", tone: "" };
+      if (view.pingBusy) {
+        return {
+          text: view.pingMode === "all" ? "Pinging " + view.pingCount + " servers..." : "Testing speed...",
+          tone: "",
+        };
+      }
       if (isSpeedFailure(notice)) return { text: notice.message, tone: "bad" };
       if (snapshot.locations_loaded && view.rows.length === 0 && view.filter !== "") {
         return { text: "No locations match the filter", tone: "" };
@@ -485,13 +570,20 @@ export default {
     }
 
     function renderActions() {
-      if (ui.test.disabled !== view.pingBusy) ui.test.disabled = view.pingBusy;
+      const busy = view.pingBusy;
+      ui.test.disabled = busy;
+      ui.pingAll.disabled = busy || allTargets().length === 0;
+      ui.toggle.disabled = view.filter !== "" || view.locations.length === 0;
+      const label = anyExpanded() ? "Collapse all" : "Expand all";
+      if (ui.toggle.textContent !== label) ui.toggle.textContent = label;
     }
 
-    // endPing ends a Test-speed run's guard; the caller re-renders (or is
-    // mid-render already).
+    // endPing ends a run's guard; the caller re-renders (or is mid-render
+    // already).
     function endPing() {
       view.pingBusy = false;
+      view.pingMode = "";
+      view.pingCount = 0;
       view.pingHosts = [];
       view.pingAllLabelledAtStart = false;
       clearTimeout(view.pingTimer);
@@ -532,10 +624,19 @@ export default {
       renderActions();
     }
 
-    function beginPing(hosts) {
+    function pingWindowMs(count) {
+      return Math.max(
+        PING_SETTLE_MS,
+        Math.ceil(count / PING_CONCURRENCY) * PING_PROBE_MS + PING_MARGIN_MS,
+      );
+    }
+
+    function beginPing(hosts, mode) {
       const snapshot = ctx.store.get();
       const rtts = snapshot.rtts || {};
       view.pingBusy = true;
+      view.pingMode = mode;
+      view.pingCount = hosts.length;
       view.pingHosts = hosts.slice();
       view.pingNoticeMark = noticeMark(snapshot.locations_notice);
       view.pingAllLabelledAtStart = hosts.every(function (host) {
@@ -546,9 +647,9 @@ export default {
         view.pingTimer = 0;
         endPing();
         render();
-      }, PING_SETTLE_MS);
-      // Disable the button in the click's own turn: another click before the
-      // next envelope must find it disabled.
+      }, pingWindowMs(hosts.length));
+      // Disable the buttons in the click's own turn: another click before the
+      // next envelope must find them disabled.
       render();
     }
 
@@ -561,13 +662,32 @@ export default {
         if (hosts.length === MAX_PING_HOSTS) break;
       }
       if (hosts.length === 0) return; // nothing visible to probe
-      beginPing(hosts);
+      beginPing(hosts, "speed");
       ctx.send("ping", { hosts: hosts }).then(function (err) {
         if (!err) return;
         endPing();
         render();
         console.warn("kumiho: locations ping refused: " + err);
       });
+    }
+
+    function onPingAll() {
+      if (view.pingBusy) return;
+      const hosts = allTargets();
+      if (hosts.length === 0) return;
+      beginPing(hosts, "all");
+      ctx.send("ping", { hosts: hosts }).then(function (err) {
+        if (!err) return;
+        endPing();
+        render();
+        console.warn("kumiho: locations ping all refused: " + err);
+      });
+    }
+
+    function onToggleAll() {
+      if (view.filter !== "" || view.locations.length === 0) return;
+      toggleAll();
+      render();
     }
 
     // Refresh asks the daemon to re-download the server list: the ruled
@@ -692,6 +812,8 @@ export default {
 
     ui.refresh.addEventListener("click", onRefresh);
     ui.test.addEventListener("click", onTestSpeed);
+    ui.pingAll.addEventListener("click", onPingAll);
+    ui.toggle.addEventListener("click", onToggleAll);
     ui.filter.addEventListener("input", onFilter);
     ui.tree.addEventListener("keydown", onTreeKey);
     ui.tree.addEventListener("pointerdown", onTreePointerDown);
