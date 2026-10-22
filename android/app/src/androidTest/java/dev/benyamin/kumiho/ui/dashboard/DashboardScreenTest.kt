@@ -258,6 +258,38 @@ class DashboardScreenTest {
         assertEquals(listOf("confirm-lockdown"), calls)
     }
 
+    @Test
+    fun theLockdownDialogExplainsTheOsRestartAndOpensVpnSettings() {
+        show(connectedState().copy(lockdownPrompt = true))
+
+        rule.onNodeWithText(text(R.string.dashboard_lockdown_text)).assertExists()
+        rule.onNodeWithTag(DashboardTags.LOCKDOWN_VPN_SETTINGS).performClick()
+
+        assertEquals(listOf("vpn-settings"), calls)
+    }
+
+    @Test
+    fun alwaysOnSaysTheOsMayRestartTheTunnel() {
+        show(connectedState().copy(alwaysOn = true))
+
+        rule.onNodeWithText(text(R.string.dashboard_details_always_on_restart)).assertExists()
+    }
+
+    @Test
+    fun theSheetKeepsTheProxyOnlyWarningCopy() {
+        show(
+            DashboardState.fromService(snapshot(state = STATE_IDLE)).copy(
+                options = ConnectOptionsState(open = true, choice = LocationChoice.Recommended),
+                locations = LocationLoad.Ready(COUNTRIES),
+            ),
+        )
+
+        rule.onNodeWithText(text(R.string.dashboard_options_proxy_only)).performScrollTo()
+            .assertExists()
+        rule.onNodeWithText(text(R.string.dashboard_options_proxy_only_text)).performScrollTo()
+            .assertExists()
+    }
+
     // ---- helpers ---------------------------------------------------------
 
     private fun actions() = DashboardActions(

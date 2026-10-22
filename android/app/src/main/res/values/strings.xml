@@ -8,7 +8,12 @@
     <!-- VPN service (T9). -->
     <string name="notification_channel_status">Connection status</string>
     <string name="notification_channel_status_description">Shows whether Kumiho is connected and lets you disconnect.</string>
+    <string name="notification_channel_alerts">Sign-in and connection alerts</string>
+    <string name="notification_channel_alerts_description">One-off prompts when Kumiho needs a sign-in or a connection fails. Not used for the ongoing status.</string>
     <string name="notification_title">Kumiho</string>
+    <string name="notification_with_location">%1$s · %2$s</string>
+    <string name="notification_uptime">Up for %1$s</string>
+    <string name="notification_traffic">↑ %1$s · ↓ %2$s</string>
     <string name="notification_state_off">Not connected</string>
     <string name="notification_state_connected">Connected</string>
     <string name="notification_state_proxy_only">Proxy only</string>
@@ -23,7 +28,23 @@
     <string name="notification_action_open">Open</string>
     <string name="notification_sign_in_title">Sign in to Kumiho</string>
     <string name="notification_sign_in_text">Open Kumiho and sign in to connect.</string>
+    <string name="notification_error_title">Kumiho could not connect</string>
+    <string name="notification_error_text">Open Kumiho to try again.</string>
     <string name="vpn_error_service_unavailable">The VPN service is unavailable</string>
+
+    <!-- Quick Settings tile (T16). The tile is a system surface, not app UI. -->
+    <string name="tile_label">Kumiho</string>
+    <string name="tile_subtitle_off">Not connected</string>
+    <string name="tile_subtitle_connected">Connected</string>
+    <string name="tile_subtitle_connected_location">Connected · %1$s</string>
+    <string name="tile_subtitle_connecting">Connecting…</string>
+    <string name="tile_subtitle_proxy_only">Proxy only</string>
+    <string name="tile_subtitle_reconnecting">Reconnecting…</string>
+    <string name="tile_subtitle_waiting">Waiting for network</string>
+    <string name="tile_subtitle_sign_in">Sign in required</string>
+    <string name="tile_subtitle_permission">VPN permission needed</string>
+    <string name="tile_subtitle_unavailable">Service unavailable</string>
+    <string name="tile_subtitle_error">Connection error</string>
 
     <!-- Four-step setup (T10). -->
     <string name="setup_title">Set up Kumiho</string>
@@ -150,6 +171,7 @@
     <!-- Dashboard details. -->
     <string name="dashboard_details_title">Details</string>
     <string name="dashboard_details_always_on">Always-on VPN</string>
+    <string name="dashboard_details_always_on_restart">Android may start Kumiho after a reboot</string>
     <string name="dashboard_details_lockdown">Lockdown</string>
     <string name="dashboard_details_autoconnect">Autoconnect</string>
     <string name="dashboard_details_autoconnect_follows">Follows Android\'s Always-on VPN</string>
@@ -203,7 +225,8 @@
 
     <!-- Dashboard lockdown disconnect explanation. -->
     <string name="dashboard_lockdown_title">Disconnect under lockdown?</string>
-    <string name="dashboard_lockdown_text">Android blocks all traffic while Kumiho is disconnected. Until you connect again, apps on this phone have no network access.</string>
+    <string name="dashboard_lockdown_text">Android blocks all traffic while Kumiho is disconnected. It may restart the tunnel on its own, but until it connects again, apps on this phone have no network access.</string>
+    <string name="dashboard_lockdown_open_settings">Open VPN settings</string>
     <string name="dashboard_lockdown_confirm">Disconnect</string>
     <string name="dashboard_lockdown_cancel">Keep connected</string>
 

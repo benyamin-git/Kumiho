@@ -54,6 +54,11 @@ fun StatusDetails(
         )
         DetailRow(
             title = stringResource(R.string.dashboard_details_always_on),
+            summary = if (state.alwaysOn) {
+                stringResource(R.string.dashboard_details_always_on_restart)
+            } else {
+                null
+            },
             value = onOff(state.alwaysOn),
         )
         DetailRow(

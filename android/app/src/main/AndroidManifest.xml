@@ -55,6 +55,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="vpn" />
         </service>
+        <!-- Quick Settings tile (T16). The signature BIND_QUICK_SETTINGS_TILE
+             permission protects the exported service; the tile renders the
+             process-local status cache and drives the same service. -->
+        <service
+            android:name=".vpn.QuickConnectTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <!-- Shares one exported log file from cacheDir/exports as a content
              URI; the provider is not exported and grants read per URI. -->
         <provider

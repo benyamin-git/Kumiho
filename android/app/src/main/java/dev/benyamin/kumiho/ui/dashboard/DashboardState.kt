@@ -428,6 +428,7 @@ object DashboardTags {
     const val PICKER_CITY_PREFIX = "dashboard_picker_city_"
 
     const val LOCKDOWN_DIALOG = "dashboard_lockdown_dialog"
+    const val LOCKDOWN_VPN_SETTINGS = "dashboard_lockdown_vpn_settings"
     const val LOCKDOWN_CONFIRM = "dashboard_lockdown_confirm"
     const val LOCKDOWN_CANCEL = "dashboard_lockdown_cancel"
 

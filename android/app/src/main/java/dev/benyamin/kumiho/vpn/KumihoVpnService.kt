@@ -19,12 +19,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -73,6 +76,9 @@ class KumihoVpnService : VpnService() {
      */
     private val connectInFlight = AtomicBoolean(false)
 
+    /** The minute ticker for a live session's uptime and traffic. */
+    private var tickerJob: Job? = null
+
     /** The local binder: no AIDL, no IPC, same process (C6). */
     inner class LocalBinder : Binder() {
         val engine: EngineClient get() = this@KumihoVpnService.engine
@@ -104,15 +110,22 @@ class KumihoVpnService : VpnService() {
                 mutableState.update { it.copy(status = status) }
             }
         }
-        // Keep the foreground notification truthful while it is showing.
+        // Keep the foreground notification truthful while it is showing: once
+        // per state change, plus a minute ticker for a live session's uptime
+        // and traffic. The ticker is cancelled as soon as the session is gone.
         scope.launch {
             mutableState.collect { snapshot ->
-                if (foreground) {
-                    notifications.update(
-                        NotificationFactory.FOREGROUND_ID,
-                        VpnStateReducer.reduceForService(snapshot),
-                    )
+                if (!foreground) {
+                    stopTicker()
+                    return@collect
                 }
+                val uiState = VpnStateReducer.reduceForService(snapshot)
+                notifications.update(
+                    NotificationFactory.FOREGROUND_ID,
+                    uiState,
+                    snapshot.status,
+                )
+                updateTicker(uiState)
             }
         }
         scope.launch { startEngine() }
@@ -177,6 +190,8 @@ class KumihoVpnService : VpnService() {
     override fun onDestroy() {
         bound = false
         foreground = false
+        stopTicker()
+        VpnStatusCache.clear()
         // Close the Go session before cancelling the scope: the engine shuts
         // the tunnel down and the adopted fd stays Go's to close.
         try {
@@ -290,7 +305,7 @@ class KumihoVpnService : VpnService() {
                 return@launch
             }
             // Proxy-only never touches the interface, so it needs no consent.
-            if (!request.proxyOnly &&
+            if (request.requiresTunInterface &&
                 PermissionController.vpnPrepareIntent(this@KumihoVpnService) != null
             ) {
                 mutableState.update { it.copy(permissionNeeded = true, error = null) }
@@ -317,12 +332,14 @@ class KumihoVpnService : VpnService() {
                     proxyOnly = request.proxyOnly,
                 )
                 notifications.cancelSignIn()
+                notifications.cancelError()
                 mutableState.update { it.copy(error = null, permissionNeeded = false) }
                 refreshStatus()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
                 mutableState.update { it.copy(error = messageOf(error)) }
+                notifications.postError(messageOf(error))
                 detachForeground()
                 stopSelf()
             } finally {
@@ -338,6 +355,7 @@ class KumihoVpnService : VpnService() {
                     engine.disconnect()
                     refreshStatus()
                     notifications.cancelSignIn()
+                    notifications.cancelError()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -414,8 +432,39 @@ class KumihoVpnService : VpnService() {
 
     private fun failAndStop() {
         // startEngine already recorded the reason.
+        notifications.postError(mutableState.value.error)
         detachForeground()
         stopSelf()
+    }
+
+    /**
+     * Starts the one-minute refresh for a live session, or stops it for every
+     * other state. The engine pushes status continuously; the ticker exists so
+     * the uptime in the notification ages even when no field changed.
+     */
+    private fun updateTicker(uiState: VpnUiState) {
+        if (!NotificationText.shouldTick(uiState)) {
+            stopTicker()
+            return
+        }
+        if (tickerJob?.isActive == true) return
+        tickerJob = scope.launch {
+            while (isActive) {
+                delay(NOTIFICATION_TICK_MILLIS)
+                if (!foreground) return@launch
+                val snapshot = mutableState.value
+                notifications.update(
+                    NotificationFactory.FOREGROUND_ID,
+                    VpnStateReducer.reduceForService(snapshot),
+                    snapshot.status,
+                )
+            }
+        }
+    }
+
+    private fun stopTicker() {
+        tickerJob?.cancel()
+        tickerJob = null
     }
 
     private fun refreshOsPolicy() {
@@ -429,11 +478,11 @@ class KumihoVpnService : VpnService() {
 
     private fun beginForeground(uiState: VpnUiState = VpnUiState.CONNECTING) {
         foreground = true
-        notifications.ensureChannel()
+        notifications.ensureChannels()
         ServiceCompat.startForeground(
             this,
             NotificationFactory.FOREGROUND_ID,
-            notifications.build(uiState),
+            notifications.build(uiState, mutableState.value.status),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             } else {
@@ -444,6 +493,7 @@ class KumihoVpnService : VpnService() {
 
     private fun detachForeground() {
         foreground = false
+        stopTicker()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
 
@@ -463,6 +513,9 @@ class KumihoVpnService : VpnService() {
 
     companion object {
         private const val TAG = "KumihoVpnService"
+
+        /** The status notification's uptime/traffic refresh while a session is up. */
+        private const val NOTIFICATION_TICK_MILLIS = 60_000L
 
         const val ACTION_CONNECT = "dev.benyamin.kumiho.action.CONNECT"
         const val ACTION_DISCONNECT = "dev.benyamin.kumiho.action.DISCONNECT"

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.service.quicksettings.TileService
 import androidx.core.content.ContextCompat
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.EngineClient
@@ -60,6 +61,21 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         }
         if (!bound) {
             loseBinding(appContext.getString(R.string.vpn_error_service_unavailable))
+        }
+        // The Quick Settings tile reads this cache; refresh a visible tile on
+        // every real service change, and drop it when the service is gone.
+        // Status pushes also carry traffic counters, which the tile ignores, so
+        // an unchanged presentation does not wake the system tile.
+        scope.launch {
+            var last: TileSnapshot? = null
+            state.collect { snapshot ->
+                val tile = VpnStatusCache.update(snapshot)
+                val presentation = tile.copy(connectInFlight = false)
+                if (presentation != last) {
+                    last = presentation
+                    requestTileRefresh()
+                }
+            }
         }
     }
 
@@ -178,6 +194,8 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         stateJob = null
         binder = null
         mutableEngine.value = null
+        VpnStatusCache.clear()
+        requestTileRefresh()
         mutableState.update {
             it.copy(binding = false, engineReady = false, status = null)
         }
@@ -191,6 +209,18 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         }
         if (!failed.isCompleted) {
             failed.completeExceptionally(failure)
+        }
+    }
+
+    /** Asks a visible Quick Settings tile to re-read the cache. */
+    private fun requestTileRefresh() {
+        try {
+            TileService.requestListeningState(
+                appContext,
+                ComponentName(appContext, QuickConnectTileService::class.java),
+            )
+        } catch (_: RuntimeException) {
+            // No tile in this process/session; the next change asks again.
         }
     }
 }

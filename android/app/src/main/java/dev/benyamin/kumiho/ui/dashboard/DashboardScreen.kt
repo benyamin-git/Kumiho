@@ -215,6 +215,7 @@ fun DashboardScreen(
         LockdownDialog(
             onConfirm = actions.onConfirmLockdownDisconnect,
             onCancel = actions.onCancelLockdown,
+            onOpenVpnSettings = actions.onOpenVpnSettings,
         )
     }
 }
@@ -333,11 +334,15 @@ private fun messageResource(message: DashboardMessage): Int = when (message) {
 
 /**
  * The lockdown explanation. Disconnecting under lockdown is allowed, but
- * Android will block all traffic until the user reconnects; the dialog says so
- * and never pretends the disconnect is free.
+ * Android blocks all traffic and may restart the tunnel on its own; the dialog
+ * says both plainly and links to the OS settings that own the policy.
  */
 @Composable
-private fun LockdownDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun LockdownDialog(
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    onOpenVpnSettings: () -> Unit,
+) {
     val loss = LocalKumihoColors.current.loss
     AlertDialog(
         onDismissRequest = onCancel,
@@ -347,7 +352,19 @@ private fun LockdownDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
                 modifier = Modifier.testTag(DashboardTags.LOCKDOWN_DIALOG),
             )
         },
-        text = { Text(stringResource(R.string.dashboard_lockdown_text)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space2)) {
+                Text(stringResource(R.string.dashboard_lockdown_text))
+                TextButton(
+                    onClick = onOpenVpnSettings,
+                    modifier = Modifier
+                        .heightIn(min = Dimens.TouchTarget)
+                        .testTag(DashboardTags.LOCKDOWN_VPN_SETTINGS),
+                ) {
+                    Text(stringResource(R.string.dashboard_lockdown_open_settings))
+                }
+            }
+        },
         confirmButton = {
             TextButton(
                 onClick = onConfirm,

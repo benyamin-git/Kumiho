@@ -145,7 +145,14 @@ data class ConnectRequest(
     val cityCode: String? = null,
     val server: String? = null,
     val proxyOnly: Boolean = false,
-)
+) {
+    /**
+     * True when Android must build a TUN interface. Proxy-only runs the local
+     * SOCKS/HTTP proxies in the same foreground service without an interface
+     * (D33), so it needs neither the interface spec nor the VPN consent.
+     */
+    val requiresTunInterface: Boolean get() = !proxyOnly
+}
 
 /** What a restarted (Always-on) service should do. */
 enum class AlwaysOnDecision { AUTO_CONNECT, SIGN_IN_NOTIFICATION, NONE }
