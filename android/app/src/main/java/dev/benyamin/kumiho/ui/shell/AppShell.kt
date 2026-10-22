@@ -47,7 +47,10 @@ fun AppShell(
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
     locations: @Composable () -> Unit = { LocationsPlaceholder() },
+    account: @Composable () -> Unit = { AccountPlaceholder() },
     settings: @Composable () -> Unit = { SettingsPlaceholder() },
+    logs: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Logs) },
+    diagnostics: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Diagnostics) },
 ) {
     val state by nav.state.collectAsStateWithLifecycle()
     AppShell(
@@ -58,15 +61,18 @@ fun AppShell(
         modifier = modifier,
         home = home,
         locations = locations,
+        account = account,
         settings = settings,
+        logs = logs,
+        diagnostics = diagnostics,
     )
 }
 
 /**
- * The stateless shell, so the navigation holder can be faked in tests. [home]
- * and [locations] are the Home and Locations destinations' content; both
- * default to the T7 placeholders so the shell tests keep compiling, and the app
- * passes the dashboard and the real locations screen.
+ * The stateless shell, so the navigation holder can be faked in tests. Every
+ * destination is a slot: [home], [locations], [account], [settings] and the two
+ * More routes, [logs] and [diagnostics]. All default to placeholders so the
+ * shell stays renderable on its own; the app passes the real screens.
  */
 @Composable
 fun AppShell(
@@ -77,7 +83,10 @@ fun AppShell(
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
     locations: @Composable () -> Unit = { LocationsPlaceholder() },
+    account: @Composable () -> Unit = { AccountPlaceholder() },
     settings: @Composable () -> Unit = { SettingsPlaceholder() },
+    logs: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Logs) },
+    diagnostics: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Diagnostics) },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
@@ -150,7 +159,7 @@ fun AppShell(
                             .widthIn(max = Dimens.ContentMaxWidth)
                             .fillMaxSize(),
                     ) {
-                        ScreenHost(state, home, locations, settings)
+                        ScreenHost(state, home, locations, account, settings, logs, diagnostics)
                     }
                 }
             }
@@ -211,28 +220,46 @@ private fun ScreenHost(
     state: ShellNavState,
     home: @Composable () -> Unit,
     locations: @Composable () -> Unit,
+    account: @Composable () -> Unit,
     settings: @Composable () -> Unit,
+    logs: @Composable () -> Unit,
+    diagnostics: @Composable () -> Unit,
 ) {
     val more = state.moreRoute
     if (more != null) {
-        PlaceholderScreen(
-            title = more.label,
-            message = "Not connected. This screen arrives with the engine client.",
-            icon = moreRouteIcon(more),
-        )
+        when (more) {
+            MoreRoute.Logs -> logs()
+            MoreRoute.Diagnostics -> diagnostics()
+        }
         return
     }
     when (state.tab) {
         Destination.Home -> home()
         Destination.Locations -> locations()
-        Destination.Account -> PlaceholderScreen(
-            title = Destination.Account.label,
-            message = "Not connected. Account details arrive with the engine client.",
-            icon = destinationIcon(Destination.Account),
-        )
+        Destination.Account -> account()
         Destination.Settings -> settings()
         Destination.More -> Unit
     }
+}
+
+/** The pre-T15 Account placeholder; the app passes the real screen. */
+@Composable
+private fun AccountPlaceholder() {
+    PlaceholderScreen(
+        title = Destination.Account.label,
+        message = "Not connected. Account details arrive with the engine client.",
+        icon = destinationIcon(Destination.Account),
+    )
+}
+
+/** The pre-T15 More-route placeholder; the app passes the real screens. */
+@Composable
+private fun MoreRoutePlaceholder(route: MoreRoute) {
+    PlaceholderScreen(
+        title = route.label,
+        message = "Not connected. This screen arrives with the engine client.",
+        icon = moreRouteIcon(route),
+    )
 }
 
 /** The pre-T13 Locations placeholder; the app passes the real screen. */

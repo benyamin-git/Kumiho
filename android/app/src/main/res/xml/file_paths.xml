@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the log export directory is shared, and only through a FileProvider
+  content URI. No other cache, file or external path is exposed.
+-->
+<paths>
+    <cache-path name="exports" path="exports/" />
+</paths>

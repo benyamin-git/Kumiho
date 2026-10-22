@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import dev.benyamin.kumiho.KumihoApplication
+import dev.benyamin.kumiho.crash.CrashLog
 import dev.benyamin.kumiho.engine.EngineClient
 import dev.benyamin.kumiho.engine.EnginePaths
 import dev.benyamin.kumiho.engine.EngineStatus
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -198,6 +200,7 @@ class KumihoVpnService : VpnService() {
             ready.complete(Unit)
             mutableState.update { it.copy(engineReady = true, error = null) }
             refreshStatus()
+            replayCrashLog()
         } catch (cancelled: CancellationException) {
             ready.cancel(cancelled)
             throw cancelled
@@ -206,6 +209,24 @@ class KumihoVpnService : VpnService() {
             mutableState.update {
                 it.copy(engineReady = false, error = messageOf(error))
             }
+        }
+    }
+
+    /**
+     * Replays a crash recorded by a previous process into the in-app log, once.
+     * The helper deletes the file only after a successful append, so a failed
+     * append keeps it for the next start. Replay is best effort: the engine is
+     * already up and a missing or unreadable file is normal.
+     */
+    private suspend fun replayCrashLog() {
+        try {
+            CrashLog.replay(File(filesDir, CrashLog.FILE_NAME)) { text ->
+                engine.logAppend("error", "crash", text)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "crash log replay failed", error)
         }
     }
 

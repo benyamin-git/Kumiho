@@ -28,9 +28,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.PaletteState
+import dev.benyamin.kumiho.ui.account.AccountRoute
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.dashboard.DashboardRoute
+import dev.benyamin.kumiho.ui.diagnostics.DiagnosticsRoute
 import dev.benyamin.kumiho.ui.locations.LocationsRoute
+import dev.benyamin.kumiho.ui.logs.LogsRoute
 import dev.benyamin.kumiho.ui.settings.SettingsRoute
 import dev.benyamin.kumiho.ui.setup.SetupRoute
 import dev.benyamin.kumiho.ui.shell.AppShell
@@ -64,7 +67,10 @@ fun KumihoApp(container: AppContainer) {
                     nav = nav,
                     home = { DashboardRoute(container) },
                     locations = { LocationsRoute(container) },
+                    account = { AccountRoute(container) },
                     settings = { SettingsRoute(container) },
+                    logs = { LogsRoute(container) },
+                    diagnostics = { DiagnosticsRoute(container) },
                 )
             }
         }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Kumiho</string>
 
     <!-- Shared components. -->
@@ -445,4 +445,142 @@
     <string name="settings_option_sni">SNI</string>
     <string name="settings_option_standard">Standard</string>
     <string name="settings_option_slow">Slow</string>
+
+    <!-- Diagnostics (T15). -->
+    <string name="diagnostics_loading">Running diagnostics…</string>
+    <string name="diagnostics_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="diagnostics_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="diagnostics_launch_failed">Android could not open that settings page.</string>
+    <string name="diagnostics_load_failed_title">Diagnostics did not finish</string>
+    <string name="diagnostics_dismiss">Dismiss</string>
+    <string name="diagnostics_summary_title">Diagnostics</string>
+    <string name="diagnostics_report_meta">Kumiho %1$s · %2$s</string>
+    <string name="diagnostics_report_host">%1$s · %2$s</string>
+    <string name="diagnostics_summary" tools:ignore="PluralsCandidate">%1$d failed · %2$d warnings · %3$d skipped</string>
+    <string name="diagnostics_group_checks">Checks</string>
+    <string name="diagnostics_remediation">Fix: %1$s</string>
+    <string name="diagnostics_rerun">Re-run</string>
+    <string name="diagnostics_rerunning">Running…</string>
+    <string name="diagnostics_copy_all">Copy all</string>
+    <string name="diagnostics_copied">The report was copied to the clipboard.</string>
+    <string name="diagnostics_reset">Reset local state…</string>
+    <string name="diagnostics_resetting">Resetting…</string>
+    <string name="diagnostics_reset_title">Reset local state?</string>
+    <string name="diagnostics_reset_text">This clears the cached server list, the log ring and the failure counters. Your Firefox Account and its tokens stay signed in.</string>
+    <string name="diagnostics_reset_confirm">Reset</string>
+    <string name="diagnostics_reset_cancel">Cancel</string>
+    <string name="diagnostics_reset_done">Local state was reset.</string>
+    <string name="diagnostics_reset_failed">The local state could not be reset.</string>
+
+    <string name="diagnostics_service_title">VPN service</string>
+    <string name="diagnostics_row_service">Service</string>
+    <string name="diagnostics_row_engine">Engine state</string>
+    <string name="diagnostics_row_service_running">Service running</string>
+    <string name="diagnostics_row_always_on">Always-on VPN</string>
+    <string name="diagnostics_row_lockdown">Lockdown</string>
+    <string name="diagnostics_row_notifications">Notifications</string>
+    <string name="diagnostics_row_battery">Battery optimization</string>
+    <string name="diagnostics_row_network">Network</string>
+    <string name="diagnostics_row_dns">DNS servers</string>
+    <string name="diagnostics_row_private_dns">Private DNS</string>
+    <string name="diagnostics_row_ports">Local ports</string>
+    <string name="diagnostics_row_clock">Clock skew</string>
+    <string name="diagnostics_row_endpoints">Endpoints</string>
+    <string name="diagnostics_ports_value">SOCKS %1$s · HTTP %2$s</string>
+    <string name="diagnostics_check_vpn_permission">VPN permission</string>
+    <string name="diagnostics_not_started">Not started</string>
+    <string name="diagnostics_not_reported">Not reported</string>
+    <string name="diagnostics_battery_optimized">Optimized</string>
+    <string name="diagnostics_battery_unrestricted">Unrestricted</string>
+    <string name="diagnostics_private_dns_hostname">Hostname</string>
+    <string name="diagnostics_private_dns_opportunistic">Opportunistic</string>
+    <string name="diagnostics_private_dns_off">Off</string>
+    <string name="diagnostics_yes">Yes</string>
+    <string name="diagnostics_no">No</string>
+    <string name="diagnostics_on">On</string>
+    <string name="diagnostics_off">Off</string>
+    <string name="diagnostics_allowed">Allowed</string>
+    <string name="diagnostics_not_allowed">Not allowed</string>
+    <string name="diagnostics_available">Available</string>
+    <string name="diagnostics_unavailable">Unavailable</string>
+    <string name="diagnostics_listening">Listening</string>
+    <string name="diagnostics_not_listening">Not listening</string>
+    <string name="diagnostics_status_ok">OK</string>
+    <string name="diagnostics_status_warn">Warn</string>
+    <string name="diagnostics_status_fail">Fail</string>
+    <string name="diagnostics_status_skip">Skip</string>
+    <string name="diagnostics_status_unknown">Unknown</string>
+    <!-- The count is intentionally count-agnostic copy; a plural table would
+         force a different sentence for one and many without changing meaning. -->
+    <string name="diagnostics_split_excluding" tools:ignore="PluralsCandidate">Excluding %1$d app(s)</string>
+    <string name="diagnostics_split_including" tools:ignore="PluralsCandidate">Including %1$d app(s)</string>
+    <string name="diagnostics_split_hint">Changes apply on the next connect.</string>
+    <string name="diagnostics_open_vpn_settings">Open Android VPN settings</string>
+    <string name="diagnostics_open_notification_settings">Open notification settings</string>
+    <string name="diagnostics_open_battery_settings">Open battery settings</string>
+
+    <!-- Logs (T15). -->
+    <string name="logs_loading">Loading the log…</string>
+    <string name="logs_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="logs_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="logs_load_failed_title">The log did not load</string>
+    <string name="logs_dismiss">Dismiss</string>
+    <string name="logs_search_label">Search the log</string>
+    <string name="logs_search_clear">Clear</string>
+    <string name="logs_filter_all">All</string>
+    <string name="logs_filter_debug">Debug</string>
+    <string name="logs_filter_info">Info</string>
+    <string name="logs_filter_warn">Warn</string>
+    <string name="logs_filter_error">Error</string>
+    <string name="logs_follow">Follow</string>
+    <string name="logs_clear">Clear</string>
+    <string name="logs_clearing">Clearing…</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_share_title">Share log file</string>
+    <string name="logs_export_failed">The log file could not be shared.</string>
+    <string name="logs_copy">Copy</string>
+    <string name="logs_copied">The line was copied to the clipboard.</string>
+    <string name="logs_cleared">The log was cleared.</string>
+    <string name="logs_clear_failed">The log could not be cleared.</string>
+    <string name="logs_empty_title">No log lines</string>
+    <string name="logs_empty_message">The engine has not logged anything yet. Connect or change a setting to produce entries.</string>
+    <string name="logs_no_match">No line matches “%1$s” at this level.</string>
+    <string name="logs_cap" tools:ignore="PluralsCandidate">Showing the newest %1$d lines. Older lines are in the exported file until the ring rotates.</string>
+
+    <!-- Account (T15). -->
+    <string name="account_loading">Loading your account…</string>
+    <string name="account_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="account_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="account_retry">Retry</string>
+    <string name="account_dismiss">Dismiss</string>
+    <string name="account_timeout">The account did not respond within 35 seconds. The last known details are still shown.</string>
+    <string name="account_load_failed">The account details did not load.</string>
+    <string name="account_refresh_failed">The account details did not refresh. The last known details are still shown.</string>
+    <string name="account_sign_out_failed">Signing out failed.</string>
+    <string name="account_signed_out_title">Not signed in</string>
+    <string name="account_signed_out_text">Sign in with your Firefox Account to see your subscription, quota and token details.</string>
+    <string name="account_signed_in_note">Signed in. The account card replaces this pane.</string>
+    <string name="account_signed_in_title">Firefox Account</string>
+    <string name="account_not_reported">Not reported</string>
+    <string name="account_uid">Account UID</string>
+    <string name="account_subscription">Subscription</string>
+    <string name="account_subscribed">Active</string>
+    <string name="account_not_subscribed">No active subscription</string>
+    <string name="account_quota">Quota</string>
+    <string name="account_quota_none">No quota reported</string>
+    <string name="account_bandwidth">Bandwidth</string>
+    <string name="account_bandwidth_limited">Limited</string>
+    <string name="account_bandwidth_unlimited">Unlimited</string>
+    <string name="account_token">Token expires</string>
+    <string name="account_token_unknown">Not reported</string>
+    <string name="account_refresh">Refresh</string>
+    <string name="account_refreshing">Refreshing…</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_signing_out">Signing out…</string>
+    <string name="account_sign_out_note">Signing out clears the tokens and disconnects the tunnel. The app stays on this screen.</string>
+    <string name="account_sign_out_title">Sign out of Firefox Accounts?</string>
+    <string name="account_sign_out_text">Your tokens are cleared and the tunnel disconnects. You can sign in again at any time.</string>
+    <string name="account_sign_out_confirm">Sign out</string>
+    <string name="account_sign_out_cancel">Cancel</string>
+    <string name="more_title">More</string>
 </resources>

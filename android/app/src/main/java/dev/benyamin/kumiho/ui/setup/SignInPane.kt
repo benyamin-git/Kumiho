@@ -50,6 +50,7 @@ fun SignInPane(
     onSubmitCode: (String) -> Unit,
     onRecheck: () -> Unit,
     modifier: Modifier = Modifier,
+    signedInNote: String? = null,
 ) {
     var email by rememberSaveable { mutableStateOf(state.email) }
     var password by remember { mutableStateOf("") }
@@ -281,7 +282,7 @@ fun SignInPane(
                     modifier = Modifier.testTag(SetupTags.SIGN_IN_ACCOUNT),
                 )
                 Text(
-                    text = stringResource(R.string.sign_in_signed_note),
+                    text = signedInNote ?: stringResource(R.string.sign_in_signed_note),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

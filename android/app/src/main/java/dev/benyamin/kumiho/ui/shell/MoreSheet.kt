@@ -11,6 +11,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoRow
 import dev.benyamin.kumiho.ui.components.KumihoSectionHeader
 import dev.benyamin.kumiho.ui.components.moreRouteIcon
@@ -43,7 +45,7 @@ fun MoreSheet(
                 .navigationBarsPadding()
                 .padding(bottom = Dimens.Space3),
         ) {
-            KumihoSectionHeader(title = "More")
+            KumihoSectionHeader(title = stringResource(R.string.more_title))
             MoreRoute.entries.forEach { route ->
                 KumihoRow(
                     title = route.label,
