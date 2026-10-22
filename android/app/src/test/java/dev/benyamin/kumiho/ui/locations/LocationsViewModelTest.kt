@@ -604,6 +604,208 @@ class LocationsViewModelTest {
             assertFalse(viewModel.state.value.canTest)
         }
 
+    // ---- ping all --------------------------------------------------------
+
+    @Test
+    fun `Ping all sends every loaded target even when the filter shows one city`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.onQueryChange("berlin")
+            runCurrent()
+            assertEquals(listOf(BER_ADDRESS), viewModel.state.value.testTargets)
+
+            viewModel.pingAll()
+            runCurrent()
+
+            assertEquals(
+                listOf(listOf(AUTO, EDGE, SHARE, WEST, BER_ADDRESS)),
+                gateway.pingCalls,
+            )
+            assertTrue(viewModel.state.value.pingingAll)
+        }
+
+    @Test
+    fun `Ping all keeps its count until the last host answers`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.pingAll()
+            runCurrent()
+
+            val running = viewModel.state.value
+            assertTrue(running.pingingAll)
+            assertFalse(running.testing)
+            assertEquals(5, running.pingAllCount)
+            assertFalse(running.canPingAll)
+
+            gateway.emitPing(AUTO, rttMs = 20.0)
+            gateway.emitPing(EDGE, rttMs = 42.0)
+            gateway.emitPing(SHARE, rttMs = null)
+            gateway.emitPing(WEST, rttMs = 88.0)
+            runCurrent()
+
+            assertTrue("one host is still pending", viewModel.state.value.pingingAll)
+            assertEquals("the count stays the run size", 5, viewModel.state.value.pingAllCount)
+
+            gateway.emitPing(BER_ADDRESS, rttMs = 61.0)
+            runCurrent()
+
+            val stopped = viewModel.state.value
+            assertFalse(stopped.pingingAll)
+            assertEquals(0, stopped.pingAllCount)
+            assertEquals(LatencyState.Measured(61), stopped.latencyOf(BER_SERVER))
+        }
+
+    @Test
+    fun `Test speed and Ping all are mutually exclusive in both orders`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.toggleCountry("us")
+            viewModel.toggleCity("us", "nyc")
+            runCurrent()
+
+            viewModel.testSpeed()
+            runCurrent()
+            viewModel.pingAll()
+            runCurrent()
+            assertEquals("Ping all is ignored while Test speed runs", 1, gateway.pingCalls.size)
+            assertTrue(viewModel.state.value.testing)
+
+            advanceTimeBy(WINDOW + 1)
+            runCurrent()
+
+            viewModel.pingAll()
+            runCurrent()
+            assertEquals(2, gateway.pingCalls.size)
+            assertTrue(viewModel.state.value.pingingAll)
+
+            viewModel.testSpeed()
+            runCurrent()
+            assertEquals("Test speed is ignored while Ping all runs", 2, gateway.pingCalls.size)
+            assertTrue(viewModel.state.value.pingingAll)
+        }
+
+    @Test
+    fun `Expand all opens every country and city and Collapse all closes them`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+            assertFalse(viewModel.state.value.anyExpanded)
+            assertTrue(viewModel.state.value.canToggleAll)
+
+            viewModel.toggleAll()
+            runCurrent()
+
+            val expanded = viewModel.state.value
+            assertTrue(expanded.anyExpanded)
+            assertEquals(setOf("rec", "us", "de"), expanded.expandedCountries)
+            assertEquals(setOf("rec/rec", "us/nyc", "us/sfo", "de/ber"), expanded.expandedCities)
+
+            viewModel.toggleAll()
+            runCurrent()
+
+            val collapsed = viewModel.state.value
+            assertFalse(collapsed.anyExpanded)
+            assertTrue(collapsed.expandedCountries.isEmpty())
+            assertTrue(collapsed.expandedCities.isEmpty())
+        }
+
+    @Test
+    fun `Expand all is a no-op while searching or without a tree`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.onQueryChange("ber")
+            runCurrent()
+            assertFalse(viewModel.state.value.canToggleAll)
+            viewModel.toggleAll()
+            runCurrent()
+            assertFalse(viewModel.state.value.anyExpanded)
+
+            viewModel.clearQuery()
+            gateway.countries = emptyList()
+            viewModel.refresh()
+            runCurrent()
+            assertFalse(viewModel.state.value.canToggleAll)
+            viewModel.toggleAll()
+            runCurrent()
+            assertFalse(viewModel.state.value.anyExpanded)
+        }
+
+    @Test
+    fun `a failed Ping all offers a retry that repeats the whole tree`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            gateway.pingError = IllegalStateException("ping unavailable")
+            viewModel.pingAll()
+            runCurrent()
+
+            val notice = viewModel.state.value.notice
+            requireNotNull(notice)
+            assertEquals(LocationsNoticeAction.RETRY_PING_ALL, notice.action)
+            assertEquals(LocationsNoticeTone.WARNING, notice.tone)
+            assertEquals(
+                LocationsNoticeText.Local(LocationsMessage.PING_ALL_FAILED, "ping unavailable"),
+                notice.text,
+            )
+            assertFalse(viewModel.state.value.pingingAll)
+            assertEquals(0, viewModel.state.value.pingAllCount)
+
+            gateway.pingError = null
+            viewModel.retryNotice()
+            runCurrent()
+
+            assertEquals(2, gateway.pingCalls.size)
+            assertEquals(listOf(AUTO, EDGE, SHARE, WEST, BER_ADDRESS), gateway.pingCalls.last())
+            assertNull(viewModel.state.value.notice)
+            assertTrue(viewModel.state.value.pingingAll)
+        }
+
+    @Test
+    fun `the ping window scales with the target count`() =
+        runTest(mainRule.testDispatcher) {
+            val cities = (1..48).map { index ->
+                City(
+                    code = "c$index",
+                    name = "City $index",
+                    servers = listOf(server("host$index.example.net")),
+                )
+            }
+            gateway.countries = listOf(Country(code = "xx", name = "Many", cities = cities))
+            val viewModel = LocationsViewModel(gateway = gateway, pingWindowMillis = 1_000L)
+            runCurrent()
+
+            viewModel.pingAll()
+            runCurrent()
+            assertEquals(1, gateway.pingCalls.size)
+            assertEquals(48, gateway.pingCalls.single().size)
+            assertTrue(viewModel.state.value.pingingAll)
+
+            advanceTimeBy(4_000)
+            runCurrent()
+            assertTrue(
+                "the base window alone must not stop 48 targets",
+                viewModel.state.value.pingingAll,
+            )
+
+            advanceTimeBy(600)
+            runCurrent()
+            assertFalse(viewModel.state.value.pingingAll)
+        }
+
     // ---- notices and reload ---------------------------------------------
 
     @Test
@@ -665,6 +867,9 @@ class LocationsViewModelTest {
         const val EMAIL = "user@example.com"
         const val EDGE = "edge.example.net:2499"
         const val SHARE = "share.example.net:443"
+        const val WEST = "west.example.net:443"
+        const val AUTO = "auto.example.net:443"
+        const val BER_ADDRESS = "ber.example.net:443"
 
         fun server(host: String, port: Int = 443, quarantined: Boolean = false) = Server(
             hostname = host,
@@ -676,6 +881,7 @@ class LocationsViewModelTest {
         val EDGE_SERVER = server("edge.example.net", 2499)
         val SHARE_SERVER = server("share.example.net")
         val WEST_SERVER = server("west.example.net")
+        val BER_SERVER = server("ber.example.net")
         val QUARANTINED_SERVER = server("quarantined.example.net", quarantined = true)
 
         val REC = Country(
@@ -701,7 +907,7 @@ class LocationsViewModelTest {
         val BER = City(
             code = "ber",
             name = "Berlin",
-            servers = listOf(server("ber.example.net"), QUARANTINED_SERVER),
+            servers = listOf(BER_SERVER, QUARANTINED_SERVER),
         )
 
         val US = Country(code = "us", name = "United States", cities = listOf(NYC, SFO))

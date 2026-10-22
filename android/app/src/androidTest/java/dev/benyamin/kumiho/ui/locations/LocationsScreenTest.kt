@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -289,8 +290,8 @@ class LocationsScreenTest {
     fun TestSpeedIsOfferedForTheVisibleServers() {
         show(state())
 
-        val helper = rule.activity.resources.getQuantityString(R.plurals.locations_test_helper, 4, 4)
-        rule.onNodeWithTag(LocationsTags.TEST_HELPER).assertExists()
+        val helper = rule.activity.getString(R.string.locations_targets_helper, 4, 6)
+        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER).assertExists()
         rule.onNodeWithText(helper).assertExists()
         rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsEnabled().performClick()
 
@@ -310,7 +311,80 @@ class LocationsScreenTest {
         show(state(query = "atlantis"))
 
         rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
-        rule.onNodeWithText(text(R.string.locations_test_helper_none)).assertExists()
+        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER)
+            .assertTextEquals(rule.activity.getString(R.string.locations_targets_helper, 0, 6))
+    }
+
+    // ---- ping all and expand all ----------------------------------------
+
+    @Test
+    fun theToolbarCountsVisibleAndTotalTargets() {
+        show(state())
+
+        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER)
+            .assertTextEquals(rule.activity.getString(R.string.locations_targets_helper, 4, 6))
+    }
+
+    @Test
+    fun PingAllTestsTheWholeTreeEvenWhenTheQueryShowsNothing() {
+        show(state(query = "atlantis"))
+
+        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER)
+            .assertTextEquals(rule.activity.getString(R.string.locations_targets_helper, 0, 6))
+        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
+        rule.onNodeWithTag(LocationsTags.PING_ALL).assertIsEnabled().performClick()
+
+        assertEquals(listOf("ping-all"), calls)
+    }
+
+    @Test
+    fun PingAllIsDisabledAndNamedWhileItRuns() {
+        show(state(pingingAll = true, pingAllCount = 6))
+
+        rule.onNodeWithTag(LocationsTags.PING_ALL).assertIsNotEnabled()
+        rule.onNodeWithText(rule.activity.getString(R.string.locations_pinging_all, 6)).assertExists()
+    }
+
+    @Test
+    fun PingAllIsDisabledWhileTestSpeedRuns() {
+        show(state(testing = true))
+
+        rule.onNodeWithTag(LocationsTags.PING_ALL).assertIsNotEnabled()
+        rule.onNodeWithText(text(R.string.locations_testing)).assertExists()
+    }
+
+    @Test
+    fun TestSpeedIsDisabledWhilePingAllRuns() {
+        show(state(pingingAll = true, pingAllCount = 6))
+
+        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
+    }
+
+    @Test
+    fun theToggleSaysExpandWhenNothingIsOpenAndRequestsIt() {
+        show(state(expandedCountries = emptySet(), expandedCities = emptySet()))
+
+        rule.onNodeWithText(text(R.string.locations_expand_all)).assertExists()
+        rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertIsEnabled().performClick()
+
+        assertEquals(listOf("toggle-all"), calls)
+    }
+
+    @Test
+    fun theToggleSaysCollapseWhenAnythingIsOpenAndRequestsIt() {
+        show(state(expandedCountries = setOf("us"), expandedCities = emptySet()))
+
+        rule.onNodeWithText(text(R.string.locations_collapse_all)).assertExists()
+        rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertIsEnabled().performClick()
+
+        assertEquals(listOf("toggle-all"), calls)
+    }
+
+    @Test
+    fun theToggleIsDisabledWhileSearching() {
+        show(state(query = "ber"))
+
+        rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertIsNotEnabled()
     }
 
     // ---- touch targets ---------------------------------------------------
@@ -321,6 +395,8 @@ class LocationsScreenTest {
 
         rule.onNodeWithTag(LocationsTags.REFRESH).assertHeightIsAtLeast(48.dp)
         rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertHeightIsAtLeast(48.dp)
+        rule.onNodeWithTag(LocationsTags.PING_ALL).assertHeightIsAtLeast(48.dp)
+        rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertHeightIsAtLeast(48.dp)
         rule.onNodeWithTag(LocationsTags.NOTICE_ACTION).assertHeightIsAtLeast(48.dp)
         rule.onNodeWithTag(LocationsTags.NOTICE_DISMISS).assertHeightIsAtLeast(48.dp)
         scrollTo(serverRowTag("us", "nyc", EDGE_ADDRESS))
@@ -346,6 +422,8 @@ class LocationsScreenTest {
         onRefresh = { calls += "refresh" },
         onRetryLoad = { calls += "retry-load" },
         onTestSpeed = { calls += "test-speed" },
+        onPingAll = { calls += "ping-all" },
+        onToggleAll = { calls += "toggle-all" },
         onDismissNotice = { calls += "dismiss-notice" },
         onRetryNotice = { calls += "retry-notice" },
     )
@@ -361,6 +439,8 @@ class LocationsScreenTest {
         selection: LocationSelection? = null,
         latency: Map<String, Double?> = emptyMap(),
         testing: Boolean = false,
+        pingingAll: Boolean = false,
+        pingAllCount: Int = 0,
         savingServer: String? = null,
         sessionActive: Boolean = false,
         notice: LocationsNotice? = null,
@@ -377,6 +457,8 @@ class LocationsScreenTest {
         selection = selection,
         latency = latency,
         testing = testing,
+        pingingAll = pingingAll,
+        pingAllCount = pingAllCount,
         savingServer = savingServer,
         sessionActive = sessionActive,
     )
