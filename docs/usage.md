@@ -33,10 +33,12 @@ TCP through it, with DNS carried as DoH over HTTPS inside the tunnel.
 `g` logs, `l` login, `r` refresh, `?` help overlay, `q` quit. Inside screens:
 arrows/`hjkl` move, `enter` select/change, `esc` back.
 
-- **Locations** — `REC` first; `p` pings the visible servers; `/` filters;
-  `enter` expands a country or selects a server (persisted). A server that
-  fails to connect 3 times in a row is dropped and the next connect
-  auto-picks (`REC` random, else the first country).
+- **Locations** — `REC` first and country rows carry flags; `p` pings the
+  visible servers, `P` pings every usable server in the loaded list, `x`
+  expands/collapses every country and city, `/` filters; `enter` expands a
+  country or selects a server (persisted). A server that fails to connect 3
+  times in a row is dropped and the next connect auto-picks (`REC` random,
+  else the first country).
 - **Settings** — every runtime setting: kill switch, autoconnect, log level,
   redaction, exit check, DoH provider, custom DNS, pinned edge, upstream
   proxy, excluded CIDRs, allow-LAN, MTU, SOCKS port, quota poll, TLS split,

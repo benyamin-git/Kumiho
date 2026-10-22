@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-10-22
+
+Locations polish across every client.
+
+### Added
+
+- Country-flag emoji on the Android Locations list, the Android connect-sheet
+  country picker and current-selection summary, the Windows GUI locations tree
+  and dashboard location select, and the TUI locations tree. Recommended,
+  cities and servers stay unprefixed.
+- **Ping all** on Android, the Windows GUI and the TUI: one action probes every
+  usable, non-quarantined server in the loaded list, deduped by `host:port` and
+  ignoring the filter and expansion. Test speed still probes only the visible
+  rows, and the run window scales with the target count.
+- **Expand all / Collapse all** on Android and the Windows GUI, plus `x` in the
+  TUI: one toggle over both country and city expansion, disabled while a filter
+  is active.
+
+### Changed
+
+- Android builds default to version `0.5.1` (`versionCode` 501).
+- README, the user and build guides, and the committed GUI/TUI screenshots
+  document and show the new locations controls.
+
+### Notes
+
+- No engine, IPC, daemon or mobile-facade change: Ping all reuses the existing
+  `ping` command and `ping_result` stream, and protocol v1 is unchanged.
+
 ## [0.5.0] - 2026-10-22
 
 The Android client. The desktop daemon, CLI, TUI, GUI and control protocol are
@@ -289,7 +318,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
 [0.4.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.0

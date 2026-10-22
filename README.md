@@ -1,13 +1,15 @@
 # Kumiho
 
-**Status:** v0.5.0 — working Linux and Windows 11 clients plus a native Android
+**Status:** v0.5.1 — working Linux and Windows 11 clients plus a native Android
 app: daemon + TUI/CLI/GUI over a Unix socket (Linux) or named pipe (Windows),
 Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
 kill switch, watchdog with edge rotation, runtime settings, log viewer, account
 screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
-install. v0.5.0 adds the Android client (sideload-only; physical acceptance is
-a partial pass with user-accepted exceptions). The signed
+install. v0.5.1 adds country flags, Ping all and Expand all/Collapse all to
+the locations screen on Android, the Windows GUI and the TUI. v0.5.0 adds the
+Android client (sideload-only; physical acceptance is a partial pass with
+user-accepted exceptions). The signed
 [v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
 is published; see [docs/android-testing.md](docs/android-testing.md).
 v0.4.0 adds backend
@@ -55,7 +57,7 @@ Captured in the Dark theme with sample data. The Windows GUI images are
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: server tree with ping times and a timeout](screenshots/windows-gui/locations.png) |
+| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: flagged country rows, Test speed / Ping all / Expand all actions and ping times](screenshots/windows-gui/locations.png) |
 
 ![Windows GUI settings: theme and accent controls, version, and background service rows](screenshots/windows-gui/settings.png)
 
@@ -63,7 +65,7 @@ Captured in the Dark theme with sample data. The Windows GUI images are
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: country and city tree with ping times](screenshots/linux-tui/locations.png) |
+| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: flagged country tree with expanded rows, ping times and expand/collapse-all hints](screenshots/linux-tui/locations.png) |
 
 ![Linux TUI settings: all settings rows and the TLS split hint](screenshots/linux-tui/settings.png)
 
@@ -239,7 +241,7 @@ Cross-compile from any OS with Go >= 1.27:
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
-    make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.5.1 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
     make vet
@@ -289,7 +291,8 @@ that runs per logged-in user. It has six screens:
 
 - **Dashboard** — the connection state, Connect/Disconnect, per-connect
   options (location, proxy only, kill switch) and the live status card;
-- **Locations** — a filterable country/city/server tree with a speed test;
+- **Locations** — a filterable country/city/server tree with country flags,
+  Test speed, Ping all and Expand all/Collapse all;
 - **Settings** — Light/Dark/OLED theme, six accents, start at login, plus the
   daemon's own settings with per-setting overrides;
 - **Account** — the entitlement and a tonal sign-out;
@@ -329,7 +332,7 @@ changes the daemon, CLI or TUI.
 
 ## Android app
 
-Kumiho's Android app (v0.5.0) is a native sideloaded client, not a front end
+Kumiho's Android app (v0.5.1) is a native sideloaded client, not a front end
 for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
 notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
@@ -339,7 +342,8 @@ no Play or F-Droid build.
 The app has a four-step setup (consent, native Firefox Accounts sign-in, VPN
 and notification permissions, Always-on guidance), then the same surfaces as
 the desktop clients: a dashboard with connect options and live status,
-locations with a filter and speed test, and all 19 settings rows (the 17
+locations with country flags, a filter, Test speed/Ping all and Expand
+all/Collapse all, and all 19 settings rows (the 17
 engine settings plus the read-only Always-on/lockdown rows Android owns),
 with overrides and Reset. Split tunneling, account, logs with sharing,
 diagnostics and proxy-only mode (local SOCKS5/HTTP without a VPN interface)

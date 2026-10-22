@@ -121,7 +121,7 @@ The action row holds:
   held disabled from the click until the action settles.
 - **Options** — a small popover with the per-connect choices:
   - **Location** — a `Saved selection` entry plus every country the daemon
-    serves, as `Name (CC)`;
+    serves, as `Name (CC)` prefixed with the country's flag;
   - **Proxy only** — *Keep system routing untouched; SOCKS5 proxy only.*;
   - **Kill switch** — `On`, `Off` or `Last` (*Last keeps the value currently
     in effect*), seeded from the current setting;
@@ -147,13 +147,20 @@ header already says so and the card stays empty.
 
 **Reached:** the `Locations` rail item. A filter box at the top narrows the
 tree live as you type. Countries contain their cities, and cities their
-servers; the recommended region is listed first. The current selection is
-marked `· selected`, and each server may show a latency such as `· 42 ms` or
-`· timeout`.
+servers; the recommended region is listed first and country rows carry their
+country-flag emoji (Recommended, cities and servers do not). The current
+selection is marked `· selected`, and each server may show a latency such as
+`· 42 ms` or `· timeout`.
 
-The action row has **Refresh** and **Test speed** (probes the visible servers
-and fills in the latency figures). A status line below reports the last
-action's result.
+The action row has **Refresh**, **Test speed**, **Ping all** and
+**Expand all**/**Collapse all**. Test speed probes the visible servers (up to
+16 hosts) and fills in the latency figures. Ping all probes every usable
+server in the loaded list — countries, cities and Recommended, deduped by
+address and skipping quarantined entries — regardless of the filter, and its
+status line reads `Pinging N servers...`. Expand all opens every country and
+city; the label flips to Collapse all while anything is open, and the control
+is disabled while the filter is non-empty. A status line below reports the
+last action's result.
 
 ## Settings
 
