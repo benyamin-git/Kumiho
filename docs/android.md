@@ -228,7 +228,7 @@ total** (17 engine settings and the 2 Android-owned Always-on/lockdown rows).
 
 `allow_lan` bypasses the tunnel for `10.0.0.0/8`, `172.16.0.0/12`,
 `192.168.0.0/16`, `169.254.0.0/16` and `224.0.0.0/4`. The tunnel DNS address
-`10.8.0.2` always stays inside the tunnel, even when one of those ranges or a
+`10.8.0.1` always stays inside the tunnel, even when one of those ranges or a
 user exclusion would otherwise cover it.
 
 ### Android VPN (2 read-only rows)
@@ -317,7 +317,7 @@ and again by the Go route computation at connect:
   blackhole the device.
 - The computed lists are capped at 256 prefixes, which bounds the
   `VpnService.Builder` work.
-- The tunnel DNS host `10.8.0.2` is subtracted from the exclusions.
+- The tunnel DNS host `10.8.0.1` is subtracted from the exclusions.
   It stays routed to the in-tunnel resolver even when `allow_lan` or a user
   CIDR covers its range, so DNS cannot be blackholed by a legitimate
   exclusion.
@@ -476,14 +476,15 @@ the shortcuts are the only writes, and they open the system page for you.
 
 ### No DNS while connected
 
-The tunnel advertises `10.8.0.2` as its DNS server and the engine serves strict
-DoH there. If lookups fail while the tunnel is up:
+The tunnel advertises `10.8.0.1` as its DNS server and the engine answers it
+inside the tunnel's userspace stack with strict DoH. If lookups fail while the
+tunnel is up:
 
 1. Open **More → Diagnostics** and check the VPN service card: the network's
-   DNS should include the VPN link's `10.8.0.2`, and Private DNS should be
+   DNS should include the VPN link's `10.8.0.1`, and Private DNS should be
    reported honestly.
 2. Check the split selection and `exclude_cidrs`. The app protects
-   `10.8.0.2/32` from `allow_lan` and user exclusions, so a correctly built
+   `10.8.0.1/32` from `allow_lan` and user exclusions, so a correctly built
    interface should still reach the resolver; a failure here is exactly the
    stop condition in the physical acceptance checklist, not something to paper
    over by switching to Private DNS or another resolver.

@@ -16,7 +16,7 @@ package dev.benyamin.kumiho.ui.settings
  *   rejected;
  * - `/0` and any union of entries that covers the whole IPv4 space are
  *   rejected;
- * - `10.8.0.2` is accepted: the DNS host stays routed even inside an excluded
+ * - `10.8.0.1` is accepted: the DNS host stays routed even inside an excluded
  *   range (C1), and the UI says so.
  */
 object CidrValidator {

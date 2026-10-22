@@ -100,14 +100,14 @@ class VpnInterfaceSpecTest {
 
     @Test
     fun c1DnsHostStaysRoutedWhenTheUserExcludesItsPrefix() {
-        // allow_lan and the raw user CIDR both cover 10.8.0.2, but the Go list
+        // allow_lan and the raw user CIDR both cover 10.8.0.1, but the Go list
         // (authoritative, C1 already applied) does not. Kotlin must not
         // subtract or recompute anything, and must not emit the host.
         val result = spec(
             33,
             config(
                 allowLan = true,
-                excludeCidrs = listOf("10.8.0.2/32"),
+                excludeCidrs = listOf("10.8.0.1/32"),
                 ipv4Excludes = listOf("10.0.0.0/8"),
             ),
         )

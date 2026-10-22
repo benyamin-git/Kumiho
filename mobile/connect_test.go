@@ -73,7 +73,7 @@ func TestConnectConfiguresTheBridgeBeforeConnecting(t *testing.T) {
 	if !covers(t, nc.IPv4Excludes, "10.0.0.1") {
 		t.Errorf("ipv4_excludes lacks the allow_lan range: %v", nc.IPv4Excludes)
 	}
-	if !covers(t, nc.IPv4Routes, "10.8.0.2") {
+	if !covers(t, nc.IPv4Routes, "10.8.0.1") {
 		t.Errorf("ipv4_routes does not carry the DNS host: %v", nc.IPv4Routes)
 	}
 }

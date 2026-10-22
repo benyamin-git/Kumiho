@@ -11,10 +11,11 @@ import (
 	"github.com/benyamin-git/kumiho/internal/version"
 )
 
-// tunnelDNSHost is the in-TUN resolver address the VpnService installs. The
-// doctor check reads the device's DNS list, so this must stay in sync with the
-// Android provider's DNSListenAddr.
-const tunnelDNSHost = "10.8.0.2"
+// tunnelDNSHost is the routed in-tunnel resolver address the VpnService
+// installs and the engine answers in userspace. The doctor check reads the
+// device's DNS list, so this must stay in sync with the Android provider's
+// DNSListenAddr.
+const tunnelDNSHost = "10.8.0.1"
 
 // doctorFacts is the Android state Kotlin collects for the doctor command.
 // Go cannot see VpnService, notifications or the battery allow-list itself.

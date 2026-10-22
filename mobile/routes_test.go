@@ -13,11 +13,11 @@ import (
 )
 
 // The expected tables below are the independent IPv4 range math for the
-// exclusion sets, with 10.8.0.2/32 (C1) subtracted and the complement
+// exclusion sets, with 10.8.0.1/32 (C1) subtracted and the complement
 // decomposed into the largest aligned prefixes.
 var (
 	excludes10 = []string{
-		"10.0.0.0/13", "10.8.0.0/31", "10.8.0.3/32", "10.8.0.4/30",
+		"10.0.0.0/13", "10.8.0.0/32", "10.8.0.2/31", "10.8.0.4/30",
 		"10.8.0.8/29", "10.8.0.16/28", "10.8.0.32/27", "10.8.0.64/26",
 		"10.8.0.128/25", "10.8.1.0/24", "10.8.2.0/23", "10.8.4.0/22",
 		"10.8.8.0/21", "10.8.16.0/20", "10.8.32.0/19", "10.8.64.0/18",
@@ -25,7 +25,7 @@ var (
 		"10.16.0.0/12", "10.32.0.0/11", "10.64.0.0/10", "10.128.0.0/9",
 	}
 	routes10 = []string{
-		"0.0.0.0/5", "8.0.0.0/7", "10.8.0.2/32", "11.0.0.0/8",
+		"0.0.0.0/5", "8.0.0.0/7", "10.8.0.1/32", "11.0.0.0/8",
 		"12.0.0.0/6", "16.0.0.0/4", "32.0.0.0/3", "64.0.0.0/2",
 		"128.0.0.0/1",
 	}
@@ -33,7 +33,7 @@ var (
 	excludesAllowLAN = append(slices.Clone(excludes10),
 		"169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4")
 	routesAllowLAN = []string{
-		"0.0.0.0/5", "8.0.0.0/7", "10.8.0.2/32", "11.0.0.0/8",
+		"0.0.0.0/5", "8.0.0.0/7", "10.8.0.1/32", "11.0.0.0/8",
 		"12.0.0.0/6", "16.0.0.0/4", "32.0.0.0/3", "64.0.0.0/2",
 		"128.0.0.0/3", "160.0.0.0/5", "168.0.0.0/8", "169.0.0.0/9",
 		"169.128.0.0/10", "169.192.0.0/11", "169.224.0.0/12",
@@ -172,31 +172,31 @@ func TestRoutesIgnoresIPv6(t *testing.T) {
 
 func TestRoutesC1NeverExcludesDNSHost(t *testing.T) {
 	t.Run("user excludes the DNS host alone", func(t *testing.T) {
-		rs := routesFor(t, false, "10.8.0.2/32")
+		rs := routesFor(t, false, "10.8.0.1/32")
 		requireStrings(t, "excludes", rs.Excludes, nil)
 		requireStrings(t, "routes", rs.Routes, []string{"0.0.0.0/0"})
 	})
 
 	t.Run("user excludes the containing prefix", func(t *testing.T) {
 		rs := routesFor(t, false, "10.8.0.0/16")
-		if covers(t, rs.Excludes, "10.8.0.2") {
-			t.Fatalf("10.8.0.2 is excluded: %v", rs.Excludes)
+		if covers(t, rs.Excludes, "10.8.0.1") {
+			t.Fatalf("10.8.0.1 is excluded: %v", rs.Excludes)
 		}
-		if !covers(t, rs.Routes, "10.8.0.2") {
-			t.Fatalf("10.8.0.2 is not routed: %v", rs.Routes)
+		if !covers(t, rs.Routes, "10.8.0.1") {
+			t.Fatalf("10.8.0.1 is not routed: %v", rs.Routes)
 		}
-		if !covers(t, rs.Excludes, "10.8.0.3") || !covers(t, rs.Excludes, "10.8.0.1") {
+		if !covers(t, rs.Excludes, "10.8.0.0") || !covers(t, rs.Excludes, "10.8.0.2") {
 			t.Fatalf("the containing prefix was not kept: %v", rs.Excludes)
 		}
 	})
 
 	t.Run("allow_lan keeps the DNS host routed", func(t *testing.T) {
 		rs := routesFor(t, true)
-		if covers(t, rs.Excludes, "10.8.0.2") {
-			t.Fatalf("10.8.0.2 is excluded with allow_lan: %v", rs.Excludes)
+		if covers(t, rs.Excludes, "10.8.0.1") {
+			t.Fatalf("10.8.0.1 is excluded with allow_lan: %v", rs.Excludes)
 		}
-		if !covers(t, rs.Routes, "10.8.0.2") {
-			t.Fatalf("10.8.0.2 is not routed with allow_lan: %v", rs.Routes)
+		if !covers(t, rs.Routes, "10.8.0.1") {
+			t.Fatalf("10.8.0.1 is not routed with allow_lan: %v", rs.Routes)
 		}
 	})
 }
@@ -277,8 +277,8 @@ func TestBuildNetworkConfig(t *testing.T) {
 	if !covers(t, nc.IPv4Routes, "8.8.8.8") || covers(t, nc.IPv4Routes, "203.0.113.9") {
 		t.Fatalf("ipv4_routes is not the complement: %v", nc.IPv4Routes)
 	}
-	if !covers(t, nc.IPv4Routes, "10.8.0.2") {
-		t.Fatal("10.8.0.2 is not routed")
+	if !covers(t, nc.IPv4Routes, "10.8.0.1") {
+		t.Fatal("10.8.0.1 is not routed")
 	}
 }
 

@@ -58,9 +58,16 @@ func (p *Provider) UserAgent() string { return fxa.UserAgent }
 // interface name and addresses.
 func (p *Provider) TunDefaults() platform.TunDefaults { return platform.TunDefaults{} }
 
-// DNSListenAddr returns the in-TUN resolver address the VpnService.Builder
-// installs as the tunnel DNS server.
-func (p *Provider) DNSListenAddr() string { return "10.8.0.2:53" }
+// DNSListenAddr returns the routed in-tunnel resolver address the
+// VpnService.Builder installs as the tunnel DNS server. It must not be the
+// TUN interface address: Android routes queries to this non-local address
+// through the TUN, where the engine answers them from the userspace stack.
+// Apps cannot bind port 53, so the engine never opens a host socket here.
+func (p *Provider) DNSListenAddr() string { return "10.8.0.1:53" }
+
+// UserspaceDNS reports that the tunnel DNS is served from the packet stack
+// rather than a privileged host listener.
+func (p *Provider) UserspaceDNS() bool { return true }
 
 // OpenDevice adopts the packet descriptor the Kotlin VpnService created. A
 // spec with FD >= 0 is adopted directly (the AAR probe and tests); otherwise
@@ -143,3 +150,4 @@ func (p *Provider) ControlEndpoint() string {
 func (p *Provider) ChownControlEndpoint(string) {}
 
 var _ platform.Provider = (*Provider)(nil)
+var _ platform.UserspaceDNS = (*Provider)(nil)

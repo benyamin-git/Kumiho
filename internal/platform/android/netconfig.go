@@ -10,9 +10,9 @@ import (
 //
 // The Kotlin VpnService.Builder already applied everything the engine's Linux
 // implementation would otherwise install: the tunnel addresses (10.8.0.2/32
-// and fd00::2/128), the DNS server (10.8.0.2), the routes and the
-// split-tunnel include/exclude lists (API 33+ excludeRoute, API 26-32
-// complement routes), and the kill switch is the OS Always-on VPN /
+// and fd00::2/128), the routed DNS server (10.8.0.1, answered in userspace),
+// the routes and the split-tunnel include/exclude lists (API 33+ excludeRoute,
+// API 26-32 complement routes), and the kill switch is the OS Always-on VPN /
 // lockdown setting. The builder owns the interface until the service stops,
 // so re-applying any of it from Go would fight it rather than help.
 type netConfig struct{}

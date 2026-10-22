@@ -336,7 +336,7 @@ device and leave the sign-off table blank until every applicable box is ticked.
 - [ ] Connect from the dashboard or the tile; the state moves through
       *Connecting* to *Connected* and the foreground notification appears.
 - [ ] `adb shell dumpsys connectivity` shows a VPN network with DNS
-      `10.8.0.2`; the engine log/notification shows the session.
+      `10.8.0.1`; the engine log/notification shows the session.
 - [ ] Browse several HTTPS sites through the tunnel; pages load and the
       **Exit IP** card shows the proxy address, not the carrier address.
 - [ ] DNS resolution works for new domains (not just cached ones), including
@@ -425,7 +425,7 @@ device and leave the sign-off table blank until every applicable box is ticked.
 - [ ] `exclude_cidrs` accepts a bare address, masks host bits, rejects IPv6,
       `/0` and whole-IPv4 unions; a valid exclusion bypasses the tunnel.
 - [ ] The tunnel DNS still resolves with `allow_lan` on and with a user CIDR
-      covering `10.0.0.0/8` (C1: `10.8.0.2` stays routed).
+      covering `10.0.0.0/8` (the DNS host `10.8.0.1` stays routed).
 - [ ] On **API 33+**: exclusions use `excludeRoute` and behave correctly.
 - [ ] On **API 26–32**: the complement-route path connects, `allow_lan` and
       user exclusions work, and DNS resolves. Record the device/API.

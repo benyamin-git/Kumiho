@@ -32,6 +32,13 @@ type fakeProvider struct {
 	events []string
 }
 
+// userspaceDNSProvider opts the fake into the Android-style userspace DNS
+// path: the provider advertises a routed in-tunnel resolver and the engine
+// answers it from the packet stack instead of binding a host socket.
+type userspaceDNSProvider struct{ *fakeProvider }
+
+func (userspaceDNSProvider) UserspaceDNS() bool { return true }
+
 func newFakeProvider() *fakeProvider {
 	return &fakeProvider{
 		name:    "fake",

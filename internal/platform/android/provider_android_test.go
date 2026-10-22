@@ -27,8 +27,11 @@ func TestProviderIdentity(t *testing.T) {
 	if got := p.Name(); got != "android" {
 		t.Errorf("Name() = %q, want %q", got, "android")
 	}
-	if got := p.DNSListenAddr(); got != "10.8.0.2:53" {
-		t.Errorf("DNSListenAddr() = %q, want %q", got, "10.8.0.2:53")
+	if got := p.DNSListenAddr(); got != "10.8.0.1:53" {
+		t.Errorf("DNSListenAddr() = %q, want %q", got, "10.8.0.1:53")
+	}
+	if !p.UserspaceDNS() {
+		t.Error("UserspaceDNS() = false, want true")
 	}
 	if got := p.TunDefaults(); got != (platform.TunDefaults{}) {
 		t.Errorf("TunDefaults() = %+v, want the zero value", got)

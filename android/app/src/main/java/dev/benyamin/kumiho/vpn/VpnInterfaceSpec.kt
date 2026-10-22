@@ -13,14 +13,19 @@ data class VpnInterfaceSpec(
     val disallowedApps: List<String>,
 ) {
     companion object {
-        /** The engine's in-tunnel IPv4 address and DNS listener (C1). */
+        /** The engine's in-tunnel IPv4 address (C1); the DNS host is separate. */
         const val TUN_ADDRESS_IPV4 = "10.8.0.2/32"
 
         /** IPv6 is captured (and then blackholed by the Go fd filter, C5). */
         const val TUN_ADDRESS_IPV6 = "fd00::2/128"
 
-        /** The tunnel DNS server; it must never appear in an exclusion (C1). */
-        const val DNS_HOST = "10.8.0.2"
+        /**
+         * The routed tunnel DNS server; it must never appear in an exclusion
+         * (C1). It is not the TUN address: Android routes this non-local
+         * address through the TUN, where the Go stack answers it in userspace
+         * (apps cannot bind port 53).
+         */
+        const val DNS_HOST = "10.8.0.1"
 
         const val DEFAULT_ROUTE_IPV4 = "0.0.0.0/0"
         const val DEFAULT_ROUTE_IPV6 = "::/0"

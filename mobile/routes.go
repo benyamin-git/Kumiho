@@ -17,9 +17,12 @@ const (
 	// VpnService.Builder entries, and an unbounded list would let a user
 	// config exhaust the builder or the Binder transaction.
 	routeListLimit = 256
-	// dnsListenerAddr is the in-tunnel resolver the VpnService advertises and
-	// the engine serves. C1: it must never be excluded, or DNS blackholes.
-	dnsListenerAddr = "10.8.0.2"
+	// dnsListenerAddr is the routed in-tunnel resolver the VpnService
+	// advertises and the engine answers in userspace. C1: it must never be
+	// excluded, or DNS blackholes. It is deliberately not the TUN interface
+	// address (10.8.0.2): Android routes a non-local address through the TUN,
+	// while the interface address is local and cannot be bound by the app.
+	dnsListenerAddr = "10.8.0.1"
 	maxIPv4         = uint32(0xffffffff)
 )
 

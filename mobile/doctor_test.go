@@ -51,7 +51,7 @@ func healthyFacts() doctorFacts {
 		Notifications:          true,
 		BatteryOptimized:       false,
 		Network:                true,
-		DNSServers:             []string{"10.8.0.2"},
+		DNSServers:             []string{"10.8.0.1"},
 		PrivateDNSMode:         "off",
 		SocksPortListening:     true,
 		HTTPProxyPortListening: false,

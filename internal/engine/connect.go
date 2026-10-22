@@ -335,9 +335,22 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 		res.dev = dev
 		res.tunName = tunDef.Name
 
+		userspaceDNS := false
+		if p, ok := c.plat.(platform.UserspaceDNS); ok {
+			userspaceDNS = p.UserspaceDNS()
+		}
+		var dnsSrv *dns.Server
+		var dnsAddr string
+		var tunOpts []tun.Option
+		if userspaceDNS {
+			dnsSrv = newDNSListener(resolver)
+			dnsAddr = c.plat.DNSListenAddr()
+			tunOpts = append(tunOpts, tun.WithDNS(dnsSrv, dnsAddr))
+		}
+
 		engine, err := tun.Start(dev, cfg.MTU, c.openStream, func(format string, args ...any) {
 			c.log.Logf(logging.Debug, "tun", format, args...)
-		})
+		}, tunOpts...)
 		if err != nil {
 			return fail(fmt.Errorf("start netstack: %w", err))
 		}
@@ -350,13 +363,20 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 			return fail(fmt.Errorf("apply network configuration: %w", err))
 		}
 
-		dnsSrv := newDNSListener(resolver)
-		dnsSrv.Addr = c.plat.DNSListenAddr()
-		if err := dnsSrv.Start(); err != nil {
-			return fail(fmt.Errorf("start DNS resolver: %w", err))
+		if userspaceDNS {
+			// Android cannot bind port 53; the VpnService routes the
+			// advertised resolver into the TUN and the stack answers it.
+			c.log.Logf(logging.Info, "tunnel", "resolver served in-tunnel on %s (DoH through the tunnel)", dnsAddr)
+		} else {
+			dnsSrv = newDNSListener(resolver)
+			dnsAddr = c.plat.DNSListenAddr()
+			dnsSrv.Addr = dnsAddr
+			if err := dnsSrv.Start(); err != nil {
+				return fail(fmt.Errorf("start DNS resolver: %w", err))
+			}
+			res.dns = dnsSrv
+			c.log.Logf(logging.Info, "tunnel", "resolver up on %s (DoH through the tunnel)", dnsSrv.Addr)
 		}
-		res.dns = dnsSrv
-		c.log.Logf(logging.Info, "tunnel", "resolver up on %s (DoH through the tunnel)", dnsSrv.Addr)
 	}
 
 	port := cfg.SocksPort

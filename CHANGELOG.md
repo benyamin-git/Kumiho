@@ -51,6 +51,13 @@ release.
 - One shared version across the Go engine and the Android app
   (`0.5.0`, `versionCode` 500).
 
+### Fixed
+
+- Android answers the tunnel's DNS inside the userspace packet stack instead
+  of binding the unprivileged port 53; the `VpnService` advertises the routed
+  `10.8.0.1` resolver and the engine resolves it through the tunnel's strict
+  DoH chain.
+
 ### Documentation
 
 - [docs/android.md](docs/android.md) — the Android user guide.

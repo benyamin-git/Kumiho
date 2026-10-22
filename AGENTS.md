@@ -123,9 +123,11 @@ change under `android/`, `mobile/` or `internal/platform/android/`. See
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
   kill switch, IP Helper link watch + `GetIpForwardTable2`), `android/` (fd
-  adoption, IPv6 blackhole, no-op net config; the OS VPN interface is built by
-  the Kotlin `VpnService`, not by Go) and `unsupported/` stubs. Prefer
-  additive interface methods over breaking the seam.
+  adoption, IPv6 blackhole, no-op net config, userspace tunnel DNS — the
+  VpnService advertises a routed `10.8.0.1` answered in the tun2socks stack
+  because apps cannot bind port 53; the OS VPN interface is built by the
+  Kotlin `VpnService`, not by Go) and `unsupported/` stubs. Prefer additive
+  interface methods over breaking the seam.
 - **IPC**: `internal/ipc` is control protocol v1 (newline-delimited JSON) and
   must stay byte-compatible. `ipc.DefaultTransport()` selects the platform
   transport (`default_unix.go` / `default_windows.go`): Unix socket vs a
@@ -155,7 +157,8 @@ change under `android/`, `mobile/` or `internal/platform/android/`. See
   over the facade; `ui/` is the shell and screens; `data/` holds DataStore
   preferences and split tunneling; `crash/` the local crash log;
   `diagnostics/` the Android facts. The Android provider adopts the detached
-  fd, drops IPv6 and leaves route/DNS work to the interface Kotlin builds.
+  fd, drops IPv6, leaves interface route/DNS work to Kotlin and answers the
+  advertised tunnel DNS in userspace (apps cannot bind port 53).
   Protocol v1, `internal/ipc`, the daemon and the desktop clients are
   untouched and stay byte-compatible.
 - **Deliberate OS branches outside the seam** (all small and paired):

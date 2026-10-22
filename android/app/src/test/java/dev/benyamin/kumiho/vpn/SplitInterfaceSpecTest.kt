@@ -34,7 +34,7 @@ class SplitInterfaceSpecTest {
         val json = JSONObject()
             .put("mtu", 8500)
             .put("allow_lan", true)
-            .put("exclude_cidrs", JSONArray().put("10.8.0.2/32"))
+            .put("exclude_cidrs", JSONArray().put("10.8.0.1/32"))
             .put("ipv4_excludes", excludesArray)
             .put("ipv4_routes", routesArray)
             .toString()
