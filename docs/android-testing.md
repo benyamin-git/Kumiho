@@ -290,9 +290,25 @@ locally with the verify script once T17 exists.
 
 ## Physical acceptance checklist
 
-The checklist has **not been run**. It is the release gate and the T11
-first-connect gate; any P0/P1 failure stops the release. Record one result per
-device and leave the sign-off table blank until every applicable box is ticked.
+The checklist has been partially run on a physical S25 FE; the sign-off table
+is still blank. It is the release gate and the T11 first-connect gate; any
+P0/P1 failure stops the release. Record one result per device and leave the
+sign-off table blank until every applicable box is ticked.
+
+### Recorded evidence (not a sign-off)
+
+On 2026-10-22, a Samsung Galaxy S25 FE (SM-S731B, Android SDK 37, debug package
+`dev.benyamin.kumiho.debug`) completed the first-connect DNS check after the
+userspace resolver fix: `CONNECTED`, VPN DNS `10.8.0.1`, Private DNS off,
+fresh-domain browsing, and the Exit IP card showing the proxy address. The
+build was `0.5.0-debug` with the pre-commit Go label
+`v0.4.1-36-g3157d64-dirty`; its source tree is the content committed as
+`78237c9`. The clean sign-off candidate is the rebuild from that commit:
+`0.5.0-debug` (versionCode 500), SHA-256
+`53b08383ca34bebb33329350d782efa42eb140bb4b2cde6a80535d9378a02b8a`.
+
+These are the only physical results recorded so far. Every box below and the
+sign-off table remain open.
 
 ### Devices and prerequisites
 
