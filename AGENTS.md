@@ -3,12 +3,16 @@
 Guidance for coding agents working in the Kumiho repository.
 
 Kumiho is a Go daemon + TUI/CLI/GUI client for the Firefox-account VPN
-entitlement. The daemon owns the tunnel; clients — the TUI, the CLI and a
+entitlement, plus a native Android app with the same engine embedded in
+process. The daemon owns the desktop tunnel; clients — the TUI, the CLI and a
 Windows GUI — talk to it over local IPC. Supported targets: **Ubuntu 24.04
-LTS** (amd64/arm64, systemd + Unix socket) and **Windows 11 amd64** (service +
-Wintun + named pipe). Read
+LTS** (amd64/arm64, systemd + Unix socket), **Windows 11 amd64** (service +
+Wintun + named pipe) and **Android 8.0+** (arm64-v8a/armeabi-v7a, sideloaded
+`VpnService` app over gomobile). Read
 [README.md](README.md) first; the protocol and design live in
-[PLAN.md](PLAN.md), user documentation in [docs/](docs/).
+[PLAN.md](PLAN.md), user documentation in [docs/](docs/) (Android:
+[docs/android.md](docs/android.md),
+[docs/android-testing.md](docs/android-testing.md)).
 
 ## Commands
 
@@ -21,6 +25,9 @@ needed to build or test.
     make build-gui      # windows/amd64 -> dist/kumiho-gui-windows-amd64.exe
     make build-probe    # windows/amd64 -> dist/kumiho-gui-probe-windows-amd64.exe
     make build-web      # linux/amd64   -> dist/kumiho-gui-web-linux-amd64 (dev harness)
+    make android-setup  # install JDK 17, SDK 36 + 37.2, NDK 28.2, gomobile
+    make android-aar    # android/arm + android/arm64 -> android/app/libs/kumiho.aar
+    make android-aar-emulator  # android/amd64 -> android/app/libs/kumiho-emulator.aar
     make test           # go test ./...
     make test-integration  # go test -tags integration ./... (real endpoints)
     make lint           # gofmt check + go vet ./...
@@ -36,6 +43,21 @@ gate green:
       GOOS=windows GOARCH=amd64 go build ./... && \
       GOOS=android GOARCH=arm64 go build ./...
 
+Android app changes additionally leave the app gate green (after
+`source scripts/android-env.sh && make android-aar && cd android`):
+
+    ./gradlew --offline :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+    # emulator only (AVD kumiho-api36, x86_64):
+    ./gradlew --offline -PkumihoEmulator=true :app:connectedDebugAndroidTest
+
+The Android app compiles against SDK 37.2 while `targetSdk` stays 36 (the
+pinned Compose/Core/Lifecycle/Navigation releases require `minCompileSdk 37`);
+the AAR is built with `-androidapi 26`. Gradle never runs Go, so the AAR must
+be built first. The Android unit/lint/assemble gate and the emulator suite are
+not part of the Go gate above and are not yet a CI job; run them for any
+change under `android/`, `mobile/` or `internal/platform/android/`. See
+[docs/android-testing.md](docs/android-testing.md).
+
 ## Dev scripts
 
 - `scripts/dev-env.sh`, `scripts/dev-env.ps1` — point `KUMIHO_CONFIG`,
@@ -50,6 +72,13 @@ gate green:
   mock daemon; the `/dev` panel drives scenarios, latency and failures.
 - `scripts/watchdog-retest.sh` — live watchdog heal check against a real edge
   (`ss -K`, needs root).
+- `scripts/android-setup.sh [--check] [--ci]` — install or verify JDK 17,
+  SDK 36 + 37.2, build-tools 36.0.0, NDK 28.2.13676358, the API 36 x86_64
+  system image, the pinned gomobile and the Gradle wrapper bootstrap.
+  `scripts/android-env.sh` exports the same toolchain for a shell.
+- `scripts/android-build-aar.sh [--emulator]` — build the git-ignored gomobile
+  AAR that Gradle links (`make android-aar` /
+  `make android-aar-emulator`).
 - `scripts/screenshots/capture.sh` — regenerate the README's GUI and TUI
   screenshots; builds the web harness with a release version label (default
   `v0.4.0`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
@@ -67,6 +96,12 @@ gate green:
   linux/arm64 and windows/amd64; packages zips (CLI, `kumiho-gui.exe`,
   `wintun.dll`, `install.sh`/`install.ps1`, systemd units, licenses including
   the WebView2 loader), writes `SHA256SUMS` and creates the GitHub release.
+- **There is no Android CI job or Android release step yet.** Only the Go
+  Android cross-build runs in `build-test`. The planned Android job,
+  signing/release scripts and asset checks are T17 work, blocked by the
+  physical first-connect gate; see
+  [docs/android-testing.md](docs/android-testing.md). Do not describe them as
+  existing.
 
 ## Architecture map
 
@@ -87,9 +122,10 @@ gate green:
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
-  kill switch, IP Helper link watch + `GetIpForwardTable2`), `android/` and
-  `unsupported/` stubs. Prefer additive interface methods over breaking the
-  seam.
+  kill switch, IP Helper link watch + `GetIpForwardTable2`), `android/` (fd
+  adoption, IPv6 blackhole, no-op net config; the OS VPN interface is built by
+  the Kotlin `VpnService`, not by Go) and `unsupported/` stubs. Prefer
+  additive interface methods over breaking the seam.
 - **IPC**: `internal/ipc` is control protocol v1 (newline-delimited JSON) and
   must stay byte-compatible. `ipc.DefaultTransport()` selects the platform
   transport (`default_unix.go` / `default_windows.go`): Unix socket vs a
@@ -105,6 +141,23 @@ gate green:
   server; `internal/gui/mock` backs the harness and the Go tests,
   `internal/gui/theme` computes the palette, `internal/gui/prefs` owns
   `gui.toml`. The harness binds `0.0.0.0:7407` (dev only, never released).
+- **Android app** (`mobile/`, `internal/platform/android/`, `android/`): the
+  Go engine is embedded in the app process, not exposed over IPC. `mobile/`
+  (module root, package `mobile`) is the gomobile facade: `Mobile.start`
+  with a five-key paths JSON, `command` taking the same control-protocol v1
+  JSON envelopes as the daemon, `palette`/`version`, and the Kotlin
+  `DeviceBridge`/`Listener` callbacks. `scripts/android-build-aar.sh` binds it
+  for `android/arm,android/arm64` (release) or `android/amd64` (emulator) into
+  a git-ignored AAR under `android/app/libs/`; Gradle never runs Go. The app
+  (`android/app/src/main/java/dev/benyamin/kumiho/`) is Kotlin/Compose:
+  `vpn/` owns `KumihoVpnService`, the bridge, the interface spec, the
+  coordinator, notifications and the QS tile; `engine/` is the pure-JVM client
+  over the facade; `ui/` is the shell and screens; `data/` holds DataStore
+  preferences and split tunneling; `crash/` the local crash log;
+  `diagnostics/` the Android facts. The Android provider adopts the detached
+  fd, drops IPv6 and leaves route/DNS work to the interface Kotlin builds.
+  Protocol v1, `internal/ipc`, the daemon and the desktop clients are
+  untouched and stay byte-compatible.
 - **Deliberate OS branches outside the seam** (all small and paired):
   `internal/cli/doctor.go` (`runtime.GOOS` branches) plus
   `doctor_{windows,other}.go` (doctor checks),
@@ -114,7 +167,9 @@ gate green:
   `internal/netcfg/exec_*.go` / `mark_*.go`. `kumiho cleanup` reaches
   `Cleanup`/`CleanupStale` through interfaces, not OS switches.
 - **Settings/paths**: `internal/settings` owns the per-OS config/state/tokens
-  layout plus the `KUMIHO_*` overrides.
+  layout plus the `KUMIHO_*` overrides. The Android app passes its own
+  app-private paths (`filesDir`, `noBackupFilesDir`, `cacheDir`) through the
+  facade.
 
 ## Design
 
@@ -140,6 +195,16 @@ gate green:
   separate file. `third_party/webview2-loader/` keeps the Microsoft 3-Clause
   BSD license text (pruned from the vendored tree) and checksums; verify with
   `cd third_party/webview2-loader && sha256sum -c SHA256SUMS`.
+- The Android gomobile AAR is a **build output**, never committed
+  (`android/app/libs/*.aar` is ignored). It is rebuilt from the vendored Go
+  tree by `scripts/android-build-aar.sh`; `golang.org/x/mobile` is a pinned Go
+  tool dependency (`go.mod`/`vendor/`), and the emulator AAR (`x86_64`) is for
+  tests only — never ship it.
+- Android app dependencies (AndroidX, Jetpack Compose, Kotlin, kotlinx
+  coroutines) are Maven artifacts resolved by Gradle from Google/Maven
+  Central, not vendored. The versions are pinned in
+  `android/gradle/libs.versions.toml`; `--offline` works after the first
+  resolve. Their Apache-2.0/BSD notices are recorded in `NOTICE`.
 - Update `NOTICE` when adding third-party code or binaries.
 
 ## Commit style

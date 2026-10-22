@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-10-21
+
+The Android client. The desktop daemon, CLI, TUI, GUI and control protocol are
+unchanged from v0.4.1; the engine and all clients share one version from this
+release.
+
+### Added
+
+- A native Android app (sideload only, Android 8.0/API 26+, `arm64-v8a` and
+  `armeabi-v7a`) with the Go engine embedded in-process through a gomobile
+  AAR: a four-step setup (consent, native Firefox Accounts sign-in with 2FA
+  and email-link flows, VPN/notification permissions, Always-on guidance), a
+  dashboard with connect options and live status, the country/city locations
+  tree with filter and 24-way speed test, and all 19 settings rows (17 engine
+  settings plus the read-only Always-on/lockdown rows) with per-setting
+  overrides and reset.
+- An Android `VpnService` that owns the tunnel: full-tunnel routing with
+  `allow_lan`/CIDR exclusions (API 33+ `excludeRoute`, API 26–32 complement
+  routes, DNS host carve-out, 256-prefix cap), IPv6 captured and blackholed,
+  watchdog recovery that keeps the interface, and a foreground service.
+- Split tunneling with Off/Exclude/Include modes, a launchable/system app
+  picker with search, Kumiho always outside its own tunnel, and the next-connect
+  apply rule.
+- Android account, logs (2000-line console with level/search/Follow/Clear and
+  FileProvider sharing), diagnostics (Android facts plus the Go doctor,
+  split-mode card and reset local state) and a local crash log replayed into
+  the engine log.
+- A rich status notification (state · location, uptime, up/down totals,
+  Disconnect/Open and no Connect), a separate alerts channel, and a Quick
+  Settings tile that connects the saved selection or disconnects (never
+  proxy-only) with API 29+ subtitles.
+- Proxy-only mode that starts the loopback SOCKS5 (and optional HTTP) proxy
+  without a VPN interface or VPN consent, with the device-wide loopback
+  warning, and read-only Always-on/lockdown rows that link to Android's VPN
+  settings (the engine's desktop `kill_switch`/`autoconnect` are never used).
+- `make android-setup`, `make android-aar`, `make android-aar-emulator` and
+  `scripts/android-setup.sh`/`android-env.sh`/`android-build-aar.sh`;
+  Gradle wrapper 9.6.0, JDK 17, SDK 36 + 37.2, NDK 28.2 and a pinned
+  gomobile, with release ABI splits and 16 KB page alignment checks.
+
+### Changed
+
+- One shared version across the Go engine and the Android app
+  (`0.5.0`, `versionCode` 500).
+
+### Documentation
+
+- [docs/android.md](docs/android.md) — the Android user guide.
+- [docs/android-testing.md](docs/android-testing.md) — build, test, signing
+  and the physical acceptance checklist.
+- README, AGENTS, NOTICE and the changelog cover the new target.
+
+### Release status
+
+The Android app's unit, lint, assemble and emulator suites pass, but the
+**physical first-connect/acceptance pass and the signing/release automation
+are still pending**. No Android APK or Android `SHA256SUMS` has been published
+yet; build from source per [docs/android-testing.md](docs/android-testing.md).
+
 ## [0.4.1] - 2026-10-21
 
 Test-only patch: the Windows test job now matches the platform's file-mode

@@ -1,18 +1,21 @@
 # Kumiho
 
-**Status:** v0.4.1 — working Linux and Windows 11 clients: daemon + TUI/CLI/GUI
-over a Unix socket (Linux) or named pipe (Windows), Firefox Accounts login
-(2FA aware), server list with ping and an on-disk cache, HTTP/2 CONNECT tunnel
-through Mozilla's Fastly edge, full-tunnel routing with a kill switch, watchdog
-with edge rotation, runtime settings, log viewer, account screen, and a
-systemd (`install.sh`) or Windows service (`install.ps1`) install. v0.4.0 adds
-backend parity with later FoxyVPN releases: strict DoH failover, anti-bot
-challenge solving, TLS ClientHello fragmentation, an upstream proxy, a local
-HTTP proxy, DNS over SOCKS5 UDP ASSOCIATE, a server-list cache and a slow
-keepalive profile. v0.4.1 fixes the Windows test-job assumptions for the
-server-list cache; the runtime is unchanged from v0.4.0.
+**Status:** v0.5.0 — working Linux and Windows 11 clients plus a native Android
+app: daemon + TUI/CLI/GUI over a Unix socket (Linux) or named pipe (Windows),
+Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
+HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
+kill switch, watchdog with edge rotation, runtime settings, log viewer, account
+screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
+install. v0.5.0 adds the Android client (sideload-only; its physical acceptance
+and signed release are still pending — see
+[docs/android-testing.md](docs/android-testing.md)). v0.4.0 adds backend
+parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
+solving, TLS ClientHello fragmentation, an upstream proxy, a local HTTP proxy,
+DNS over SOCKS5 UDP ASSOCIATE, a server-list cache and a slow keepalive
+profile. v0.4.1 fixes the Windows test-job assumptions for the server-list
+cache; the desktop runtime is unchanged from v0.4.0.
 
-Kumiho is an unofficial Linux and Windows CLI/TUI client for the free
+Kumiho is an unofficial Linux, Windows and Android client for the free
 Firefox-account VPN proxy — the same entitlement FoxyVPN for Android uses. It
 signs into Firefox Accounts, mints a Guardian proxy pass, resolves the Mozilla
 server list, and tunnels system traffic over **HTTP/2 CONNECT** streams to a
@@ -21,7 +24,10 @@ device + userspace TCP/IP stack (gVisor via `xjasonlyu/tun2socks`), policy
 routing that cannot kill an existing SSH/Tailscale session, an optional
 nftables kill switch, and a Bubble Tea TUI plus a systemd daemon so the tunnel
 survives SSH logouts. On Windows it uses a Wintun adapter, a WFP kill switch
-and a LocalSystem service.
+and a LocalSystem service. On Android the same Go engine is embedded in the
+app through gomobile, a `VpnService` owns the tunnel, and a Compose UI covers
+setup, dashboard, locations, settings, split tunneling, account, logs,
+diagnostics, a status notification and a Quick Settings tile.
 
 **It is not WireGuard.** No WireGuard config exists for this entitlement.
 The transport is TCP over HTTP/2 CONNECT to the Fastly edge, which accepts
@@ -34,8 +40,9 @@ skipped for 30 minutes, and if every endpoint fails the query answers
 SERVFAIL instead of falling back to plaintext.
 
 Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
-over a Unix socket) and **Windows 11 amd64** (Windows service + Wintun, and
-TUI/CLI/GUI over a named pipe).
+over a Unix socket), **Windows 11 amd64** (Windows service + Wintun, and
+TUI/CLI/GUI over a named pipe) and **Android 8.0+ (API 26+) on arm64-v8a or
+armeabi-v7a** (sideloaded app with the engine embedded in-process).
 
 ## Screenshots
 
@@ -73,7 +80,9 @@ Linux and Windows 11 ship today; each new platform must reach full parity
 before release:
 
 - **Windows 11 amd64** — Windows service + Wintun, TUI client over a named pipe.
-- **Android** — planned: VpnService app with the engine embedded in-process, simple GUI.
+- **Android 8.0+** — implemented as a sideloaded VpnService app with the
+  engine embedded in-process; the physical acceptance pass and signed release
+  are still pending (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
 ## What's new in v0.4.0
@@ -163,6 +172,17 @@ Then, in a new shell:
 From a checkout, run `make build-windows` first: the installer finds the
 binary in `dist\` and `wintun.dll` under `third_party\wintun\amd64\`.
 
+Android 8.0+, from a checkout (sideload; no Play/F-Droid):
+
+    bash scripts/android-setup.sh    # JDK 17, SDK 36 + 37.2, NDK 28.2, gomobile
+    make android-aar                 # android/app/libs/kumiho.aar (git-ignored)
+    cd android && ./gradlew :app:assembleDebug
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+See [docs/android.md](docs/android.md) for the app itself and
+[docs/android-testing.md](docs/android-testing.md) for the toolchain,
+emulator, APK and physical-acceptance details.
+
 See [docs/manual.md](docs/manual.md) for a plain-language usage manual,
 [docs/install.md](docs/install.md) for the details, [docs/usage.md](docs/usage.md)
 for the CLI/TUI and settings, and [docs/troubleshooting.md](docs/troubleshooting.md)
@@ -190,6 +210,14 @@ for common issues.
   bypasses the tunnel as on Linux.
 - The Windows binary is unsigned: SmartScreen warns on first run (More
   info → Run anyway), and `install.ps1` needs an Administrator shell.
+- On Android, IPv6 is captured and blackholed rather than tunneled, so apps
+  can wait for an `AAAA` attempt to fail before falling back to IPv4. The UI
+  is English-only, there is no home-screen widget or launcher shortcut (the
+  Quick Settings tile covers fast access), no browser/captcha sign-in and no
+  auto-update. Always-on and lockdown are Android settings and some OEM
+  battery managers delay or refuse Always-on starts. The physical acceptance
+  pass and signed release are still pending; see
+  [docs/android.md](docs/android.md#limitations).
 - Using an unofficial client is a ToS gray area (see PLAN.md §13); Kumiho
   never sees or stores your Firefox password, only the resulting tokens.
 
@@ -203,11 +231,22 @@ Cross-compile from any OS with Go >= 1.27:
     make build-gui      # dist/kumiho-gui-windows-amd64.exe (Windows GUI)
     make build-probe    # dist/kumiho-gui-probe-windows-amd64.exe (diagnostic)
     make build-web      # dist/kumiho-gui-web-linux-amd64 (GUI dev harness)
+    make android-setup  # install JDK 17, SDK 36 + 37.2, NDK 28.2, gomobile
+    make android-aar    # android/app/libs/kumiho.aar (arm + arm64, git-ignored)
+    make android-aar-emulator  # x86_64 AAR for the emulator
     make test           # unit tests (run on any OS)
     make vet
 
+The Android app itself is built with its Gradle wrapper after the AAR exists
+(`cd android && ./gradlew :app:assembleDebug`); see
+[docs/android-testing.md](docs/android-testing.md) for unit/lint/connected
+commands and the physical checklist. The AAR is a build output and is never
+committed.
+
 Module dependencies are vendored in `vendor/`, so no network access is
-needed to build or test. The Windows build needs the signed `wintun.dll`
+needed to build or test. The Android Gradle dependencies are not vendored;
+they resolve from Google/Maven Central once and then work with `--offline`.
+The Windows build needs the signed `wintun.dll`
 committed under `third_party/wintun/amd64/` beside the binary at run time;
 the release zip and `install.ps1` place it in `%ProgramFiles%\Kumiho`. The
 GUI needs no extra file at run time: the WebView2 loader is embedded in
@@ -280,10 +319,41 @@ The harness binds `0.0.0.0:7407` (override the port with
 failures. The GUI is Windows-only and the harness is a dev tool; neither
 changes the daemon, CLI or TUI.
 
+## Android app
+
+Kumiho's Android app (v0.5.0) is a native sideloaded client, not a front end
+for the daemon: the same Go engine is embedded in the app process through a
+gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
+notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
+newer on `arm64-v8a` or `armeabi-v7a`, and is distributed as an APK — there is
+no Play or F-Droid build.
+
+The app has a four-step setup (consent, native Firefox Accounts sign-in, VPN
+and notification permissions, Always-on guidance), then the same surfaces as
+the desktop clients: a dashboard with connect options and live status,
+locations with a filter and speed test, and all 19 settings rows (the 17
+engine settings plus the read-only Always-on/lockdown rows Android owns),
+with overrides and Reset. Split tunneling, account, logs with sharing,
+diagnostics and proxy-only mode (local SOCKS5/HTTP without a VPN interface)
+are all there too.
+
+> **Release status.** The app builds and its unit, lint, assemble and
+> emulator suites pass, but the physical first-connect/acceptance pass and the
+> signing/release automation are **not done**. Build it locally for now; do
+> not treat a local APK as a published release.
+
+Build it with the toolchain and AAR commands in
+[docs/android-testing.md](docs/android-testing.md); the user guide, including
+split tunneling, Always-on/lockdown, proxy-only, privacy and troubleshooting,
+is [docs/android.md](docs/android.md). The emulator AAR (`make
+android-aar-emulator`) is for tests only and is never part of a release.
+
 ## Plan and docs
 
 The full design — protocol details, Linux networking, IPC, milestones and
-acceptance criteria — lives in [PLAN.md](PLAN.md).
+acceptance criteria — lives in [PLAN.md](PLAN.md). The Android client has its
+own user guide at [docs/android.md](docs/android.md) and build/test/release
+guide at [docs/android-testing.md](docs/android-testing.md).
 
 ## Disclaimer
 
