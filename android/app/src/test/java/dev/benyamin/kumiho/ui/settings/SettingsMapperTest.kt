@@ -250,8 +250,16 @@ class SettingsMapperTest {
         )
         assertEquals(SettingInput.Valid(""), SettingsMapper.serialize(spec, "  "))
         assertEquals(
-            SettingInput.Valid("0.0.0.0/0"),
+            SettingInput.Invalid(SettingError.CIDR_TOO_BROAD, detail = "0.0.0.0/0"),
             SettingsMapper.serialize(spec, "0.0.0.0/0"),
+        )
+        assertEquals(
+            SettingInput.Invalid(SettingError.CIDR_TOO_BROAD),
+            SettingsMapper.serialize(spec, "0.0.0.0/1, 128.0.0.0/1"),
+        )
+        assertEquals(
+            SettingInput.Valid("10.1.2.3/32"),
+            SettingsMapper.serialize(spec, "10.1.2.3"),
         )
         assertEquals(
             SettingInput.Invalid(SettingError.IPV6_NOT_SUPPORTED),

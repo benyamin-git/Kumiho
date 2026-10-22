@@ -6,7 +6,10 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.benyamin.kumiho.vpn.SplitMode
+import dev.benyamin.kumiho.vpn.SplitSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -37,7 +40,7 @@ interface ThemePreferences {
  * Typed access to the app preferences. Empty values mean "follow the system"
  * for the theme and "blue" for the accent; the caller resolves them.
  */
-class AppPrefs(context: Context) : ThemePreferences {
+class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore {
     private val store = context.applicationContext.kumihoDataStore
 
     /** The stored theme id, or null when the user has not chosen one. */
@@ -49,12 +52,32 @@ class AppPrefs(context: Context) : ThemePreferences {
     /** Whether the four-step setup finished. */
     val setupComplete: Flow<Boolean> = store.data.map { it[KEY_SETUP_COMPLETE] ?: false }
 
+    /**
+     * The persisted split-tunnel selection. An absent mode means Off (the safe
+     * default for installs that predate split tunneling); an absent set is
+     * empty. An unknown stored mode also falls back to Off.
+     */
+    override val splitSettings: Flow<SplitSettings> = store.data.map { prefs ->
+        val mode = prefs[KEY_SPLIT_MODE]?.let { stored ->
+            SplitMode.entries.firstOrNull { it.name == stored }
+        } ?: SplitMode.OFF
+        SplitSettings(mode = mode, packages = prefs[KEY_SPLIT_PACKAGES].orEmpty())
+    }
+
     override suspend fun setTheme(id: String) {
         store.edit { it[KEY_THEME] = id }
     }
 
     override suspend fun setAccent(id: String) {
         store.edit { it[KEY_ACCENT] = id }
+    }
+
+    override suspend fun setSplitMode(mode: SplitMode) {
+        store.edit { it[KEY_SPLIT_MODE] = mode.name }
+    }
+
+    override suspend fun setSplitPackages(packages: Set<String>) {
+        store.edit { it[KEY_SPLIT_PACKAGES] = packages }
     }
 
     suspend fun setSetupComplete(value: Boolean) {
@@ -65,5 +88,7 @@ class AppPrefs(context: Context) : ThemePreferences {
         val KEY_THEME = stringPreferencesKey("theme")
         val KEY_ACCENT = stringPreferencesKey("accent")
         val KEY_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
+        val KEY_SPLIT_MODE = stringPreferencesKey("split_mode")
+        val KEY_SPLIT_PACKAGES = stringSetPreferencesKey("split_packages")
     }
 }

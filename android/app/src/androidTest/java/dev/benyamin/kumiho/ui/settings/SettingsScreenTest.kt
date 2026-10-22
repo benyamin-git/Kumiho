@@ -3,6 +3,7 @@ package dev.benyamin.kumiho.ui.settings
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
@@ -20,6 +21,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.vpn.SplitMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -113,6 +115,15 @@ class SettingsScreenTest {
         rule.onNodeWithTag(SettingsTags.toggle("exit_check")).performClick()
 
         assertEquals(listOf("clear-exit_check", "toggle-exit_check-false"), calls)
+    }
+
+    @Test
+    fun aBooleanSwitchIsNamedForTalkBack() {
+        show()
+
+        scrollTo(SettingsTags.row("exit_check"))
+        rule.onNodeWithTag(SettingsTags.toggle("exit_check"))
+            .assertContentDescriptionEquals(text(R.string.settings_label_exit_check))
     }
 
     @Test
@@ -350,6 +361,64 @@ class SettingsScreenTest {
             .assertTextEquals(text(R.string.settings_always_on_state_on))
     }
 
+    // ---- split tunneling shortcut ----------------------------------------
+
+    @Test
+    fun theSplitRowShowsOffAndOpensTheNestedScreen() {
+        show(appState = appState(splitMode = SplitMode.OFF, splitAppCount = 0))
+
+        scrollTo(SettingsTags.SPLIT_ROW)
+        rule.onNodeWithTag(SettingsTags.SPLIT_SUMMARY, useUnmergedTree = true)
+            .assertTextEquals(text(R.string.settings_split_summary_off))
+        rule.onNodeWithTag(SettingsTags.SPLIT_ROW).performClick()
+
+        assertEquals(listOf("split"), calls)
+    }
+
+    @Test
+    fun theSplitRowSummarizesTheExcludedCount() {
+        show(appState = appState(splitMode = SplitMode.EXCLUDE, splitAppCount = 3))
+        scrollTo(SettingsTags.SPLIT_ROW)
+        rule.onNodeWithTag(SettingsTags.SPLIT_SUMMARY, useUnmergedTree = true).assertTextEquals(
+            rule.activity.resources.getQuantityString(
+                R.plurals.settings_split_summary_exclude,
+                3,
+                3,
+            ),
+        )
+    }
+
+    @Test
+    fun theSplitRowSummarizesTheIncludedCount() {
+        show(appState = appState(splitMode = SplitMode.INCLUDE, splitAppCount = 2))
+        scrollTo(SettingsTags.SPLIT_ROW)
+        rule.onNodeWithTag(SettingsTags.SPLIT_SUMMARY, useUnmergedTree = true).assertTextEquals(
+            rule.activity.resources.getQuantityString(
+                R.plurals.settings_split_summary_include,
+                2,
+                2,
+            ),
+        )
+    }
+
+    @Test
+    fun theSplitRowStaysReachableWhileEngineSettingsLoad() {
+        show(state(loading = true, loaded = false, snapshot = null))
+
+        scrollTo(SettingsTags.SPLIT_ROW)
+        rule.onNodeWithTag(SettingsTags.SPLIT_ROW).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
+    }
+
+    @Test
+    fun theSplitRowStaysReachableWhenEngineSettingsFail() {
+        show(state(loading = false, loaded = false, snapshot = null, loadError = "daemon offline"))
+
+        scrollTo(SettingsTags.SPLIT_ROW)
+        rule.onNodeWithTag(SettingsTags.SPLIT_ROW).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
+    }
+
     // ---- notices and content states -------------------------------------
 
     @Test
@@ -443,6 +512,8 @@ class SettingsScreenTest {
         notificationsAllowed: Boolean = true,
         batteryUnrestricted: Boolean = false,
         launchError: String? = null,
+        splitMode: SplitMode = SplitMode.OFF,
+        splitAppCount: Int = 0,
     ) = SettingsAppState(
         theme = ThemeId.LIGHT,
         accent = KumihoAccent.BLUE,
@@ -452,6 +523,8 @@ class SettingsScreenTest {
         notificationsAllowed = notificationsAllowed,
         batteryUnrestricted = batteryUnrestricted,
         launchError = launchError,
+        splitMode = splitMode,
+        splitAppCount = splitAppCount,
     )
 
     private fun actions() = SettingsActions(
@@ -471,6 +544,7 @@ class SettingsScreenTest {
         onOpenBatterySettings = { calls += "battery-settings" },
         onOpenVpnSettings = { calls += "vpn-settings" },
         onDismissLaunchError = { calls += "dismiss-launch-error" },
+        onOpenSplitTunneling = { calls += "split" },
     )
 
     private companion object {

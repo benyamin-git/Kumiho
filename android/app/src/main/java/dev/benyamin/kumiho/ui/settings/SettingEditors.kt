@@ -110,6 +110,7 @@ fun EngineSettingRow(
                     applying -> ApplyingValue(key = spec.key)
                     boolean -> BooleanValue(
                         key = spec.key,
+                        label = stringResource(spec.labelRes),
                         checked = checked,
                         enabled = enabled,
                         onToggle = onToggle,
@@ -160,6 +161,7 @@ private fun ApplyingValue(key: String) {
 @Composable
 private fun BooleanValue(
     key: String,
+    label: String,
     checked: Boolean,
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
@@ -178,7 +180,9 @@ private fun BooleanValue(
             checked = checked,
             onCheckedChange = onToggle,
             enabled = enabled,
-            modifier = Modifier.testTag(SettingsTags.toggle(key)),
+            modifier = Modifier
+                .testTag(SettingsTags.toggle(key))
+                .semantics { contentDescription = label },
         )
     }
 }
@@ -341,6 +345,16 @@ fun SettingEditorDialog(
                             invalid = null
                         },
                     )
+                } else if (spec.kind == SettingKind.CIDR_LIST) {
+                    CidrEditor(
+                        value = text,
+                        onValueChange = {
+                            text = it
+                            invalid = null
+                        },
+                        enabled = !locked,
+                        invalid = invalid,
+                    )
                 } else {
                     OutlinedTextField(
                         value = text,
@@ -351,8 +365,8 @@ fun SettingEditorDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag(SettingsTags.DIALOG_FIELD),
-                        singleLine = spec.kind != SettingKind.CIDR_LIST,
-                        maxLines = if (spec.kind == SettingKind.CIDR_LIST) 3 else 1,
+                        singleLine = true,
+                        maxLines = 1,
                         enabled = !locked,
                         isError = invalid != null,
                         keyboardOptions = if (spec.kind == SettingKind.INTEGER) {
@@ -482,5 +496,6 @@ fun settingValidationText(invalid: SettingInput.Invalid): String = when (invalid
         invalid.detail.orEmpty(),
     )
     SettingError.IPV6_NOT_SUPPORTED -> stringResource(R.string.settings_validation_cidr_ipv6)
+    SettingError.CIDR_TOO_BROAD -> stringResource(R.string.settings_validation_cidr_too_broad)
     SettingError.READ_ONLY -> stringResource(R.string.settings_validation_read_only)
 }

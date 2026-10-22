@@ -170,11 +170,12 @@ class SettingsScreenshotsTest {
 
     private companion object {
         /**
-         * The kill-switch item's index: eight app items, the Connection header
-         * and its seven rows, the Android header and its explanation precede it.
-         * Scrolling here frames the two Android rows above the Advanced group.
+         * The kill-switch item's index: eight app items, the Split tunneling
+         * row, the Connection header and its seven rows, the Android header and
+         * its explanation precede it. Scrolling here frames the two Android
+         * rows above the Advanced group.
          */
-        const val ANDROID_START_INDEX = 18
+        const val ANDROID_START_INDEX = 19
 
         val SETTINGS = Settings(
             socksPort = 1080,

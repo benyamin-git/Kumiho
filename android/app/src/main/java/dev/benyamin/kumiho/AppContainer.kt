@@ -3,9 +3,10 @@ package dev.benyamin.kumiho
 import android.content.Context
 import android.content.res.Configuration
 import dev.benyamin.kumiho.data.AppPrefs
+import dev.benyamin.kumiho.data.InstalledAppsRepository
+import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
 import dev.benyamin.kumiho.ui.theme.ThemeId
-import dev.benyamin.kumiho.vpn.OffSplitSettingsProvider
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CoroutineScope
@@ -32,8 +33,22 @@ class AppContainer(context: Context) {
         defaultTheme = { if (appContext.isNightMode()) ThemeId.DARK else ThemeId.LIGHT },
     )
 
-    /** The split-tunnel selection; Off until T14 replaces this seam. */
-    val splitSettingsProvider: SplitSettingsProvider = OffSplitSettingsProvider
+    /** The installed-app list behind the split screen's picker. */
+    val installedAppsRepository = InstalledAppsRepository(appContext)
+
+    /**
+     * The split-tunnel selection and the provider the VPN bridge reads. Its
+     * `snapshot()` is synchronous and serves Off until the DataStore loads, so
+     * `acquireFD` never waits on storage.
+     */
+    val splitTunnelRepository = SplitTunnelRepository(
+        store = appPrefs,
+        scope = scope,
+        installedPackages = installedAppsRepository::installedPackageNames,
+    )
+
+    /** The seam `KumihoVpnService` hands to the bridge. */
+    val splitSettingsProvider: SplitSettingsProvider = splitTunnelRepository
 
     /**
      * The app-scoped binding to the VPN service. It binds with
@@ -45,6 +60,7 @@ class AppContainer(context: Context) {
     /** Starts app-scoped work. Idempotent. */
     fun start() {
         themeRepository.start()
+        splitTunnelRepository.start()
     }
 }
 

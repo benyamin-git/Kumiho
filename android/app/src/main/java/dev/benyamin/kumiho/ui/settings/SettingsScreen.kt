@@ -34,12 +34,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -64,6 +66,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.vpn.SplitMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -86,6 +89,20 @@ fun SettingsRoute(
     val engine by coordinator.engine.collectAsStateWithLifecycle()
     val paletteState by container.themeRepository.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // Split tunneling is a nested page inside Settings: it keeps the shell's
+    // top bar and bottom navigation, provides its own back row, and survives
+    // rotation through rememberSaveable.
+    var splitOpen by rememberSaveable { mutableStateOf(false) }
+    if (splitOpen) {
+        SplitTunnelRoute(
+            container = container,
+            onBack = { splitOpen = false },
+            modifier = modifier,
+        )
+        return
+    }
+
     val client = engine
 
     if (client == null) {
@@ -106,6 +123,7 @@ fun SettingsRoute(
         )
     }
     val state by settingsViewModel.state.collectAsStateWithLifecycle()
+    val splitState by container.splitTunnelRepository.state.collectAsStateWithLifecycle()
 
     val colors = (paletteState as? PaletteState.Ready)?.colors
     val theme = colors?.theme ?: ThemeId.LIGHT
@@ -162,6 +180,8 @@ fun SettingsRoute(
             notificationsAllowed = notificationsAllowed,
             batteryUnrestricted = batteryUnrestricted,
             launchError = launchError,
+            splitMode = splitState.settings.mode,
+            splitAppCount = splitState.settings.packages.size,
         ),
         actions = SettingsActions(
             onToggleAdvanced = settingsViewModel::toggleAdvanced,
@@ -188,9 +208,7 @@ fun SettingsRoute(
             },
             onOpenVpnSettings = { open(PermissionController.vpnSettingsIntent()) },
             onDismissLaunchError = { launchError = null },
-            // T14 owns split tunneling. T13 deliberately renders no row and no
-            // dead click; T14 passes its navigation callback here.
-            onOpenSplitTunneling = null,
+            onOpenSplitTunneling = { splitOpen = true },
         ),
         modifier = modifier,
     )
@@ -336,6 +354,15 @@ private fun SettingsList(
                 onOpenSettings = actions.onOpenVpnSettings,
             )
         }
+        // App-level and deliberately outside the engine snapshot: the split
+        // selection lives in DataStore and stays reachable while engine
+        // settings load or fail.
+        item(key = "split") {
+            SplitTunnelRow(
+                appState = appState,
+                onClick = actions.onOpenSplitTunneling,
+            )
+        }
 
         if (state.hasSnapshot) {
             item(key = "header_connection") {
@@ -376,6 +403,69 @@ private fun SettingsList(
                     EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
                 }
             }
+        }
+    }
+}
+
+/**
+ * The Split tunneling shortcut: mode and app count at a glance, and a chevron
+ * that opens the nested screen. It is App-level state from DataStore, so it
+ * renders even while the engine snapshot is loading or missing.
+ */
+@Composable
+private fun SplitTunnelRow(
+    appState: SettingsAppState,
+    onClick: (() -> Unit)?,
+) {
+    val summary = when (appState.splitMode) {
+        SplitMode.OFF -> stringResource(R.string.settings_split_summary_off)
+        SplitMode.EXCLUDE -> pluralStringResource(
+            R.plurals.settings_split_summary_exclude,
+            appState.splitAppCount,
+            appState.splitAppCount,
+        )
+        SplitMode.INCLUDE -> pluralStringResource(
+            R.plurals.settings_split_summary_include,
+            appState.splitAppCount,
+            appState.splitAppCount,
+        )
+    }
+    Surface(color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = Dimens.TouchTarget)
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(role = Role.Button, onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .testTag(SettingsTags.SPLIT_ROW)
+                .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_split_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(SettingsTags.SPLIT_SUMMARY),
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
         }
     }
 }

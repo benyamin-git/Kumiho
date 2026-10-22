@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.vpn.SplitMode
 
 /** The tone of a screen-level notice; the icon carries the meaning too. */
 enum class SettingsNoticeTone { WARNING, ERROR }
@@ -108,6 +109,10 @@ data class SettingsAppState(
     val batteryUnrestricted: Boolean = false,
     /** A failed system-settings launch, shown inline so it can never crash. */
     val launchError: String? = null,
+    /** The saved split-tunnel mode; Off is the safe first-run default. */
+    val splitMode: SplitMode = SplitMode.OFF,
+    /** How many apps the saved split-tunnel selection contains. */
+    val splitAppCount: Int = 0,
 )
 
 /**
@@ -169,6 +174,11 @@ object SettingsTags {
     const val ALWAYS_ON_STATE = "settings_always_on_state"
     const val ALWAYS_ON_OPEN = "settings_always_on_open"
     const val VPN_EXPLANATION = "settings_vpn_explanation"
+    const val SPLIT_ROW = "settings_split_row"
+    const val SPLIT_SUMMARY = "settings_split_summary"
+
+    const val CIDR_HINT = "settings_cidr_hint"
+    const val CIDR_DNS_NOTE = "settings_cidr_dns_note"
 
     fun vpnSettings(key: String): String = "settings_vpn_settings_$key"
 

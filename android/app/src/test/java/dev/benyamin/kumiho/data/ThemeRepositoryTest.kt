@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.data
 
+import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -7,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -83,6 +85,44 @@ class ThemeRepositoryTest {
             val state = repository.state.value
             assertTrue("expected an error state, got $state", state is PaletteState.Error)
             assertEquals("no palette", (state as PaletteState.Error).message)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    // ---- M-3: the setters persist through the seam -----------------------
+
+    @Test
+    fun `setTheme persists the choice immediately`() = runBlocking {
+        val prefs = FakePreferences()
+        val scope = CoroutineScope(Job() + Dispatchers.Default)
+        val repository = ThemeRepository(
+            prefs = prefs,
+            scope = scope,
+            defaultTheme = { ThemeId.LIGHT },
+        )
+        try {
+            repository.setTheme(ThemeId.DARK)
+            assertEquals("dark", prefs.theme.first { it != null })
+            assertEquals("dark", prefs.theme.value)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `setAccent persists the choice immediately`() = runBlocking {
+        val prefs = FakePreferences()
+        val scope = CoroutineScope(Job() + Dispatchers.Default)
+        val repository = ThemeRepository(
+            prefs = prefs,
+            scope = scope,
+            defaultTheme = { ThemeId.LIGHT },
+        )
+        try {
+            repository.setAccent(KumihoAccent.VIOLET)
+            assertEquals("violet", prefs.accent.first { it != null })
+            assertEquals("violet", prefs.accent.value)
         } finally {
             scope.cancel()
         }

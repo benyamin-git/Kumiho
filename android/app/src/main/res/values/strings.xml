@@ -316,6 +316,50 @@
     <string name="settings_always_on_state_off">Off</string>
     <string name="settings_always_on_open">Open Android VPN settings</string>
 
+    <string name="settings_split_title">Split tunneling</string>
+    <string name="settings_split_hint">Choose which apps use the tunnel. Changes apply on the next connect.</string>
+    <string name="settings_split_summary_off">Off</string>
+    <plurals name="settings_split_summary_exclude">
+        <item quantity="one">Excluding %1$d app</item>
+        <item quantity="other">Excluding %1$d apps</item>
+    </plurals>
+    <plurals name="settings_split_summary_include">
+        <item quantity="one">Including %1$d app</item>
+        <item quantity="other">Including %1$d apps</item>
+    </plurals>
+
+    <string name="split_back">Back to settings</string>
+    <string name="split_apply_note">Changes are saved immediately and apply on the next connect.</string>
+    <string name="split_reconnect">The tunnel is up. Reconnect to apply this selection.</string>
+    <string name="split_off_hint">Every app uses the tunnel. Kumiho itself always stays outside.</string>
+    <string name="split_empty_include_warning">No apps are included yet, so every app will use the tunnel. Select at least one app to limit the tunnel to those apps.</string>
+    <string name="split_mode_off_title">Off</string>
+    <string name="split_mode_off_description">Every app uses the tunnel.</string>
+    <string name="split_mode_exclude_title">Exclude apps</string>
+    <string name="split_mode_exclude_description">Selected apps bypass the tunnel; everything else uses it.</string>
+    <string name="split_mode_include_title">Include apps</string>
+    <string name="split_mode_include_description">Only selected apps use the tunnel; everything else bypasses it.</string>
+    <plurals name="split_selected_apps">
+        <item quantity="one">%1$d app selected</item>
+        <item quantity="other">%1$d apps selected</item>
+    </plurals>
+    <string name="split_off_pick_mode">Choose Exclude or Include to pick apps.</string>
+    <string name="split_system_apps">System apps</string>
+    <string name="split_search_label">Search apps</string>
+    <string name="split_search_clear">Clear search</string>
+    <string name="split_kumiho_locked">Always outside</string>
+    <string name="split_loading">Loading split-tunnel settings…</string>
+    <string name="split_load_failed_title">Split tunneling is unavailable</string>
+    <string name="split_load_failed_hint">Your selection is still stored; retry to load it.</string>
+    <string name="split_apps_loading">Loading apps…</string>
+    <string name="split_apps_failed_title">The app list could not be read</string>
+    <string name="split_apps_empty">No apps are installed.</string>
+    <string name="split_apps_no_match">No apps match “%1$s”.</string>
+
+    <string name="settings_cidr_label">IPv4 CIDRs</string>
+    <string name="settings_cidr_hint">One or more IPv4 CIDRs separated by commas, for example 10.0.0.0/8. A bare address becomes /32. IPv6 is always blackholed and cannot be excluded.</string>
+    <string name="settings_cidr_dns_note">The tunnel DNS host 10.8.0.2 always stays routed, even inside an excluded range.</string>
+
     <string name="settings_label_kill_switch">Kill switch</string>
     <string name="settings_label_autoconnect">Autoconnect</string>
     <string name="settings_label_mtu">MTU</string>
@@ -343,11 +387,11 @@
     <string name="settings_hint_exit_check">Probe the public exit IP after connecting. Applies on the next connect.</string>
     <string name="settings_hint_doh_provider">In-tunnel DNS-over-HTTPS resolver. Applies on the next connect.</string>
     <string name="settings_hint_dns_upstream">Resolver IP for DoH; empty uses the provider default. Applies on the next connect.</string>
-    <string name="settings_hint_allow_lan">Keeps private LAN ranges outside the tunnel. The tunnel DNS 10.8.0.2 stays inside, so local names still resolve. Applies on the next connect.</string>
+    <string name="settings_hint_allow_lan">When on, RFC1918 private, link-local and multicast ranges bypass the tunnel. The tunnel DNS 10.8.0.2 always stays inside. Applies on the next connect.</string>
     <string name="settings_hint_quota_poll_minutes">Minutes between quota refreshes while connected. Applies on the next connect.</string>
     <string name="settings_hint_edge_address">Pins the Fastly edge IP; empty resolves normally. Applies on the next connect.</string>
     <string name="settings_hint_upstream_proxy">Chains the edge connection through a proxy URL; empty connects directly. Applies on the next connect.</string>
-    <string name="settings_hint_exclude_cidrs">Comma-separated IPv4 CIDRs that bypass the tunnel. IPv6 is always blackholed and cannot be excluded. Applies on the next connect.</string>
+    <string name="settings_hint_exclude_cidrs">Extra IPv4 ranges that bypass the tunnel. A bare address becomes /32 and host bits are masked. IPv6 is always blackholed. Applies on the next connect.</string>
     <string name="settings_hint_tls_split">Splits the TLS ClientHello across writes. Applies on the next connect.</string>
     <string name="settings_hint_http_proxy">Loopback HTTP/CONNECT proxy through the tunnel. Any app on this phone can use it. Applies on the next connect.</string>
     <string name="settings_hint_http_proxy_port">Loopback HTTP proxy listener port. Applies on the next connect.</string>
@@ -384,6 +428,7 @@
     <string name="settings_validation_option">Choose one of the listed options.</string>
     <string name="settings_validation_cidr">“%1$s” is not an IPv4 CIDR.</string>
     <string name="settings_validation_cidr_ipv6">IPv6 is always blackholed. Enter an IPv4 CIDR.</string>
+    <string name="settings_validation_cidr_too_broad">This would exclude the whole IPv4 internet. Enter a narrower range.</string>
     <string name="settings_validation_read_only">This setting is managed by Android.</string>
     <string name="settings_validation_apply_failed">The engine rejected this value:</string>
 

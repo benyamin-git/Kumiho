@@ -60,6 +60,7 @@ enum class SettingError {
     NOT_AN_OPTION,
     INVALID_CIDR,
     IPV6_NOT_SUPPORTED,
+    CIDR_TOO_BROAD,
 }
 
 /** A client-side validation outcome. */
@@ -385,44 +386,10 @@ object SettingsMapper {
     }
 
     /**
-     * Parses a comma-separated IPv4 list. Spaces and empty items are dropped, a
-     * bare address becomes `/32`, and IPv6 is rejected with its own error so the
-     * screen can say why (IPv6 is always blackholed).
+     * Parses a comma-separated IPv4 list through [CidrValidator]. Spaces and
+     * empty items are dropped, a bare address becomes `/32`, host bits are
+     * masked, and `/0` or a union covering all of IPv4 is rejected before it
+     * can reach `settings_set`.
      */
-    fun cidrList(raw: String): SettingInput {
-        val parts = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        if (parts.isEmpty()) return SettingInput.Valid("")
-        val normalized = ArrayList<String>(parts.size)
-        for (part in parts) {
-            if (part.contains(':')) return SettingInput.Invalid(SettingError.IPV6_NOT_SUPPORTED)
-            normalized += normalizeCidr(part)
-                ?: return SettingInput.Invalid(SettingError.INVALID_CIDR, detail = part)
-        }
-        return SettingInput.Valid(normalized.joinToString(", "))
-    }
-
-    /** `10.0.0.0/8` stays; `10.1.2.3` becomes `10.1.2.3/32`; malformed text is null. */
-    private fun normalizeCidr(raw: String): String? {
-        val slash = raw.indexOf('/')
-        val host = if (slash >= 0) raw.substring(0, slash) else raw
-        val prefix = if (slash >= 0) raw.substring(slash + 1) else "32"
-        val octets = parseIpv4(host) ?: return null
-        val bits = prefix.toIntOrNull() ?: return null
-        if (bits !in 0..32 || prefix.isBlank()) return null
-        return "${octets.joinToString(".")}/$bits"
-    }
-
-    /** Strict dotted-quad parsing; no hostnames, no shorthand and no DNS. */
-    private fun parseIpv4(text: String): List<Int>? {
-        val parts = text.split('.')
-        if (parts.size != 4) return null
-        val octets = ArrayList<Int>(4)
-        for (part in parts) {
-            if (part.isEmpty() || part.length > 3 || part.any { !it.isDigit() }) return null
-            val value = part.toIntOrNull() ?: return null
-            if (value !in 0..255) return null
-            octets += value
-        }
-        return octets
-    }
+    fun cidrList(raw: String): SettingInput = CidrValidator.validate(raw)
 }
