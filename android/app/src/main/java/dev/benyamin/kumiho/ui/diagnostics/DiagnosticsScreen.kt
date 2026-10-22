@@ -436,7 +436,7 @@ private fun SplitCard(mode: SplitMode, count: Int, modifier: Modifier = Modifier
         SplitMode.EXCLUDE -> stringResource(R.string.diagnostics_split_excluding, count)
         SplitMode.INCLUDE -> stringResource(R.string.diagnostics_split_including, count)
     }
-    KumihoCard(modifier = modifier.testTag(DiagnosticsTags.SPLIT_CARD)) {
+    KumihoCard(modifier = modifier.fillMaxWidth().testTag(DiagnosticsTags.SPLIT_CARD)) {
         Text(
             text = stringResource(R.string.settings_split_title),
             style = MaterialTheme.typography.titleMedium,
