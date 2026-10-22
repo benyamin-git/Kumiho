@@ -10,10 +10,11 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 > Galaxy S25 FE; the sign-off is recorded below. The release automation is
 > implemented: `android-verify-apk.sh`, `android-release.sh`, the five Makefile
 > targets, an Android CI job and Android signing steps in the release workflow.
-> The scripts were exercised end to end with a throwaway signing key. The
-> production key, GitHub Actions secrets, tag and published APK are still
-> user-owned and pending; no Android APK or `SHA256SUMS` has been published yet.
-> Do not report the app as released until the tagged release workflow succeeds.
+> The scripts were exercised end to end with a throwaway signing key, then the
+> production-signed `v0.5.0`
+> [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0) was
+> published on 2026-10-22 with three Android APKs and `SHA256SUMS`. The
+> production signing key and GitHub Actions secret values remain user-owned.
 
 ## Versions
 
@@ -311,12 +312,23 @@ The release workflow expects five repository secrets:
 writes `android/keystore.properties` with mode 600, runs
 `scripts/android-release.sh`, appends the three APKs to `SHA256SUMS`, and
 attaches them to the GitHub release. A step trap removes the temporary
-keystore and properties, and an `always()` step is a backstop. The job
-publishes stable `vMAJOR.MINOR.PATCH` tags;
-prerelease tags such as `v0.5.0-rc.1` are intentionally skipped until a
-prerelease/versionCode policy exists. The workflow is wired but has not been
-triggered: there is no `v0.5.0` tag yet. Do not claim a release until the tag
-workflow succeeds and the assets appear on GitHub.
+keystore and properties, and an `always()` step is a backstop. The workflow
+runs on stable `vMAJOR.MINOR.PATCH` tags; prerelease tags such as `v0.5.0-rc.1`
+are intentionally skipped until a prerelease/versionCode policy exists. Tag
+`v0.5.0` ran the workflow successfully on 2026-10-22 and published the desktop
+and Android assets.
+
+### Published v0.5.0 release
+
+Tag `v0.5.0` points at merge commit `7202426`. The
+[release workflow](https://github.com/benyamin-git/kumiho/actions/runs/39819623775)
+passed and the [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+contains Linux amd64/arm64 and Windows amd64 zips, the three signed Android
+APKs, and `SHA256SUMS`. The APKs were verified after download: package
+`dev.benyamin.kumiho`, version `0.5.0`/500, min/target SDK 26/36, exact arm
+ABIs, 16 KB alignment, arm64 `p_align=0x4000`, and the production certificate
+`4bfbd2690546a969d1416e0729c2d5b93d39211d2ceb67068b03705b5bff707e`; the
+universal APK is 25.51 MiB.
 
 ### Release checks
 
@@ -540,8 +552,8 @@ elsewhere.
 
 The T11 physical first-connect gate is passed on this device. T18 is accepted
 with the exceptions above; T17 (release signing/CI/release workflow) is
-implemented. The production keystore, GitHub secrets, `v0.5.0` tag and
-published release remain user-owned follow-ups.
+implemented and the `v0.5.0` release was published on 2026-10-22. The
+production keystore and GitHub secret values remain user-owned.
 
 ## Rollback and uninstall
 

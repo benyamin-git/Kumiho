@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - unreleased
+## [0.5.0] - 2026-10-22
 
 The Android client. The desktop daemon, CLI, TUI, GUI and control protocol are
 unchanged from v0.4.1; the engine and all clients share one version from this
@@ -70,10 +70,9 @@ release.
 The Android app's unit, lint, assemble and emulator suites pass. Physical
 first-connect/DNS/browsing/exit-IP acceptance passed on a Galaxy S25 FE; the
 remaining checklist items are user-accepted exceptions, so this is a partial
-acceptance rather than a full pass. The signing/release automation is
-implemented and was tested locally with a throwaway key. The production key,
-`v0.5.0` tag and published APK are still pending; no Android APK or Android
-`SHA256SUMS` has been published yet. See
+acceptance rather than a full pass. The signed `v0.5.0` release was published
+on 2026-10-22 with three Android APKs and `SHA256SUMS`; the signing key and
+GitHub Actions secrets remain user-owned. See
 [docs/android-testing.md](docs/android-testing.md).
 
 ## [0.4.1] - 2026-10-21
@@ -290,7 +289,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
 [0.4.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.0
 [0.3.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.3.0

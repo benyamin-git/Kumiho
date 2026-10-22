@@ -7,9 +7,10 @@ HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
 kill switch, watchdog with edge rotation, runtime settings, log viewer, account
 screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
 install. v0.5.0 adds the Android client (sideload-only; physical acceptance is
-a partial pass with user-accepted exceptions, and the signed release is pending
-the `v0.5.0` tag — see
-[docs/android-testing.md](docs/android-testing.md)). v0.4.0 adds backend
+a partial pass with user-accepted exceptions). The signed
+[v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+is published; see [docs/android-testing.md](docs/android-testing.md).
+v0.4.0 adds backend
 parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
 solving, TLS ClientHello fragmentation, an upstream proxy, a local HTTP proxy,
 DNS over SOCKS5 UDP ASSOCIATE, a server-list cache and a slow keepalive
@@ -83,7 +84,7 @@ before release:
 - **Windows 11 amd64** — Windows service + Wintun, TUI client over a named pipe.
 - **Android 8.0+** — implemented as a sideloaded VpnService app with the
   engine embedded in-process; physical acceptance is a partial pass with
-  user-accepted exceptions and the signed release is pending the `v0.5.0` tag
+  user-accepted exceptions, and the signed `v0.5.0` release is published
   (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
@@ -217,9 +218,8 @@ for common issues.
   Quick Settings tile covers fast access), no browser/captcha sign-in and no
   auto-update. Always-on and lockdown are Android settings and some OEM
   battery managers delay or refuse Always-on starts. Physical acceptance is a
-  partial pass with user-accepted exceptions, and the signed release is
-  pending the `v0.5.0` tag; see
-  [docs/android.md](docs/android.md#limitations).
+  partial pass with user-accepted exceptions; the signed `v0.5.0` release is
+  published. See [docs/android.md](docs/android.md#limitations).
 - Using an unofficial client is a ToS gray area (see PLAN.md §13); Kumiho
   never sees or stores your Firefox password, only the resulting tokens.
 
@@ -348,10 +348,10 @@ are all there too.
 > **Release status.** The app builds and its unit, lint, assemble and
 > emulator suites pass. Physical first-connect/DNS/browsing/exit-IP acceptance
 > passed on a Galaxy S25 FE; the remaining checklist items are user-accepted
-> exceptions (a partial acceptance, not a full pass). The signing/release
-> automation is implemented and tested with a throwaway key, but the production
-> key, `v0.5.0` tag and published APK are still pending. Do not treat a local
-> APK as a published release.
+> exceptions (a partial acceptance, not a full pass). The production-signed
+> [v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+> carries three APKs and `SHA256SUMS`. Verify a download against the release
+> checksums; a local APK is not a published release.
 
 Build it with the toolchain and AAR commands in
 [docs/android-testing.md](docs/android-testing.md); the user guide, including

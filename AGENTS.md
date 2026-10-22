@@ -116,9 +116,9 @@ them locally for any change under `android/`, `mobile/` or
   the APKs to `SHA256SUMS`, attaches all desktop and Android assets, and
   creates the GitHub release. The signing material is removed by a step trap
   and an `always()` step. Prerelease tags are not published.
-- The Android CI job and release steps are implemented; no `v0.5.0` tag has
-  been pushed yet, so the release workflow has not run. See
-  [docs/android-testing.md](docs/android-testing.md).
+- The Android CI job and release steps are implemented and were exercised by
+  the `v0.5.0` release on 2026-10-22; the workflow published the desktop and
+  Android assets. See [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
 

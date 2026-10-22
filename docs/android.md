@@ -13,11 +13,11 @@ This guide describes the app as implemented for **v0.5.0**
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE; the remaining checklist items were explicitly accepted by the
 > user as exceptions, so this is a **partial acceptance**, not a full pass. The
-> signing/release automation is implemented, but the production key, `v0.5.0`
-> tag and GitHub release are still pending. There is therefore **no published
-> Android APK or `SHA256SUMS` at the time of writing**; build the app locally
-> with [android-testing.md](android-testing.md) and treat a local build as a
-> test build, not a release.
+> production-signed
+> [v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+> is published with the three Android APKs and `SHA256SUMS`; the signing key and
+> GitHub Actions secret values remain user-owned. Local builds are test builds,
+> not published releases.
 
 ## Requirements
 
@@ -55,10 +55,11 @@ The debug build installs side by side with a release build: its package is
 build is `dev.benyamin.kumiho`. The full toolchain, emulator and release
 instructions are in [android-testing.md](android-testing.md).
 
-### From a release (pending the v0.5.0 tag)
+### From a release
 
-When the v0.5.0 release workflow succeeds, each GitHub release carries three
-APKs and the usual `SHA256SUMS`:
+The [v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+is published. Each GitHub release carries three APKs and the usual
+`SHA256SUMS`:
 
 | Asset | ABI | Use |
 |---|---|---|
@@ -67,10 +68,9 @@ APKs and the usual `SHA256SUMS`:
 | `kumiho-v<version>-android-universal.apk` | both | One file if unsure |
 
 Those names are produced by `scripts/android-release.sh` and attached by
-`.github/workflows/release.yml`; **the v0.5.0 release is not published yet**.
-Never install an APK from an untrusted mirror: when a release exists, download
-it from the project's GitHub Releases and check it against the `SHA256SUMS`
-published with it.
+`.github/workflows/release.yml`. Download from the project's GitHub Releases
+and check the APK against the `SHA256SUMS` published with it. Never install an
+APK from an untrusted mirror.
 
 ### Updating
 
@@ -611,10 +611,9 @@ daemon or your Firefox Account.
   loopback-only, unauthenticated and device-wide.
 - **Non-DNS UDP is blocked** inside the tunnel (QUIC/HTTP3 falls back to TCP;
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
-- **Physical acceptance is a partial pass with user-accepted exceptions, and
-  the signed release is pending.** Treat the current build as a test build
-  until the `v0.5.0` release workflow succeeds; see
-  [android-testing.md](android-testing.md).
+- **Physical acceptance is a partial pass with user-accepted exceptions.**
+  The signed `v0.5.0` release is published, but the untested checklist items
+  remain exceptions; see [android-testing.md](android-testing.md).
 
 ## Desktop parity
 
