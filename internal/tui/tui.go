@@ -181,6 +181,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loc.rtts = map[string]*float64{}
 				}
 				m.loc.rtts[pr.Host] = pr.RTTMS
+				m.ackPing(pr.Host)
 			}
 		case ipc.TypeLog:
 			var e logging.Entry
@@ -195,6 +196,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleLoginState(msg)
 	case locationsMsg:
 		return m.handleLocationsMsg(msg)
+	case pingFailedMsg:
+		m.loc.ping = nil
+		m.notice = "ping: " + msg.err.Error()
+		return m, nil
 	case selectDoneMsg:
 		if msg.err != nil {
 			m.notice = "selection failed: " + msg.err.Error()
