@@ -127,7 +127,20 @@ class LocationsScreenTest {
         show(state(selection = LocationTree.currentSelection(COUNTRIES, "us", EDGE_ADDRESS)))
 
         rule.onNodeWithTag(LocationsTags.SUMMARY).assertExists()
-        rule.onNodeWithText("United States · New York · edge.example.net").assertExists()
+        // The visual line carries the flag; semantics keep the plain summary.
+        rule.onNodeWithContentDescription("United States · New York · edge.example.net").assertExists()
+        rule.onNodeWithText("United States · New York · edge.example.net").assertDoesNotExist()
+    }
+
+    @Test
+    fun countryFlagsAreDecorativeAndRecommendedHasNone() {
+        show(state())
+
+        rule.onNodeWithTag(countryRowTag("de")).assertTextContains("Germany")
+        rule.onNodeWithText("🇩🇪").assertDoesNotExist()
+        rule.onNodeWithTag(countryRowTag("rec"))
+            .assertTextContains(text(R.string.locations_recommended))
+        rule.onNodeWithText("🇷🇪").assertDoesNotExist()
     }
 
     @Test

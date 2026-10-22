@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.ui.theme.Dimens
 
@@ -34,6 +36,7 @@ fun KumihoRow(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    titlePrefix: String? = null,
     icon: Painter? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
@@ -61,7 +64,8 @@ fun KumihoRow(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                TitleLine(
+                    prefix = titlePrefix,
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -76,6 +80,27 @@ fun KumihoRow(
             }
             trailing?.invoke()
         }
+    }
+}
+
+/** The title line with an optional decorative prefix the accessibility tree hides. */
+@Composable
+private fun TitleLine(prefix: String?, text: String, style: TextStyle, color: Color) {
+    if (prefix.isNullOrEmpty()) {
+        Text(text = text, style = style, color = color)
+        return
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+    ) {
+        Text(
+            text = prefix,
+            style = style,
+            color = color,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
+        Text(text = text, style = style, color = color)
     }
 }
 

@@ -219,6 +219,9 @@ data class LocationSelection(
     /** The REC pseudo-country is presented as "Recommended". */
     val recommended: Boolean get() = countryCode.equals(LocationTree.RECOMMENDED_CODE, ignoreCase = true)
 
+    /** The country's flag, or "" for Recommended, blank or an unknown code. */
+    val flag: String get() = CountryFlags.emoji(countryCode)
+
     /** The country's display name, or the raw code while the tree does not know it. */
     val countryName: String?
         get() = country?.name ?: countryCode.takeIf { it.isNotBlank() }

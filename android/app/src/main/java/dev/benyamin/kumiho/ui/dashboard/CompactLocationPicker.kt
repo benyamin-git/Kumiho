@@ -22,6 +22,7 @@ import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.components.KumihoRow
+import dev.benyamin.kumiho.ui.locations.CountryFlags
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
@@ -95,6 +96,7 @@ fun CompactLocationPicker(
                     val expanded = country.code in state.options.expanded
                     CountryRow(
                         name = country.name,
+                        titlePrefix = CountryFlags.emoji(country.code),
                         expanded = expanded,
                         onClick = { onToggleCountry(country.code) },
                         modifier = Modifier.testTag(countryTag(country.code)),
@@ -126,9 +128,11 @@ private fun CountryRow(
     expanded: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    titlePrefix: String? = null,
 ) {
     KumihoRow(
         title = name,
+        titlePrefix = titlePrefix,
         modifier = modifier,
         onClick = onClick,
         trailing = {

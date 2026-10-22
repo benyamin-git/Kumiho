@@ -213,6 +213,22 @@ class LocationTreeTest {
     }
 
     @Test
+    fun `a resolved country selection carries its flag`() {
+        val selection = LocationTree.currentSelection(ORDERED, location = "us", server = "edge.example.net:2499")
+
+        requireNotNull(selection)
+        assertEquals("🇺🇸", selection.flag)
+    }
+
+    @Test
+    fun `a recommended selection carries no flag`() {
+        val selection = LocationTree.currentSelection(ORDERED, location = "REC", server = null)
+
+        requireNotNull(selection)
+        assertEquals("", selection.flag)
+    }
+
+    @Test
     fun `a server the tree no longer lists stays an honest raw address`() {
         val selection = LocationTree.currentSelection(
             ORDERED,

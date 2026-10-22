@@ -50,6 +50,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -355,8 +357,15 @@ private fun SelectionSummary(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val plain = selectionText(selection)
+            val flag = selection?.flag.orEmpty()
             Text(
-                text = selectionText(selection),
+                text = if (flag.isEmpty()) plain else "$flag $plain",
+                modifier = if (flag.isEmpty()) {
+                    Modifier
+                } else {
+                    Modifier.clearAndSetSemantics { contentDescription = plain }
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
@@ -640,8 +649,10 @@ private fun CountryRow(
     } else {
         row.country.name
     }
+    val flag = CountryFlags.emoji(row.country.code)
     KumihoRow(
         title = name,
+        titlePrefix = flag.takeIf { it.isNotEmpty() },
         modifier = Modifier
             .semantics { heading() }
             .testTag(countryRowTag(row.country.code)),
