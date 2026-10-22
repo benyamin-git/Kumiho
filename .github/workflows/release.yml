@@ -9,6 +9,10 @@ permissions:
 
 jobs:
   release:
+    # The Android release script accepts stable MAJOR.MINOR.PATCH tags only.
+    # Prerelease tags (for example v0.5.0-rc.1) are intentionally not published
+    # by this workflow until a prerelease policy exists.
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -48,12 +52,24 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
           set -euo pipefail
           source scripts/android-env.sh
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_CERT_SHA256; do
+            if [ -z "${!name:-}" ]; then
+              echo "release: repository secret $name is missing or empty" >&2
+              exit 1
+            fi
+          done
           keystore="$RUNNER_TEMP/kumiho-android-release.jks"
+          trap 'rm -f "$keystore" android/keystore.properties' EXIT
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           chmod 600 "$keystore"
+          keytool -list -keystore "$keystore" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
           {
             printf 'storeFile=%s\n' "$keystore"
             printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
@@ -61,7 +77,9 @@ jobs:
             printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
           } > android/keystore.properties
           chmod 600 android/keystore.properties
-          KUMIHO_VERSION="${GITHUB_REF_NAME#v}" bash scripts/android-release.sh
+          KUMIHO_VERSION="${GITHUB_REF_NAME#v}" \
+            KUMIHO_EXPECT_CERT_SHA256="$ANDROID_CERT_SHA256" \
+            bash scripts/android-release.sh
 
       - name: Package zips and checksums
         run: |

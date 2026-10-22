@@ -48,19 +48,19 @@ android-aar-emulator:
 
 android-debug:
 	bash scripts/android-build-aar.sh
-	cd android && $(GRADLE) $(GRADLE_FLAGS) :app:assembleDebug
+	. scripts/android-env.sh >/dev/null && cd android && $(GRADLE) $(GRADLE_FLAGS) :app:assembleDebug
 
 android-test:
 	bash scripts/android-build-aar.sh
-	cd android && $(GRADLE) $(GRADLE_FLAGS) :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+	. scripts/android-env.sh >/dev/null && cd android && $(GRADLE) $(GRADLE_FLAGS) :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
 android-emulator-test:
 	bash scripts/android-build-aar.sh --emulator
-	cd android && $(GRADLE) $(GRADLE_FLAGS) -PkumihoEmulator=true :app:connectedDebugAndroidTest
+	GRADLE="$(GRADLE)" GRADLE_FLAGS="$(GRADLE_FLAGS)" bash scripts/android-connected-test.sh
 
 android-release:
-	@test -n "$(KUMIHO_VERSION)" || { echo "usage: make android-release KUMIHO_VERSION=0.5.0" >&2; exit 2; }
-	KUMIHO_VERSION="$(KUMIHO_VERSION)" bash scripts/android-release.sh
+	@test -n "$(KUMIHO_VERSION)" || { echo "usage: make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>" >&2; exit 2; }
+	KUMIHO_VERSION="$(KUMIHO_VERSION)" KUMIHO_EXPECT_CERT_SHA256="$(KUMIHO_EXPECT_CERT_SHA256)" GRADLE_FLAGS="$(GRADLE_FLAGS)" bash scripts/android-release.sh
 
 android-verify:
 	@if [ -n "$(APK)" ]; then \

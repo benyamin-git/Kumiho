@@ -24,8 +24,10 @@ Builds the arm/arm64 AAR and signed per-ABI + universal release APKs, verifies
 each APK, and leaves them in dist/. Requires android/keystore.properties.
 
 Environment:
-  KUMIHO_VERSION   required, MAJOR.MINOR.PATCH; a leading v is stripped
-  KUMIHO_ALLOW_DIRTY=1  allow a dirty worktree (local experiments only)
+  KUMIHO_VERSION                 required, MAJOR.MINOR.PATCH; a leading v is stripped
+  KUMIHO_EXPECT_CERT_SHA256      required signing certificate SHA-256
+  KUMIHO_ALLOW_DIRTY=1           allow a dirty worktree (local experiments only)
+  GRADLE_FLAGS                   optional extra Gradle flags (for example --offline)
 EOF
 }
 
@@ -50,7 +52,19 @@ if ! [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
 	echo "android-release: KUMIHO_VERSION must be MAJOR.MINOR.PATCH, got '$version'" >&2
 	exit 2
 fi
-version_code=$((BASH_REMATCH[1] * 10000 + BASH_REMATCH[2] * 100 + BASH_REMATCH[3]))
+minor=${BASH_REMATCH[2]}
+patch=${BASH_REMATCH[3]}
+if [ $((10#$minor)) -ge 100 ] || [ $((10#$patch)) -ge 100 ]; then
+	echo "android-release: minor and patch must be < 100 (versionCode scheme), got '$version'" >&2
+	exit 2
+fi
+version_code=$((10#${BASH_REMATCH[1]} * 10000 + 10#$minor * 100 + 10#$patch))
+expect_cert="${KUMIHO_EXPECT_CERT_SHA256:-}"
+if [ -z "$expect_cert" ]; then
+	echo "android-release: KUMIHO_EXPECT_CERT_SHA256 is required" >&2
+	echo "  set it to the SHA-256 of the release certificate; it is public metadata" >&2
+	exit 2
+fi
 
 props="$repo_root/android/keystore.properties"
 if [ ! -f "$props" ]; then
@@ -113,7 +127,10 @@ VERSION="v$version" \
 rm -rf "$repo_root/android/app/build/outputs/apk/release"
 (
 	cd "$repo_root/android"
-	./gradlew --no-daemon -PkumihoVersion="$version" :app:assembleRelease
+	# GRADLE_FLAGS is intentionally word-split so callers can pass several
+	# flags (for example GRADLE_FLAGS='--offline --stacktrace').
+	# shellcheck disable=SC2086
+	./gradlew --no-daemon ${GRADLE_FLAGS:-} -PkumihoVersion="$version" :app:assembleRelease
 )
 
 out="$repo_root/android/app/build/outputs/apk/release"
@@ -143,6 +160,11 @@ for entry in "${apks[@]}"; do
 	KUMIHO_EXPECT_PACKAGE=dev.benyamin.kumiho \
 		KUMIHO_EXPECT_VERSION="$version" \
 		KUMIHO_EXPECT_VERSION_CODE="$version_code" \
+		KUMIHO_EXPECT_MIN_SDK=26 \
+		KUMIHO_EXPECT_TARGET_SDK=36 \
+		KUMIHO_EXPECT_CERT_SHA256="$expect_cert" \
+		KUMIHO_ALLOW_UNSIGNED=0 \
+		KUMIHO_MAX_UNIVERSAL_BYTES=62914560 \
 		KUMIHO_ABI="$abi" \
 		bash "$repo_root/scripts/android-verify-apk.sh" "$apk"
 done

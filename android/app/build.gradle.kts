@@ -12,11 +12,16 @@ plugins {
 val kumihoVersionName: String = providers.gradleProperty("kumihoVersion")
     .getOrElse("0.5.0")
     .removePrefix("v")
-val versionMatch = Regex("""^(\d+)\.(\d+)\.(\d+)""").find(kumihoVersionName)
+val versionMatch = Regex("""^(\d+)\.(\d+)\.(\d+)$""").find(kumihoVersionName)
     ?: throw GradleException("kumihoVersion must be MAJOR.MINOR.PATCH, was '$kumihoVersionName'")
+val kumihoVersionMinor = versionMatch.groupValues[2].toInt()
+val kumihoVersionPatch = versionMatch.groupValues[3].toInt()
+require(kumihoVersionMinor < 100 && kumihoVersionPatch < 100) {
+    "kumihoVersion minor and patch must be < 100 (versionCode scheme), was '$kumihoVersionName'"
+}
 val kumihoVersionCode: Int = versionMatch.groupValues[1].toInt() * 10000 +
-    versionMatch.groupValues[2].toInt() * 100 +
-    versionMatch.groupValues[3].toInt()
+    kumihoVersionMinor * 100 +
+    kumihoVersionPatch
 
 // The emulator AAR carries an x86_64 .so; ABI splits would leave it out of the
 // debug APK, so -PkumihoEmulator=true turns splits off. AGP has no per-variant

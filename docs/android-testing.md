@@ -111,8 +111,8 @@ first:
     make android-debug
     make android-test                 # JVM tests + lint + debug APK
     make android-emulator-test        # connected suite; emulator must be running
-    make android-release KUMIHO_VERSION=0.5.0
-    make android-verify               # verify every dist/kumiho-*-android-*.apk
+    make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
+    KUMIHO_EXPECT_CERT_SHA256=<fingerprint> make android-verify
 
 Pass `GRADLE_FLAGS=--offline` to any of the Gradle-backed targets once the
 cache is warm. The unit/lint/assemble gate directly:
@@ -243,14 +243,20 @@ check is:
 - With the file present, the release build type uses the `release` signing
   config and the APKs are signed.
 - `scripts/android-release.sh` requires the file and refuses to start without
-  a non-empty value for all four keys and an existing `storeFile`.
+  a non-empty value for all four keys and an existing `storeFile`. It also
+  requires `KUMIHO_EXPECT_CERT_SHA256`, the public SHA-256 fingerprint of the
+  release certificate, so a wrong or rotated key fails before publishing.
 
 ### Signed release build
 
     cp android/keystore.properties.example android/keystore.properties
     # edit the four values; use an absolute storeFile path
-    make android-release KUMIHO_VERSION=0.5.0
-    make android-verify
+    CERT_SHA256=$(keytool -list -v \
+      -keystore ~/kumiho-android-release.jks -alias kumiho \
+      | awk '/SHA256:/ { print $2; exit }' | tr -d ':')
+    make android-release KUMIHO_VERSION=0.5.0 \
+      KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256"
+    KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256" make android-verify
 
 `android-release.sh` validates the semantic version, builds the arm/arm64 AAR
 with the release label, runs `:app:assembleRelease`, copies the three APKs to
@@ -286,11 +292,12 @@ Never commit the keystore or passwords. For a local signed build, create
 
 `storeFile` is resolved with `rootProject.file(...)`: an absolute path is used
 as-is; a relative path is relative to `android/`. Then run
-`make android-release KUMIHO_VERSION=0.5.0`.
+`make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
+as shown above. The fingerprint is public metadata, not a secret.
 
 ### GitHub Actions secrets and tagged release
 
-The release workflow expects four repository secrets:
+The release workflow expects five repository secrets:
 
 | Secret | Value |
 |---|---|
@@ -298,23 +305,29 @@ The release workflow expects four repository secrets:
 | `ANDROID_KEYSTORE_PASSWORD` | keystore password |
 | `ANDROID_KEY_ALIAS` | key alias (`kumiho` in the example) |
 | `ANDROID_KEY_PASSWORD` | key password |
+| `ANDROID_CERT_SHA256` | certificate SHA-256 fingerprint (public) |
 
 `.github/workflows/release.yml` decodes the keystore into `$RUNNER_TEMP`,
 writes `android/keystore.properties` with mode 600, runs
 `scripts/android-release.sh`, appends the three APKs to `SHA256SUMS`, and
-attaches them to the GitHub release. An `always()` step removes the temporary
-keystore and properties. The workflow is wired but has not been triggered:
-there is no `v0.5.0` tag yet. Do not claim a release until the tag workflow
-succeeds and the assets appear on GitHub.
+attaches them to the GitHub release. A step trap removes the temporary
+keystore and properties, and an `always()` step is a backstop. The job
+publishes stable `vMAJOR.MINOR.PATCH` tags;
+prerelease tags such as `v0.5.0-rc.1` are intentionally skipped until a
+prerelease/versionCode policy exists. The workflow is wired but has not been
+triggered: there is no `v0.5.0` tag yet. Do not claim a release until the tag
+workflow succeeds and the assets appear on GitHub.
 
 ### Release checks
 
 Before any release, the local script and CI gate on: `aapt2` badging
-(package/version/min/target), an ABI check (arm only; no x86/x86_64 native
-libraries), `zipalign -c -P 16 -v 4`, `llvm-readelf` `p_align >= 0x4000` on
-the arm64 `libgojni.so`, `apksigner verify --print-certs`, and a universal APK
-at or under 60 MiB with per-ABI sizes recorded. `make android-verify` reruns
-the checks over `dist/`.
+(package/version/min/target), an exact arm-only ABI set (no x86/x86_64 or other
+native ABI directories), `zipalign -c -P 16 -v 4`, `llvm-readelf`
+`p_align >= 0x4000` on **every** arm64 native library, `apksigner
+verify --print-certs` with the expected certificate fingerprint, and a
+universal APK at or under 60 MiB with per-ABI sizes recorded.
+`make android-verify` reruns the structural checks over `dist/`; pass
+`KUMIHO_EXPECT_CERT_SHA256=<fingerprint>` to pin the certificate there too.
 
 ## Physical acceptance checklist
 

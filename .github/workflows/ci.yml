@@ -122,6 +122,13 @@ jobs:
           ./gradlew --no-daemon -PkumihoEmulator=true \
             :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Connected tests (API 36)
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
@@ -131,10 +138,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          script: |
-            source scripts/android-env.sh
-            cd android
-            ./gradlew --no-daemon -PkumihoEmulator=true :app:connectedDebugAndroidTest
+          script: bash scripts/android-connected-test.sh
 
       - name: Release build check (unsigned)
         run: |

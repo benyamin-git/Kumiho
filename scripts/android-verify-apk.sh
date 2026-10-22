@@ -21,6 +21,7 @@ Environment:
   KUMIHO_EXPECT_MIN_SDK        default 26
   KUMIHO_EXPECT_TARGET_SDK     default 36
   KUMIHO_ABI                   arm64-v8a|armeabi-v7a|universal; default inferred
+  KUMIHO_EXPECT_CERT_SHA256    optional expected signer certificate SHA-256
   KUMIHO_ALLOW_UNSIGNED=1      skip apksigner (CI assembleRelease check)
   KUMIHO_MAX_UNIVERSAL_BYTES   universal cap (default 62914560, 60 MiB)
   KUMIHO_BUILD_TOOLS           build-tools version (default 36.0.0)
@@ -79,6 +80,7 @@ expect_min="${KUMIHO_EXPECT_MIN_SDK:-26}"
 expect_target="${KUMIHO_EXPECT_TARGET_SDK:-36}"
 max_universal="${KUMIHO_MAX_UNIVERSAL_BYTES:-62914560}"
 allow_unsigned="${KUMIHO_ALLOW_UNSIGNED:-0}"
+expect_cert="${KUMIHO_EXPECT_CERT_SHA256:-}"
 
 readelf_bin=""
 if [ -n "${ANDROID_NDK_HOME:-}" ] && [ -d "$ANDROID_NDK_HOME" ]; then
@@ -144,49 +146,62 @@ check_one() {
 	*) fail "$apk: unsupported KUMIHO_ABI=$abi" ;;
 	esac
 
-	local libs native_libs
-	libs=$(unzip -Z1 "$apk" | grep -E '^lib/(arm64-v8a|armeabi-v7a|x86|x86_64)/libgojni\.so$' || true)
-	native_libs=$(unzip -Z1 "$apk" | grep -E '^lib/[^/]+/.*\.so$' || true)
-	if printf '%s\n' "$native_libs" | grep -Eq '^lib/(x86|x86_64)/'; then
-		fail "$apk contains x86/x86_64 native libraries"
-	fi
+	local libs abi_dirs expected_dirs
+	libs=$(unzip -Z1 "$apk" | grep -E '^lib/[^/]+/.*\.so$' || true)
+	[ -n "$libs" ] || fail "$apk contains no native libraries"
+	abi_dirs=$(printf '%s\n' "$libs" |
+		sed -n 's#^lib/\([^/]*\)/.*#\1#p' | sort -u)
 	case "$abi" in
-	arm64-v8a)
-		[ "$libs" = "lib/arm64-v8a/libgojni.so" ] || fail "$apk arm64 libs: ${libs:-none}"
-		;;
-	armeabi-v7a)
-		[ "$libs" = "lib/armeabi-v7a/libgojni.so" ] || fail "$apk armeabi-v7a libs: ${libs:-none}"
-		;;
-	universal)
-		printf '%s\n' "$libs" | grep -qx 'lib/arm64-v8a/libgojni.so' || fail "$apk missing arm64 lib"
-		printf '%s\n' "$libs" | grep -qx 'lib/armeabi-v7a/libgojni.so' || fail "$apk missing armeabi-v7a lib"
-		if printf '%s\n' "$libs" | grep -Eq '^lib/(x86|x86_64)/'; then
-			fail "$apk contains an x86 library"
-		fi
-		;;
+	arm64-v8a) expected_dirs="arm64-v8a" ;;
+	armeabi-v7a) expected_dirs="armeabi-v7a" ;;
+	universal) expected_dirs=$'arm64-v8a\narmeabi-v7a' ;;
 	esac
+	expected_dirs=$(printf '%s\n' "$expected_dirs" | sort)
+	if [ "$abi_dirs" != "$expected_dirs" ]; then
+		fail "$apk native ABI dirs: $(printf '%s' "$abi_dirs" | tr '\n' ' '), want $(printf '%s' "$expected_dirs" | tr '\n' ' ')"
+	fi
+	local lib
+	for lib in $expected_dirs; do
+		printf '%s\n' "$libs" | grep -qx "lib/$lib/libgojni.so" ||
+			fail "$apk missing lib/$lib/libgojni.so"
+	done
 
 	"$zipalign" -c -P 16 -v 4 "$apk" >/dev/null || fail "$apk failed zipalign -P 16"
 
-	local aligns="" align align_display
+	local all_aligns="" aligns="" align align_display
 	if [ "$abi" = "arm64-v8a" ] || [ "$abi" = "universal" ]; then
 		[ -n "$readelf_bin" ] || fail "llvm-readelf not found under $ANDROID_NDK_HOME"
-		unzip -p "$apk" lib/arm64-v8a/libgojni.so >"$tmp/libgojni.so" ||
-			fail "$apk could not extract arm64 libgojni.so"
-		aligns="$("$readelf_bin" -lW "$tmp/libgojni.so" | awk '$1 == "LOAD" { print $NF }')"
-		[ -n "$aligns" ] || fail "$apk arm64 lib has no LOAD segments"
-		for align in $aligns; do
-			[ $((align)) -ge $((0x4000)) ] || fail "$apk arm64 LOAD p_align $align < 0x4000"
+		for lib in $(printf '%s\n' "$libs" | grep '^lib/arm64-v8a/.*\.so$'); do
+			unzip -p "$apk" "$lib" >"$tmp/lib.so" ||
+				fail "$apk could not extract $lib"
+			aligns="$("$readelf_bin" -lW "$tmp/lib.so" | awk '$1 == "LOAD" { print $NF }')"
+			[ -n "$aligns" ] || fail "$apk $lib has no LOAD segments"
+			for align in $aligns; do
+				[ $((align)) -ge $((0x4000)) ] ||
+					fail "$apk $lib LOAD p_align $align < 0x4000"
+			done
+			all_aligns="$all_aligns $aligns"
 		done
 	fi
-	align_display=$(printf '%s\n' "$aligns" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+	align_display=$(printf '%s\n' $all_aligns | sort -u | tr '\n' ' ' |
+		sed 's/[[:space:]]*$//')
 
 	local sig="skipped (unsigned allowed)"
+	if [ "$allow_unsigned" = "1" ] && [ -n "$expect_cert" ]; then
+		fail "$apk cannot combine KUMIHO_ALLOW_UNSIGNED=1 with KUMIHO_EXPECT_CERT_SHA256"
+	fi
 	if [ "$allow_unsigned" != "1" ]; then
 		local certs
 		certs="$("$apksigner" verify --print-certs "$apk" 2>&1)" || fail "$apk is not signed"
 		sig=$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)
 		[ -n "$sig" ] || sig="verified"
+		if [ -n "$expect_cert" ]; then
+			local want got
+			want=$(printf '%s' "$expect_cert" | tr '[:upper:]' '[:lower:]' | tr -d ' :')
+			got=$(printf '%s' "$sig" | tr '[:upper:]' '[:lower:]' | tr -d ' :')
+			[ "$got" = "$want" ] ||
+				fail "$apk signer certificate $sig, want $expect_cert"
+		fi
 	fi
 
 	local bytes mib

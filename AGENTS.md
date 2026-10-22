@@ -31,7 +31,7 @@ needed to build or test.
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
-    make android-release KUMIHO_VERSION=0.5.0  # signed per-ABI + universal
+    make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     make android-verify # verify every release APK in dist/
     make test           # go test ./...
     make test-integration  # go test -tags integration ./... (real endpoints)
@@ -86,9 +86,12 @@ them locally for any change under `android/`, `mobile/` or
 - `scripts/android-verify-apk.sh <apk>` — release gate for badging, ABI,
   16 KB alignment, arm64 `p_align`, signature and universal size; accepts
   `KUMIHO_ALLOW_UNSIGNED=1` for an unsigned CI compile check.
-- `scripts/android-release.sh` — with `KUMIHO_VERSION` and
-  `android/keystore.properties`, build the AAR, sign the per-ABI and universal
-  APKs into `dist/`, verify them and print SHA-256.
+- `scripts/android-release.sh` — with `KUMIHO_VERSION`,
+  `KUMIHO_EXPECT_CERT_SHA256` and `android/keystore.properties`, build the
+  AAR, sign the per-ABI and universal APKs into `dist/`, verify them against
+  the expected certificate and print SHA-256.
+- `scripts/android-connected-test.sh` — source the Android environment and run
+  the connected suite; also the emulator action entry point.
 - `scripts/screenshots/capture.sh` — regenerate the README's GUI and TUI
   screenshots; builds the web harness with a release version label (default
   `v0.4.0`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
@@ -109,9 +112,10 @@ them locally for any change under `android/`, `mobile/` or
   linux/arm64 and windows/amd64; packages zips (CLI, `kumiho-gui.exe`,
   `wintun.dll`, `install.sh`/`install.ps1`, systemd units, licenses including
   the WebView2 loader), builds and verifies the signed Android APKs with the
-  four `ANDROID_*` secrets, appends the APKs to `SHA256SUMS`, attaches all
-  desktop and Android assets, and creates the GitHub release. The signing
-  material is removed in an `always()` step.
+  five `ANDROID_*` secrets (including the certificate fingerprint), appends
+  the APKs to `SHA256SUMS`, attaches all desktop and Android assets, and
+  creates the GitHub release. The signing material is removed by a step trap
+  and an `always()` step. Prerelease tags are not published.
 - The Android CI job and release steps are implemented; no `v0.5.0` tag has
   been pushed yet, so the release workflow has not run. See
   [docs/android-testing.md](docs/android-testing.md).

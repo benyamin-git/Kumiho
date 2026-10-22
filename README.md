@@ -239,8 +239,8 @@ Cross-compile from any OS with Go >= 1.27:
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
-    make android-release KUMIHO_VERSION=0.5.0  # signed per-ABI + universal
-    make android-verify # verify the APKs in dist/
+    make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
     make vet
 
