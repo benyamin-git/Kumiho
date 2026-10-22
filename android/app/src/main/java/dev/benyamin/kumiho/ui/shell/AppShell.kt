@@ -47,6 +47,7 @@ fun AppShell(
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
     locations: @Composable () -> Unit = { LocationsPlaceholder() },
+    settings: @Composable () -> Unit = { SettingsPlaceholder() },
 ) {
     val state by nav.state.collectAsStateWithLifecycle()
     AppShell(
@@ -57,6 +58,7 @@ fun AppShell(
         modifier = modifier,
         home = home,
         locations = locations,
+        settings = settings,
     )
 }
 
@@ -75,6 +77,7 @@ fun AppShell(
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
     locations: @Composable () -> Unit = { LocationsPlaceholder() },
+    settings: @Composable () -> Unit = { SettingsPlaceholder() },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
@@ -147,7 +150,7 @@ fun AppShell(
                             .widthIn(max = Dimens.ContentMaxWidth)
                             .fillMaxSize(),
                     ) {
-                        ScreenHost(state, home, locations)
+                        ScreenHost(state, home, locations, settings)
                     }
                 }
             }
@@ -208,6 +211,7 @@ private fun ScreenHost(
     state: ShellNavState,
     home: @Composable () -> Unit,
     locations: @Composable () -> Unit,
+    settings: @Composable () -> Unit,
 ) {
     val more = state.moreRoute
     if (more != null) {
@@ -226,21 +230,27 @@ private fun ScreenHost(
             message = "Not connected. Account details arrive with the engine client.",
             icon = destinationIcon(Destination.Account),
         )
-        Destination.Settings -> PlaceholderScreen(
-            title = Destination.Settings.label,
-            message = "Engine settings arrive with the engine client.",
-            icon = destinationIcon(Destination.Settings),
-        )
+        Destination.Settings -> settings()
         Destination.More -> Unit
     }
 }
 
-/** The pre-T12 Locations placeholder; the app passes the real screen. */
+/** The pre-T13 Locations placeholder; the app passes the real screen. */
 @Composable
 private fun LocationsPlaceholder() {
     PlaceholderScreen(
         title = Destination.Locations.label,
         message = "Not connected. Location data arrives with the engine client.",
         icon = destinationIcon(Destination.Locations),
+    )
+}
+
+/** The pre-T13 Settings placeholder; the app passes the real screen. */
+@Composable
+private fun SettingsPlaceholder() {
+    PlaceholderScreen(
+        title = Destination.Settings.label,
+        message = "Engine settings arrive with the engine client.",
+        icon = destinationIcon(Destination.Settings),
     )
 }

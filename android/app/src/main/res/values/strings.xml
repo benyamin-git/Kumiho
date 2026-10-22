@@ -250,4 +250,154 @@
     <string name="locations_message_refresh_failed">The refresh failed. The list below is the last one that loaded.</string>
     <string name="locations_message_select_failed">The location could not be saved.</string>
     <string name="locations_message_test_failed">The speed test could not start.</string>
+
+    <!-- Settings (T13). -->
+    <string name="settings_loading">Loading settings…</string>
+    <string name="settings_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="settings_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="settings_load_failed_title">Settings did not load</string>
+    <string name="settings_retry">Retry</string>
+    <string name="settings_dismiss">Dismiss</string>
+    <string name="settings_message_refresh_failed">Settings did not refresh. The values below are the last ones loaded.</string>
+    <string name="settings_message_refresh_after_save_failed">The change was saved, but the settings could not be reloaded.</string>
+    <string name="settings_launch_failed">Android could not open that settings page.</string>
+    <string name="settings_launch_failed_dismiss">Dismiss</string>
+
+    <string name="settings_group_app">Kumiho app</string>
+    <string name="settings_group_connection">Connection</string>
+    <string name="settings_group_android_vpn">Android VPN</string>
+    <string name="settings_group_advanced">Advanced</string>
+    <string name="settings_advanced_hint">Proxy and low-level engine settings</string>
+    <string name="settings_expand">Expand</string>
+    <string name="settings_collapse">Collapse</string>
+
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_hint">Kumiho\'s colour theme; changes immediately</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_oled">OLED</string>
+    <string name="settings_accent_title">Accent</string>
+    <string name="settings_accent_hint">One accent at a time; changes immediately</string>
+    <string name="settings_accent_blue">Blue</string>
+    <string name="settings_accent_teal">Teal</string>
+    <string name="settings_accent_green">Green</string>
+    <string name="settings_accent_orange">Orange</string>
+    <string name="settings_accent_rose">Rose</string>
+    <string name="settings_accent_violet">Violet</string>
+    <string name="settings_selected">Selected</string>
+
+    <string name="settings_version_title">Version</string>
+    <string name="settings_version_hint">The app and engine installed on this phone</string>
+    <string name="settings_version_app">Kumiho %1$s</string>
+    <string name="settings_version_engine">Engine %1$s</string>
+    <string name="settings_update_title">Software updates</string>
+    <string name="settings_update_check">Check for updates</string>
+    <string name="settings_update_hint">Checks GitHub releases only when you tap; nothing is downloaded</string>
+    <string name="settings_update_checking">Checking…</string>
+    <string name="settings_update_up_to_date">Kumiho is up to date</string>
+    <string name="settings_update_available">Kumiho %1$s is available</string>
+    <string name="settings_update_open">Open release page</string>
+    <string name="settings_update_retry">Retry</string>
+    <string name="settings_update_failed">The update check failed.</string>
+
+    <string name="settings_notifications_title">Notifications</string>
+    <string name="settings_notifications_hint">Kumiho shows the connection status and a Disconnect action while the tunnel is up</string>
+    <string name="settings_notifications_allowed">Allowed</string>
+    <string name="settings_notifications_missing">Not allowed</string>
+    <string name="settings_notifications_open">Open notification settings</string>
+    <string name="settings_battery_title">Battery optimization</string>
+    <string name="settings_battery_hint">Android may stop background work while Kumiho is optimized</string>
+    <string name="settings_battery_unrestricted">Unrestricted</string>
+    <string name="settings_battery_optimized">Optimized</string>
+    <string name="settings_battery_open">Open battery settings</string>
+    <string name="settings_always_on_title">Always-on VPN</string>
+    <string name="settings_always_on_hint">Android starts Kumiho\'s VPN when this is on; Kumiho never changes it itself</string>
+    <string name="settings_always_on_state_on">On</string>
+    <string name="settings_always_on_state_off">Off</string>
+    <string name="settings_always_on_open">Open Android VPN settings</string>
+
+    <string name="settings_label_kill_switch">Kill switch</string>
+    <string name="settings_label_autoconnect">Autoconnect</string>
+    <string name="settings_label_mtu">MTU</string>
+    <string name="settings_label_socks_port">SOCKS port</string>
+    <string name="settings_label_exit_check">Exit check</string>
+    <string name="settings_label_doh_provider">DoH provider</string>
+    <string name="settings_label_dns_upstream">DNS upstream</string>
+    <string name="settings_label_allow_lan">Allow LAN</string>
+    <string name="settings_label_quota_poll_minutes">Quota poll</string>
+    <string name="settings_label_edge_address">Edge address</string>
+    <string name="settings_label_upstream_proxy">Upstream proxy</string>
+    <string name="settings_label_exclude_cidrs">Exclude CIDRs</string>
+    <string name="settings_label_tls_split">TLS split</string>
+    <string name="settings_label_http_proxy">HTTP proxy</string>
+    <string name="settings_label_http_proxy_port">HTTP proxy port</string>
+    <string name="settings_label_solve_challenges">Solve challenges</string>
+    <string name="settings_label_keepalive_profile">Keepalive profile</string>
+    <string name="settings_label_log_level">Log level</string>
+    <string name="settings_label_redact_targets">Redact targets</string>
+
+    <string name="settings_hint_kill_switch">Android\'s lockdown blocks all traffic while the tunnel is down. Kumiho shows the OS state and never changes it.</string>
+    <string name="settings_hint_autoconnect">Android starts Kumiho\'s VPN through Always-on. The engine\'s desktop autoconnect value is not used here.</string>
+    <string name="settings_hint_mtu">Tunnel MTU. Applies on the next connect.</string>
+    <string name="settings_hint_socks_port">Loopback SOCKS5 listener port. Applies on the next connect.</string>
+    <string name="settings_hint_exit_check">Probe the public exit IP after connecting. Applies on the next connect.</string>
+    <string name="settings_hint_doh_provider">In-tunnel DNS-over-HTTPS resolver. Applies on the next connect.</string>
+    <string name="settings_hint_dns_upstream">Resolver IP for DoH; empty uses the provider default. Applies on the next connect.</string>
+    <string name="settings_hint_allow_lan">Keeps private LAN ranges outside the tunnel. The tunnel DNS 10.8.0.2 stays inside, so local names still resolve. Applies on the next connect.</string>
+    <string name="settings_hint_quota_poll_minutes">Minutes between quota refreshes while connected. Applies on the next connect.</string>
+    <string name="settings_hint_edge_address">Pins the Fastly edge IP; empty resolves normally. Applies on the next connect.</string>
+    <string name="settings_hint_upstream_proxy">Chains the edge connection through a proxy URL; empty connects directly. Applies on the next connect.</string>
+    <string name="settings_hint_exclude_cidrs">Comma-separated IPv4 CIDRs that bypass the tunnel. IPv6 is always blackholed and cannot be excluded. Applies on the next connect.</string>
+    <string name="settings_hint_tls_split">Splits the TLS ClientHello across writes. Applies on the next connect.</string>
+    <string name="settings_hint_http_proxy">Loopback HTTP/CONNECT proxy through the tunnel. Any app on this phone can use it. Applies on the next connect.</string>
+    <string name="settings_hint_http_proxy_port">Loopback HTTP proxy listener port. Applies on the next connect.</string>
+    <string name="settings_hint_solve_challenges">Solves Firefox Accounts and edge challenges automatically. Applies immediately.</string>
+    <string name="settings_hint_keepalive_profile">Keepalive ping timeout profile. Applies on the next connect.</string>
+    <string name="settings_hint_log_level">Minimum level recorded in the log ring. Applies immediately.</string>
+    <string name="settings_hint_redact_targets">Masks hostnames and IPs in log messages. Applies immediately.</string>
+
+    <string name="settings_placeholder_provider_default">(provider default)</string>
+    <string name="settings_placeholder_resolve">(resolve normally)</string>
+    <string name="settings_placeholder_direct">(direct)</string>
+    <string name="settings_placeholder_none">(none)</string>
+
+    <string name="settings_kill_switch_lockdown">Lockdown</string>
+    <string name="settings_kill_switch_always_on">Always-on only</string>
+    <string name="settings_kill_switch_off">Off</string>
+    <string name="settings_autoconnect_on">On (Always-on)</string>
+    <string name="settings_autoconnect_off">Off</string>
+    <string name="settings_android_vpn_explanation">Android owns kill switch and autoconnect on this phone. Lockdown is the real kill switch; Always-on is what starts Kumiho. The engine\'s desktop values are not used here.</string>
+    <string name="settings_open_vpn_settings">Open Android VPN settings</string>
+    <string name="settings_on">On</string>
+    <string name="settings_off">Off</string>
+
+    <string name="settings_apply">Apply</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_applying">Applying…</string>
+    <string name="settings_overridden">Overridden</string>
+    <string name="settings_reset">Reset</string>
+    <string name="settings_reset_label">Reset %1$s</string>
+    <string name="settings_editor_title">%1$s</string>
+
+    <string name="settings_validation_number">Enter a whole number.</string>
+    <string name="settings_validation_range">Enter a number from %1$d to %2$d.</string>
+    <string name="settings_validation_option">Choose one of the listed options.</string>
+    <string name="settings_validation_cidr">“%1$s” is not an IPv4 CIDR.</string>
+    <string name="settings_validation_cidr_ipv6">IPv6 is always blackholed. Enter an IPv4 CIDR.</string>
+    <string name="settings_validation_read_only">This setting is managed by Android.</string>
+    <string name="settings_validation_apply_failed">The engine rejected this value:</string>
+
+    <string name="settings_option_debug">Debug</string>
+    <string name="settings_option_info">Info</string>
+    <string name="settings_option_warn">Warning</string>
+    <string name="settings_option_error">Error</string>
+    <string name="settings_option_automatic">Automatic</string>
+    <string name="settings_option_cloudflare">Cloudflare</string>
+    <string name="settings_option_google">Google</string>
+    <string name="settings_option_quad9">Quad9</string>
+    <string name="settings_option_off">Off</string>
+    <string name="settings_option_first_byte">First byte</string>
+    <string name="settings_option_sni">SNI</string>
+    <string name="settings_option_standard">Standard</string>
+    <string name="settings_option_slow">Slow</string>
 </resources>
