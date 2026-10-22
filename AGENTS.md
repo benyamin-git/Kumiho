@@ -94,8 +94,9 @@ them locally for any change under `android/`, `mobile/` or
   the connected suite; also the emulator action entry point.
 - `scripts/screenshots/capture.sh` — regenerate the README's GUI and TUI
   screenshots; builds the web harness with a release version label (default
-  `v0.4.0`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
-  TUI captures. See `scripts/screenshots/README.md`.
+  `v0.5.1`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
+  TUI captures. Noto Color Emoji is required for the flag captures. See
+  `scripts/screenshots/README.md`.
 
 ## CI jobs
 
