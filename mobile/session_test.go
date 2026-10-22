@@ -136,9 +136,7 @@ func TestStartWritesDefaultMTUOnlyWhenAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat config: %v", err)
 	}
-	if fi.Mode().Perm() != 0o600 {
-		t.Errorf("config mode = %o, want 600", fi.Mode().Perm())
-	}
+	requirePerm(t, fi, 0o600, "config")
 	for _, dir := range []string{
 		filepath.Dir(p.Config), p.Logs, p.Runtime, filepath.Dir(p.Tokens),
 	} {
@@ -149,18 +147,14 @@ func TestStartWritesDefaultMTUOnlyWhenAbsent(t *testing.T) {
 		if !di.IsDir() {
 			t.Fatalf("%s is not a directory", dir)
 		}
-		if di.Mode().Perm() != 0o700 {
-			t.Errorf("%s mode = %o, want 700", dir, di.Mode().Perm())
-		}
+		requirePerm(t, di, 0o700, dir)
 	}
 	logPath := filepath.Join(p.Logs, "kumiho.log")
 	li, err := os.Stat(logPath)
 	if err != nil {
 		t.Fatalf("stat log file: %v", err)
 	}
-	if li.Mode().Perm() != 0o600 {
-		t.Errorf("log mode = %o, want 600", li.Mode().Perm())
-	}
+	requirePerm(t, li, 0o600, "log")
 	if err := Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}

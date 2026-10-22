@@ -3,10 +3,23 @@ package mobile
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 )
+
+// requirePerm checks the Unix permission bits. Windows only emulates the
+// read-only bit, so os.Stat reports 0666/0777 regardless of Chmod.
+func requirePerm(t *testing.T, fi os.FileInfo, want os.FileMode, name string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if got := fi.Mode().Perm(); got != want {
+		t.Errorf("%s mode = %o, want %o", name, got, want)
+	}
+}
 
 func listLogFiles(t *testing.T, dir string) []string {
 	t.Helper()
@@ -46,9 +59,7 @@ func TestRotatingWriterRotatesAtOneMegabyte(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stat %s: %v", name, err)
 		}
-		if fi.Mode().Perm() != 0o600 {
-			t.Errorf("%s mode = %o, want 600", name, fi.Mode().Perm())
-		}
+		requirePerm(t, fi, 0o600, name)
 		if fi.Size() > 1<<20 {
 			t.Errorf("%s is %d bytes, over the 1 MB cap", name, fi.Size())
 		}
