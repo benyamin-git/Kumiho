@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Dark splash and shell surfaces. kumiho_background resolves to the dark
+      neutral here, so the first frame is dark before Compose paints.
+    -->
+    <style name="Theme.Kumiho" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/kumiho_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Kumiho.Main</item>
+    </style>
+
+    <style name="Theme.Kumiho.Main" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kumiho_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

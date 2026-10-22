@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/xjasonlyu/tun2socks/v2/core"
@@ -33,13 +34,20 @@ type Engine struct {
 // Start wires the device into a fresh netstack and installs the proxy
 // adapter on the shared tun2socks tunnel. The device's Close must unblock a
 // concurrent Read (the Linux TUN fd is poller-backed for exactly this);
-// logf, when set, receives per-flow diagnostics.
-func Start(dev io.ReadWriteCloser, mtu int, dial Dialer, logf func(format string, args ...any)) (*Engine, error) {
+// logf, when set, receives per-flow diagnostics. Options are applied before
+// the stack starts; WithDNS enables the userspace in-tunnel DNS path.
+func Start(dev io.ReadWriteCloser, mtu int, dial Dialer, logf func(format string, args ...any), opts ...Option) (*Engine, error) {
 	if dev == nil {
 		return nil, errors.New("tun: no packet device")
 	}
 	if mtu <= 0 {
 		return nil, fmt.Errorf("tun: invalid MTU %d", mtu)
+	}
+	a := &adapter{dial: dial, logf: logf}
+	for _, opt := range opts {
+		if err := opt(a); err != nil {
+			return nil, err
+		}
 	}
 	quietTun2socksLogs()
 	ep, err := iobased.New(dev, uint32(mtu), 0)
@@ -53,7 +61,7 @@ func Start(dev io.ReadWriteCloser, mtu int, dial Dialer, logf func(format string
 	if err != nil {
 		return nil, fmt.Errorf("tun: netstack: %w", err)
 	}
-	tunnel.T().SetProxy(&adapter{dial: dial, logf: logf})
+	tunnel.T().SetProxy(a)
 	return &Engine{stack: st, dev: dev}, nil
 }
 
@@ -107,6 +115,12 @@ type adapter struct {
 	dial Dialer
 	// logf receives per-flow diagnostics (may be nil).
 	logf func(format string, args ...any)
+
+	// dns is set by WithDNS: the stack answers queries to the routed
+	// in-tunnel resolver instead of rejecting them as ordinary UDP.
+	dns     DNSHandler
+	dnsHost netip.Addr
+	dnsAddr *net.UDPAddr
 }
 
 func (a *adapter) debug(format string, args ...any) {
@@ -116,6 +130,10 @@ func (a *adapter) debug(format string, args ...any) {
 }
 
 func (a *adapter) DialContext(ctx context.Context, m *metadata.Metadata) (net.Conn, error) {
+	if a.isTunnelDNS(m) {
+		a.debug("flow %s: serving DNS over TCP in the tunnel", m.DestinationAddress())
+		return newDNSTCPConn(a.dns, a.dnsAddr), nil
+	}
 	if !m.DstIP.IsValid() {
 		return nil, errors.New("tun: flow with no destination IP")
 	}
@@ -136,9 +154,15 @@ func (a *adapter) DialContext(ctx context.Context, m *metadata.Metadata) (net.Co
 	return conn, nil
 }
 
-// DialUDP rejects UDP inside the TUN on purpose (PLAN.md §3.7): the only DNS
-// path is the local 10.8.0.2 listener, and QUIC falls back to TCP.
-func (a *adapter) DialUDP(*metadata.Metadata) (net.PacketConn, error) {
+// DialUDP rejects UDP inside the TUN on purpose (PLAN.md §3.7): the only UDP
+// flow served is DNS to the advertised in-tunnel resolver (WithDNS); QUIC
+// falls back to TCP. Desktop keeps its privileged host listener and passes no
+// WithDNS option.
+func (a *adapter) DialUDP(m *metadata.Metadata) (net.PacketConn, error) {
+	if a.isTunnelDNS(m) {
+		a.debug("flow %s: serving DNS over UDP in the tunnel", m.DestinationAddress())
+		return newDNSPacketConn(a.dns, a.dnsAddr), nil
+	}
 	return nil, errors.New("tun: UDP is not tunnelled")
 }
 

@@ -1,0 +1,609 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Kumiho</string>
+
+    <!-- Shared components. -->
+    <string name="power_description">Power</string>
+
+    <!-- VPN service (T9). -->
+    <string name="notification_channel_status">Connection status</string>
+    <string name="notification_channel_status_description">Shows whether Kumiho is connected and lets you disconnect.</string>
+    <string name="notification_channel_alerts">Sign-in and connection alerts</string>
+    <string name="notification_channel_alerts_description">One-off prompts when Kumiho needs a sign-in or a connection fails. Not used for the ongoing status.</string>
+    <string name="notification_title">Kumiho</string>
+    <string name="notification_with_location">%1$s · %2$s</string>
+    <string name="notification_uptime">Up for %1$s</string>
+    <string name="notification_traffic">↑ %1$s · ↓ %2$s</string>
+    <string name="notification_state_off">Not connected</string>
+    <string name="notification_state_connected">Connected</string>
+    <string name="notification_state_proxy_only">Proxy only</string>
+    <string name="notification_state_connecting">Connecting…</string>
+    <string name="notification_state_reconnecting">Reconnecting…</string>
+    <string name="notification_state_waiting">Waiting for network</string>
+    <string name="notification_state_not_signed_in">Sign in required</string>
+    <string name="notification_state_error">Connection error</string>
+    <string name="notification_state_unavailable">Service unavailable</string>
+    <string name="notification_state_permission_needed">VPN permission needed</string>
+    <string name="notification_action_disconnect">Disconnect</string>
+    <string name="notification_action_open">Open</string>
+    <string name="notification_sign_in_title">Sign in to Kumiho</string>
+    <string name="notification_sign_in_text">Open Kumiho and sign in to connect.</string>
+    <string name="notification_error_title">Kumiho could not connect</string>
+    <string name="notification_error_text">Open Kumiho to try again.</string>
+    <string name="vpn_error_service_unavailable">The VPN service is unavailable</string>
+
+    <!-- Quick Settings tile (T16). The tile is a system surface, not app UI. -->
+    <string name="tile_label">Kumiho</string>
+    <string name="tile_subtitle_off">Not connected</string>
+    <string name="tile_subtitle_connected">Connected</string>
+    <string name="tile_subtitle_connected_location">Connected · %1$s</string>
+    <string name="tile_subtitle_connecting">Connecting…</string>
+    <string name="tile_subtitle_proxy_only">Proxy only</string>
+    <string name="tile_subtitle_reconnecting">Reconnecting…</string>
+    <string name="tile_subtitle_waiting">Waiting for network</string>
+    <string name="tile_subtitle_sign_in">Sign in required</string>
+    <string name="tile_subtitle_permission">VPN permission needed</string>
+    <string name="tile_subtitle_unavailable">Service unavailable</string>
+    <string name="tile_subtitle_error">Connection error</string>
+
+    <!-- Four-step setup (T10). -->
+    <string name="setup_title">Set up Kumiho</string>
+    <string name="setup_loading">Starting the local engine…</string>
+    <string name="setup_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="setup_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="setup_step_position">Step %1$d of 4</string>
+    <string name="setup_step_of_current">Step %1$d of 4: %2$s, current step</string>
+    <string name="setup_step_consent">Consent</string>
+    <string name="setup_step_sign_in">Sign in</string>
+    <string name="setup_step_permissions">Permissions</string>
+    <string name="setup_step_always_on">Always-on</string>
+    <string name="setup_back">Back</string>
+    <string name="setup_continue">Continue</string>
+    <string name="setup_finish">Finish</string>
+    <string name="setup_finish_connect">Finish and connect</string>
+    <string name="setup_finish_without_connect">Finish without connecting</string>
+    <string name="setup_error_title">Kumiho could not save the setup</string>
+
+    <!-- Step 1: consent. -->
+    <string name="consent_title">Before you connect</string>
+    <string name="consent_intro">Kumiho runs a VPN on this phone. While it is connected, the traffic of the apps that use the tunnel goes to a Kumiho proxy server, and that server reaches the sites you asked for. This is what keeps your address away from those sites and what makes the tunnel work.</string>
+    <string name="consent_future">Android asks for VPN permission in a later step. Nothing is routed until you grant it and connect.</string>
+    <string name="consent_local_title">What stays on this phone</string>
+    <string name="consent_local_tokens">Your Firefox Account tokens are written only to Kumiho\'s private app storage. Android backup and device transfer are turned off for this app, so they are never copied off the phone.</string>
+    <string name="consent_local_data">Settings, the server list and the connection logs are local files in the same private storage. A log leaves the phone only when you share it yourself.</string>
+    <string name="consent_local_no_telemetry">There is no telemetry, no analytics and no crash reporting. Nothing is sent to the Kumiho developers.</string>
+    <string name="consent_proxy_title">Local proxies</string>
+    <string name="consent_proxy_text">While the tunnel is up, Kumiho also listens on this phone\'s loopback interface for its local SOCKS5 proxy, and for its local HTTP proxy when you turn that on. Any app on this phone can use them, so treat them as device-wide. Other devices on your network cannot reach them.</string>
+    <string name="consent_accept">I understand what Kumiho routes, and that I am responsible for what I send through it.</string>
+
+    <!-- Step 2: sign in. -->
+    <string name="sign_in_intro">Kumiho uses your Firefox Account entitlement to reach the proxy network. The engine talks to Firefox Accounts directly, with no browser hand-off.</string>
+    <string name="sign_in_email_label">Firefox Account email</string>
+    <string name="sign_in_email_submit">Continue with email</string>
+    <string name="sign_in_password_title">Enter your password</string>
+    <string name="sign_in_password_label">Password</string>
+    <string name="sign_in_password_note">The password goes straight to Firefox Accounts and is not stored by Kumiho.</string>
+    <string name="sign_in_password_submit">Sign in</string>
+    <string name="sign_in_code_title">Enter the code</string>
+    <string name="sign_in_code_label">Verification code</string>
+    <string name="sign_in_code_note">Enter the code Firefox Accounts sent you, then tap Verify. The field clears after each attempt.</string>
+    <string name="sign_in_code_submit">Verify</string>
+    <string name="sign_in_reason">Firefox Accounts asked for this verification: %1$s</string>
+    <string name="sign_in_link_title">Check your email</string>
+    <string name="sign_in_link_text">Firefox Accounts sent a confirmation link to %1$s. Open it, then come back here.</string>
+    <string name="sign_in_link_waiting">Waiting for the link to be confirmed…</string>
+    <string name="sign_in_link_polling">Kumiho checks again every 3 seconds while this screen is open.</string>
+    <string name="sign_in_recheck">Re-check</string>
+    <string name="sign_in_signed_title">Signed in</string>
+    <string name="sign_in_signed_as">Signed in as %1$s</string>
+    <string name="sign_in_signed_note">Continue to the Android permission step.</string>
+    <string name="sign_in_error_title">Sign-in failed</string>
+    <string name="sign_in_email_required">Enter the email address of your Firefox Account.</string>
+    <string name="sign_in_password_required">Enter your Firefox Account password.</string>
+    <string name="sign_in_code_required">Enter the code from the email.</string>
+    <string name="sign_in_unexpected_step">The engine answered with an unexpected sign-in step. Start again from the email address.</string>
+
+    <!-- Step 3: Android permissions. -->
+    <string name="permissions_title">Android permissions</string>
+    <string name="permissions_intro">Two Android permissions make the tunnel usable. You can finish setup without either of them; Kumiho asks again when you connect.</string>
+    <string name="permissions_vpn_title">VPN permission</string>
+    <string name="permissions_vpn_text">Android asks you to approve a VPN before any app can carry traffic. Granting it now saves a prompt on your first connect.</string>
+    <string name="permissions_vpn_action">Allow VPN</string>
+    <string name="permissions_vpn_granted">Granted</string>
+    <string name="permissions_vpn_missing">Not granted</string>
+    <string name="permissions_vpn_denied">Android did not grant the VPN permission. You can still finish setup; Kumiho asks again when you connect.</string>
+    <string name="permissions_notifications_title">Notifications</string>
+    <string name="permissions_notifications_text">Kumiho shows a status notification while the tunnel is up, with a Disconnect action. Without it the tunnel still runs; Android just cannot show the status or the action.</string>
+    <string name="permissions_notifications_action">Allow notifications</string>
+    <string name="permissions_notifications_settings">Open notification settings</string>
+    <string name="permissions_notifications_granted">Allowed</string>
+    <string name="permissions_notifications_missing">Not allowed</string>
+    <string name="permissions_notifications_denied">Notifications are turned off for Kumiho. You can allow them in Android settings at any time.</string>
+    <string name="permissions_note">Both permissions can be changed later in Android settings.</string>
+
+    <!-- Step 4: Always-on guidance. -->
+    <string name="always_on_intro">Android can start Kumiho\'s VPN on its own, including after a reboot. Kumiho never changes this for you: the switch lives in Android\'s VPN settings.</string>
+    <string name="always_on_always_title">Always-on VPN</string>
+    <string name="always_on_always_text">When Always-on VPN is on, Android starts Kumiho whenever no VPN is connected, and Kumiho connects if you are signed in. If you are signed out it asks you to sign in instead of connecting.</string>
+    <string name="always_on_lockdown_title">Lockdown</string>
+    <string name="always_on_lockdown_text">Lockdown is stricter: Android blocks all traffic while Kumiho is not connected. Kumiho shows the real state and never works around it.</string>
+    <string name="always_on_row_state">Android state</string>
+    <string name="always_on_state_on">On</string>
+    <string name="always_on_state_off">Off</string>
+    <string name="always_on_open_settings">Open Android VPN settings</string>
+    <string name="always_on_connect_hint">You are signed in and the VPN permission is granted, so Finish can connect straight away.</string>
+    <string name="always_on_connect_hint_needs_vpn">Connect now needs the VPN permission: grant it when Kumiho asks on your first connect.</string>
+    <string name="always_on_connect_hint_needs_sign_in">Connect now needs a signed-in Firefox Account. Finish, then sign in from Account.</string>
+    <string name="always_on_connect_hint_needs_both">Connect now needs the VPN permission and a signed-in Firefox Account. Finish, then grant it and sign in.</string>
+    <string name="always_on_finish_note">Finish saves the setup and opens the dashboard.</string>
+
+    <!-- Dashboard (T11). -->
+    <string name="dashboard_state_loading">Starting…</string>
+    <string name="dashboard_state_off">Off</string>
+    <string name="dashboard_state_connected">Connected</string>
+    <string name="dashboard_state_proxy_only">Proxy only</string>
+    <string name="dashboard_state_connecting">Connecting</string>
+    <string name="dashboard_state_reconnecting">Reconnecting</string>
+    <string name="dashboard_state_waiting">Waiting for network</string>
+    <string name="dashboard_state_not_signed_in">Sign in required</string>
+    <string name="dashboard_state_error">Connection error</string>
+    <string name="dashboard_state_unavailable">Service unavailable</string>
+    <string name="dashboard_state_permission_needed">VPN permission needed</string>
+    <string name="dashboard_proxy_only_chip">No VPN tunnel</string>
+    <string name="dashboard_uptime">Up for %1$s</string>
+    <string name="dashboard_connect_options">Connect options</string>
+    <string name="dashboard_loading">Connecting to the local engine…</string>
+    <string name="dashboard_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="dashboard_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+
+    <!-- Dashboard cards. -->
+    <string name="dashboard_location_title">Location</string>
+    <string name="dashboard_location_recommended">Recommended</string>
+    <string name="dashboard_location_country_city">%1$s · %2$s</string>
+    <string name="dashboard_location_default_hint">Closest server chosen for you</string>
+    <string name="dashboard_location_change">Change</string>
+    <string name="dashboard_exit_title">Exit IP</string>
+    <string name="dashboard_quota_title">Quota</string>
+    <string name="dashboard_quota_resets">Resets %1$s</string>
+    <string name="dashboard_session_title">Session</string>
+    <string name="dashboard_session_uptime">Up for %1$s</string>
+
+    <!-- Dashboard details. -->
+    <string name="dashboard_details_title">Details</string>
+    <string name="dashboard_details_always_on">Always-on VPN</string>
+    <string name="dashboard_details_always_on_restart">Android may start Kumiho after a reboot</string>
+    <string name="dashboard_details_lockdown">Lockdown</string>
+    <string name="dashboard_details_autoconnect">Autoconnect</string>
+    <string name="dashboard_details_autoconnect_follows">Follows Android\'s Always-on VPN</string>
+    <string name="dashboard_details_open_vpn_settings">Open Android VPN settings</string>
+    <string name="dashboard_details_token">Account token</string>
+    <string name="dashboard_details_pass">Subscription</string>
+    <string name="dashboard_details_expires">Expires %1$s</string>
+    <string name="dashboard_details_dns">DNS</string>
+    <string name="dashboard_details_ipv6">IPv6</string>
+    <string name="dashboard_ipv6_blackholed">Blackholed</string>
+    <string name="dashboard_on">On</string>
+    <string name="dashboard_off">Off</string>
+
+    <!-- Dashboard connect options sheet. -->
+    <string name="dashboard_options_title">Connect</string>
+    <string name="dashboard_options_connect">Connect</string>
+    <string name="dashboard_options_proxy_only">Proxy only</string>
+    <string name="dashboard_options_proxy_only_text">Start the local proxies without the VPN tunnel.</string>
+    <string name="dashboard_options_lockdown">Lockdown</string>
+    <string name="dashboard_options_lockdown_summary">Managed in Android VPN settings</string>
+    <string name="dashboard_options_disconnect_first">Disconnect first to change location</string>
+    <string name="dashboard_options_waiting">A connection command is in progress.</string>
+    <string name="dashboard_options_sign_in">Sign in to connect.</string>
+    <string name="dashboard_options_unavailable">The service is not available right now.</string>
+
+    <!-- Dashboard compact location picker. -->
+    <string name="dashboard_picker_recommended">Recommended</string>
+    <string name="dashboard_picker_recommended_text">The closest server, chosen by Kumiho</string>
+    <string name="dashboard_picker_saved">Saved location</string>
+    <string name="dashboard_picker_loading">Loading locations…</string>
+    <string name="dashboard_picker_failed_title">Locations did not load</string>
+    <string name="dashboard_picker_empty">No locations are available right now.</string>
+    <string name="dashboard_selected">Selected</string>
+    <string name="dashboard_expand">Expand</string>
+    <string name="dashboard_collapse">Collapse</string>
+
+    <!-- Dashboard notice row. -->
+    <string name="dashboard_notice_retry">Retry</string>
+    <string name="dashboard_notice_grant">Allow VPN</string>
+    <string name="dashboard_notice_reload">Reload</string>
+    <string name="dashboard_notice_dismiss">Dismiss</string>
+    <string name="dashboard_message_sign_in">Kumiho needs a signed-in Firefox Account to connect.</string>
+    <string name="dashboard_message_unavailable">The VPN service is unavailable.</string>
+    <string name="dashboard_message_permission_denied">Android did not grant the VPN permission. Kumiho cannot connect without it.</string>
+    <string name="dashboard_message_refresh_failed">The status did not refresh.</string>
+    <string name="dashboard_message_connect_failed">The connect command failed.</string>
+    <string name="dashboard_message_disconnect_failed">The disconnect command failed.</string>
+    <string name="dashboard_message_locations_failed">The location list did not load.</string>
+    <string name="dashboard_message_settings_unavailable">Android\'s VPN settings could not be opened.</string>
+    <string name="dashboard_message_engine_notice">The engine reported a problem.</string>
+
+    <!-- Dashboard lockdown disconnect explanation. -->
+    <string name="dashboard_lockdown_title">Disconnect under lockdown?</string>
+    <string name="dashboard_lockdown_text">Android blocks all traffic while Kumiho is disconnected. It may restart the tunnel on its own, but until it connects again, apps on this phone have no network access.</string>
+    <string name="dashboard_lockdown_open_settings">Open VPN settings</string>
+    <string name="dashboard_lockdown_confirm">Disconnect</string>
+    <string name="dashboard_lockdown_cancel">Keep connected</string>
+
+    <!-- Locations (T12). -->
+    <string name="locations_loading">Loading locations…</string>
+    <string name="locations_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="locations_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="locations_search_label">Search locations</string>
+    <string name="locations_search_clear">Clear search</string>
+    <string name="locations_refresh">Refresh locations</string>
+    <string name="locations_refresh_action">Refresh</string>
+    <string name="locations_test_speed">Test speed</string>
+    <string name="locations_testing">Testing…</string>
+    <string name="locations_test_helper_none">No servers are shown</string>
+    <plurals name="locations_test_helper">
+        <item quantity="one">Tests the %1$d server shown</item>
+        <item quantity="other">Tests the %1$d servers shown</item>
+    </plurals>
+    <string name="locations_selected">Selected</string>
+    <string name="locations_summary_label">Current selection</string>
+    <string name="locations_selection_none">No server selected yet — the dashboard uses Recommended</string>
+    <string name="locations_selection_separator" translatable="false">" · "</string>
+    <string name="locations_recommended">Recommended</string>
+    <string name="locations_connected_hint">This location is saved for your next connection. Disconnect on Home, then connect again; the current session keeps its server and exit IP.</string>
+    <string name="locations_quarantined">Quarantined</string>
+    <string name="locations_expand">Expand</string>
+    <string name="locations_collapse">Collapse</string>
+    <string name="locations_server_protocols">%1$s · port %2$d</string>
+    <string name="locations_server_port">port %1$d</string>
+    <plurals name="locations_city_servers">
+        <item quantity="one">%1$d server</item>
+        <item quantity="other">%1$d servers</item>
+    </plurals>
+    <string name="locations_latency">%1$d ms</string>
+    <string name="locations_latency_timeout">timeout</string>
+    <string name="locations_latency_none" translatable="false">—</string>
+    <string name="locations_retry">Retry</string>
+    <string name="locations_dismiss">Dismiss</string>
+    <string name="locations_empty_title">No locations</string>
+    <string name="locations_empty_message">The engine returned no locations. Refresh to try again.</string>
+    <string name="locations_no_match_title">No matches</string>
+    <string name="locations_no_match_message">No country, city or server matches “%1$s”.</string>
+    <string name="locations_load_failed_title">Locations did not load</string>
+    <string name="locations_message_refresh_failed">The refresh failed. The list below is the last one that loaded.</string>
+    <string name="locations_message_select_failed">The location could not be saved.</string>
+    <string name="locations_message_test_failed">The speed test could not start.</string>
+
+    <!-- Settings (T13). -->
+    <string name="settings_loading">Loading settings…</string>
+    <string name="settings_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="settings_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="settings_load_failed_title">Settings did not load</string>
+    <string name="settings_retry">Retry</string>
+    <string name="settings_dismiss">Dismiss</string>
+    <string name="settings_message_refresh_failed">Settings did not refresh. The values below are the last ones loaded.</string>
+    <string name="settings_message_refresh_after_save_failed">The change was saved, but the settings could not be reloaded.</string>
+    <string name="settings_launch_failed">Android could not open that settings page.</string>
+    <string name="settings_launch_failed_dismiss">Dismiss</string>
+
+    <string name="settings_group_app">Kumiho app</string>
+    <string name="settings_group_connection">Connection</string>
+    <string name="settings_group_android_vpn">Android VPN</string>
+    <string name="settings_group_advanced">Advanced</string>
+    <string name="settings_advanced_hint">Proxy and low-level engine settings</string>
+    <string name="settings_expand">Expand</string>
+    <string name="settings_collapse">Collapse</string>
+
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_hint">Kumiho\'s colour theme; changes immediately</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_oled">OLED</string>
+    <string name="settings_accent_title">Accent</string>
+    <string name="settings_accent_hint">One accent at a time; changes immediately</string>
+    <string name="settings_accent_blue">Blue</string>
+    <string name="settings_accent_teal">Teal</string>
+    <string name="settings_accent_green">Green</string>
+    <string name="settings_accent_orange">Orange</string>
+    <string name="settings_accent_rose">Rose</string>
+    <string name="settings_accent_violet">Violet</string>
+    <string name="settings_selected">Selected</string>
+
+    <string name="settings_version_title">Version</string>
+    <string name="settings_version_hint">The app and engine installed on this phone</string>
+    <string name="settings_version_app">Kumiho %1$s</string>
+    <string name="settings_version_engine">Engine %1$s</string>
+    <string name="settings_update_title">Software updates</string>
+    <string name="settings_update_check">Check for updates</string>
+    <string name="settings_update_hint">Checks GitHub releases only when you tap; nothing is downloaded</string>
+    <string name="settings_update_checking">Checking…</string>
+    <string name="settings_update_up_to_date">Kumiho is up to date</string>
+    <string name="settings_update_available">Kumiho %1$s is available</string>
+    <string name="settings_update_open">Open release page</string>
+    <string name="settings_update_retry">Retry</string>
+    <string name="settings_update_failed">The update check failed.</string>
+
+    <string name="settings_notifications_title">Notifications</string>
+    <string name="settings_notifications_hint">Kumiho shows the connection status and a Disconnect action while the tunnel is up</string>
+    <string name="settings_notifications_allowed">Allowed</string>
+    <string name="settings_notifications_missing">Not allowed</string>
+    <string name="settings_notifications_open">Open notification settings</string>
+    <string name="settings_battery_title">Battery optimization</string>
+    <string name="settings_battery_hint">Android may stop background work while Kumiho is optimized</string>
+    <string name="settings_battery_unrestricted">Unrestricted</string>
+    <string name="settings_battery_optimized">Optimized</string>
+    <string name="settings_battery_open">Open battery settings</string>
+    <string name="settings_always_on_title">Always-on VPN</string>
+    <string name="settings_always_on_hint">Android starts Kumiho\'s VPN when this is on; Kumiho never changes it itself</string>
+    <string name="settings_always_on_state_on">On</string>
+    <string name="settings_always_on_state_off">Off</string>
+    <string name="settings_always_on_open">Open Android VPN settings</string>
+
+    <string name="settings_split_title">Split tunneling</string>
+    <string name="settings_split_hint">Choose which apps use the tunnel. Changes apply on the next connect.</string>
+    <string name="settings_split_summary_off">Off</string>
+    <plurals name="settings_split_summary_exclude">
+        <item quantity="one">Excluding %1$d app</item>
+        <item quantity="other">Excluding %1$d apps</item>
+    </plurals>
+    <plurals name="settings_split_summary_include">
+        <item quantity="one">Including %1$d app</item>
+        <item quantity="other">Including %1$d apps</item>
+    </plurals>
+
+    <string name="split_back">Back to settings</string>
+    <string name="split_apply_note">Changes are saved immediately and apply on the next connect.</string>
+    <string name="split_reconnect">The tunnel is up. Reconnect to apply this selection.</string>
+    <string name="split_off_hint">Every app uses the tunnel. Kumiho itself always stays outside.</string>
+    <string name="split_empty_include_warning">No apps are included yet, so every app will use the tunnel. Select at least one app to limit the tunnel to those apps.</string>
+    <string name="split_mode_off_title">Off</string>
+    <string name="split_mode_off_description">Every app uses the tunnel.</string>
+    <string name="split_mode_exclude_title">Exclude apps</string>
+    <string name="split_mode_exclude_description">Selected apps bypass the tunnel; everything else uses it.</string>
+    <string name="split_mode_include_title">Include apps</string>
+    <string name="split_mode_include_description">Only selected apps use the tunnel; everything else bypasses it.</string>
+    <plurals name="split_selected_apps">
+        <item quantity="one">%1$d app selected</item>
+        <item quantity="other">%1$d apps selected</item>
+    </plurals>
+    <string name="split_off_pick_mode">Choose Exclude or Include to pick apps.</string>
+    <string name="split_system_apps">System apps</string>
+    <string name="split_search_label">Search apps</string>
+    <string name="split_search_clear">Clear search</string>
+    <string name="split_kumiho_locked">Always outside</string>
+    <string name="split_loading">Loading split-tunnel settings…</string>
+    <string name="split_load_failed_title">Split tunneling is unavailable</string>
+    <string name="split_load_failed_hint">Your selection is still stored; retry to load it.</string>
+    <string name="split_apps_loading">Loading apps…</string>
+    <string name="split_apps_failed_title">The app list could not be read</string>
+    <string name="split_apps_empty">No apps are installed.</string>
+    <string name="split_apps_no_match">No apps match “%1$s”.</string>
+
+    <string name="settings_cidr_label">IPv4 CIDRs</string>
+    <string name="settings_cidr_hint">One or more IPv4 CIDRs separated by commas, for example 10.0.0.0/8. A bare address becomes /32. IPv6 is always blackholed and cannot be excluded.</string>
+    <string name="settings_cidr_dns_note">The tunnel DNS host 10.8.0.2 always stays routed, even inside an excluded range.</string>
+
+    <string name="settings_label_kill_switch">Kill switch</string>
+    <string name="settings_label_autoconnect">Autoconnect</string>
+    <string name="settings_label_mtu">MTU</string>
+    <string name="settings_label_socks_port">SOCKS port</string>
+    <string name="settings_label_exit_check">Exit check</string>
+    <string name="settings_label_doh_provider">DoH provider</string>
+    <string name="settings_label_dns_upstream">DNS upstream</string>
+    <string name="settings_label_allow_lan">Allow LAN</string>
+    <string name="settings_label_quota_poll_minutes">Quota poll</string>
+    <string name="settings_label_edge_address">Edge address</string>
+    <string name="settings_label_upstream_proxy">Upstream proxy</string>
+    <string name="settings_label_exclude_cidrs">Exclude CIDRs</string>
+    <string name="settings_label_tls_split">TLS split</string>
+    <string name="settings_label_http_proxy">HTTP proxy</string>
+    <string name="settings_label_http_proxy_port">HTTP proxy port</string>
+    <string name="settings_label_solve_challenges">Solve challenges</string>
+    <string name="settings_label_keepalive_profile">Keepalive profile</string>
+    <string name="settings_label_log_level">Log level</string>
+    <string name="settings_label_redact_targets">Redact targets</string>
+
+    <string name="settings_hint_kill_switch">Android\'s lockdown blocks all traffic while the tunnel is down. Kumiho shows the OS state and never changes it.</string>
+    <string name="settings_hint_autoconnect">Android starts Kumiho\'s VPN through Always-on. The engine\'s desktop autoconnect value is not used here.</string>
+    <string name="settings_hint_mtu">Tunnel MTU. Applies on the next connect.</string>
+    <string name="settings_hint_socks_port">Loopback SOCKS5 listener port. Applies on the next connect.</string>
+    <string name="settings_hint_exit_check">Probe the public exit IP after connecting. Applies on the next connect.</string>
+    <string name="settings_hint_doh_provider">In-tunnel DNS-over-HTTPS resolver. Applies on the next connect.</string>
+    <string name="settings_hint_dns_upstream">Resolver IP for DoH; empty uses the provider default. Applies on the next connect.</string>
+    <string name="settings_hint_allow_lan">When on, RFC1918 private, link-local and multicast ranges bypass the tunnel. The tunnel DNS 10.8.0.2 always stays inside. Applies on the next connect.</string>
+    <string name="settings_hint_quota_poll_minutes">Minutes between quota refreshes while connected. Applies on the next connect.</string>
+    <string name="settings_hint_edge_address">Pins the Fastly edge IP; empty resolves normally. Applies on the next connect.</string>
+    <string name="settings_hint_upstream_proxy">Chains the edge connection through a proxy URL; empty connects directly. Applies on the next connect.</string>
+    <string name="settings_hint_exclude_cidrs">Extra IPv4 ranges that bypass the tunnel. A bare address becomes /32 and host bits are masked. IPv6 is always blackholed. Applies on the next connect.</string>
+    <string name="settings_hint_tls_split">Splits the TLS ClientHello across writes. Applies on the next connect.</string>
+    <string name="settings_hint_http_proxy">Loopback HTTP/CONNECT proxy through the tunnel. Any app on this phone can use it. Applies on the next connect.</string>
+    <string name="settings_hint_http_proxy_port">Loopback HTTP proxy listener port. Applies on the next connect.</string>
+    <string name="settings_hint_solve_challenges">Solves Firefox Accounts and edge challenges automatically. Applies immediately.</string>
+    <string name="settings_hint_keepalive_profile">Keepalive ping timeout profile. Applies on the next connect.</string>
+    <string name="settings_hint_log_level">Minimum level recorded in the log ring. Applies immediately.</string>
+    <string name="settings_hint_redact_targets">Masks hostnames and IPs in log messages. Applies immediately.</string>
+
+    <string name="settings_placeholder_provider_default">(provider default)</string>
+    <string name="settings_placeholder_resolve">(resolve normally)</string>
+    <string name="settings_placeholder_direct">(direct)</string>
+    <string name="settings_placeholder_none">(none)</string>
+
+    <string name="settings_kill_switch_lockdown">Lockdown</string>
+    <string name="settings_kill_switch_always_on">Always-on only</string>
+    <string name="settings_kill_switch_off">Off</string>
+    <string name="settings_autoconnect_on">On (Always-on)</string>
+    <string name="settings_autoconnect_off">Off</string>
+    <string name="settings_android_vpn_explanation">Android owns kill switch and autoconnect on this phone. Lockdown is the real kill switch; Always-on is what starts Kumiho. The engine\'s desktop values are not used here.</string>
+    <string name="settings_open_vpn_settings">Open Android VPN settings</string>
+    <string name="settings_on">On</string>
+    <string name="settings_off">Off</string>
+
+    <string name="settings_apply">Apply</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_applying">Applying…</string>
+    <string name="settings_overridden">Overridden</string>
+    <string name="settings_reset">Reset</string>
+    <string name="settings_reset_label">Reset %1$s</string>
+    <string name="settings_editor_title">%1$s</string>
+
+    <string name="settings_validation_number">Enter a whole number.</string>
+    <string name="settings_validation_range">Enter a number from %1$d to %2$d.</string>
+    <string name="settings_validation_option">Choose one of the listed options.</string>
+    <string name="settings_validation_cidr">“%1$s” is not an IPv4 CIDR.</string>
+    <string name="settings_validation_cidr_ipv6">IPv6 is always blackholed. Enter an IPv4 CIDR.</string>
+    <string name="settings_validation_cidr_too_broad">This would exclude the whole IPv4 internet. Enter a narrower range.</string>
+    <string name="settings_validation_read_only">This setting is managed by Android.</string>
+    <string name="settings_validation_apply_failed">The engine rejected this value:</string>
+
+    <string name="settings_option_debug">Debug</string>
+    <string name="settings_option_info">Info</string>
+    <string name="settings_option_warn">Warning</string>
+    <string name="settings_option_error">Error</string>
+    <string name="settings_option_automatic">Automatic</string>
+    <string name="settings_option_cloudflare">Cloudflare</string>
+    <string name="settings_option_google">Google</string>
+    <string name="settings_option_quad9">Quad9</string>
+    <string name="settings_option_off">Off</string>
+    <string name="settings_option_first_byte">First byte</string>
+    <string name="settings_option_sni">SNI</string>
+    <string name="settings_option_standard">Standard</string>
+    <string name="settings_option_slow">Slow</string>
+
+    <!-- Diagnostics (T15). -->
+    <string name="diagnostics_loading">Running diagnostics…</string>
+    <string name="diagnostics_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="diagnostics_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="diagnostics_launch_failed">Android could not open that settings page.</string>
+    <string name="diagnostics_load_failed_title">Diagnostics did not finish</string>
+    <string name="diagnostics_dismiss">Dismiss</string>
+    <string name="diagnostics_summary_title">Diagnostics</string>
+    <string name="diagnostics_report_meta">Kumiho %1$s · %2$s</string>
+    <string name="diagnostics_report_host">%1$s · %2$s</string>
+    <string name="diagnostics_summary" tools:ignore="PluralsCandidate">%1$d failed · %2$d warnings · %3$d skipped</string>
+    <string name="diagnostics_group_checks">Checks</string>
+    <string name="diagnostics_remediation">Fix: %1$s</string>
+    <string name="diagnostics_rerun">Re-run</string>
+    <string name="diagnostics_rerunning">Running…</string>
+    <string name="diagnostics_copy_all">Copy all</string>
+    <string name="diagnostics_copied">The report was copied to the clipboard.</string>
+    <string name="diagnostics_reset">Reset local state…</string>
+    <string name="diagnostics_resetting">Resetting…</string>
+    <string name="diagnostics_reset_title">Reset local state?</string>
+    <string name="diagnostics_reset_text">This clears the cached server list, the log ring and the failure counters. Your Firefox Account and its tokens stay signed in.</string>
+    <string name="diagnostics_reset_confirm">Reset</string>
+    <string name="diagnostics_reset_cancel">Cancel</string>
+    <string name="diagnostics_reset_done">Local state was reset.</string>
+    <string name="diagnostics_reset_failed">The local state could not be reset.</string>
+
+    <string name="diagnostics_service_title">VPN service</string>
+    <string name="diagnostics_row_service">Service</string>
+    <string name="diagnostics_row_engine">Engine state</string>
+    <string name="diagnostics_row_service_running">Service running</string>
+    <string name="diagnostics_row_always_on">Always-on VPN</string>
+    <string name="diagnostics_row_lockdown">Lockdown</string>
+    <string name="diagnostics_row_notifications">Notifications</string>
+    <string name="diagnostics_row_battery">Battery optimization</string>
+    <string name="diagnostics_row_network">Network</string>
+    <string name="diagnostics_row_dns">DNS servers</string>
+    <string name="diagnostics_row_private_dns">Private DNS</string>
+    <string name="diagnostics_row_ports">Local ports</string>
+    <string name="diagnostics_row_clock">Clock skew</string>
+    <string name="diagnostics_row_endpoints">Endpoints</string>
+    <string name="diagnostics_ports_value">SOCKS %1$s · HTTP %2$s</string>
+    <string name="diagnostics_check_vpn_permission">VPN permission</string>
+    <string name="diagnostics_not_started">Not started</string>
+    <string name="diagnostics_not_reported">Not reported</string>
+    <string name="diagnostics_battery_optimized">Optimized</string>
+    <string name="diagnostics_battery_unrestricted">Unrestricted</string>
+    <string name="diagnostics_private_dns_hostname">Hostname</string>
+    <string name="diagnostics_private_dns_opportunistic">Opportunistic</string>
+    <string name="diagnostics_private_dns_off">Off</string>
+    <string name="diagnostics_yes">Yes</string>
+    <string name="diagnostics_no">No</string>
+    <string name="diagnostics_on">On</string>
+    <string name="diagnostics_off">Off</string>
+    <string name="diagnostics_allowed">Allowed</string>
+    <string name="diagnostics_not_allowed">Not allowed</string>
+    <string name="diagnostics_available">Available</string>
+    <string name="diagnostics_unavailable">Unavailable</string>
+    <string name="diagnostics_listening">Listening</string>
+    <string name="diagnostics_not_listening">Not listening</string>
+    <string name="diagnostics_status_ok">OK</string>
+    <string name="diagnostics_status_warn">Warn</string>
+    <string name="diagnostics_status_fail">Fail</string>
+    <string name="diagnostics_status_skip">Skip</string>
+    <string name="diagnostics_status_unknown">Unknown</string>
+    <!-- The count is intentionally count-agnostic copy; a plural table would
+         force a different sentence for one and many without changing meaning. -->
+    <string name="diagnostics_split_excluding" tools:ignore="PluralsCandidate">Excluding %1$d app(s)</string>
+    <string name="diagnostics_split_including" tools:ignore="PluralsCandidate">Including %1$d app(s)</string>
+    <string name="diagnostics_split_hint">Changes apply on the next connect.</string>
+    <string name="diagnostics_open_vpn_settings">Open Android VPN settings</string>
+    <string name="diagnostics_open_notification_settings">Open notification settings</string>
+    <string name="diagnostics_open_battery_settings">Open battery settings</string>
+
+    <!-- Logs (T15). -->
+    <string name="logs_loading">Loading the log…</string>
+    <string name="logs_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="logs_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="logs_load_failed_title">The log did not load</string>
+    <string name="logs_dismiss">Dismiss</string>
+    <string name="logs_search_label">Search the log</string>
+    <string name="logs_search_clear">Clear</string>
+    <string name="logs_filter_all">All</string>
+    <string name="logs_filter_debug">Debug</string>
+    <string name="logs_filter_info">Info</string>
+    <string name="logs_filter_warn">Warn</string>
+    <string name="logs_filter_error">Error</string>
+    <string name="logs_follow">Follow</string>
+    <string name="logs_clear">Clear</string>
+    <string name="logs_clearing">Clearing…</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_share_title">Share log file</string>
+    <string name="logs_export_failed">The log file could not be shared.</string>
+    <string name="logs_copy">Copy</string>
+    <string name="logs_copied">The line was copied to the clipboard.</string>
+    <string name="logs_cleared">The log was cleared.</string>
+    <string name="logs_clear_failed">The log could not be cleared.</string>
+    <string name="logs_empty_title">No log lines</string>
+    <string name="logs_empty_message">The engine has not logged anything yet. Connect or change a setting to produce entries.</string>
+    <string name="logs_no_match">No line matches “%1$s” at this level.</string>
+    <string name="logs_cap" tools:ignore="PluralsCandidate">Showing the newest %1$d lines. Older lines are in the exported file until the ring rotates.</string>
+
+    <!-- Account (T15). -->
+    <string name="account_loading">Loading your account…</string>
+    <string name="account_engine_unavailable_title">Kumiho cannot start</string>
+    <string name="account_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
+    <string name="account_retry">Retry</string>
+    <string name="account_dismiss">Dismiss</string>
+    <string name="account_timeout">The account did not respond within 35 seconds. The last known details are still shown.</string>
+    <string name="account_load_failed">The account details did not load.</string>
+    <string name="account_refresh_failed">The account details did not refresh. The last known details are still shown.</string>
+    <string name="account_sign_out_failed">Signing out failed.</string>
+    <string name="account_signed_out_title">Not signed in</string>
+    <string name="account_signed_out_text">Sign in with your Firefox Account to see your subscription, quota and token details.</string>
+    <string name="account_signed_in_note">Signed in. The account card replaces this pane.</string>
+    <string name="account_signed_in_title">Firefox Account</string>
+    <string name="account_not_reported">Not reported</string>
+    <string name="account_uid">Account UID</string>
+    <string name="account_subscription">Subscription</string>
+    <string name="account_subscribed">Active</string>
+    <string name="account_not_subscribed">No active subscription</string>
+    <string name="account_quota">Quota</string>
+    <string name="account_quota_none">No quota reported</string>
+    <string name="account_bandwidth">Bandwidth</string>
+    <string name="account_bandwidth_limited">Limited</string>
+    <string name="account_bandwidth_unlimited">Unlimited</string>
+    <string name="account_token">Token expires</string>
+    <string name="account_token_unknown">Not reported</string>
+    <string name="account_refresh">Refresh</string>
+    <string name="account_refreshing">Refreshing…</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_signing_out">Signing out…</string>
+    <string name="account_sign_out_note">Signing out clears the tokens and disconnects the tunnel. The app stays on this screen.</string>
+    <string name="account_sign_out_title">Sign out of Firefox Accounts?</string>
+    <string name="account_sign_out_text">Your tokens are cleared and the tunnel disconnects. You can sign in again at any time.</string>
+    <string name="account_sign_out_confirm">Sign out</string>
+    <string name="account_sign_out_cancel">Cancel</string>
+    <string name="more_title">More</string>
+</resources>

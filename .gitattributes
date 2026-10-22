@@ -12,3 +12,4 @@
 # that straddle a 512-byte scan boundary), so checked-out batch files need
 # CRLF even though the repository stores LF.
 install.cmd text eol=crlf
+android/gradlew.bat text eol=crlf

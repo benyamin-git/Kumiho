@@ -741,6 +741,40 @@ func TestStartTunnelSharesDNSResolver(t *testing.T) {
 		}
 	})
 
+	t.Run("userspace DNS does not bind the host listener", func(t *testing.T) {
+		ctrl, _ := newTestController(t, loginOKHandler(t))
+		fp := ctrl.plat.(*fakeProvider)
+		fp.dnsAddr = "10.8.0.1:53"
+		ctrl.plat = userspaceDNSProvider{fp}
+		ctrl.socksPortOverride = freePort(t)
+		ctrl.mu.Lock()
+		ctrl.session = newFakeSession()
+		ctrl.mu.Unlock()
+
+		capture := installDNSCapture(t)
+		res, err := ctrl.startTunnel(context.Background(), false)
+		if err != nil {
+			t.Fatalf("startTunnel(full, userspace DNS): %v", err)
+		}
+		defer res.Close()
+
+		if got := capture.resolverCalls.Load(); got != 1 {
+			t.Fatalf("resolver constructions = %d, want exactly 1", got)
+		}
+		if got := capture.listenerCalls.Load(); got != 1 {
+			t.Fatalf("DNS listener constructions = %d, want 1", got)
+		}
+		if res.dns != nil {
+			t.Fatal("userspace DNS started a privileged host listener")
+		}
+		if capture.listenerArg == nil || capture.listenerArg != capture.resolver {
+			t.Fatal("the userspace DNS server was not built with the shared resolver")
+		}
+		if res.socks == nil || res.socks.Resolve == nil {
+			t.Fatal("userspace DNS SOCKS server has no resolver wired")
+		}
+	})
+
 	t.Run("DNS start failure tears the full path down", func(t *testing.T) {
 		occupied, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 		if err != nil {

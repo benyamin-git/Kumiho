@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The splash theme holds the first frame until the palette is loaded, then
+      hands off to Theme.Kumiho.Main. The window background is the house
+      neutral, qualified for night mode by values-night/colors.xml.
+    -->
+    <style name="Theme.Kumiho" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/kumiho_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Kumiho.Main</item>
+    </style>
+
+    <!--
+      The shell theme. No Material You and no dynamic colour: Compose paints the
+      house palette edge to edge over these window defaults.
+    -->
+    <style name="Theme.Kumiho.Main" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kumiho_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

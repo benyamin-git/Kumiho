@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Night-qualified neutrals: the splash and first frame stay dark, so a dark
+      or OLED session never flashes the light surface while the palette loads.
+      OLED is never automatic, so the night surface is the Dark neutral.
+    -->
+    <color name="kumiho_background">#1c1b1f</color>
+    <color name="kumiho_on_surface">#e6e1e5</color>
+</resources>

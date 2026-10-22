@@ -5,6 +5,9 @@ Linux and the named pipe `\\.\pipe\kumiho\control` on Windows. Start it with
 `sudo systemctl start kumiho` (installed Linux), `Start-Service kumiho`
 (installed Windows) or `scripts/dev-daemon.sh start` (Linux development).
 
+The Android app does not use this daemon or IPC: the engine is embedded in the
+app process. Its guide is [android.md](android.md).
+
 ## CLI
 
     kumiho                      # TUI (default)

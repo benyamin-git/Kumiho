@@ -35,19 +35,31 @@ var Accents = []Accent{
 	{Name: "violet", Hue: 300, Chroma: 0.20},
 }
 
-// CSS returns the :root{...} custom-property block for a theme and accent
-// name. Unknown themes and accents are errors: the theme values are exactly
+// Palette returns the validated semantic roles for a theme and accent.
+// Unknown themes and accents are errors: the theme values are exactly
 // "light", "dark" and "oled", and accent names are the Accents table's exact
-// lowercase names.
-func CSS(theme Theme, accent string) (string, error) {
-	if _, ok := neutrals[theme]; !ok {
-		return "", fmt.Errorf("theme: unknown theme %q", theme)
+// lowercase names. Keys are the custom-property names without the "--"
+// prefix. The map is a copy; callers may mutate it without affecting later
+// calls.
+func Palette(t Theme, accent string) (map[string]string, error) {
+	if _, ok := neutrals[t]; !ok {
+		return nil, fmt.Errorf("theme: unknown theme %q", t)
 	}
 	a, ok := accentByName(accent)
 	if !ok {
-		return "", fmt.Errorf("theme: unknown accent %q", accent)
+		return nil, fmt.Errorf("theme: unknown accent %q", accent)
 	}
-	return cssBlock(theme, a), nil
+	return values(t, a), nil
+}
+
+// CSS returns the :root{...} custom-property block for a theme and accent
+// name. Unknown themes and accents are errors, exactly as Palette reports.
+func CSS(theme Theme, accent string) (string, error) {
+	v, err := Palette(theme, accent)
+	if err != nil {
+		return "", err
+	}
+	return cssBlock(theme, v), nil
 }
 
 // accentByName resolves an exact accent name.

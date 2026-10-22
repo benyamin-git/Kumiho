@@ -45,5 +45,23 @@ jchv/go-winloader (https://github.com/jchv/go-winloader)
 charmbracelet/bubbletea, lipgloss, bubbles (https://github.com/charmbracelet)
     MIT License. TUI framework (from milestone M1).
 
+AndroidX, Jetpack Compose and Kotlin (https://developer.android.com/jetpack,
+https://kotlinlang.org)
+    Apache License 2.0. Android app framework, Compose UI toolkit, Kotlin
+    standard library, AndroidX lifecycle/navigation/datastore/test libraries
+    and kotlinx.coroutines, resolved by Gradle and pinned in
+    android/gradle/libs.versions.toml. No third-party app code is copied into
+    Kumiho; the Android UI is original Compose code and no code from FoxyVPN's
+    Android app is included.
+
+gomobile / golang.org/x/mobile (https://pkg.go.dev/golang.org/x/mobile)
+    BSD 3-Clause License. Tool used to bind the Go engine into the Android
+    app as an AAR. The generated archive is a build output and is not
+    committed.
+
+The Go standard library and runtime (https://go.dev)
+    BSD 3-Clause License. Compiled into every Kumiho binary and the Android
+    AAR's libgojni.so.
+
 Full license texts for third-party dependencies are available in the Go
 module cache and at the respective upstream repositories.
