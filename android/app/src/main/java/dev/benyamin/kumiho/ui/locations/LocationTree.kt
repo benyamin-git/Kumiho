@@ -56,18 +56,21 @@ object LocationTree {
      * A non-blank [query] filters first ([LocationFilter]) and then opens every
      * matching branch, so the results are visible without the user expanding
      * anything; the stored expansion sets are untouched, so clearing the query
-     * restores exactly what was open before.
+     * restores exactly what was open before. The country list is speed-ordered
+     * by [latency] ([orderedCountries]); the rows inside a country keep the
+     * engine order.
      */
     fun rows(
         countries: List<Country>,
         query: String = "",
         expandedCountries: Set<String> = emptySet(),
         expandedCities: Set<String> = emptySet(),
+        latency: Map<String, Double?> = emptyMap(),
     ): List<LocationRow> {
         val searching = query.isNotBlank()
         val filtered = LocationFilter.apply(countries, query)
         val rows = ArrayList<LocationRow>()
-        for (country in filtered) {
+        for (country in orderedCountries(filtered, latency)) {
             val countryOpen = searching || countryKey(country) in expandedCountries
             rows += LocationRow.CountryRow(country = country, expanded = countryOpen)
             if (!countryOpen) continue
@@ -198,6 +201,69 @@ object LocationTree {
         if (rtt == null || rtt.isNaN() || rtt < 0.0) return LatencyState.Timeout
         return LatencyState.Measured(Math.round(rtt))
     }
+
+    /**
+     * The LatencyState a country row shows (D9): the fastest measured RTT in
+     * whole milliseconds, a timeout when some usable server answered without a
+     * number, or untested when nothing answered yet.
+     */
+    fun countryLatencyOf(latency: Map<String, Double?>, country: Country): LatencyState {
+        val best = bestMeasuredRtt(latency, country)
+        if (best != null) return LatencyState.Measured(Math.round(best))
+        val answered = country.cities.any { city -> city.servers.any { timedOut(latency, it) } }
+        return if (answered) LatencyState.Timeout else LatencyState.Untested
+    }
+
+    /**
+     * A server's usable measurement: the key is present, the value is a real
+     * non-negative number, and the server is not quarantined and has a real
+     * address. Absent and timeout both return null.
+     */
+    private fun measuredRtt(latency: Map<String, Double?>, server: Server): Double? {
+        if (!usable(server)) return null
+        val rtt = latency[addressKey(addressOf(server))]
+        if (rtt == null || rtt.isNaN() || rtt < 0.0) return null
+        return rtt
+    }
+
+    /** The fastest measured RTT of a country's usable servers, or null. */
+    private fun bestMeasuredRtt(latency: Map<String, Double?>, country: Country): Double? =
+        country.cities.asSequence()
+            .flatMap { it.servers.asSequence() }
+            .mapNotNull { measuredRtt(latency, it) }
+            .minOrNull()
+
+    /** True when a usable server has a present key that is not a measurement. */
+    private fun timedOut(latency: Map<String, Double?>, server: Server): Boolean {
+        if (!usable(server)) return false
+        val key = addressKey(addressOf(server))
+        if (!latency.containsKey(key)) return false
+        val rtt = latency[key]
+        return rtt == null || rtt.isNaN() || rtt < 0.0
+    }
+
+    /** A server the screen may ping or measure at all. */
+    private fun usable(server: Server): Boolean =
+        !server.quarantined && server.hostname.isNotBlank() && server.port > 0
+
+    /**
+     * The engine order, speed-ordered: countries with a measurement first
+     * (ascending), Recommended pinned before everything, and unmeasured
+     * countries keeping their original order. The input list is never touched.
+     */
+    private fun orderedCountries(
+        countries: List<Country>,
+        latency: Map<String, Double?>,
+    ): List<Country> = countries.withIndex()
+        .sortedWith(
+            compareBy<IndexedValue<Country>>(
+                { if (isRecommended(it.value)) 0 else 1 },
+                { if (bestMeasuredRtt(latency, it.value) != null) 0 else 1 },
+                { bestMeasuredRtt(latency, it.value) ?: 0.0 },
+                { it.index },
+            ),
+        )
+        .map { it.value }
 }
 
 /**

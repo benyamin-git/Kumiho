@@ -337,6 +337,201 @@ class LocationTreeTest {
         )
     }
 
+    // ---- country latency and speed order ---------------------------------
+
+    @Test
+    fun `unmeasured rows keep the engine order with Recommended pinned first`() {
+        val countries = listOf(US, REC, DE)
+
+        assertEquals(
+            listOf("country:rec", "country:us", "country:de"),
+            LocationTree.rows(countries).map { it.key },
+        )
+
+        val servers = LocationTree.rows(
+            countries,
+            expandedCountries = setOf("us"),
+            expandedCities = setOf("us/nyc", "us/sfo"),
+        ).filterIsInstance<LocationRow.ServerRow>()
+
+        assertEquals(listOf("nyc", "nyc", "sfo"), servers.map { it.city.code })
+        assertEquals(
+            listOf(
+                "edge.example.net:2499",
+                "share.example.net:443",
+                "share.example.net:443",
+            ),
+            servers.map { LocationTree.addressOf(it.server) },
+        )
+    }
+
+    @Test
+    fun `measured countries sort first ascending and unmeasured keep engine order`() {
+        val latency = mapOf(
+            latencyKey("edge.example.net", 2499) to 80.0,
+            latencyKey("ber.example.net") to 20.0,
+        )
+
+        assertEquals(
+            listOf("country:rec", "country:de", "country:us"),
+            LocationTree.rows(listOf(US, REC, DE), latency = latency).map { it.key },
+        )
+        assertEquals(
+            listOf("country:rec", "country:de", "country:us", "country:fr"),
+            LocationTree.rows(listOf(US, REC, DE, FR), latency = latency).map { it.key },
+        )
+    }
+
+    @Test
+    fun `Recommended stays pinned first even when others are measured`() {
+        val latency = mapOf(latencyKey("edge.example.net", 2499) to 20.0)
+
+        assertEquals(
+            listOf("country:rec", "country:us"),
+            LocationTree.rows(listOf(US, REC), latency = latency).map { it.key },
+        )
+    }
+
+    @Test
+    fun `timeouts do not count as measurements`() {
+        val latency = mapOf(
+            latencyKey("edge.example.net", 2499) to null,
+            latencyKey("ber.example.net") to 30.0,
+        )
+
+        assertEquals(
+            listOf("country:rec", "country:de", "country:us"),
+            LocationTree.rows(listOf(US, REC, DE), latency = latency).map { it.key },
+        )
+    }
+
+    @Test
+    fun `countryLatencyOf takes the fastest measurement`() {
+        val fastest = mapOf(
+            latencyKey("edge.example.net", 2499) to 42.4,
+            latencyKey("share.example.net") to 9.0,
+        )
+        assertEquals(LatencyState.Measured(9), LocationTree.countryLatencyOf(fastest, US))
+
+        val timeoutBeside = mapOf(
+            latencyKey("edge.example.net", 2499) to 42.4,
+            latencyKey("share.example.net") to null,
+        )
+        assertEquals(LatencyState.Measured(42), LocationTree.countryLatencyOf(timeoutBeside, US))
+    }
+
+    @Test
+    fun `countryLatencyOf reads timeout when only timeouts answered`() {
+        assertEquals(
+            LatencyState.Timeout,
+            LocationTree.countryLatencyOf(mapOf(latencyKey("edge.example.net", 2499) to null), US),
+        )
+        assertEquals(LatencyState.Untested, LocationTree.countryLatencyOf(emptyMap(), US))
+    }
+
+    @Test
+    fun `NaN and negative results are timeouts not measurements`() {
+        val latency = mapOf(
+            latencyKey("edge.example.net", 2499) to Double.NaN,
+            latencyKey("share.example.net") to -1.0,
+        )
+
+        assertEquals(LatencyState.Timeout, LocationTree.countryLatencyOf(latency, US))
+        assertEquals(
+            listOf("country:rec", "country:us", "country:de"),
+            LocationTree.rows(listOf(US, REC, DE), latency = latency).map { it.key },
+        )
+    }
+
+    @Test
+    fun `quarantined and unusable servers never set a country latency`() {
+        assertEquals(
+            LatencyState.Untested,
+            LocationTree.countryLatencyOf(mapOf(latencyKey("quarantined.example.net") to 1.0), DE),
+        )
+        assertEquals(
+            LatencyState.Untested,
+            LocationTree.countryLatencyOf(mapOf(latencyKey("quarantined.example.net") to null), DE),
+        )
+        assertEquals(
+            LatencyState.Measured(50),
+            LocationTree.countryLatencyOf(
+                mapOf(
+                    latencyKey("quarantined.example.net") to null,
+                    latencyKey("ber.example.net") to 50.0,
+                ),
+                DE,
+            ),
+        )
+
+        val broken = Country(
+            code = "us",
+            name = "United States",
+            cities = listOf(
+                City(
+                    code = "nyc",
+                    name = "New York",
+                    servers = listOf(server("", 443), server("noport.example.net", 0)),
+                ),
+            ),
+        )
+        assertEquals(
+            LatencyState.Untested,
+            LocationTree.countryLatencyOf(
+                mapOf(
+                    latencyKey(":443") to 1.0,
+                    latencyKey("noport.example.net", 0) to 1.0,
+                ),
+                broken,
+            ),
+        )
+    }
+
+    @Test
+    fun `searching sorts the filtered view`() {
+        val latency = mapOf(
+            latencyKey("edge.example.net", 2499) to 10.0,
+            latencyKey("share.example.net") to 200.0,
+            latencyKey("par.example.net") to 50.0,
+        )
+
+        assertEquals(
+            listOf("country:rec", "country:us", "country:fr", "country:de"),
+            LocationTree.rows(listOf(US, REC, DE, FR), latency = latency).map { it.key },
+        )
+
+        val rows = LocationTree.rows(listOf(US, REC, DE, FR), query = "c", latency = latency)
+        assertEquals(
+            listOf("country:rec", "country:fr", "country:us"),
+            rows.filterIsInstance<LocationRow.CountryRow>().map { it.key },
+        )
+
+        val filteredUs = rows
+            .filterIsInstance<LocationRow.CountryRow>()
+            .first { it.country.code == "us" }
+            .country
+        assertEquals(listOf("sfo"), filteredUs.cities.map { it.code })
+        assertEquals(LatencyState.Measured(200), LocationTree.countryLatencyOf(latency, filteredUs))
+        assertEquals(LatencyState.Measured(10), LocationTree.countryLatencyOf(latency, US))
+    }
+
+    @Test
+    fun `host and city searches still auto-open the matching branch`() {
+        assertEquals(
+            listOf(
+                "country:de",
+                "city:de/ber",
+                "server:de/ber/ber.example.net:443",
+                "server:de/ber/quarantined.example.net:443",
+            ),
+            LocationTree.rows(ORDERED, query = "berlin").map { it.key },
+        )
+        assertEquals(
+            listOf("country:us", "city:us/nyc", "server:us/nyc/edge.example.net:2499"),
+            LocationTree.rows(ORDERED, query = "edge.example").map { it.key },
+        )
+    }
+
     private companion object {
         fun server(host: String, port: Int = 443, quarantined: Boolean = false) = Server(
             hostname = host,
@@ -344,6 +539,10 @@ class LocationTreeTest {
             quarantined = quarantined,
             protocols = listOf(Protocol(name = "connect", host = host, port = port, scheme = "https")),
         )
+
+        /** The latency-map key for one fixture address. */
+        fun latencyKey(host: String, port: Int = 443): String =
+            LocationTree.addressKey("$host:$port")
 
         val REC = Country(
             code = "rec",
@@ -378,6 +577,14 @@ class LocationTreeTest {
                     name = "Berlin",
                     servers = listOf(server("ber.example.net"), server("quarantined.example.net", quarantined = true)),
                 ),
+            ),
+        )
+
+        val FR = Country(
+            code = "fr",
+            name = "France",
+            cities = listOf(
+                City(code = "par", name = "Paris", servers = listOf(server("par.example.net"))),
             ),
         )
 
