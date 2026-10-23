@@ -172,6 +172,14 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 	replyOK := func() {
 		_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
 	}
+	replyCtrlErr := func(err error) {
+		var re *api.RemoteError
+		if errors.As(err, &re) {
+			replyErr(re.Code, re.Message)
+		} else {
+			replyErr(api.CodeInternal, err.Error())
+		}
+	}
 
 	switch env.Type {
 	case ipc.TypeHello:
@@ -250,6 +258,102 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 			return
 		}
 		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.Login2FA(ctx, p.Code))
+		h.broadcastStatus()
+
+	case ipc.TypeLoginStart, ipc.TypeAccountsAddStart:
+		var p api.LoginStartPayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.LoginStart(p.Method, p.Email, p.AccountID))
+		h.broadcastStatus()
+
+	case ipc.TypeLoginStatus, ipc.TypeAccountsAddStatus:
+		var p api.LoginStatusPayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		state, err := h.ctrl.LoginStatus(p.LoginID)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		_ = conn.Reply(env.ID, ipc.TypeLoginState, state)
+
+	case ipc.TypeLoginCancel, ipc.TypeAccountsAddCancel:
+		var p api.LoginCancelPayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		err := h.ctrl.LoginCancel(p.LoginID)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
+		h.broadcastStatus()
+
+	case ipc.TypeAccountsList:
+		view := h.ctrl.Accounts()
+		_ = conn.Reply(env.ID, ipc.TypeAccountsInfo, view)
+
+	case ipc.TypeAccountsUse:
+		var p api.AccountsUsePayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		err := h.ctrl.UseAccount(p.ID)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
+		h.broadcastStatus()
+
+	case ipc.TypeAccountsRemove:
+		var p api.AccountsRemovePayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		err := h.ctrl.RemoveAccount(p.ID)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
+		h.broadcastStatus()
+
+	case ipc.TypeAccountsUpdate:
+		var p api.AccountsUpdatePayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		err := h.ctrl.UpdateAccount(p.ID, p.Label)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
+		h.broadcastStatus()
+
+	case ipc.TypeAccountsSetRotation:
+		var p api.AccountsRotationPayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		err := h.ctrl.SetAccountRotation(p.Enabled, p.Threshold)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
 		h.broadcastStatus()
 
 	case ipc.TypeLogout:

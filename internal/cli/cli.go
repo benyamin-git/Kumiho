@@ -24,7 +24,8 @@ Commands:
   disconnect    Tear the tunnel down
   cleanup       Remove stale routes/rules/nftables/DNS state (crash recovery)
   login         Sign in to Firefox Accounts through the daemon
-  logout        Sign out and clear stored tokens
+  accounts      List and manage up to five accounts
+  logout        Sign out of every account and clear stored tokens
   locations     List VPN locations (--ping for latency, --json)
   logs          Print daemon logs (-f follows, --level filters)
   status        Show daemon status (--json for machine output)
@@ -54,6 +55,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runDaemon(rest, stdout, stderr)
 	case "login":
 		return runLogin(rest, stdout, stderr)
+	case "accounts":
+		return runAccounts(rest, stdout, stderr)
 	case "logout":
 		return runLogout(rest, stdout, stderr)
 	case "connect":

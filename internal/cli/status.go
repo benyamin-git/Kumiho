@@ -126,7 +126,7 @@ func runLogout(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "Usage: kumiho logout\n\nSigns out and clears stored tokens.\n")
+		fmt.Fprint(stderr, "Usage: kumiho logout\n\nSigns out of every account and clears stored tokens.\n")
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {

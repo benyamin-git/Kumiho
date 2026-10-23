@@ -136,7 +136,7 @@ type AccountsUpdatePayload struct {
 // AccountsRotationPayload changes rotation settings.
 type AccountsRotationPayload struct {
 	Enabled   bool `json:"enabled"`
-	Threshold int  `json:"threshold"`
+	Threshold int  `json:"rotation_threshold"`
 }
 
 // Status is the daemon dashboard snapshot (PLAN.md §5).
