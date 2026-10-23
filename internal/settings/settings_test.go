@@ -444,3 +444,70 @@ func TestV040SetOverrideRejects(t *testing.T) {
 		t.Fatalf("overrides after failures = %v", keys)
 	}
 }
+
+func TestAccountRotationDefaultsAndValidation(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.AccountRotation {
+		t.Fatal("account_rotation should default to false")
+	}
+	if cfg.RotationThreshold != 10 {
+		t.Fatalf("rotation_threshold = %d, want 10", cfg.RotationThreshold)
+	}
+	cfg.RotationThreshold = 0
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("rotation_threshold 0 should fail validation")
+	}
+	cfg.RotationThreshold = 51
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("rotation_threshold 51 should fail validation")
+	}
+	cfg.RotationThreshold = 1
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("rotation_threshold 1 should pass: %v", err)
+	}
+	cfg.RotationThreshold = 50
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("rotation_threshold 50 should pass: %v", err)
+	}
+}
+
+func TestAccountRotationOverrideRoundTrip(t *testing.T) {
+	paths := testPaths(t)
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetOverride("account_rotation", "on"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetOverride("rotation_threshold", "20"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := st.EffectiveConfig()
+	if !cfg.AccountRotation || cfg.RotationThreshold != 20 {
+		t.Fatalf("effective config = rotation %v threshold %d", cfg.AccountRotation, cfg.RotationThreshold)
+	}
+	keys := st.OverriddenKeys()
+	for _, want := range []string{"account_rotation", "rotation_threshold"} {
+		found := false
+		for _, key := range keys {
+			if key == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("OverriddenKeys = %v, missing %s", keys, want)
+		}
+	}
+	if err := st.ClearOverride("account_rotation"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ClearOverride("rotation_threshold"); err != nil {
+		t.Fatal(err)
+	}
+	cfg = st.EffectiveConfig()
+	if cfg.AccountRotation || cfg.RotationThreshold != 10 {
+		t.Fatalf("after clear: rotation %v threshold %d", cfg.AccountRotation, cfg.RotationThreshold)
+	}
+}

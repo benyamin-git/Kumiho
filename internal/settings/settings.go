@@ -68,49 +68,53 @@ func ApplyEnvOverrides(base Paths) Paths {
 
 // Config mirrors /etc/kumiho/config.toml (PLAN.md §8).
 type Config struct {
-	SocksBind        string   `toml:"socks_bind"`
-	SocksPort        int      `toml:"socks_port"`
-	ProxyOnly        bool     `toml:"proxy_only"`
-	KillSwitch       string   `toml:"kill_switch"` // last|on|off
-	Autoconnect      string   `toml:"autoconnect"` // last|on|off
-	ExitCheck        bool     `toml:"exit_check"`
-	DoHProvider      string   `toml:"doh_provider"` // automatic|cloudflare|google|quad9|off
-	DNSUpstream      string   `toml:"dns_upstream"`
-	EdgeAddress      string   `toml:"edge_address"`
-	UpstreamProxy    string   `toml:"upstream_proxy"`
-	ExcludeCIDRs     []string `toml:"exclude_cidrs"`
-	AllowLAN         bool     `toml:"allow_lan"`
-	MTU              int      `toml:"mtu"`
-	LogLevel         string   `toml:"log_level"`
-	RedactTargets    bool     `toml:"redact_targets"`
-	QuotaPollMinutes int      `toml:"quota_poll_minutes"`
-	TLSSplit         string   `toml:"tls_split"` // off|first-byte|sni
-	HTTPProxy        bool     `toml:"http_proxy"`
-	HTTPProxyPort    int      `toml:"http_proxy_port"`
-	SolveChallenges  bool     `toml:"solve_challenges"`
-	KeepaliveProfile string   `toml:"keepalive_profile"` // standard|slow
+	SocksBind         string   `toml:"socks_bind"`
+	SocksPort         int      `toml:"socks_port"`
+	ProxyOnly         bool     `toml:"proxy_only"`
+	KillSwitch        string   `toml:"kill_switch"` // last|on|off
+	Autoconnect       string   `toml:"autoconnect"` // last|on|off
+	ExitCheck         bool     `toml:"exit_check"`
+	DoHProvider       string   `toml:"doh_provider"` // automatic|cloudflare|google|quad9|off
+	DNSUpstream       string   `toml:"dns_upstream"`
+	EdgeAddress       string   `toml:"edge_address"`
+	UpstreamProxy     string   `toml:"upstream_proxy"`
+	ExcludeCIDRs      []string `toml:"exclude_cidrs"`
+	AllowLAN          bool     `toml:"allow_lan"`
+	MTU               int      `toml:"mtu"`
+	LogLevel          string   `toml:"log_level"`
+	RedactTargets     bool     `toml:"redact_targets"`
+	QuotaPollMinutes  int      `toml:"quota_poll_minutes"`
+	TLSSplit          string   `toml:"tls_split"` // off|first-byte|sni
+	HTTPProxy         bool     `toml:"http_proxy"`
+	HTTPProxyPort     int      `toml:"http_proxy_port"`
+	SolveChallenges   bool     `toml:"solve_challenges"`
+	KeepaliveProfile  string   `toml:"keepalive_profile"` // standard|slow
+	AccountRotation   bool     `toml:"account_rotation"`
+	RotationThreshold int      `toml:"rotation_threshold"`
 }
 
 // DefaultConfig returns the built-in defaults (PLAN.md §8).
 func DefaultConfig() Config {
 	return Config{
-		SocksBind:        "127.0.0.1",
-		SocksPort:        1080,
-		ProxyOnly:        false,
-		KillSwitch:       "last",
-		Autoconnect:      "last",
-		ExitCheck:        true,
-		DoHProvider:      "automatic",
-		AllowLAN:         true,
-		MTU:              8500,
-		LogLevel:         "info",
-		RedactTargets:    true,
-		QuotaPollMinutes: 15,
-		TLSSplit:         "off",
-		HTTPProxy:        false,
-		HTTPProxyPort:    8080,
-		SolveChallenges:  true,
-		KeepaliveProfile: "standard",
+		SocksBind:         "127.0.0.1",
+		SocksPort:         1080,
+		ProxyOnly:         false,
+		KillSwitch:        "last",
+		Autoconnect:       "last",
+		ExitCheck:         true,
+		DoHProvider:       "automatic",
+		AllowLAN:          true,
+		MTU:               8500,
+		LogLevel:          "info",
+		RedactTargets:     true,
+		QuotaPollMinutes:  15,
+		TLSSplit:          "off",
+		HTTPProxy:         false,
+		HTTPProxyPort:     8080,
+		SolveChallenges:   true,
+		KeepaliveProfile:  "standard",
+		AccountRotation:   false,
+		RotationThreshold: 10,
 	}
 }
 
@@ -164,6 +168,9 @@ func (c Config) Validate() error {
 	}
 	if c.QuotaPollMinutes < 1 || c.QuotaPollMinutes > 24*60 {
 		return fmt.Errorf("quota_poll_minutes: out of range: %d", c.QuotaPollMinutes)
+	}
+	if c.RotationThreshold < 1 || c.RotationThreshold > 50 {
+		return fmt.Errorf("rotation_threshold: out of range: %d", c.RotationThreshold)
 	}
 	return nil
 }
@@ -238,6 +245,10 @@ type State struct {
 	HTTPProxyPort    *int    `json:"http_proxy_port,omitempty"`
 	SolveChallenges  *bool   `json:"solve_challenges,omitempty"`
 	KeepaliveProfile *string `json:"keepalive_profile,omitempty"`
+
+	// v0.6.0 account rotation overrides.
+	AccountRotation   *bool `json:"account_rotation,omitempty"`
+	RotationThreshold *int  `json:"rotation_threshold,omitempty"`
 }
 
 // Store owns the config/state pair and persists state atomically.
@@ -417,6 +428,12 @@ func (s *Store) effectiveConfigLocked() Config {
 	if st.KeepaliveProfile != nil {
 		cfg.KeepaliveProfile = *st.KeepaliveProfile
 	}
+	if st.AccountRotation != nil {
+		cfg.AccountRotation = *st.AccountRotation
+	}
+	if st.RotationThreshold != nil {
+		cfg.RotationThreshold = *st.RotationThreshold
+	}
 	return cfg
 }
 
@@ -452,6 +469,8 @@ func (s *Store) OverriddenKeys() []string {
 	add("http_proxy_port", st.HTTPProxyPort != nil)
 	add("solve_challenges", st.SolveChallenges != nil)
 	add("keepalive_profile", st.KeepaliveProfile != nil)
+	add("account_rotation", st.AccountRotation != nil)
+	add("rotation_threshold", st.RotationThreshold != nil)
 	sort.Strings(keys)
 	return keys
 }
@@ -502,7 +521,7 @@ func (s *Store) SetOverride(key, value string) error {
 		s.state = st
 		return s.saveStateLocked()
 
-	case "exit_check", "redact_targets", "allow_lan", "http_proxy", "solve_challenges":
+	case "exit_check", "redact_targets", "allow_lan", "http_proxy", "solve_challenges", "account_rotation":
 		v, err := parseOnOff(value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", key, err)
@@ -523,6 +542,9 @@ func (s *Store) SetOverride(key, value string) error {
 		case "solve_challenges":
 			cand.SolveChallenges = v
 			st.SolveChallenges = &v
+		case "account_rotation":
+			cand.AccountRotation = v
+			st.AccountRotation = &v
 		}
 
 	case "log_level":
@@ -556,7 +578,7 @@ func (s *Store) SetOverride(key, value string) error {
 		cand.ExcludeCIDRs = list
 		st.ExcludeCIDRs = &list
 
-	case "mtu", "socks_port", "quota_poll_minutes", "http_proxy_port":
+	case "mtu", "socks_port", "quota_poll_minutes", "http_proxy_port", "rotation_threshold":
 		n, err := strconv.Atoi(value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", key, err)
@@ -574,6 +596,9 @@ func (s *Store) SetOverride(key, value string) error {
 		case "http_proxy_port":
 			cand.HTTPProxyPort = n
 			st.HTTPProxyPort = &n
+		case "rotation_threshold":
+			cand.RotationThreshold = n
+			st.RotationThreshold = &n
 		}
 
 	default:
@@ -633,6 +658,10 @@ func (s *Store) ClearOverride(key string) error {
 		st.SolveChallenges = nil
 	case "keepalive_profile":
 		st.KeepaliveProfile = nil
+	case "account_rotation":
+		st.AccountRotation = nil
+	case "rotation_threshold":
+		st.RotationThreshold = nil
 	default:
 		return ErrUnknownSetting
 	}

@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
-// loadTokens reads tokens.json; a missing file means "not signed in".
+// loadTokens reads tokens.json; a missing or empty file means "not signed in".
 func loadTokens(path string) (*fxa.Tokens, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -17,6 +18,9 @@ func loadTokens(path string) (*fxa.Tokens, error) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("tokens %s: %w", path, err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return nil, nil
 	}
 	var t fxa.Tokens
 	if err := json.Unmarshal(data, &t); err != nil {

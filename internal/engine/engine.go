@@ -755,6 +755,8 @@ func (c *Controller) Settings() api.SettingsView {
 		HTTPProxyPort:        cfg.HTTPProxyPort,
 		SolveChallenges:      cfg.SolveChallenges,
 		KeepaliveProfile:     cfg.KeepaliveProfile,
+		AccountRotation:      cfg.AccountRotation,
+		RotationThreshold:    cfg.RotationThreshold,
 		Overridden:           c.store.OverriddenKeys(),
 	}
 }

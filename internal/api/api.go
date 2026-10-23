@@ -67,34 +67,101 @@ type Login2FAPayload struct {
 
 // LoginState is the reply to every login step.
 type LoginState struct {
-	Step               string `json:"step"` // email|password|2fa|done
+	Step               string `json:"step"` // email|password|2fa|browser|done|error|cancelled
 	Email              string `json:"email,omitempty"`
-	Method             string `json:"method,omitempty"` // email|totp|unblock|2fa
+	Method             string `json:"method,omitempty"` // email|totp|unblock|2fa|browser
 	VerificationMethod string `json:"verification_method,omitempty"`
 	VerificationReason string `json:"verification_reason,omitempty"`
+	URL                string `json:"url,omitempty"`
+	LoginID            string `json:"login_id,omitempty"`
 	Error              string `json:"error,omitempty"`
+}
+
+// AccountSummary is one row in the Account screen.
+type AccountSummary struct {
+	ID             string `json:"id"`
+	Email          string `json:"email"`
+	Label          string `json:"label"`
+	Method         string `json:"method"`
+	Active         bool   `json:"active"`
+	ReauthRequired bool   `json:"reauth_required,omitempty"`
+	LastUsedAt     int64  `json:"last_used_at,omitempty"`
+	Quota          *Quota `json:"quota,omitempty"`
+}
+
+// AccountsView is the accounts_list reply and the Account screen snapshot.
+type AccountsView struct {
+	Accounts   []AccountSummary `json:"accounts"`
+	Active     string           `json:"active,omitempty"`
+	Rotation   bool             `json:"rotation"`
+	Threshold  int              `json:"rotation_threshold"`
+	LastMethod string           `json:"last_method,omitempty"`
+	Notice     string           `json:"notice,omitempty"`
+	Error      string           `json:"error,omitempty"`
+}
+
+// LoginStartPayload starts a browser or password sign-in for an account.
+type LoginStartPayload struct {
+	Method    string `json:"method,omitempty"`
+	Email     string `json:"email,omitempty"`
+	AccountID string `json:"account_id,omitempty"`
+}
+
+// LoginStatusPayload polls a browser sign-in.
+type LoginStatusPayload struct {
+	LoginID string `json:"login_id"`
+}
+
+// LoginCancelPayload cancels a browser sign-in.
+type LoginCancelPayload struct {
+	LoginID string `json:"login_id"`
+}
+
+// AccountsRemovePayload removes one account.
+type AccountsRemovePayload struct {
+	ID string `json:"id"`
+}
+
+// AccountsUsePayload selects one account.
+type AccountsUsePayload struct {
+	ID string `json:"id"`
+}
+
+// AccountsUpdatePayload renames one account.
+type AccountsUpdatePayload struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// AccountsRotationPayload changes rotation settings.
+type AccountsRotationPayload struct {
+	Enabled   bool `json:"enabled"`
+	Threshold int  `json:"threshold"`
 }
 
 // Status is the daemon dashboard snapshot (PLAN.md §5).
 type Status struct {
-	State         string        `json:"state"`
-	Authenticated bool          `json:"authenticated"`
-	Email         string        `json:"email,omitempty"`
-	Since         int64         `json:"since,omitempty"`
-	TokenExpires  int64         `json:"token_expires,omitempty"`
-	KillSwitch    bool          `json:"kill_switch"`
-	Autoconnect   bool          `json:"autoconnect"`
-	Location      string        `json:"location,omitempty"`
-	Server        string        `json:"server,omitempty"`
-	ProxyOnly     bool          `json:"proxy_only,omitempty"`
-	PassExpires   int64         `json:"pass_expires,omitempty"`
-	Quota         *Quota        `json:"quota,omitempty"`
-	DNS           string        `json:"dns,omitempty"`
-	IPv6          string        `json:"ipv6,omitempty"`
-	ExitIP        string        `json:"exit_ip,omitempty"`
-	ExitCountry   string        `json:"exit_country,omitempty"`
-	Totals        *ByteCounters `json:"totals,omitempty"`
-	Rates         *ByteRates    `json:"rates,omitempty"`
+	State         string           `json:"state"`
+	Authenticated bool             `json:"authenticated"`
+	Email         string           `json:"email,omitempty"`
+	Since         int64            `json:"since,omitempty"`
+	TokenExpires  int64            `json:"token_expires,omitempty"`
+	KillSwitch    bool             `json:"kill_switch"`
+	Autoconnect   bool             `json:"autoconnect"`
+	Location      string           `json:"location,omitempty"`
+	Server        string           `json:"server,omitempty"`
+	ProxyOnly     bool             `json:"proxy_only,omitempty"`
+	PassExpires   int64            `json:"pass_expires,omitempty"`
+	Quota         *Quota           `json:"quota,omitempty"`
+	DNS           string           `json:"dns,omitempty"`
+	IPv6          string           `json:"ipv6,omitempty"`
+	ExitIP        string           `json:"exit_ip,omitempty"`
+	ExitCountry   string           `json:"exit_country,omitempty"`
+	Totals        *ByteCounters    `json:"totals,omitempty"`
+	Rates         *ByteRates       `json:"rates,omitempty"`
+	Accounts      []AccountSummary `json:"accounts,omitempty"`
+	ActiveAccount string           `json:"active_account,omitempty"`
+	Login         *LoginState      `json:"login,omitempty"`
 }
 
 // Quota is the account's proxy quota as reported by Guardian headers.
@@ -141,6 +208,8 @@ type SettingsView struct {
 	HTTPProxyPort        int      `json:"http_proxy_port"`
 	SolveChallenges      bool     `json:"solve_challenges"`
 	KeepaliveProfile     string   `json:"keepalive_profile"`
+	AccountRotation      bool     `json:"account_rotation"`
+	RotationThreshold    int      `json:"rotation_threshold"`
 }
 
 // SettingsSetPayload changes one runtime setting. Reset drops the persisted
@@ -205,6 +274,10 @@ type LogSnapshot struct {
 // AccountInfo is the Account screen snapshot (PLAN.md §6): local session
 // facts plus a best-effort Guardian entitlement lookup.
 type AccountInfo struct {
+	ID               string `json:"id,omitempty"`
+	Label            string `json:"label,omitempty"`
+	Method           string `json:"method,omitempty"`
+	ReauthRequired   bool   `json:"reauth_required,omitempty"`
 	Email            string `json:"email,omitempty"`
 	UID              string `json:"uid,omitempty"`
 	Subscribed       bool   `json:"subscribed"`
