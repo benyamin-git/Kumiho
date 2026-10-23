@@ -519,6 +519,23 @@ sign-off table remain open.
       the mode it actually sent; record any OS behaviour that ignores the
       filters.
 
+### Keeping connections open across a transition
+
+This is the physical acceptance for **Keep connections outside the tunnel**
+(Android-only; no engine or protocol change).
+
+- [ ] On the S25 FE, with Always-on on and lockdown off, turn **Keep
+      connections outside the tunnel** on **before** connecting. Open an SSH
+      session to a LAN host, run a command, connect Kumiho's full tunnel, run
+      the command again, disconnect, and run it again. The same session must
+      survive both transitions. Record the SSH host, client app and Android
+      build.
+- [ ] With the setting off, the same LAN session drops on connect/disconnect
+      (the previous behavior). With it on, a public SSH session carried
+      through the tunnel still drops (its exit IP changes); this is expected.
+- [ ] With lockdown on, the setting stays visible and editable, the override
+      line is shown, and Android still drops the session when the VPN changes.
+
 ### Account, logs, diagnostics and lifecycle
 
 - [ ] Account shows email, UID, subscription, quota, bandwidth and token

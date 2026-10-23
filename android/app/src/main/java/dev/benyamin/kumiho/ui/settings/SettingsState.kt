@@ -1,6 +1,7 @@
 package dev.benyamin.kumiho.ui.settings
 
 import androidx.compose.ui.graphics.Color
+import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.ThemeId
@@ -113,6 +114,14 @@ data class SettingsAppState(
     val splitMode: SplitMode = SplitMode.OFF,
     /** How many apps the saved split-tunnel selection contains. */
     val splitAppCount: Int = 0,
+    /** The saved allow-bypass choice; Off until loaded. */
+    val bypassEnabled: Boolean = false,
+    /** The initial load finished, so the switch may be used. */
+    val bypassLoaded: Boolean = false,
+    /** A full tunnel is live and was built with a different value. */
+    val bypassNeedsReconnect: Boolean = false,
+    /** A fixed load/save error under the row, if any. */
+    val bypassError: BypassError? = null,
 )
 
 /**
@@ -137,6 +146,7 @@ data class SettingsActions(
     val onOpenBatterySettings: () -> Unit,
     val onOpenVpnSettings: () -> Unit,
     val onDismissLaunchError: () -> Unit,
+    val onToggleBypass: (Boolean) -> Unit,
     val onOpenSplitTunneling: (() -> Unit)? = null,
 )
 
@@ -176,6 +186,12 @@ object SettingsTags {
     const val VPN_EXPLANATION = "settings_vpn_explanation"
     const val SPLIT_ROW = "settings_split_row"
     const val SPLIT_SUMMARY = "settings_split_summary"
+    const val BYPASS_ROW = "settings_bypass_row"
+    const val BYPASS_VALUE = "settings_bypass_value"
+    const val BYPASS_SWITCH = "settings_bypass_switch"
+    const val BYPASS_RECONNECT = "settings_bypass_reconnect"
+    const val BYPASS_LOCKDOWN = "settings_bypass_lockdown"
+    const val BYPASS_ERROR = "settings_bypass_error"
 
     const val CIDR_HINT = "settings_cidr_hint"
     const val CIDR_DNS_NOTE = "settings_cidr_dns_note"

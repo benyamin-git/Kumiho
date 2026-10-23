@@ -1,7 +1,9 @@
 package dev.benyamin.kumiho.vpn
 
+import dev.benyamin.kumiho.data.AllowBypassState
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.ui.settings.SplitTunnelUiState
+import dev.benyamin.kumiho.ui.settings.bypassReconnectRequired
 import dev.benyamin.kumiho.ui.settings.splitReconnectRequired
 import org.json.JSONArray
 import org.json.JSONObject
@@ -174,6 +176,34 @@ class SplitInterfaceSpecTest {
         assertTrue(splitReconnectRequired(statusService("CONNECTING")))
         assertTrue(splitReconnectRequired(statusService("RECONNECTING")))
         assertTrue(splitReconnectRequired(statusService("WAITING_NETWORK")))
+    }
+
+    @Test
+    fun `allow-bypass reconnect follows only a live full tunnel and a changed value`() {
+        val changed = AllowBypassState(enabled = true, applied = false, loading = false)
+        assertFalse(bypassReconnectRequired(ServiceState(binding = true), changed))
+        assertFalse(bypassReconnectRequired(statusService("IDLE"), changed))
+        assertFalse(bypassReconnectRequired(unauthenticatedService(), changed))
+        assertFalse(bypassReconnectRequired(statusService("PROXY_ONLY"), changed))
+        assertFalse(bypassReconnectRequired(statusService("FATAL"), changed))
+
+        assertTrue(bypassReconnectRequired(statusService("CONNECTED"), changed))
+        assertTrue(bypassReconnectRequired(statusService("CONNECTING"), changed))
+        assertTrue(bypassReconnectRequired(statusService("RECONNECTING"), changed))
+        assertTrue(bypassReconnectRequired(statusService("WAITING_NETWORK"), changed))
+
+        assertFalse(
+            bypassReconnectRequired(
+                statusService("CONNECTED"),
+                changed.copy(loading = true),
+            ),
+        )
+        assertFalse(
+            bypassReconnectRequired(
+                statusService("CONNECTED"),
+                changed.copy(applied = true),
+            ),
+        )
     }
 
     private fun unauthenticatedService() = statusService("UNAUTHENTICATED").let { service ->

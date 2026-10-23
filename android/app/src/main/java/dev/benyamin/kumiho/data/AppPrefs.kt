@@ -40,7 +40,7 @@ interface ThemePreferences {
  * Typed access to the app preferences. Empty values mean "follow the system"
  * for the theme and "blue" for the accent; the caller resolves them.
  */
-class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore {
+class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore, BypassSettingsStore {
     private val store = context.applicationContext.kumihoDataStore
 
     /** The stored theme id, or null when the user has not chosen one. */
@@ -64,6 +64,9 @@ class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore {
         SplitSettings(mode = mode, packages = prefs[KEY_SPLIT_PACKAGES].orEmpty())
     }
 
+    /** The persisted allow-bypass choice; an absent key means Off. */
+    override val allowBypass: Flow<Boolean> = store.data.map { it[KEY_ALLOW_BYPASS] ?: false }
+
     override suspend fun setTheme(id: String) {
         store.edit { it[KEY_THEME] = id }
     }
@@ -80,6 +83,10 @@ class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore {
         store.edit { it[KEY_SPLIT_PACKAGES] = packages }
     }
 
+    override suspend fun setAllowBypass(enabled: Boolean) {
+        store.edit { it[KEY_ALLOW_BYPASS] = enabled }
+    }
+
     suspend fun setSetupComplete(value: Boolean) {
         store.edit { it[KEY_SETUP_COMPLETE] = value }
     }
@@ -90,5 +97,6 @@ class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore {
         val KEY_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
         val KEY_SPLIT_MODE = stringPreferencesKey("split_mode")
         val KEY_SPLIT_PACKAGES = stringSetPreferencesKey("split_packages")
+        val KEY_ALLOW_BYPASS = booleanPreferencesKey("allow_bypass")
     }
 }

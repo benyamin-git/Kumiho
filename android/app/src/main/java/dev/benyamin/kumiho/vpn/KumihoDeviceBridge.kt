@@ -21,11 +21,13 @@ import java.net.InetAddress
  *
  * [configure] and [acquireFD] share one lock: a configure that lands while a
  * previous connection is being replaced cannot tear the builder input in half,
- * and the split snapshot is read inside the same critical section.
+ * and the split and allow-bypass snapshots are read inside the same critical
+ * section.
  */
 class KumihoDeviceBridge(
     private val service: VpnService,
     private val splitSettings: SplitSettingsProvider,
+    private val bypassSettings: BypassSettingsProvider,
 ) : DeviceBridge {
     private val lock = Any()
     private var config: VpnConfig? = null
@@ -51,12 +53,16 @@ class KumihoDeviceBridge(
                 config = current,
                 split = splitSettings.snapshot(),
                 appPackage = service.packageName,
+                allowBypass = bypassSettings.snapshot(),
             )
         }
 
         val builder = service.Builder()
             .setSession(SESSION_NAME)
             .setMtu(mtu.toInt())
+        if (spec.allowBypass) {
+            builder.allowBypass()
+        }
 
         for (address in spec.addresses) {
             val (host, length) = splitCidr(address)
@@ -89,6 +95,7 @@ class KumihoDeviceBridge(
                 "establish() returned null; the VPN consent or interface is missing",
             )
         return try {
+            bypassSettings.markApplied()
             descriptor.detachFd().toLong()
         } finally {
             descriptor.close()
