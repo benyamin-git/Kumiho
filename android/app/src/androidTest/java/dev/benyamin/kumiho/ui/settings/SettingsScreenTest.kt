@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
@@ -419,6 +420,96 @@ class SettingsScreenTest {
         rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
     }
 
+    // ---- keep connections outside the tunnel ----------------------------
+
+    @Test
+    fun theBypassRowShowsOffAndIsEnabled() {
+        show()
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithText(text(R.string.settings_bypass_title)).assertExists()
+        rule.onNodeWithText(text(R.string.settings_bypass_hint)).assertExists()
+        rule.onNodeWithTag(SettingsTags.BYPASS_VALUE)
+            .assertTextEquals(text(R.string.settings_off))
+        rule.onNodeWithTag(SettingsTags.BYPASS_SWITCH).assertIsEnabled()
+    }
+
+    @Test
+    fun theBypassSwitchWritesThroughAndNamesOn() {
+        show(appState = appState(bypassEnabled = true))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_VALUE)
+            .assertTextEquals(text(R.string.settings_on))
+        rule.onNodeWithTag(SettingsTags.BYPASS_SWITCH).performClick()
+
+        assertEquals(listOf("bypass-false"), calls)
+    }
+
+    @Test
+    fun theBypassSwitchIsDisabledWhileLoading() {
+        show(appState = appState(bypassLoaded = false))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_SWITCH).assertIsNotEnabled()
+        rule.onNodeWithTag(SettingsTags.BYPASS_VALUE)
+            .assertTextEquals(text(R.string.settings_off))
+    }
+
+    @Test
+    fun theBypassReconnectWarningAppears() {
+        show(appState = appState(bypassNeedsReconnect = true))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_RECONNECT).assertExists()
+        rule.onNodeWithText(text(R.string.settings_bypass_reconnect)).assertExists()
+    }
+
+    @Test
+    fun theBypassReconnectWarningIsAbsentByDefault() {
+        show()
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_RECONNECT).assertDoesNotExist()
+    }
+
+    @Test
+    fun theBypassLockdownWarningIsShown() {
+        show(appState = appState(lockdown = true))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_LOCKDOWN).assertExists()
+        rule.onNodeWithText(text(R.string.settings_bypass_lockdown)).assertExists()
+    }
+
+    @Test
+    fun aBypassLoadErrorIsShown() {
+        show(appState = appState(bypassError = BypassError.LOAD, bypassLoaded = true))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_ERROR).assertExists()
+        rule.onNodeWithText(text(R.string.settings_bypass_load_failed)).assertExists()
+        rule.onNodeWithTag(SettingsTags.BYPASS_SWITCH).assertIsEnabled()
+    }
+
+    @Test
+    fun aBypassSaveErrorIsShown() {
+        show(appState = appState(bypassError = BypassError.SAVE, bypassEnabled = true))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_ERROR).assertExists()
+        rule.onNodeWithText(text(R.string.settings_bypass_save_failed)).assertExists()
+    }
+
+    @Test
+    fun theBypassRowStaysReachableWhenEngineSettingsFail() {
+        show(state(loading = false, loaded = false, snapshot = null, loadError = "daemon offline"))
+
+        scrollTo(SettingsTags.BYPASS_ROW)
+        rule.onNodeWithTag(SettingsTags.BYPASS_ROW).assertExists()
+        rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
+    }
+
     // ---- notices and content states -------------------------------------
 
     @Test
@@ -514,6 +605,10 @@ class SettingsScreenTest {
         launchError: String? = null,
         splitMode: SplitMode = SplitMode.OFF,
         splitAppCount: Int = 0,
+        bypassEnabled: Boolean = false,
+        bypassLoaded: Boolean = true,
+        bypassNeedsReconnect: Boolean = false,
+        bypassError: BypassError? = null,
     ) = SettingsAppState(
         theme = ThemeId.LIGHT,
         accent = KumihoAccent.BLUE,
@@ -525,6 +620,10 @@ class SettingsScreenTest {
         launchError = launchError,
         splitMode = splitMode,
         splitAppCount = splitAppCount,
+        bypassEnabled = bypassEnabled,
+        bypassLoaded = bypassLoaded,
+        bypassNeedsReconnect = bypassNeedsReconnect,
+        bypassError = bypassError,
     )
 
     private fun actions() = SettingsActions(
@@ -544,6 +643,7 @@ class SettingsScreenTest {
         onOpenBatterySettings = { calls += "battery-settings" },
         onOpenVpnSettings = { calls += "vpn-settings" },
         onDismissLaunchError = { calls += "dismiss-launch-error" },
+        onToggleBypass = { calls += "bypass-$it" },
         onOpenSplitTunneling = { calls += "split" },
     )
 

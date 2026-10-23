@@ -223,6 +223,7 @@ class SplitTunnelScreenshotsTest {
         batteryUnrestricted = false,
         splitMode = mode,
         splitAppCount = count,
+        bypassLoaded = true,
     )
 
     private fun noOpActions() = SplitTunnelActions(
@@ -253,6 +254,7 @@ class SplitTunnelScreenshotsTest {
         onOpenBatterySettings = {},
         onOpenVpnSettings = {},
         onDismissLaunchError = {},
+        onToggleBypass = {},
         onOpenSplitTunneling = {},
     )
 

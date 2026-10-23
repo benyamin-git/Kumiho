@@ -147,6 +147,7 @@ class SettingsScreenshotsTest {
         lockdown = true,
         notificationsAllowed = false,
         batteryUnrestricted = false,
+        bypassLoaded = true,
     )
 
     private fun noOpActions() = SettingsActions(
@@ -166,16 +167,17 @@ class SettingsScreenshotsTest {
         onOpenBatterySettings = {},
         onOpenVpnSettings = {},
         onDismissLaunchError = {},
+        onToggleBypass = {},
     )
 
     private companion object {
         /**
          * The kill-switch item's index: eight app items, the Split tunneling
-         * row, the Connection header and its seven rows, the Android header and
-         * its explanation precede it. Scrolling here frames the two Android
-         * rows above the Advanced group.
+         * row, the app-owned Keep connections row, the Connection header and
+         * its seven rows, the Android header and its explanation precede it.
+         * Scrolling here frames the two Android rows above the Advanced group.
          */
-        const val ANDROID_START_INDEX = 19
+        const val ANDROID_START_INDEX = 20
 
         val SETTINGS = Settings(
             socksPort = 1080,

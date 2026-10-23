@@ -21,15 +21,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -39,11 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -55,6 +60,8 @@ import androidx.core.net.toUri
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.BuildConfig
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AllowBypassState
+import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.permissions.PermissionController
@@ -66,6 +73,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.vpn.ServiceState
 import dev.benyamin.kumiho.vpn.SplitMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,6 +97,9 @@ fun SettingsRoute(
     val engine by coordinator.engine.collectAsStateWithLifecycle()
     val paletteState by container.themeRepository.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // Re-entering Settings restarts a failed read; start() is idempotent.
+    LaunchedEffect(Unit) { container.allowBypassRepository.start() }
 
     // Split tunneling is a nested page inside Settings: it keeps the shell's
     // top bar and bottom navigation, provides its own back row, and survives
@@ -124,6 +135,11 @@ fun SettingsRoute(
     }
     val state by settingsViewModel.state.collectAsStateWithLifecycle()
     val splitState by container.splitTunnelRepository.state.collectAsStateWithLifecycle()
+    val bypassState by container.allowBypassRepository.state
+        .collectAsStateWithLifecycle()
+    val bypassReconnect = remember(serviceState, bypassState) {
+        bypassReconnectRequired(serviceState, bypassState)
+    }
 
     val colors = (paletteState as? PaletteState.Ready)?.colors
     val theme = colors?.theme ?: ThemeId.LIGHT
@@ -182,6 +198,10 @@ fun SettingsRoute(
             launchError = launchError,
             splitMode = splitState.settings.mode,
             splitAppCount = splitState.settings.packages.size,
+            bypassEnabled = bypassState.enabled,
+            bypassLoaded = !bypassState.loading,
+            bypassNeedsReconnect = bypassReconnect,
+            bypassError = bypassState.error,
         ),
         actions = SettingsActions(
             onToggleAdvanced = settingsViewModel::toggleAdvanced,
@@ -208,11 +228,23 @@ fun SettingsRoute(
             },
             onOpenVpnSettings = { open(PermissionController.vpnSettingsIntent()) },
             onDismissLaunchError = { launchError = null },
+            onToggleBypass = container.allowBypassRepository::setEnabled,
             onOpenSplitTunneling = { splitOpen = true },
         ),
         modifier = modifier,
     )
 }
+
+/**
+ * A live full tunnel built with a different allow-bypass value. Reuse the
+ * split screen's full-tunnel states; proxy-only and idle sessions never warn.
+ */
+internal fun bypassReconnectRequired(
+    state: ServiceState,
+    bypass: AllowBypassState,
+): Boolean = !bypass.loading &&
+    bypass.enabled != bypass.applied &&
+    splitReconnectRequired(state)
 
 private fun Context.isIgnoringBatteryOptimizations(): Boolean {
     val power = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
@@ -355,12 +387,18 @@ private fun SettingsList(
             )
         }
         // App-level and deliberately outside the engine snapshot: the split
-        // selection lives in DataStore and stays reachable while engine
-        // settings load or fail.
+        // selection and the allow-bypass choice live in DataStore and stay
+        // reachable while engine settings load or fail.
         item(key = "split") {
             SplitTunnelRow(
                 appState = appState,
                 onClick = actions.onOpenSplitTunneling,
+            )
+        }
+        item(key = "bypass") {
+            BypassSettingRow(
+                appState = appState,
+                onToggle = actions.onToggleBypass,
             )
         }
 
@@ -467,6 +505,123 @@ private fun SplitTunnelRow(
                 modifier = Modifier.size(24.dp),
             )
         }
+    }
+}
+
+/**
+ * The app-owned allow-bypass choice. It renders from DataStore state, not the
+ * engine snapshot, so it stays usable while engine settings load or fail.
+ *
+ * The On/Off word stays visible in every state; the warnings and the error are
+ * words with an icon, never colour alone.
+ */
+@Composable
+private fun BypassSettingRow(
+    appState: SettingsAppState,
+    onToggle: (Boolean) -> Unit,
+) {
+    val title = stringResource(R.string.settings_bypass_title)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(SettingsTags.BYPASS_ROW)
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.settings_bypass_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = stringResource(
+                    if (appState.bypassEnabled) R.string.settings_on else R.string.settings_off,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(SettingsTags.BYPASS_VALUE),
+            )
+            Switch(
+                checked = appState.bypassEnabled,
+                onCheckedChange = onToggle,
+                enabled = appState.bypassLoaded,
+                modifier = Modifier
+                    .testTag(SettingsTags.BYPASS_SWITCH)
+                    .semantics { contentDescription = title },
+            )
+        }
+        if (appState.bypassNeedsReconnect) {
+            BypassNotice(
+                text = stringResource(R.string.settings_bypass_reconnect),
+                tint = MaterialTheme.colorScheme.primary,
+                icon = Icons.Filled.Info,
+                tag = SettingsTags.BYPASS_RECONNECT,
+            )
+        }
+        if (appState.lockdown) {
+            BypassNotice(
+                text = stringResource(R.string.settings_bypass_lockdown),
+                tint = LocalKumihoColors.current.warning,
+                icon = Icons.Filled.Warning,
+                tag = SettingsTags.BYPASS_LOCKDOWN,
+            )
+        }
+        appState.bypassError?.let { error ->
+            BypassNotice(
+                text = stringResource(
+                    when (error) {
+                        BypassError.LOAD -> R.string.settings_bypass_load_failed
+                        BypassError.SAVE -> R.string.settings_bypass_save_failed
+                    },
+                ),
+                tint = LocalKumihoColors.current.loss,
+                icon = Icons.Filled.Warning,
+                tag = SettingsTags.BYPASS_ERROR,
+            )
+        }
+    }
+}
+
+/** One fixed warning or error line under the allow-bypass row. */
+@Composable
+private fun BypassNotice(
+    text: String,
+    tint: Color,
+    icon: ImageVector,
+    tag: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.Space1)
+            .testTag(tag),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(16.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

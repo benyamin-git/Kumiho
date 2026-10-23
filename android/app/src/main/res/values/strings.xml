@@ -352,6 +352,13 @@
         <item quantity="other">Including %1$d apps</item>
     </plurals>
 
+    <string name="settings_bypass_title">Keep connections outside the tunnel</string>
+    <string name="settings_bypass_hint">Keeps LAN and other already-bypassed connections open when Kumiho connects or disconnects. Normal traffic still uses the tunnel, but apps that deliberately bind to Wi-Fi or mobile data can bypass it. Android lockdown still overrides this; applies on the next connect.</string>
+    <string name="settings_bypass_reconnect">The tunnel is up. Reconnect to apply this setting.</string>
+    <string name="settings_bypass_lockdown">Lockdown is on, so Android still closes connections when the VPN changes.</string>
+    <string name="settings_bypass_load_failed">This setting could not be loaded, so it stays off.</string>
+    <string name="settings_bypass_save_failed">This setting could not be saved. The previous value is still in use.</string>
+
     <string name="split_back">Back to settings</string>
     <string name="split_apply_note">Changes are saved immediately and apply on the next connect.</string>
     <string name="split_reconnect">The tunnel is up. Reconnect to apply this selection.</string>
