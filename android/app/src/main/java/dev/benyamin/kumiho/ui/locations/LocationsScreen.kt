@@ -107,7 +107,6 @@ fun LocationsRoute(
             onQueryChange = locationsViewModel::onQueryChange,
             onClearQuery = locationsViewModel::clearQuery,
             onToggleCountry = locationsViewModel::toggleCountry,
-            onToggleCity = locationsViewModel::toggleCity,
             onSelect = locationsViewModel::select,
             onRefresh = locationsViewModel::refresh,
             onRetryLoad = locationsViewModel::retryLoad,
@@ -126,7 +125,6 @@ data class LocationsActions(
     val onQueryChange: (String) -> Unit,
     val onClearQuery: () -> Unit,
     val onToggleCountry: (String) -> Unit,
-    val onToggleCity: (String, String) -> Unit,
     val onSelect: (Country, City, Server) -> Unit,
     val onRefresh: () -> Unit,
     val onRetryLoad: () -> Unit,
@@ -140,7 +138,7 @@ data class LocationsActions(
 /**
  * The stateless Locations screen: a pinned search field and toolbar, the
  * current selection, the connected hint, the notice banner and the full
- * country/city/server tree.
+ * country/server tree.
  *
  * It makes no engine, service or Android call, so a Compose test renders it
  * from fake state. Nothing here selects or connects on its own: a server row
@@ -667,12 +665,8 @@ private fun Tree(state: LocationsState, actions: LocationsActions) {
                 is LocationRow.CountryRow -> CountryRow(
                     row = row,
                     searching = state.searching,
+                    latency = state.countryLatency(row.country),
                     onToggle = actions.onToggleCountry,
-                )
-                is LocationRow.CityRow -> CityRow(
-                    row = row,
-                    searching = state.searching,
-                    onToggle = actions.onToggleCity,
                 )
                 is LocationRow.ServerRow -> ServerRow(
                     row = row,
@@ -690,6 +684,7 @@ private fun Tree(state: LocationsState, actions: LocationsActions) {
 private fun CountryRow(
     row: LocationRow.CountryRow,
     searching: Boolean,
+    latency: LatencyState,
     onToggle: (String) -> Unit,
 ) {
     val name = if (LocationTree.isRecommended(row.country)) {
@@ -698,42 +693,29 @@ private fun CountryRow(
         row.country.name
     }
     val flag = CountryFlags.emoji(row.country.code)
+    val serverCount = row.country.cities.sumOf { it.servers.size }
     KumihoRow(
         title = name,
         titlePrefix = flag.takeIf { it.isNotEmpty() },
+        subtitle = pluralStringResource(R.plurals.locations_country_servers, serverCount, serverCount),
         modifier = Modifier
             .semantics { heading() }
             .testTag(countryRowTag(row.country.code)),
         onClick = if (searching) null else ({ onToggle(row.country.code) }),
-        trailing = if (searching) {
-            null
-        } else {
-            { ExpandGlyph(expanded = row.expanded) }
-        },
-    )
-}
-
-@Composable
-private fun CityRow(
-    row: LocationRow.CityRow,
-    searching: Boolean,
-    onToggle: (String, String) -> Unit,
-) {
-    KumihoRow(
-        title = row.city.name,
-        subtitle = pluralStringResource(
-            R.plurals.locations_city_servers,
-            row.city.servers.size,
-            row.city.servers.size,
-        ),
-        modifier = Modifier
-            .padding(start = Dimens.Space4)
-            .testTag(cityRowTag(row.country.code, row.city.code)),
-        onClick = if (searching) null else ({ onToggle(row.country.code, row.city.code) }),
-        trailing = if (searching) {
-            null
-        } else {
-            { ExpandGlyph(expanded = row.expanded) }
+        trailing = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+            ) {
+                Text(
+                    text = latencyText(latency),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!searching) {
+                    ExpandGlyph(expanded = row.expanded)
+                }
+            }
         },
     )
 }
@@ -803,7 +785,7 @@ private fun ServerRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                ServerDetail(server)
+                ServerDetail(server = server, city = row.city)
             }
             if (saving) {
                 CircularProgressIndicator(
@@ -830,9 +812,9 @@ private fun ServerRow(
     }
 }
 
-/** `connect, quic · port 2499`, plus the honest quarantine mark. */
+/** `New York · connect, quic · port 2499`, plus the honest quarantine mark. */
 @Composable
-private fun ServerDetail(server: Server) {
+private fun ServerDetail(server: Server, city: City) {
     val separator = stringResource(R.string.locations_selection_separator)
     val protocols = server.protocols
         .map { it.name.trim() }
@@ -849,7 +831,7 @@ private fun ServerDetail(server: Server) {
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
     ) {
         Text(
-            text = detail,
+            text = stringResource(R.string.locations_server_city, city.name, detail),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

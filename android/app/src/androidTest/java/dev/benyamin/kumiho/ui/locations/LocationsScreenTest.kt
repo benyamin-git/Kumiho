@@ -69,7 +69,7 @@ class LocationsScreenTest {
 
     @Test
     fun theTreeIsRECFirstAndNamesTheRecommendedCountry() {
-        show(state(expandedCountries = setOf("rec", "us"), expandedCities = setOf("us/nyc")))
+        show(state(expandedCountries = setOf("rec", "us")))
 
         val rec = rule.onNodeWithTag(countryRowTag("rec")).fetchSemanticsNode().boundsInRoot
         val us = rule.onNodeWithTag(countryRowTag("us")).fetchSemanticsNode().boundsInRoot
@@ -91,8 +91,12 @@ class LocationsScreenTest {
         )
 
         rule.onNodeWithText(EDGE_SERVER.hostname).assertExists()
-        rule.onNodeWithText("connect, quic · port 2499").assertExists()
-        rule.onNodeWithText(rule.activity.getString(R.string.locations_latency, 42L)).assertExists()
+        rule.onNodeWithText("New York · connect, quic · port 2499").assertExists()
+        // The country row carries the same number, so scope both by tag.
+        rule.onNodeWithTag(serverRowTag("us", "nyc", EDGE_ADDRESS))
+            .assertTextContains(rule.activity.getString(R.string.locations_latency, 42L))
+        rule.onNodeWithTag(countryRowTag("us"))
+            .assertTextContains(rule.activity.getString(R.string.locations_latency, 42L))
 
         // Never tested is an em dash, deliberately different from a timeout.
         rule.onAllNodesWithText(text(R.string.locations_latency_none)).onFirst().assertExists()
@@ -104,6 +108,15 @@ class LocationsScreenTest {
         scrollTo(serverRowTag("us", "nyc", LONG_ADDRESS))
         rule.onNodeWithText(LONG_SERVER.hostname).assertExists()
         rule.onNodeWithText(rule.activity.getString(R.string.locations_latency, 1_234L)).assertExists()
+    }
+
+    @Test
+    fun aServerRowNamesItsCity() {
+        show(state())
+
+        scrollTo(serverRowTag("us", "nyc", SHARE_ADDRESS))
+        rule.onNodeWithTag(serverRowTag("us", "nyc", SHARE_ADDRESS))
+            .assertTextContains("New York · connect · port 443")
     }
 
     @Test
@@ -145,6 +158,42 @@ class LocationsScreenTest {
     }
 
     @Test
+    fun aCountryRowShowsItsServerCount() {
+        show(state())
+
+        rule.onNodeWithTag(countryRowTag("us")).assertTextContains(
+            rule.activity.resources.getQuantityString(R.plurals.locations_country_servers, 5, 5),
+        )
+        rule.onNodeWithTag(countryRowTag("rec")).assertTextContains(
+            rule.activity.resources.getQuantityString(R.plurals.locations_country_servers, 1, 1),
+        )
+        scrollTo(countryRowTag("de"))
+        rule.onNodeWithTag(countryRowTag("de")).assertTextContains(
+            rule.activity.resources.getQuantityString(R.plurals.locations_country_servers, 1, 1),
+        )
+    }
+
+    @Test
+    fun anExpandedOrCollapsedCountryRowShowsItsBestLatency() {
+        show(
+            state(
+                latency = mapOf(
+                    LocationTree.addressKey(EDGE_ADDRESS) to 10.0,
+                    LocationTree.addressKey(SHARE_ADDRESS) to 5.0,
+                    LocationTree.addressKey(WEST_ADDRESS) to null,
+                    LocationTree.addressKey(BER_ADDRESS) to 61.0,
+                ),
+            ),
+        )
+
+        rule.onNodeWithTag(countryRowTag("us"))
+            .assertTextContains(rule.activity.getString(R.string.locations_latency, 5L))
+        scrollTo(countryRowTag("de"))
+        rule.onNodeWithTag(countryRowTag("de"))
+            .assertTextContains(rule.activity.getString(R.string.locations_latency, 61L))
+    }
+
+    @Test
     fun withNoSelectionTheSummaryIsHonest() {
         show(state())
 
@@ -177,20 +226,11 @@ class LocationsScreenTest {
 
     @Test
     fun tappingACountryRequestsItsToggle() {
-        show(state(expandedCountries = emptySet(), expandedCities = emptySet()))
+        show(state(expandedCountries = emptySet()))
 
         rule.onNodeWithTag(countryRowTag("US")).performClick()
 
         assertEquals(listOf("toggle-country-us"), calls)
-    }
-
-    @Test
-    fun tappingACityRequestsItsToggle() {
-        show(state())
-
-        rule.onNodeWithTag(cityRowTag("us", "nyc")).performClick()
-
-        assertEquals(listOf("toggle-city-us-nyc"), calls)
     }
 
     // ---- selection and the connected hint --------------------------------
@@ -362,7 +402,7 @@ class LocationsScreenTest {
 
     @Test
     fun theToggleSaysExpandWhenNothingIsOpenAndRequestsIt() {
-        show(state(expandedCountries = emptySet(), expandedCities = emptySet()))
+        show(state(expandedCountries = emptySet()))
 
         rule.onNodeWithText(text(R.string.locations_expand_all)).assertExists()
         rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertIsEnabled().performClick()
@@ -372,7 +412,7 @@ class LocationsScreenTest {
 
     @Test
     fun theToggleSaysCollapseWhenAnythingIsOpenAndRequestsIt() {
-        show(state(expandedCountries = setOf("us"), expandedCities = emptySet()))
+        show(state(expandedCountries = setOf("us")))
 
         rule.onNodeWithText(text(R.string.locations_collapse_all)).assertExists()
         rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertIsEnabled().performClick()
@@ -415,7 +455,6 @@ class LocationsScreenTest {
         onQueryChange = { calls += "query-$it" },
         onClearQuery = { calls += "clear-query" },
         onToggleCountry = { calls += "toggle-country-$it" },
-        onToggleCity = { country, city -> calls += "toggle-city-$country-$city" },
         onSelect = { country, city, server ->
             calls += "select-${country.code}-${city.code}-${LocationTree.addressOf(server)}"
         },
@@ -435,7 +474,6 @@ class LocationsScreenTest {
         loadError: String? = null,
         query: String = "",
         expandedCountries: Set<String> = setOf("us"),
-        expandedCities: Set<String> = setOf("us/nyc", "us/sfo"),
         selection: LocationSelection? = null,
         latency: Map<String, Double?> = emptyMap(),
         testing: Boolean = false,
@@ -453,7 +491,6 @@ class LocationsScreenTest {
         notice = notice,
         query = query,
         expandedCountries = expandedCountries,
-        expandedCities = expandedCities,
         selection = selection,
         latency = latency,
         testing = testing,
@@ -489,6 +526,7 @@ class LocationsScreenTest {
         const val LONG_ADDRESS = "a-very-long-edge-hostname-that-needs-truncation.example.net:443"
         const val WEST_ADDRESS = "west.example.net:443"
         const val QUARANTINED_ADDRESS = "quarantined.example.net:443"
+        const val BER_ADDRESS = "ber.example.net:443"
 
         val REC = Country(
             code = "rec",

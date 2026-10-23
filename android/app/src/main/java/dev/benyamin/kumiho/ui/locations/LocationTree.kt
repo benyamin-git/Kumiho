@@ -46,7 +46,7 @@ object LocationTree {
     /** The expansion-set key for a country (normalized, so toggling is stable). */
     fun countryKey(country: Country): String = country.code.trim().lowercase()
 
-    /** The expansion-set key for a city inside a country. */
+    /** The normalized `country/city` path used in server row keys. */
     fun cityKey(country: Country, city: City): String =
         countryKey(country) + "/" + city.code.trim().lowercase()
 
@@ -55,16 +55,15 @@ object LocationTree {
      *
      * A non-blank [query] filters first ([LocationFilter]) and then opens every
      * matching branch, so the results are visible without the user expanding
-     * anything; the stored expansion sets are untouched, so clearing the query
+     * anything; the stored expansion set is untouched, so clearing the query
      * restores exactly what was open before. The country list is speed-ordered
-     * by [latency] ([orderedCountries]); the rows inside a country keep the
-     * engine order.
+     * by [latency] ([orderedCountries]) and an open country lists its servers
+     * through [orderedServers].
      */
     fun rows(
         countries: List<Country>,
         query: String = "",
         expandedCountries: Set<String> = emptySet(),
-        expandedCities: Set<String> = emptySet(),
         latency: Map<String, Double?> = emptyMap(),
     ): List<LocationRow> {
         val searching = query.isNotBlank()
@@ -74,13 +73,8 @@ object LocationTree {
             val countryOpen = searching || countryKey(country) in expandedCountries
             rows += LocationRow.CountryRow(country = country, expanded = countryOpen)
             if (!countryOpen) continue
-            for (city in country.cities) {
-                val cityOpen = searching || cityKey(country, city) in expandedCities
-                rows += LocationRow.CityRow(country = country, city = city, expanded = cityOpen)
-                if (!cityOpen) continue
-                for (server in city.servers) {
-                    rows += LocationRow.ServerRow(country = country, city = city, server = server)
-                }
+            for ((city, server) in orderedServers(country, latency)) {
+                rows += LocationRow.ServerRow(country = country, city = city, server = server)
             }
         }
         return rows
@@ -247,6 +241,31 @@ object LocationTree {
         !server.quarantined && server.hostname.isNotBlank() && server.port > 0
 
     /**
+     * A country's servers in display order: measured hosts first ascending,
+     * unmeasured ones after them; ties and unmeasured hosts keep the engine
+     * order through the flattened index. Cities stay attached for context.
+     */
+    private fun orderedServers(
+        country: Country,
+        latency: Map<String, Double?>,
+    ): List<Pair<City, Server>> {
+        val flattened = ArrayList<Pair<City, Server>>()
+        for (city in country.cities) {
+            for (server in city.servers) {
+                flattened += city to server
+            }
+        }
+        return flattened.withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<Pair<City, Server>>>(
+                    { measuredRtt(latency, it.value.second) ?: Double.POSITIVE_INFINITY },
+                    { it.index },
+                ),
+            )
+            .map { it.value }
+    }
+
+    /**
      * The engine order, speed-ordered: countries with a measurement first
      * (ascending), Recommended pinned before everything, and unmeasured
      * countries keeping their original order. The input list is never touched.
@@ -275,14 +294,6 @@ sealed interface LocationRow {
 
     data class CountryRow(val country: Country, val expanded: Boolean) : LocationRow {
         override val key: String get() = "country:" + LocationTree.countryKey(country)
-    }
-
-    data class CityRow(
-        val country: Country,
-        val city: City,
-        val expanded: Boolean,
-    ) : LocationRow {
-        override val key: String get() = "city:" + LocationTree.cityKey(country, city)
     }
 
     data class ServerRow(
@@ -367,16 +378,11 @@ object LocationsTags {
     const val NO_MATCH_CLEAR = "locations_no_match_clear"
 
     const val COUNTRY_PREFIX = "locations_country_"
-    const val CITY_PREFIX = "locations_city_"
     const val SERVER_PREFIX = "locations_server_"
 }
 
 /** The tag for one country row. */
 fun countryRowTag(code: String): String = LocationsTags.COUNTRY_PREFIX + code.lowercase()
-
-/** The tag for one city row. */
-fun cityRowTag(countryCode: String, cityCode: String): String =
-    LocationsTags.CITY_PREFIX + countryCode.lowercase() + "_" + cityCode.lowercase()
 
 /** The tag for one server row; the address keeps its punctuation. */
 fun serverRowTag(countryCode: String, cityCode: String, address: String): String =

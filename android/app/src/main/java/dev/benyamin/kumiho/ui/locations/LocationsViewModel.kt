@@ -163,8 +163,6 @@ data class LocationsState(
     val query: String = "",
     /** Country expansion keys ([LocationTree.countryKey]). */
     val expandedCountries: Set<String> = emptySet(),
-    /** City expansion keys ([LocationTree.cityKey]). */
-    val expandedCities: Set<String> = emptySet(),
     /** The engine's reported selection, resolved against the tree. */
     val selection: LocationSelection? = null,
     /** The last RTT per address key; a null value is a timeout, an absent key is untested. */
@@ -186,7 +184,7 @@ data class LocationsState(
 
     /** The visible rows for the current query and expansion state. */
     val rows: List<LocationRow>
-        get() = LocationTree.rows(countries, query, expandedCountries, expandedCities)
+        get() = LocationTree.rows(countries, query, expandedCountries, latency)
 
     /** The `host:port` targets a Test speed would send. */
     val testTargets: List<String> get() = LocationTree.pingTargets(rows)
@@ -194,9 +192,9 @@ data class LocationsState(
     /** The whole loaded tree's `host:port` targets, independent of filter and expansion. */
     val allTargets: List<String> get() = LocationTree.pingAllTargets(countries)
 
-    /** True when a country or city is stored as open, so the toggle reads "Collapse all". */
+    /** True when a country is stored as open, so the toggle reads "Collapse all". */
     val anyExpanded: Boolean
-        get() = expandedCountries.isNotEmpty() || expandedCities.isNotEmpty()
+        get() = expandedCountries.isNotEmpty()
 
     /** Honest screen states, each true only when it is the only thing to show. */
     val showLoading: Boolean get() = loading && !hasTree
@@ -219,6 +217,10 @@ data class LocationsState(
     val canToggleAll: Boolean get() = hasTree && query.isEmpty()
 
     fun latencyOf(server: Server): LatencyState = LocationTree.latencyOf(latency, server)
+
+    /** The LatencyState a country row shows (D9). */
+    fun countryLatency(country: Country): LatencyState =
+        LocationTree.countryLatencyOf(latency, country)
 
     fun isSelected(country: Country, city: City, server: Server): Boolean =
         selection?.marks(country, city, server) == true
@@ -389,45 +391,20 @@ class LocationsViewModel(
         }
     }
 
-    fun toggleCity(countryCode: String, cityCode: String) {
-        val key = countryCode.trim().lowercase() + "/" + cityCode.trim().lowercase()
-        mutableState.update { current ->
-            current.copy(
-                expandedCities = if (key in current.expandedCities) {
-                    current.expandedCities - key
-                } else {
-                    current.expandedCities + key
-                },
-            )
-        }
-    }
-
     /**
-     * Opens every country and city, or clears both stored sets when anything is
-     * already open. The filter-forced view never counts as stored expansion and
-     * the control is inert while a query is active.
+     * Opens every country, or clears the stored set when anything is already
+     * open. The filter-forced view never counts as stored expansion and the
+     * control is inert while a query is active.
      */
     fun toggleAll() {
         val current = mutableState.value
         if (current.query.isNotEmpty() || !current.hasTree) return
         if (current.anyExpanded) {
-            mutableState.update {
-                it.copy(expandedCountries = emptySet(), expandedCities = emptySet())
-            }
+            mutableState.update { it.copy(expandedCountries = emptySet()) }
             return
         }
-        val countries = current.countries
-        val allCountries = countries.mapTo(mutableSetOf(), LocationTree::countryKey)
-        val allCities = buildSet {
-            for (country in countries) {
-                for (city in country.cities) {
-                    add(LocationTree.cityKey(country, city))
-                }
-            }
-        }
-        mutableState.update {
-            it.copy(expandedCountries = allCountries, expandedCities = allCities)
-        }
+        val allCountries = current.countries.mapTo(mutableSetOf(), LocationTree::countryKey)
+        mutableState.update { it.copy(expandedCountries = allCountries) }
     }
 
     // ---- selection -------------------------------------------------------

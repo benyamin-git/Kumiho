@@ -62,43 +62,54 @@ class LocationTreeTest {
     }
 
     @Test
-    fun `a country expands to its cities but not yet to its servers`() {
+    fun `a country expands straight to its servers`() {
         val rows = LocationTree.rows(ORDERED, expandedCountries = setOf("us"))
 
         assertEquals(
-            listOf("country:rec", "country:us", "city:us/nyc", "city:us/sfo", "country:de"),
+            listOf(
+                "country:rec",
+                "country:us",
+                "server:us/nyc/edge.example.net:2499",
+                "server:us/nyc/share.example.net:443",
+                "server:us/sfo/share.example.net:443",
+                "country:de",
+            ),
             rows.map { it.key },
         )
     }
 
     @Test
-    fun `a city expands to its servers`() {
-        val rows = LocationTree.rows(
-            ORDERED,
-            expandedCountries = setOf("us"),
-            expandedCities = setOf("us/nyc"),
-        )
+    fun `server rows keep their city for context`() {
+        val servers = LocationTree.rows(ORDERED, expandedCountries = setOf("us"))
+            .filterIsInstance<LocationRow.ServerRow>()
 
-        val servers = rows.filterIsInstance<LocationRow.ServerRow>()
-        assertEquals(listOf("edge.example.net:2499", "share.example.net:443"), servers.map { LocationTree.addressOf(it.server) })
+        assertEquals(listOf("nyc", "nyc", "sfo"), servers.map { it.city.code })
         assertEquals("us", servers.first().country.code)
-        assertEquals("nyc", servers.first().city.code)
     }
 
     @Test
     fun `row keys are stable and unique`() {
-        val rows = LocationTree.rows(
-            ORDERED,
-            expandedCountries = setOf("rec", "us", "de"),
-            expandedCities = setOf("rec/rec", "us/nyc", "us/sfo", "de/ber"),
-        )
+        val rows = LocationTree.rows(ORDERED, expandedCountries = setOf("rec", "us", "de"))
 
+        assertEquals(
+            listOf(
+                "country:rec",
+                "server:rec/rec/auto.example.net:443",
+                "country:us",
+                "server:us/nyc/edge.example.net:2499",
+                "server:us/nyc/share.example.net:443",
+                "server:us/sfo/share.example.net:443",
+                "country:de",
+                "server:de/ber/ber.example.net:443",
+                "server:de/ber/quarantined.example.net:443",
+            ),
+            rows.map { it.key },
+        )
         assertEquals(rows.size, rows.map { it.key }.toSet().size)
-        assertEquals(rows.map { it.key }, LocationTree.rows(
-            ORDERED,
-            expandedCountries = setOf("rec", "us", "de"),
-            expandedCities = setOf("rec/rec", "us/nyc", "us/sfo", "de/ber"),
-        ).map { it.key })
+        assertEquals(
+            rows.map { it.key },
+            LocationTree.rows(ORDERED, expandedCountries = setOf("rec", "us", "de")).map { it.key },
+        )
     }
 
     @Test
@@ -106,7 +117,7 @@ class LocationTreeTest {
         val rows = LocationTree.rows(ORDERED, query = "edge")
 
         assertEquals(
-            listOf("country:us", "city:us/nyc", "server:us/nyc/edge.example.net:2499"),
+            listOf("country:us", "server:us/nyc/edge.example.net:2499"),
             rows.map { it.key },
         )
         // The user's expansion is untouched: clearing the query returns to none.
@@ -117,11 +128,7 @@ class LocationTreeTest {
 
     @Test
     fun `ping targets are the visible servers deduped by address`() {
-        val rows = LocationTree.rows(
-            ORDERED,
-            expandedCountries = setOf("us"),
-            expandedCities = setOf("us/nyc", "us/sfo"),
-        )
+        val rows = LocationTree.rows(ORDERED, expandedCountries = setOf("us"))
 
         // share.example.net:443 appears under both cities; it is probed once.
         assertEquals(
@@ -149,11 +156,7 @@ class LocationTreeTest {
             ),
         )
 
-        val rows = LocationTree.rows(
-            listOf(country),
-            expandedCountries = setOf("us"),
-            expandedCities = setOf("us/nyc"),
-        )
+        val rows = LocationTree.rows(listOf(country), expandedCountries = setOf("us"))
 
         assertEquals(listOf("edge.example.net:2499"), LocationTree.pingTargets(rows))
     }
@@ -206,11 +209,7 @@ class LocationTreeTest {
 
     @Test
     fun `a quarantined server is still visible for context`() {
-        val rows = LocationTree.rows(
-            ORDERED,
-            expandedCountries = setOf("de"),
-            expandedCities = setOf("de/ber"),
-        )
+        val rows = LocationTree.rows(ORDERED, expandedCountries = setOf("de"))
 
         assertTrue(LocationTree.visibleServers(rows).any { it.quarantined })
         assertFalse(LocationTree.pingTargets(rows).any { it.contains("quarantined") })
@@ -348,11 +347,8 @@ class LocationTreeTest {
             LocationTree.rows(countries).map { it.key },
         )
 
-        val servers = LocationTree.rows(
-            countries,
-            expandedCountries = setOf("us"),
-            expandedCities = setOf("us/nyc", "us/sfo"),
-        ).filterIsInstance<LocationRow.ServerRow>()
+        val servers = LocationTree.rows(countries, expandedCountries = setOf("us"))
+            .filterIsInstance<LocationRow.ServerRow>()
 
         assertEquals(listOf("nyc", "nyc", "sfo"), servers.map { it.city.code })
         assertEquals(
@@ -520,15 +516,75 @@ class LocationTreeTest {
         assertEquals(
             listOf(
                 "country:de",
-                "city:de/ber",
                 "server:de/ber/ber.example.net:443",
                 "server:de/ber/quarantined.example.net:443",
             ),
             LocationTree.rows(ORDERED, query = "berlin").map { it.key },
         )
         assertEquals(
-            listOf("country:us", "city:us/nyc", "server:us/nyc/edge.example.net:2499"),
+            listOf("country:us", "server:us/nyc/edge.example.net:2499"),
             LocationTree.rows(ORDERED, query = "edge.example").map { it.key },
+        )
+    }
+
+    // ---- server speed order ----------------------------------------------
+
+    @Test
+    fun `servers sort measured first then keep input order`() {
+        val rows = LocationTree.rows(
+            ORDERED,
+            expandedCountries = setOf("us"),
+            latency = mapOf(latencyKey("share.example.net") to 90.0),
+        )
+
+        assertEquals(
+            listOf(
+                "country:rec",
+                "country:us",
+                "server:us/nyc/share.example.net:443",
+                "server:us/sfo/share.example.net:443",
+                "server:us/nyc/edge.example.net:2499",
+                "country:de",
+            ),
+            rows.map { it.key },
+        )
+
+        val ascending = LocationTree.rows(
+            ORDERED,
+            expandedCountries = setOf("us"),
+            latency = mapOf(
+                latencyKey("share.example.net") to 90.0,
+                latencyKey("edge.example.net", 2499) to 10.0,
+            ),
+        )
+        assertEquals(
+            listOf(
+                "server:us/nyc/edge.example.net:2499",
+                "server:us/nyc/share.example.net:443",
+                "server:us/sfo/share.example.net:443",
+            ),
+            ascending.filterIsInstance<LocationRow.ServerRow>().map { it.key },
+        )
+    }
+
+    @Test
+    fun `equal measurements keep input order`() {
+        val rows = LocationTree.rows(
+            ORDERED,
+            expandedCountries = setOf("us"),
+            latency = mapOf(
+                latencyKey("share.example.net") to 42.0,
+                latencyKey("edge.example.net", 2499) to 42.0,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                "server:us/nyc/edge.example.net:2499",
+                "server:us/nyc/share.example.net:443",
+                "server:us/sfo/share.example.net:443",
+            ),
+            rows.filterIsInstance<LocationRow.ServerRow>().map { it.key },
         )
     }
 

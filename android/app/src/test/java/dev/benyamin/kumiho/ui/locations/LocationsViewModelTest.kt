@@ -289,7 +289,7 @@ class LocationsViewModelTest {
     // ---- filter and expansion -------------------------------------------
 
     @Test
-    fun `expanding and collapsing a country and a city drives the visible rows`() =
+    fun `expanding and collapsing a country drives the visible rows`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
@@ -298,26 +298,18 @@ class LocationsViewModelTest {
             viewModel.toggleCountry("US")
             runCurrent()
             assertEquals(
-                listOf("country:rec", "country:us", "city:us/nyc", "city:us/sfo", "country:de"),
-                viewModel.state.value.rows.map { it.key },
-            )
-
-            viewModel.toggleCity("us", "NYC")
-            runCurrent()
-            assertEquals(
                 listOf(
                     "country:rec",
                     "country:us",
-                    "city:us/nyc",
                     "server:us/nyc/edge.example.net:2499",
                     "server:us/nyc/share.example.net:443",
-                    "city:us/sfo",
+                    "server:us/sfo/share.example.net:443",
+                    "server:us/sfo/west.example.net:443",
                     "country:de",
                 ),
                 viewModel.state.value.rows.map { it.key },
             )
 
-            viewModel.toggleCity("us", "nyc")
             viewModel.toggleCountry("us")
             runCurrent()
             assertEquals(3, viewModel.state.value.rows.size)
@@ -330,7 +322,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
             val before = viewModel.state.value.rows.map { it.key }
 
@@ -340,7 +331,12 @@ class LocationsViewModelTest {
             val filtered = viewModel.state.value
             assertTrue(filtered.searching)
             assertEquals("country:de", filtered.rows.first().key)
-            assertTrue("matching branches open without a tap", filtered.rows.any { it is LocationRow.CityRow })
+            assertEquals(
+                "matching branches open without a tap",
+                listOf("ber.example.net:443", "quarantined.example.net:443"),
+                filtered.rows.filterIsInstance<LocationRow.ServerRow>()
+                    .map { LocationTree.addressOf(it.server) },
+            )
             assertEquals(
                 "only the matching branch is probed",
                 listOf("ber.example.net:443"),
@@ -379,8 +375,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
-            viewModel.toggleCity("us", "sfo")
             runCurrent()
 
             assertEquals(
@@ -405,7 +399,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
             viewModel.onQueryChange("edge")
             runCurrent()
@@ -426,13 +419,15 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
 
             viewModel.testSpeed()
             runCurrent()
 
-            assertEquals(listOf(listOf(EDGE, "share.example.net:443")), gateway.pingCalls)
+            assertEquals(
+                listOf(listOf(EDGE, "share.example.net:443", "west.example.net:443")),
+                gateway.pingCalls,
+            )
             assertTrue(viewModel.state.value.testing)
             assertFalse(viewModel.state.value.canTest)
 
@@ -448,7 +443,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
             assertEquals(LatencyState.Untested, viewModel.state.value.latencyOf(EDGE_SERVER))
 
@@ -472,16 +466,16 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
             viewModel.testSpeed()
             runCurrent()
 
             gateway.emitPing(EDGE, rttMs = 42.4)
             runCurrent()
-            assertTrue("one host is still pending", viewModel.state.value.testing)
+            assertTrue("not every host has answered yet", viewModel.state.value.testing)
 
             gateway.emitPing(SHARE.uppercase(), rttMs = 9.0)
+            gateway.emitPing(WEST, rttMs = 88.0)
             runCurrent()
 
             assertFalse(viewModel.state.value.testing)
@@ -496,8 +490,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
-            viewModel.toggleCity("us", "sfo")
             runCurrent()
             viewModel.testSpeed()
             runCurrent()
@@ -521,8 +513,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
-            viewModel.toggleCity("us", "sfo")
             runCurrent()
             viewModel.testSpeed()
             runCurrent()
@@ -533,7 +523,7 @@ class LocationsViewModelTest {
             assertFalse(viewModel.state.value.testing)
 
             // Narrow the view to one city and test again; only its hosts are probed.
-            viewModel.toggleCity("us", "sfo")
+            viewModel.onQueryChange("new york")
             runCurrent()
             viewModel.testSpeed()
             runCurrent()
@@ -561,7 +551,6 @@ class LocationsViewModelTest {
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
 
             gateway.pingError = IllegalStateException("ping unavailable")
@@ -607,7 +596,7 @@ class LocationsViewModelTest {
     // ---- ping all --------------------------------------------------------
 
     @Test
-    fun `Ping all sends every loaded target even when the filter shows one city`() =
+    fun `Ping all sends every loaded target even when the filter narrows the tree`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
@@ -662,13 +651,60 @@ class LocationsViewModelTest {
         }
 
     @Test
+    fun `a country's latency is its fastest measured server`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.pingAll()
+            runCurrent()
+            gateway.emitPing(EDGE, rttMs = 42.4)
+            gateway.emitPing(SHARE, rttMs = 9.0)
+            gateway.emitPing(WEST, rttMs = null)
+            gateway.emitPing(AUTO, rttMs = 20.0)
+            gateway.emitPing(BER_ADDRESS, rttMs = null)
+            runCurrent()
+
+            val state = viewModel.state.value
+            assertEquals(LatencyState.Measured(9), state.countryLatency(US))
+            assertEquals(LatencyState.Measured(20), state.countryLatency(REC))
+            assertEquals(LatencyState.Timeout, state.countryLatency(DE))
+            assertEquals(
+                listOf("country:rec", "country:us", "country:de"),
+                state.rows.map { it.key },
+            )
+        }
+
+    @Test
+    fun `live results reorder the countries by measured speed`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(REC, US, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.pingAll()
+            runCurrent()
+            gateway.emitPing(AUTO, rttMs = 20.0)
+            gateway.emitPing(EDGE, rttMs = 42.0)
+            gateway.emitPing(SHARE, rttMs = null)
+            gateway.emitPing(WEST, rttMs = null)
+            gateway.emitPing(BER_ADDRESS, rttMs = 5.0)
+            runCurrent()
+
+            assertEquals(
+                listOf("country:rec", "country:de", "country:us"),
+                viewModel.state.value.rows.map { it.key },
+            )
+        }
+
+    @Test
     fun `Test speed and Ping all are mutually exclusive in both orders`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
             runCurrent()
             viewModel.toggleCountry("us")
-            viewModel.toggleCity("us", "nyc")
             runCurrent()
 
             viewModel.testSpeed()
@@ -693,7 +729,7 @@ class LocationsViewModelTest {
         }
 
     @Test
-    fun `Expand all opens every country and city and Collapse all closes them`() =
+    fun `Expand all opens every country and Collapse all closes them`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
@@ -707,7 +743,6 @@ class LocationsViewModelTest {
             val expanded = viewModel.state.value
             assertTrue(expanded.anyExpanded)
             assertEquals(setOf("rec", "us", "de"), expanded.expandedCountries)
-            assertEquals(setOf("rec/rec", "us/nyc", "us/sfo", "de/ber"), expanded.expandedCities)
 
             viewModel.toggleAll()
             runCurrent()
@@ -715,7 +750,6 @@ class LocationsViewModelTest {
             val collapsed = viewModel.state.value
             assertFalse(collapsed.anyExpanded)
             assertTrue(collapsed.expandedCountries.isEmpty())
-            assertTrue(collapsed.expandedCities.isEmpty())
         }
 
     @Test

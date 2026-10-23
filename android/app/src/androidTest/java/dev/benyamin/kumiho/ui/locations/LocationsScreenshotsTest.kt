@@ -98,13 +98,12 @@ class LocationsScreenshotsTest {
         loaded = true,
         countries = COUNTRIES,
         expandedCountries = setOf("rec", "us", "de"),
-        expandedCities = setOf("rec/rec", "us/nyc", "us/sfo", "de/ber"),
         selection = LocationTree.currentSelection(COUNTRIES, "us", EDGE_ADDRESS),
         latency = mapOf(
             LocationTree.addressKey(EDGE_ADDRESS) to 42.4,
             LocationTree.addressKey(WEST_ADDRESS) to null,
             LocationTree.addressKey(LONG_ADDRESS) to 128.0,
-            LocationTree.addressKey(BER_ADDRESS) to 61.0,
+            LocationTree.addressKey(BER_ADDRESS) to 17.0,
         ),
         sessionActive = true,
     )
@@ -120,7 +119,6 @@ class LocationsScreenshotsTest {
         onQueryChange = {},
         onClearQuery = {},
         onToggleCountry = {},
-        onToggleCity = { _, _ -> },
         onSelect = { _, _, _ -> },
         onRefresh = {},
         onRetryLoad = {},

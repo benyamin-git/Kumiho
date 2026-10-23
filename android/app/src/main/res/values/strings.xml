@@ -256,7 +256,8 @@
     <string name="locations_collapse">Collapse</string>
     <string name="locations_server_protocols">%1$s · port %2$d</string>
     <string name="locations_server_port">port %1$d</string>
-    <plurals name="locations_city_servers">
+    <string name="locations_server_city">%1$s · %2$s</string>
+    <plurals name="locations_country_servers">
         <item quantity="one">%1$d server</item>
         <item quantity="other">%1$d servers</item>
     </plurals>
