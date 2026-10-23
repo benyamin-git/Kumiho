@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -504,22 +505,22 @@ func TestShutdownCancelsBrowserFlow(t *testing.T) {
 }
 
 func TestLogoutCancelsBrowserFlow(t *testing.T) {
-	entered := make(chan struct{})
+	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseHandler := func() { releaseOnce.Do(func() { close(release) }) }
 	exp := time.Now().Add(time.Hour).Unix()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v2/vpn/login/verify" {
 			http.NotFound(w, r)
 			return
 		}
-		select {
-		case entered <- struct{}{}:
-		default:
-		}
+		entered <- struct{}{}
 		<-release
 		fmt.Fprintf(w, `{"user":{"email":"late@example.com"},"token":%q}`, browserTestJWT(exp))
 	}))
 	t.Cleanup(srv.Close)
+	t.Cleanup(releaseHandler)
 	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
@@ -540,7 +541,7 @@ func TestLogoutCancelsBrowserFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertBrowserListenerClosed(t, ls.URL)
-	close(release)
+	releaseHandler()
 	time.Sleep(150 * time.Millisecond)
 
 	st := ctrl.Snapshot()
