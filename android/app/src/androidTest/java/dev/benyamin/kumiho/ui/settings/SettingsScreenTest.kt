@@ -480,6 +480,8 @@ class SettingsScreenTest {
         scrollTo(SettingsTags.BYPASS_ROW)
         rule.onNodeWithTag(SettingsTags.BYPASS_LOCKDOWN).assertExists()
         rule.onNodeWithText(text(R.string.settings_bypass_lockdown)).assertExists()
+        rule.onNodeWithTag(SettingsTags.BYPASS_SWITCH).assertIsEnabled().performClick()
+        assertEquals(listOf("bypass-true"), calls)
     }
 
     @Test
