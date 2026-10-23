@@ -23,16 +23,18 @@ import (
 // Command deadlines from the task table. Zero-timeout commands are
 // synchronous and use the facade root context directly.
 const (
-	locationsTimeout     = 45 * time.Second
-	connectTimeout       = 120 * time.Second
-	disconnectTimeout    = 20 * time.Second
-	settingsSetTimeout   = 20 * time.Second
-	accountTimeout       = 35 * time.Second
-	loginPasswordTimeout = 60 * time.Second
-	login2FATimeout      = 60 * time.Second
-	resetStateTimeout    = 10 * time.Second
-	doctorTimeout        = 30 * time.Second
-	revokeTimeout        = 10 * time.Second
+	locationsTimeout      = 45 * time.Second
+	connectTimeout        = 120 * time.Second
+	disconnectTimeout     = 20 * time.Second
+	settingsSetTimeout    = 20 * time.Second
+	accountTimeout        = 35 * time.Second
+	accountsTimeout       = 10 * time.Second
+	accountCommandTimeout = 10 * time.Second
+	loginPasswordTimeout  = 60 * time.Second
+	login2FATimeout       = 60 * time.Second
+	resetStateTimeout     = 10 * time.Second
+	doctorTimeout         = 30 * time.Second
+	revokeTimeout         = 10 * time.Second
 
 	// pingTimeout is the per-host TCP probe deadline.
 	pingTimeout = 10 * time.Second
@@ -186,6 +188,108 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		state := f.ctrl.Login2FA(lctx, p.Code)
 		f.pushStatus()
 		return encodeResponse("login_state", state)
+
+	case "accounts_list":
+		actx, cancel := context.WithTimeout(ctx, accountsTimeout)
+		defer cancel()
+		_ = actx
+		return encodeResponse("accounts_info", f.ctrl.Accounts())
+
+	case "accounts_add_start", "login_start":
+		var p api.LoginStartPayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		state := f.ctrl.LoginStart(p.Method, p.Email, p.AccountID)
+		f.pushStatus()
+		return encodeResponse("login_state", state)
+
+	case "accounts_add_status", "login_status":
+		var p api.LoginStatusPayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		state, err := f.ctrl.LoginStatus(p.LoginID)
+		if err != nil {
+			return f.fail(err)
+		}
+		return encodeResponse("login_state", state)
+
+	case "accounts_add_cancel", "login_cancel":
+		var p api.LoginCancelPayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		if err := f.ctrl.LoginCancel(p.LoginID); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
+	case "accounts_remove":
+		var p api.AccountsRemovePayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		if err := f.ctrl.RemoveAccount(p.ID); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
+	case "accounts_use":
+		var p api.AccountsUsePayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		if err := f.ctrl.UseAccount(p.ID); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
+	case "accounts_update":
+		var p api.AccountsUpdatePayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		if err := f.ctrl.UpdateAccount(p.ID, p.Label); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
+	case "accounts_set_rotation":
+		var p api.AccountsRotationPayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		if err := f.ctrl.SetAccountRotation(p.Enabled, p.Threshold); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
 
 	case "logout":
 		if err := f.ctrl.Logout(); err != nil {

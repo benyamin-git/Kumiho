@@ -65,12 +65,13 @@ fun EngineSettingRow(
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onReset: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val enabled = !locked
+    val interactive = enabled && !locked
     val boolean = spec.kind == SettingKind.BOOLEAN
     val checked = value == "on"
-    val open = if (boolean || !enabled) null else onEdit
+    val open = if (boolean || !interactive) null else onEdit
     val rowModifier = if (open != null) {
         Modifier.clickable(role = Role.Button, onClick = open)
     } else {
@@ -112,7 +113,7 @@ fun EngineSettingRow(
                         key = spec.key,
                         label = stringResource(spec.labelRes),
                         checked = checked,
-                        enabled = enabled,
+                        enabled = interactive,
                         onToggle = onToggle,
                     )
                     else -> DisplayValue(
@@ -125,7 +126,7 @@ fun EngineSettingRow(
                 OverrideMark(
                     key = spec.key,
                     label = stringResource(spec.labelRes),
-                    enabled = enabled,
+                    enabled = interactive,
                     onReset = onReset,
                 )
             }

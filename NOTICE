@@ -48,8 +48,8 @@ charmbracelet/bubbletea, lipgloss, bubbles (https://github.com/charmbracelet)
 AndroidX, Jetpack Compose and Kotlin (https://developer.android.com/jetpack,
 https://kotlinlang.org)
     Apache License 2.0. Android app framework, Compose UI toolkit, Kotlin
-    standard library, AndroidX lifecycle/navigation/datastore/test libraries
-    and kotlinx.coroutines, resolved by Gradle and pinned in
+    standard library, AndroidX lifecycle/navigation/datastore/browser (Custom
+    Tabs)/test libraries and kotlinx.coroutines, resolved by Gradle and pinned in
     android/gradle/libs.versions.toml. No third-party app code is copied into
     Kumiho; the Android UI is original Compose code and no code from FoxyVPN's
     Android app is included.

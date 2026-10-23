@@ -397,6 +397,8 @@
     <string name="settings_label_dns_upstream">DNS upstream</string>
     <string name="settings_label_allow_lan">Allow LAN</string>
     <string name="settings_label_quota_poll_minutes">Quota poll</string>
+    <string name="settings_label_account_rotation">Rotate accounts</string>
+    <string name="settings_label_rotation_threshold">Rotation threshold</string>
     <string name="settings_label_edge_address">Edge address</string>
     <string name="settings_label_upstream_proxy">Upstream proxy</string>
     <string name="settings_label_exclude_cidrs">Exclude CIDRs</string>
@@ -417,6 +419,8 @@
     <string name="settings_hint_dns_upstream">Resolver IP for DoH; empty uses the provider default. Applies on the next connect.</string>
     <string name="settings_hint_allow_lan">When on, RFC1918 private, link-local and multicast ranges bypass the tunnel. The tunnel DNS 10.8.0.2 always stays inside. Applies on the next connect.</string>
     <string name="settings_hint_quota_poll_minutes">Minutes between quota refreshes while connected. Applies on the next connect.</string>
+    <string name="settings_hint_account_rotation">Switch accounts before connecting when the active account is low on quota. Applies on the next connect.</string>
+    <string name="settings_hint_rotation_threshold">Switch when the active account has this percentage of quota left or less. Applies on the next connect.</string>
     <string name="settings_hint_edge_address">Pins the Fastly edge IP; empty resolves normally. Applies on the next connect.</string>
     <string name="settings_hint_upstream_proxy">Chains the edge connection through a proxy URL; empty connects directly. Applies on the next connect.</string>
     <string name="settings_hint_exclude_cidrs">Extra IPv4 ranges that bypass the tunnel. A bare address becomes /32 and host bits are masked. IPv6 is always blackholed. Applies on the next connect.</string>

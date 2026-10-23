@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The settings catalog and the pure mapping: all nineteen engine keys exactly
+ * The settings catalog and the pure mapping: all twenty-one engine keys exactly
  * once, their groups and kinds, the current values, override marks, Reset and
  * the exact strings `settings_set` receives.
  *
@@ -20,18 +20,19 @@ class SettingsMapperTest {
     // ---- the catalog -----------------------------------------------------
 
     @Test
-    fun `the catalog lists all nineteen engine keys exactly once`() {
+    fun `the catalog lists all twenty-one engine keys exactly once`() {
         val expected = setOf(
             "socks_port", "mtu", "exit_check", "doh_provider", "dns_upstream",
             "edge_address", "upstream_proxy", "exclude_cidrs", "allow_lan",
             "log_level", "redact_targets", "kill_switch", "autoconnect",
-            "quota_poll_minutes", "tls_split", "http_proxy", "http_proxy_port",
+            "quota_poll_minutes", "account_rotation", "rotation_threshold",
+            "tls_split", "http_proxy", "http_proxy_port",
             "solve_challenges", "keepalive_profile",
         )
-        assertEquals(19, SettingsCatalog.specs.size)
+        assertEquals(21, SettingsCatalog.specs.size)
         assertEquals(expected, SettingsCatalog.engineKeys.toSet())
-        assertEquals(19, SettingsCatalog.engineKeys.size)
-        assertEquals(17, SettingsCatalog.settableKeys.size)
+        assertEquals(21, SettingsCatalog.engineKeys.size)
+        assertEquals(19, SettingsCatalog.settableKeys.size)
         assertEquals(setOf("kill_switch", "autoconnect"), SettingsCatalog.readOnlyKeys.toSet())
     }
 
@@ -40,7 +41,8 @@ class SettingsMapperTest {
         assertEquals(
             listOf(
                 "mtu", "socks_port", "exit_check", "doh_provider", "dns_upstream",
-                "allow_lan", "quota_poll_minutes",
+                "allow_lan", "quota_poll_minutes", "account_rotation",
+                "rotation_threshold",
             ),
             SettingsCatalog.specsIn(SettingsGroup.CONNECTION).map { it.key },
         )
@@ -66,7 +68,9 @@ class SettingsMapperTest {
         assertEquals(SettingKind.INTEGER, kinds["socks_port"])
         assertEquals(SettingKind.INTEGER, kinds["quota_poll_minutes"])
         assertEquals(SettingKind.INTEGER, kinds["http_proxy_port"])
+        assertEquals(SettingKind.INTEGER, kinds["rotation_threshold"])
         assertEquals(SettingKind.BOOLEAN, kinds["exit_check"])
+        assertEquals(SettingKind.BOOLEAN, kinds["account_rotation"])
         assertEquals(SettingKind.BOOLEAN, kinds["allow_lan"])
         assertEquals(SettingKind.BOOLEAN, kinds["http_proxy"])
         assertEquals(SettingKind.BOOLEAN, kinds["solve_challenges"])
@@ -111,6 +115,8 @@ class SettingsMapperTest {
             "dns_upstream" to "9.9.9.9",
             "allow_lan" to "off",
             "quota_poll_minutes" to "15",
+            "account_rotation" to "on",
+            "rotation_threshold" to "20",
             "edge_address" to "203.0.113.7",
             "upstream_proxy" to "http://proxy.example:3128",
             "exclude_cidrs" to "10.0.0.0/8, 192.168.1.0/24",
@@ -195,6 +201,11 @@ class SettingsMapperTest {
         assertValid("quota_poll_minutes", "1440")
         assertOutOfRange("quota_poll_minutes", "0", 1, 1440)
         assertOutOfRange("quota_poll_minutes", "1441", 1, 1440)
+
+        assertValid("rotation_threshold", "1")
+        assertValid("rotation_threshold", "50")
+        assertOutOfRange("rotation_threshold", "0", 1, 50)
+        assertOutOfRange("rotation_threshold", "51", 1, 50)
 
         assertValid("http_proxy_port", "1")
         assertValid("http_proxy_port", "65535")
@@ -297,6 +308,16 @@ class SettingsMapperTest {
         }
     }
 
+    @Test
+    fun `the threshold depends on the rotation toggle`() {
+        assertEquals(
+            "account_rotation",
+            SettingsCatalog.byKey("rotation_threshold")?.dependsOn,
+        )
+        assertNull(SettingsCatalog.byKey("account_rotation")?.dependsOn)
+        assertNull(SettingsCatalog.byKey("mtu")?.dependsOn)
+    }
+
     // ---- helpers ---------------------------------------------------------
 
     private fun assertValid(key: String, raw: String) {
@@ -335,6 +356,8 @@ class SettingsMapperTest {
         killSwitchEffective = true,
         autoconnectEffective = false,
         quotaPollMinutes = 15,
+        accountRotation = true,
+        rotationThreshold = 20,
         overridden = overridden,
         tlsSplit = "first-byte",
         httpProxy = true,

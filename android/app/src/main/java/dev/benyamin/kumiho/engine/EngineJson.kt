@@ -98,6 +98,8 @@ object EngineJson {
         httpProxyPort = int(fields, "http_proxy_port"),
         solveChallenges = boolean(fields, "solve_challenges"),
         keepaliveProfile = stringOrEmpty(fields, "keepalive_profile"),
+        accountRotation = boolean(fields, "account_rotation"),
+        rotationThreshold = int(fields, "rotation_threshold"),
     )
 
     fun loginState(json: String): LoginState = loginState(parseObject(json, "login state"))
@@ -108,6 +110,32 @@ object EngineJson {
         verificationMethod = string(fields, "verification_method"),
         verificationReason = string(fields, "verification_reason"),
         error = string(fields, "error"),
+        method = string(fields, "method"),
+        url = string(fields, "url"),
+        loginId = string(fields, "login_id"),
+    )
+
+    fun accounts(json: String): Accounts = accounts(parseObject(json, "accounts"))
+
+    fun accounts(fields: JSONObject): Accounts = Accounts(
+        accounts = objectsIn(arrayOrNull(fields, "accounts")).map(::accountSummary),
+        active = string(fields, "active"),
+        rotation = boolean(fields, "rotation"),
+        threshold = int(fields, "rotation_threshold"),
+        lastMethod = string(fields, "last_method"),
+        notice = string(fields, "notice"),
+        error = string(fields, "error"),
+    )
+
+    private fun accountSummary(fields: JSONObject): AccountSummary = AccountSummary(
+        id = stringOrEmpty(fields, "id"),
+        email = stringOrEmpty(fields, "email"),
+        label = stringOrEmpty(fields, "label"),
+        method = stringOrEmpty(fields, "method"),
+        active = boolean(fields, "active"),
+        reauthRequired = boolean(fields, "reauth_required"),
+        lastUsedAt = longOrNull(fields, "last_used_at") ?: 0L,
+        quota = quotaOrNull(fields),
     )
 
     fun account(json: String): Account = account(parseObject(json, "account"))

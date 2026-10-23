@@ -225,6 +225,8 @@ class EngineJsonTest {
               "kill_switch_effective": true,
               "autoconnect_effective": false,
               "quota_poll_minutes": 15,
+              "account_rotation": true,
+              "rotation_threshold": 20,
               "overridden": ["mtu", "log_level"],
               "tls_split": "sni",
               "http_proxy": true,
@@ -251,6 +253,8 @@ class EngineJsonTest {
         assertTrue(settings.killSwitchEffective)
         assertFalse(settings.autoconnectEffective)
         assertEquals(15, settings.quotaPollMinutes)
+        assertTrue(settings.accountRotation)
+        assertEquals(20, settings.rotationThreshold)
         assertEquals(listOf("mtu", "log_level"), settings.overridden)
         assertEquals("sni", settings.tlsSplit)
         assertTrue(settings.httpProxy)
@@ -276,6 +280,8 @@ class EngineJsonTest {
         assertEquals("", settings.killSwitch)
         assertEquals("", settings.autoconnect)
         assertEquals(0, settings.quotaPollMinutes)
+        assertFalse(settings.accountRotation)
+        assertEquals(0, settings.rotationThreshold)
         assertTrue(settings.overridden.isEmpty())
         assertEquals("", settings.tlsSplit)
         assertEquals("", settings.keepaliveProfile)
@@ -300,6 +306,82 @@ class EngineJsonTest {
         assertEquals("done", failed.step)
         assertEquals("invalid password", failed.error)
         assertNull(failed.email)
+    }
+
+    @Test
+    fun `accounts parses summaries quotas and rotation`() {
+        val view = EngineJson.accounts(
+            """
+            {
+              "accounts": [
+                {
+                  "id": "a",
+                  "email": "one@example.com",
+                  "label": "Home",
+                  "method": "browser",
+                  "active": true,
+                  "last_used_at": 1761086400,
+                  "quota": {"limit": 1000, "remaining": 820}
+                },
+                {
+                  "id": "b",
+                  "email": "two@example.com",
+                  "label": "Work",
+                  "method": "password",
+                  "active": false,
+                  "reauth_required": true
+                }
+              ],
+              "active": "a",
+              "rotation": true,
+              "rotation_threshold": 20,
+              "last_method": "browser",
+              "notice": "skipped Work: sign-in expired",
+              "error": "quota poll failed"
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("a", "b"), view.accounts.map { it.id })
+        val home = view.accounts[0]
+        assertEquals("one@example.com", home.email)
+        assertEquals("Home", home.label)
+        assertEquals("browser", home.method)
+        assertTrue(home.active)
+        assertFalse(home.reauthRequired)
+        assertEquals(1761086400L, home.lastUsedAt)
+        assertEquals(Quota(1000L, 820L, null), home.quota)
+        val work = view.accounts[1]
+        assertFalse(work.active)
+        assertTrue(work.reauthRequired)
+        assertEquals(0L, work.lastUsedAt)
+        assertNull(work.quota)
+        assertEquals("a", view.active)
+        assertTrue(view.rotation)
+        assertEquals(20, view.threshold)
+        assertEquals("browser", view.lastMethod)
+        assertEquals("skipped Work: sign-in expired", view.notice)
+        assertEquals("quota poll failed", view.error)
+
+        val empty = EngineJson.accounts("{}")
+        assertTrue(empty.accounts.isEmpty())
+        assertNull(empty.active)
+        assertFalse(empty.rotation)
+        assertEquals(0, empty.threshold)
+        assertNull(empty.lastMethod)
+        assertNull(empty.notice)
+        assertNull(empty.error)
+    }
+
+    @Test
+    fun `login state parses browser url id and method`() {
+        val browser = EngineJson.loginState(
+            """{"step":"browser","method":"browser","url":"https://example.test/signin","login_id":"abc"}""",
+        )
+        assertEquals("browser", browser.step)
+        assertEquals("browser", browser.method)
+        assertEquals("https://example.test/signin", browser.url)
+        assertEquals("abc", browser.loginId)
     }
 
     @Test

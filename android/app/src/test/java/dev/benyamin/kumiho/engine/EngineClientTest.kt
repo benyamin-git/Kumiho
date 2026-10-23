@@ -413,6 +413,85 @@ class EngineClientTest {
         }
 
     @Test
+    fun `account commands use the expected wire names and payloads`() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val dispatcher = mainDispatcherRule.testDispatcher
+            val transport = FakeTransport()
+            val client = client(transport, dispatcher)
+
+            client.accountsList()
+            client.accountsAddStart(method = "browser", email = "one@example.com", accountId = "a")
+            client.accountsAddStatus("add-1")
+            client.accountsAddCancel("add-1")
+            client.accountsRemove("a")
+            client.accountsUse("a")
+            client.accountsUpdate("a", "Home")
+            client.accountsSetRotation(enabled = true, threshold = 20)
+            client.loginStart(method = "password", email = "one@example.com")
+            client.loginStatus("login-1")
+            client.loginCancel("login-1")
+
+            assertEquals(
+                listOf(
+                    "accounts_list",
+                    "accounts_add_start",
+                    "accounts_add_status",
+                    "accounts_add_cancel",
+                    "accounts_remove",
+                    "accounts_use",
+                    "accounts_update",
+                    "accounts_set_rotation",
+                    "login_start",
+                    "login_status",
+                    "login_cancel",
+                ),
+                transport.requests.map { it.getString("type") },
+            )
+            val byType = transport.requests.groupBy { it.getString("type") }
+            val add = byType.getValue("accounts_add_start").single().getJSONObject("payload")
+            assertEquals("browser", add.getString("method"))
+            assertEquals("one@example.com", add.getString("email"))
+            assertEquals("a", add.getString("account_id"))
+            assertEquals(
+                "add-1",
+                byType.getValue("accounts_add_status").single().getJSONObject("payload")
+                    .getString("login_id"),
+            )
+            assertEquals(
+                "add-1",
+                byType.getValue("accounts_add_cancel").single().getJSONObject("payload")
+                    .getString("login_id"),
+            )
+            assertEquals(
+                "a",
+                byType.getValue("accounts_remove").single().getJSONObject("payload").getString("id"),
+            )
+            assertEquals(
+                "a",
+                byType.getValue("accounts_use").single().getJSONObject("payload").getString("id"),
+            )
+            val update = byType.getValue("accounts_update").single().getJSONObject("payload")
+            assertEquals("a", update.getString("id"))
+            assertEquals("Home", update.getString("label"))
+            val rotation = byType.getValue("accounts_set_rotation").single().getJSONObject("payload")
+            assertTrue(rotation.getBoolean("enabled"))
+            assertEquals(20, rotation.getInt("rotation_threshold"))
+            val start = byType.getValue("login_start").single().getJSONObject("payload")
+            assertEquals("password", start.getString("method"))
+            assertEquals("one@example.com", start.getString("email"))
+            assertEquals(
+                "login-1",
+                byType.getValue("login_status").single().getJSONObject("payload")
+                    .getString("login_id"),
+            )
+            assertEquals(
+                "login-1",
+                byType.getValue("login_cancel").single().getJSONObject("payload")
+                    .getString("login_id"),
+            )
+        }
+
+    @Test
     fun `settings, account, locations, status and doctor responses parse`() =
         runTest(mainDispatcherRule.testDispatcher) {
             val dispatcher = mainDispatcherRule.testDispatcher

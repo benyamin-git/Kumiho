@@ -701,6 +701,7 @@ private fun EngineRow(
     actions: SettingsActions,
     onEdit: (SettingSpec) -> Unit,
 ) {
+    val dependencyOff = spec.dependsOn?.let { state.valueOf(it) != "on" } ?: false
     EngineSettingRow(
         spec = spec,
         value = state.valueOf(spec.key),
@@ -708,6 +709,7 @@ private fun EngineRow(
         locked = state.applying,
         applying = state.applyingKey == spec.key,
         error = state.errorFor(spec.key),
+        enabled = !dependencyOff,
         onToggle = { checked ->
             actions.onClearError(spec.key)
             actions.onToggle(spec.key, checked)

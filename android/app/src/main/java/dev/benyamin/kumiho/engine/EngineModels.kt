@@ -74,6 +74,8 @@ data class Settings(
     val httpProxyPort: Int,
     val solveChallenges: Boolean,
     val keepaliveProfile: String,
+    val accountRotation: Boolean = false,
+    val rotationThreshold: Int = 10,
 )
 
 /**
@@ -155,6 +157,9 @@ data class LoginState(
     val verificationMethod: String?,
     val verificationReason: String?,
     val error: String?,
+    val method: String? = null,
+    val url: String? = null,
+    val loginId: String? = null,
 )
 
 /** One latency measurement; a null [rttMs] means the probe failed. */

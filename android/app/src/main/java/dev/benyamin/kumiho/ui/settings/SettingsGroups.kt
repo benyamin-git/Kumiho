@@ -40,6 +40,8 @@ data class SettingSpec(
     val range: SettingRange? = null,
     @StringRes val placeholderRes: Int? = null,
     val applyTiming: ApplyTiming = ApplyTiming.NEXT_CONNECT,
+    /** Another row key that must be "on" before this row is editable. */
+    val dependsOn: String? = null,
 ) {
     /** Read-only rows are Android state; they are never written through `settings_set`. */
     val readOnly: Boolean get() = kind == SettingKind.READ_ONLY
@@ -75,7 +77,7 @@ sealed interface SettingInput {
 }
 
 /**
- * The single ordered catalog of all nineteen engine rows plus their exact
+ * The single ordered catalog of all twenty-one engine rows plus their exact
  * groups. Every key appears once; [SettingsMapperTest] enforces that, and the
  * screen renders [specsIn] so a duplicate would be visible immediately.
  */
@@ -136,6 +138,25 @@ object SettingsCatalog {
             labelRes = R.string.settings_label_quota_poll_minutes,
             hintRes = R.string.settings_hint_quota_poll_minutes,
             range = SettingRange(1, 1440),
+        ),
+        SettingSpec(
+            key = "account_rotation",
+            group = SettingsGroup.CONNECTION,
+            kind = SettingKind.BOOLEAN,
+            labelRes = R.string.settings_label_account_rotation,
+            hintRes = R.string.settings_hint_account_rotation,
+            // The Account screen is the primary surface; this is the mirror.
+            applyTiming = ApplyTiming.NEXT_CONNECT,
+        ),
+        SettingSpec(
+            key = "rotation_threshold",
+            group = SettingsGroup.CONNECTION,
+            kind = SettingKind.INTEGER,
+            labelRes = R.string.settings_label_rotation_threshold,
+            hintRes = R.string.settings_hint_rotation_threshold,
+            range = SettingRange(1, 50),
+            applyTiming = ApplyTiming.NEXT_CONNECT,
+            dependsOn = "account_rotation",
         ),
 
         // Android VPN: read-only OS state, never the engine values (A10).
@@ -246,7 +267,7 @@ object SettingsCatalog {
 
     fun specsIn(group: SettingsGroup): List<SettingSpec> = specs.filter { it.group == group }
 
-    /** The nineteen engine keys, in catalog order; the read-only two included. */
+    /** The twenty-one engine keys, in catalog order; the read-only two included. */
     val engineKeys: List<String> = specs.map { it.key }
 
     /** Every key that can be sent through `settings_set`. */
@@ -314,6 +335,7 @@ object SettingsMapper {
             "http_proxy" -> onOff(settings.httpProxy)
             "solve_challenges" -> onOff(settings.solveChallenges)
             "redact_targets" -> onOff(settings.redactTargets)
+            "account_rotation" -> onOff(settings.accountRotation)
             else -> ""
         }
         SettingKind.ENUM -> when (spec.key) {
@@ -327,6 +349,7 @@ object SettingsMapper {
             "mtu" -> settings.mtu.toString()
             "socks_port" -> settings.socksPort.toString()
             "quota_poll_minutes" -> settings.quotaPollMinutes.toString()
+            "rotation_threshold" -> settings.rotationThreshold.toString()
             "http_proxy_port" -> settings.httpProxyPort.toString()
             else -> ""
         }

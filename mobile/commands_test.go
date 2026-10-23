@@ -495,3 +495,92 @@ func TestConcurrentCommandsAndClose(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestMobileAccountCommands(t *testing.T) {
+	p := testPaths(t)
+	if err := os.MkdirAll(filepath.Dir(p.Tokens), 0o700); err != nil {
+		t.Fatalf("create no-backup dir: %v", err)
+	}
+	accounts := `{
+  "version": 2,
+  "active": "a1",
+  "last_method": "browser",
+  "accounts": [
+    {
+      "id": "a1",
+      "email": "user@example.com",
+      "label": "Home",
+      "method": "browser",
+      "browser": {"token": "browser-token", "expires_at": 9999999999},
+      "added_at": "2026-10-23T12:00:00Z",
+      "last_used_at": "2026-10-23T12:00:00Z"
+    }
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(filepath.Dir(p.Tokens), "accounts.json"), []byte(accounts), 0o600); err != nil {
+		t.Fatalf("write accounts.json: %v", err)
+	}
+	startTest(t, p, nil, newTestListener())
+
+	out := mustCommand(t, "accounts_list", nil)
+	if env := decodeEnvelope(t, out); env.Type != "accounts_info" {
+		t.Fatalf("accounts_list type = %q, want %q", env.Type, "accounts_info")
+	}
+	var view api.AccountsView
+	decodeTestPayload(t, out, &view)
+	if len(view.Accounts) != 1 || view.Active != "a1" || view.LastMethod != "browser" {
+		t.Fatalf("accounts view = %+v", view)
+	}
+
+	out = mustCommand(t, "accounts_add_start", map[string]any{"method": "browser"})
+	if env := decodeEnvelope(t, out); env.Type != "login_state" {
+		t.Fatalf("accounts_add_start type = %q, want login_state", env.Type)
+	}
+	var add api.LoginState
+	decodeTestPayload(t, out, &add)
+	if add.Step != "browser" || add.LoginID == "" || add.URL == "" {
+		t.Fatalf("accounts_add_start state = %+v", add)
+	}
+
+	out = mustCommand(t, "accounts_add_status", map[string]any{"login_id": add.LoginID})
+	if env := decodeEnvelope(t, out); env.Type != "login_state" {
+		t.Fatalf("accounts_add_status type = %q, want login_state", env.Type)
+	}
+	out = mustCommand(t, "accounts_add_cancel", map[string]any{"login_id": add.LoginID})
+	if env := decodeEnvelope(t, out); env.Type != "result" {
+		t.Fatalf("accounts_add_cancel type = %q, want result", env.Type)
+	}
+
+	out = mustCommand(t, "login_start", map[string]any{"method": "browser"})
+	if env := decodeEnvelope(t, out); env.Type != "login_state" {
+		t.Fatalf("login_start type = %q, want login_state", env.Type)
+	}
+	var login api.LoginState
+	decodeTestPayload(t, out, &login)
+	if login.Step != "browser" || login.LoginID == "" {
+		t.Fatalf("login_start state = %+v", login)
+	}
+	out = mustCommand(t, "login_status", map[string]any{"login_id": login.LoginID})
+	if env := decodeEnvelope(t, out); env.Type != "login_state" {
+		t.Fatalf("login_status type = %q, want login_state", env.Type)
+	}
+	out = mustCommand(t, "login_cancel", map[string]any{"login_id": login.LoginID})
+	if env := decodeEnvelope(t, out); env.Type != "result" {
+		t.Fatalf("login_cancel type = %q, want result", env.Type)
+	}
+
+	for _, step := range []struct {
+		typ     string
+		payload any
+	}{
+		{"accounts_use", map[string]any{"id": "a1"}},
+		{"accounts_update", map[string]any{"id": "a1", "label": "Work"}},
+		{"accounts_set_rotation", map[string]any{"enabled": true, "rotation_threshold": 20}},
+		{"accounts_remove", map[string]any{"id": "a1"}},
+	} {
+		out = mustCommand(t, step.typ, step.payload)
+		if env := decodeEnvelope(t, out); env.Type != "result" {
+			t.Fatalf("%s type = %q, want result", step.typ, env.Type)
+		}
+	}
+}

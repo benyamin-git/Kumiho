@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -209,6 +211,87 @@ class EngineClient(
         command("logout")
     }
 
+    // ---- accounts and browser sign-in ---------------------------------
+
+    /** The account list, rotation settings and the last sign-in method. */
+    suspend fun accountsList(): Accounts = timed("list accounts") {
+        EngineJson.accounts(command("accounts_list"))
+    }
+
+    /** Starts adding an account; browser sign-in returns a URL immediately. */
+    suspend fun accountsAddStart(
+        method: String? = null,
+        email: String? = null,
+        accountId: String? = null,
+    ): LoginState = timed("start adding an account") {
+        val payload = JSONObject()
+        if (!method.isNullOrBlank()) payload.put("method", method)
+        if (!email.isNullOrBlank()) payload.put("email", email)
+        if (!accountId.isNullOrBlank()) payload.put("account_id", accountId)
+        EngineJson.loginState(command("accounts_add_start", payload))
+    }
+
+    suspend fun accountsAddStatus(id: String): LoginState = timed("poll account sign-in") {
+        EngineJson.loginState(
+            command("accounts_add_status", JSONObject().put("login_id", id)),
+        )
+    }
+
+    suspend fun accountsAddCancel(id: String) {
+        timed("cancel account sign-in") {
+            command("accounts_add_cancel", JSONObject().put("login_id", id))
+        }
+    }
+
+    suspend fun accountsRemove(id: String) {
+        timed("remove the account") {
+            command("accounts_remove", JSONObject().put("id", id))
+        }
+    }
+
+    suspend fun accountsUse(id: String) {
+        timed("switch accounts") {
+            command("accounts_use", JSONObject().put("id", id))
+        }
+    }
+
+    suspend fun accountsUpdate(id: String, label: String) {
+        timed("rename the account") {
+            command(
+                "accounts_update",
+                JSONObject().put("id", id).put("label", label),
+            )
+        }
+    }
+
+    /** Turns next-connect rotation on or off; zero keeps the threshold. */
+    suspend fun accountsSetRotation(enabled: Boolean, threshold: Int) {
+        timed("save account rotation") {
+            command(
+                "accounts_set_rotation",
+                JSONObject().put("enabled", enabled).put("rotation_threshold", threshold),
+            )
+        }
+    }
+
+    /** Starts onboarding sign-in by browser or password. */
+    suspend fun loginStart(method: String, email: String? = null): LoginState =
+        timed("start sign-in") {
+            val payload = JSONObject().put("method", method)
+            if (!email.isNullOrBlank()) payload.put("email", email)
+            EngineJson.loginState(command("login_start", payload))
+        }
+
+    suspend fun loginStatus(id: String): LoginState = timed("poll sign-in") {
+        EngineJson.loginState(command("login_status", JSONObject().put("login_id", id)))
+    }
+
+    suspend fun loginCancel(id: String) {
+        timed("cancel sign-in") {
+            command("login_cancel", JSONObject().put("login_id", id))
+        }
+    }
+
     /** The retained log ring, optionally filtered to a minimum level. */
     suspend fun logsSnapshot(level: String? = null): List<LogEntry> =
         EngineJson.logEntries(command("logs_snapshot", levelPayload(level)))
@@ -334,6 +417,17 @@ class EngineClient(
     private fun levelPayload(level: String?): JSONObject? =
         if (level.isNullOrBlank()) null else JSONObject().put("level", level)
 
+    private suspend fun <T> timed(what: String, block: suspend () -> T): T =
+        try {
+            withTimeout(ACCOUNT_TIMEOUT_MS) { block() }
+        } catch (timeout: TimeoutCancellationException) {
+            throw EngineException(
+                EngineErrorCodes.ENGINE,
+                "could not $what: the engine did not answer within 10 seconds",
+                timeout,
+            )
+        }
+
     private fun ensureOpen() {
         if (closed.get()) {
             throw EngineException(EngineErrorCodes.CLOSED, "the engine client is closed")
@@ -348,6 +442,7 @@ class EngineClient(
 
     private companion object {
         const val MAX_LOG_ENTRIES = 2000
+        const val ACCOUNT_TIMEOUT_MS = 10_000L
         const val PING_BUFFER = 512
         const val NOTICE_BUFFER = 64
         const val WARNING_INTERVAL_MS = 1_000L
