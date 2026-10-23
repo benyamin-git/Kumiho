@@ -31,7 +31,7 @@ needed to build or test.
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
-    make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.5.1 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     make android-verify # verify every release APK in dist/
     make test           # go test ./...
     make test-integration  # go test -tags integration ./... (real endpoints)
@@ -94,8 +94,9 @@ them locally for any change under `android/`, `mobile/` or
   the connected suite; also the emulator action entry point.
 - `scripts/screenshots/capture.sh` — regenerate the README's GUI and TUI
   screenshots; builds the web harness with a release version label (default
-  `v0.4.0`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
-  TUI captures. See `scripts/screenshots/README.md`.
+  `v0.5.1`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
+  TUI captures. Noto Color Emoji is required for the flag captures. See
+  `scripts/screenshots/README.md`.
 
 ## CI jobs
 
@@ -196,6 +197,9 @@ them locally for any change under `android/`, `mobile/` or
 - Palette: skill `design` — six accents, default blue
 - Themes: Light / Dark / OLED; first run follows prefers-color-scheme; OLED opt-in
 - Type: system-ui (Segoe UI Variable on Windows 11), one family
+- Emoji: country-flag emoji in locations are a deliberate, user-approved
+  departure from design ban 3 (v0.5.1); Windows renders regional-indicator
+  letters.
 - Approved: 2026-10-15
 
 ## Vendor policy

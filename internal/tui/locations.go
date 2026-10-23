@@ -13,6 +13,14 @@ import (
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
 
+// pingRun tracks one Test speed or Ping all run until every requested host
+// has answered.
+type pingRun struct {
+	all     bool
+	total   int
+	pending map[string]bool
+}
+
 // locationsState is the Locations screen state (PLAN.md §6).
 type locationsState struct {
 	countries         []serverlist.Country
@@ -24,6 +32,7 @@ type locationsState struct {
 	loading           bool
 	err               string
 	rtts              map[string]*float64 // host:port -> ms (nil = unreachable)
+	ping              *pingRun
 }
 
 type locationsMsg struct {
@@ -32,6 +41,8 @@ type locationsMsg struct {
 }
 
 type selectDoneMsg struct{ err error }
+
+type pingFailedMsg struct{ err error }
 
 func fetchLocations(c *ipc.Client, refresh bool) tea.Cmd {
 	return func() tea.Msg {
@@ -56,7 +67,9 @@ func pingHosts(c *ipc.Client, hosts []string) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, _ = c.Call(ctx, ipc.TypePing, api.PingPayload{Hosts: hosts})
+		if _, err := c.Call(ctx, ipc.TypePing, api.PingPayload{Hosts: hosts}); err != nil {
+			return pingFailedMsg{err: err}
+		}
 		return nil
 	}
 }
@@ -123,6 +136,93 @@ func (m *Model) locationRows() []locRow {
 	return rows
 }
 
+// allLocationHosts returns every connectable server address in the loaded
+// tree, including REC, regardless of the filter or expansion state.
+func (m *Model) allLocationHosts() []string {
+	seen := map[string]bool{}
+	var hosts []string
+	for _, c := range m.loc.countries {
+		for _, city := range c.Cities {
+			for _, s := range city.Servers {
+				if s.Quarantined {
+					continue
+				}
+				host, port, ok := s.ConnectTarget()
+				if !ok {
+					continue
+				}
+				addr := fmt.Sprintf("%s:%d", host, port)
+				key := strings.ToLower(addr)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				hosts = append(hosts, addr)
+			}
+		}
+	}
+	return hosts
+}
+
+func (m *Model) anyExpanded() bool {
+	for _, expanded := range m.loc.expandedCountries {
+		if expanded {
+			return true
+		}
+	}
+	for _, expanded := range m.loc.expandedCities {
+		if expanded {
+			return true
+		}
+	}
+	return false
+}
+
+// toggleAllExpanded opens every country and city, or closes them all when any
+// group is already open.
+func (m *Model) toggleAllExpanded() {
+	if len(m.loc.countries) == 0 {
+		return
+	}
+	if m.anyExpanded() {
+		m.loc.expandedCountries = map[string]bool{}
+		m.loc.expandedCities = map[string]bool{}
+		return
+	}
+	countries := make(map[string]bool)
+	cities := make(map[string]bool)
+	for _, c := range m.loc.countries {
+		countries[c.Code] = true
+		for _, city := range c.Cities {
+			cities[c.Code+"/"+city.Code] = true
+		}
+	}
+	m.loc.expandedCountries = countries
+	m.loc.expandedCities = cities
+}
+
+func (m *Model) startPing(all bool, hosts []string) tea.Cmd {
+	if m.loc.ping != nil || len(hosts) == 0 {
+		return nil
+	}
+	pending := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
+		pending[host] = true
+	}
+	m.loc.ping = &pingRun{all: all, total: len(hosts), pending: pending}
+	return pingHosts(m.client, hosts)
+}
+
+func (m *Model) ackPing(host string) {
+	if m.loc.ping == nil {
+		return
+	}
+	delete(m.loc.ping.pending, host)
+	if len(m.loc.ping.pending) == 0 {
+		m.loc.ping = nil
+	}
+}
+
 func (m *Model) handleLocationsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.loc.filtering {
 		switch k.String() {
@@ -166,13 +266,34 @@ func (m *Model) handleLocationsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loc.err = ""
 		return m, fetchLocations(m.client, true)
 	case "p":
+		if m.loc.ping != nil {
+			return m, nil
+		}
 		var hosts []string
 		for _, row := range rows {
 			if row.kind == rowServer {
 				hosts = append(hosts, fmt.Sprintf("%s:%d", row.host, row.port))
 			}
 		}
-		return m, pingHosts(m.client, hosts)
+		if len(hosts) == 0 {
+			return m, nil
+		}
+		return m, m.startPing(false, hosts)
+	case "P":
+		if m.loc.ping != nil {
+			return m, nil
+		}
+		hosts := m.allLocationHosts()
+		if len(hosts) == 0 {
+			return m, nil
+		}
+		return m, m.startPing(true, hosts)
+	case "x":
+		if strings.TrimSpace(m.loc.filter) != "" {
+			return m, nil
+		}
+		m.toggleAllExpanded()
+		return m, nil
 	case "up", "k":
 		if m.loc.cursor > 0 {
 			m.loc.cursor--
@@ -276,7 +397,11 @@ func (m *Model) renderLocations(b *strings.Builder) {
 			if m.status.Location == row.countryCode {
 				mark = "*"
 			}
-			fmt.Fprintf(b, "%s%s %s (%s) - %d cities\n", cursor, mark, row.countryName, row.countryCode, row.cityCount)
+			flag := serverlist.FlagEmoji(row.countryCode)
+			if flag != "" {
+				flag += " "
+			}
+			fmt.Fprintf(b, "%s%s %s%s (%s) - %d cities\n", cursor, mark, flag, row.countryName, row.countryCode, row.cityCount)
 		case rowCity:
 			fmt.Fprintf(b, "%s    %s (%s)\n", cursor, row.cityName, row.cityCode)
 		case rowServer:
@@ -301,5 +426,9 @@ func (m *Model) renderLocations(b *strings.Builder) {
 		fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.notice))
 	}
 	fmt.Fprintln(b)
-	fmt.Fprintln(b, dimStyle.Render("enter expand/select • p ping • r refresh • / filter • esc back • ? help"))
+	if run := m.loc.ping; run != nil && run.all {
+		fmt.Fprintln(b, dimStyle.Render(fmt.Sprintf("pinging %d servers...", run.total)))
+	}
+	fmt.Fprintln(b, dimStyle.Render("enter expand/select • p ping • P ping all • / filter"))
+	fmt.Fprintln(b, dimStyle.Render("x expand/collapse all • r refresh • esc back • ? help"))
 }

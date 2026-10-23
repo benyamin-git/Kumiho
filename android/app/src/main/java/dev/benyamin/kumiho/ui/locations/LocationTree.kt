@@ -107,6 +107,28 @@ object LocationTree {
     }
 
     /**
+     * The whole loaded tree's ping targets: every country/city/server, skipping
+     * quarantined and unusable entries, deduped by lowercased host:port. The
+     * first spelling wins, and the result does not depend on the filter or the
+     * stored expansion.
+     */
+    fun pingAllTargets(countries: List<Country>): List<String> {
+        val targets = ArrayList<String>()
+        val seen = HashSet<String>()
+        for (country in countries) {
+            for (city in country.cities) {
+                for (server in city.servers) {
+                    if (server.quarantined) continue
+                    if (server.hostname.isBlank() || server.port <= 0) continue
+                    val address = addressOf(server)
+                    if (seen.add(addressKey(address))) targets += address
+                }
+            }
+        }
+        return targets
+    }
+
+    /**
      * The selection the engine reports, resolved against the loaded tree.
      *
      * `status.location` is the persisted country code and `status.server` is the
@@ -219,6 +241,9 @@ data class LocationSelection(
     /** The REC pseudo-country is presented as "Recommended". */
     val recommended: Boolean get() = countryCode.equals(LocationTree.RECOMMENDED_CODE, ignoreCase = true)
 
+    /** The country's flag, or "" for Recommended, blank or an unknown code. */
+    val flag: String get() = CountryFlags.emoji(countryCode)
+
     /** The country's display name, or the raw code while the tree does not know it. */
     val countryName: String?
         get() = country?.name ?: countryCode.takeIf { it.isNotBlank() }
@@ -260,7 +285,9 @@ object LocationsTags {
     const val SEARCH_CLEAR = "locations_search_clear"
     const val REFRESH = "locations_refresh"
     const val TEST_SPEED = "locations_test_speed"
-    const val TEST_HELPER = "locations_test_helper"
+    const val PING_ALL = "locations_ping_all"
+    const val TOGGLE_ALL = "locations_toggle_all"
+    const val TARGETS_HELPER = "locations_targets_helper"
     const val SUMMARY = "locations_summary"
     const val CONNECTED_HINT = "locations_connected_hint"
     const val NOTICE = "locations_notice"

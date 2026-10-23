@@ -159,6 +159,52 @@ class LocationTreeTest {
     }
 
     @Test
+    fun `ping all targets walk every country including REC`() {
+        assertEquals(
+            listOf(
+                "auto.example.net:443",
+                "edge.example.net:2499",
+                "share.example.net:443",
+                "ber.example.net:443",
+            ),
+            LocationTree.pingAllTargets(ORDERED),
+        )
+    }
+
+    @Test
+    fun `ping all targets skip quarantined and broken addresses and keep the first spelling`() {
+        val country = Country(
+            code = "us",
+            name = "United States",
+            cities = listOf(
+                City(
+                    code = "nyc",
+                    name = "New York",
+                    servers = listOf(
+                        server("EDGE.Example.NET", 2499),
+                        server("edge.example.net", 2499),
+                        server("quarantined.example.net", quarantined = true),
+                        server("", 443),
+                        server("noport.example.net", 0),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("EDGE.Example.NET:2499"), LocationTree.pingAllTargets(listOf(country)))
+    }
+
+    @Test
+    fun `ping all targets are independent of expansion and filtering`() {
+        assertEquals(
+            "a collapsed tree has nothing for Test speed to probe",
+            emptyList<String>(),
+            LocationTree.pingTargets(LocationTree.rows(ORDERED)),
+        )
+        assertEquals(4, LocationTree.pingAllTargets(ORDERED).size)
+    }
+
+    @Test
     fun `a quarantined server is still visible for context`() {
         val rows = LocationTree.rows(
             ORDERED,
@@ -210,6 +256,22 @@ class LocationTreeTest {
         requireNotNull(selection)
         assertTrue(selection.recommended)
         assertEquals("Recommended", selection.serverName ?: "Recommended")
+    }
+
+    @Test
+    fun `a resolved country selection carries its flag`() {
+        val selection = LocationTree.currentSelection(ORDERED, location = "us", server = "edge.example.net:2499")
+
+        requireNotNull(selection)
+        assertEquals("🇺🇸", selection.flag)
+    }
+
+    @Test
+    fun `a recommended selection carries no flag`() {
+        val selection = LocationTree.currentSelection(ORDERED, location = "REC", server = null)
+
+        requireNotNull(selection)
+        assertEquals("", selection.flag)
     }
 
     @Test

@@ -91,6 +91,7 @@ enum class LocationsMessage {
     REFRESH_FAILED,
     SELECT_FAILED,
     TEST_FAILED,
+    PING_ALL_FAILED,
 }
 
 /** Notice text: either the engine's own words or a local message code. */
@@ -104,7 +105,7 @@ sealed interface LocationsNoticeText {
 enum class LocationsNoticeTone { WARNING, ERROR }
 
 /** The one retry a notice can offer. */
-enum class LocationsNoticeAction { NONE, RETRY_REFRESH, RETRY_SELECT, RETRY_TEST }
+enum class LocationsNoticeAction { NONE, RETRY_REFRESH, RETRY_SELECT, RETRY_TEST, RETRY_PING_ALL }
 
 /** The latest advisory message from a load, a save or a speed test. */
 data class LocationsNotice(
@@ -132,6 +133,12 @@ data class LocationsNotice(
             text = LocationsNoticeText.Local(LocationsMessage.TEST_FAILED, detail),
             tone = LocationsNoticeTone.WARNING,
             action = LocationsNoticeAction.RETRY_TEST,
+        )
+
+        fun pingAllFailed(detail: String): LocationsNotice = LocationsNotice(
+            text = LocationsNoticeText.Local(LocationsMessage.PING_ALL_FAILED, detail),
+            tone = LocationsNoticeTone.WARNING,
+            action = LocationsNoticeAction.RETRY_PING_ALL,
         )
     }
 }
@@ -164,6 +171,10 @@ data class LocationsState(
     val latency: Map<String, Double?> = emptyMap(),
     /** A Test speed run is in flight (its command plus the results it is waiting for). */
     val testing: Boolean = false,
+    /** A Ping all run is in flight. */
+    val pingingAll: Boolean = false,
+    /** The static target count shown on the Ping all button for this run. */
+    val pingAllCount: Int = 0,
     /** The address key of the server whose save is in flight. */
     val savingServer: String? = null,
     /** A tunnel or proxy session is up, so the saved choice only applies after a reconnect. */
@@ -180,6 +191,13 @@ data class LocationsState(
     /** The `host:port` targets a Test speed would send. */
     val testTargets: List<String> get() = LocationTree.pingTargets(rows)
 
+    /** The whole loaded tree's `host:port` targets, independent of filter and expansion. */
+    val allTargets: List<String> get() = LocationTree.pingAllTargets(countries)
+
+    /** True when a country or city is stored as open, so the toggle reads "Collapse all". */
+    val anyExpanded: Boolean
+        get() = expandedCountries.isNotEmpty() || expandedCities.isNotEmpty()
+
     /** Honest screen states, each true only when it is the only thing to show. */
     val showLoading: Boolean get() = loading && !hasTree
 
@@ -189,8 +207,16 @@ data class LocationsState(
 
     val showNoMatch: Boolean get() = hasTree && searching && rows.isEmpty()
 
-    /** Test speed is offered only when there is something visible to test. */
-    val canTest: Boolean get() = !testing && !loading && loadError == null && testTargets.isNotEmpty()
+    /** Test speed is offered only when there is something visible to test and no run is active. */
+    val canTest: Boolean
+        get() = !testing && !pingingAll && !loading && loadError == null && testTargets.isNotEmpty()
+
+    /** Ping all is offered whenever the loaded tree has a usable target and no run is active. */
+    val canPingAll: Boolean
+        get() = !testing && !pingingAll && !loading && loadError == null && allTargets.isNotEmpty()
+
+    /** The expansion toggle only acts on a loaded tree without a search filter. */
+    val canToggleAll: Boolean get() = hasTree && query.isEmpty()
 
     fun latencyOf(server: Server): LatencyState = LocationTree.latencyOf(latency, server)
 
@@ -376,6 +402,34 @@ class LocationsViewModel(
         }
     }
 
+    /**
+     * Opens every country and city, or clears both stored sets when anything is
+     * already open. The filter-forced view never counts as stored expansion and
+     * the control is inert while a query is active.
+     */
+    fun toggleAll() {
+        val current = mutableState.value
+        if (current.query.isNotEmpty() || !current.hasTree) return
+        if (current.anyExpanded) {
+            mutableState.update {
+                it.copy(expandedCountries = emptySet(), expandedCities = emptySet())
+            }
+            return
+        }
+        val countries = current.countries
+        val allCountries = countries.mapTo(mutableSetOf(), LocationTree::countryKey)
+        val allCities = buildSet {
+            for (country in countries) {
+                for (city in country.cities) {
+                    add(LocationTree.cityKey(country, city))
+                }
+            }
+        }
+        mutableState.update {
+            it.copy(expandedCountries = allCountries, expandedCities = allCities)
+        }
+    }
+
     // ---- selection -------------------------------------------------------
 
     /** A server row's tap; quarantined servers are not selectable. */
@@ -423,36 +477,46 @@ class LocationsViewModel(
         }
     }
 
-    // ---- speed test ------------------------------------------------------
+    // ---- speed tests -----------------------------------------------------
+
+    /** Test speed: only the server rows currently in view, deduped by address. */
+    fun testSpeed() = startPing(mutableState.value.testTargets, all = false)
+
+    /** Ping all: every usable server in the loaded tree, whatever the filter shows. */
+    fun pingAll() = startPing(mutableState.value.allTargets, all = true)
 
     /**
-     * The only call that pings: the currently visible server rows, deduped by
-     * address. Results replace the values for the hosts this run tested as they
-     * arrive; every other host keeps its last value.
+     * The only path that pings. Test speed and Ping all share one run state, so
+     * starting either while the other runs is ignored. Results replace the
+     * values for the hosts this run tested as they arrive; every other host
+     * keeps its last value.
      */
-    fun testSpeed() {
+    private fun startPing(targets: List<String>, all: Boolean) {
         val current = mutableState.value
-        val targets = current.testTargets
-        if (targets.isEmpty() || current.testing) return
+        if (targets.isEmpty() || current.testing || current.pingingAll) return
 
         pendingPings.clear()
         targets.mapTo(pendingPings, LocationTree::addressKey)
+        val cleared = if (all) {
+            LocationsNoticeAction.RETRY_PING_ALL
+        } else {
+            LocationsNoticeAction.RETRY_TEST
+        }
         mutableState.update {
             it.copy(
-                testing = true,
-                notice = if (it.notice?.action == LocationsNoticeAction.RETRY_TEST) {
-                    null
-                } else {
-                    it.notice
-                },
+                testing = !all,
+                pingingAll = all,
+                pingAllCount = if (all) targets.size else 0,
+                notice = if (it.notice?.action == cleared) null else it.notice,
             )
         }
         pingJob?.cancel()
         pingJob = viewModelScope.launch {
-            // The engine's per-host probe deadline is 10 s; this bounds the
-            // "Testing…" state when a host never answers at all.
-            delay(pingWindowMillis)
-            stopTesting()
+            // serverlist.PingTCP gives each host 1.5 s; the window also covers
+            // the engine's 24-way worker pool, and it bounds the run when a
+            // host never answers at all.
+            delay(pingWindowFor(targets.size))
+            stopPing()
         }
         viewModelScope.launch {
             try {
@@ -460,29 +524,39 @@ class LocationsViewModel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                stopTesting()
-                mutableState.update { it.copy(notice = LocationsNotice.testFailed(messageOf(error))) }
+                stopPing()
+                val detail = messageOf(error)
+                mutableState.update {
+                    it.copy(
+                        notice = if (all) {
+                            LocationsNotice.pingAllFailed(detail)
+                        } else {
+                            LocationsNotice.testFailed(detail)
+                        },
+                    )
+                }
             }
         }
     }
+
+    /** The run window: the base, scaled by the engine's 24-way probe batches. */
+    private fun pingWindowFor(count: Int): Long =
+        maxOf(pingWindowMillis, ((count + 23) / 24).toLong() * 1_500L + 1_500L)
 
     private fun onPing(result: PingResult) {
         val key = LocationTree.addressKey(result.host)
         val wasPending = pendingPings.remove(key)
         mutableState.update { current ->
-            current.copy(
-                latency = current.latency + (key to result.rttMs),
-                testing = if (wasPending && pendingPings.isEmpty()) false else current.testing,
-            )
+            current.copy(latency = current.latency + (key to result.rttMs))
         }
-        if (wasPending && pendingPings.isEmpty()) stopTesting()
+        if (wasPending && pendingPings.isEmpty()) stopPing()
     }
 
-    private fun stopTesting() {
+    private fun stopPing() {
         pendingPings.clear()
         pingJob?.cancel()
         pingJob = null
-        mutableState.update { it.copy(testing = false) }
+        mutableState.update { it.copy(testing = false, pingingAll = false, pingAllCount = 0) }
     }
 
     // ---- notices ---------------------------------------------------------
@@ -508,6 +582,10 @@ class LocationsViewModel(
                 mutableState.update { it.copy(notice = null) }
                 testSpeed()
             }
+            LocationsNoticeAction.RETRY_PING_ALL -> {
+                mutableState.update { it.copy(notice = null) }
+                pingAll()
+            }
             LocationsNoticeAction.NONE -> Unit
         }
     }
@@ -518,7 +596,11 @@ class LocationsViewModel(
             ?: "unknown error"
 
     private companion object {
-        /** Longer than the engine's 10 s per-host probe deadline. */
+        /**
+         * The floor for a ping run: the engine probes 24 hosts at a time with a
+         * 1.5 s per-host timeout, and this window bounds the run when answers
+         * never arrive at all.
+         */
         const val DEFAULT_PING_WINDOW_MS = 12_000L
     }
 }

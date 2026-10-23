@@ -5,7 +5,7 @@ Gradle commands, APK verification, signing, release automation and the
 physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
-> tree: **423 JVM tests / 124 connected tests / lint 0 errors + 6 warnings**.
+> tree: **438 JVM tests / 133 connected tests / lint 0 errors + 9 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
 > Galaxy S25 FE; the sign-off is recorded below. The release automation is
 > implemented: `android-verify-apk.sh`, `android-release.sh`, the five Makefile
@@ -20,7 +20,7 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 
 | Piece | Pin | Where |
 |---|---|---|
-| App | `0.5.0`, `versionCode` 500 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
+| App | `0.5.1`, `versionCode` 501 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
 | Package | `dev.benyamin.kumiho` (debug: `.debug`) | `android/app/build.gradle.kts` |
 | minSdk | 26 (Android 8.0) | `android/app/build.gradle.kts` |
 | targetSdk | 36 | `android/app/build.gradle.kts` |
@@ -112,7 +112,7 @@ first:
     make android-debug
     make android-test                 # JVM tests + lint + debug APK
     make android-emulator-test        # connected suite; emulator must be running
-    make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
+    make android-release KUMIHO_VERSION=0.5.1 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
     KUMIHO_EXPECT_CERT_SHA256=<fingerprint> make android-verify
 
 Pass `GRADLE_FLAGS=--offline` to any of the Gradle-backed targets once the
@@ -122,11 +122,13 @@ cache is warm. The unit/lint/assemble gate directly:
     cd android
     ./gradlew --offline :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
-Current expected result on the T16 tree:
+Current expected result on the current tree:
 
-- **423 JVM tests, 0 failures, 0 errors, 0 skipped**;
-- **lint 0 errors, 6 warnings** — the pre-existing `OldTargetApi`,
-  `UnusedAttribute`, `ObsoleteSdkInt` and three `UnusedResources`;
+- **438 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **lint 0 errors, 9 warnings** — the pre-existing `OldTargetApi`,
+  `UnusedAttribute`, `ObsoleteSdkInt` and three `UnusedResources`, plus a
+  `PluralsCandidate` on the toolbar's `visible · total` helper and two
+  dependency-update notices;
 - `app/build/outputs/apk/debug/app-debug.apk`.
 
 The debug build is one APK containing the AAR's arm libraries and installs as
@@ -146,7 +148,7 @@ before treating any release APK as shippable.
 
 You can override the version for a one-off build:
 
-    ./gradlew -PkumihoVersion=v0.5.0 :app:assembleDebug
+    ./gradlew -PkumihoVersion=v0.5.1 :app:assembleDebug
 
 ### Instrumented tests on the emulator
 
@@ -170,7 +172,7 @@ Then run:
     cd android
     ./gradlew --offline -PkumihoEmulator=true :app:connectedDebugAndroidTest
 
-Current expected result: **124 tests, 0 failures, 0 errors, 0 skipped**. The
+Current expected result: **133 tests, 0 failures, 0 errors, 0 skipped**. The
 suite includes the AAR probe, setup, dashboard, locations, settings, split
 tunneling, account, logs, diagnostics, notification/tile reducers and the
 screenshot capture tests. A connected run uninstalls the app and its external
@@ -200,7 +202,7 @@ x86/x86_64 native libraries, `zipalign -c -P 16 -v 4`, the arm64 `libgojni.so`
 `p_align >= 0x4000`, the signature via `apksigner`, and the universal size cap:
 
     source scripts/android-env.sh
-    scripts/android-verify-apk.sh dist/kumiho-v0.5.0-android-universal.apk
+    scripts/android-verify-apk.sh dist/kumiho-v0.5.1-android-universal.apk
 
     # Unsigned output from a compile-check assembleRelease:
     KUMIHO_ALLOW_UNSIGNED=1 scripts/android-verify-apk.sh \
@@ -223,7 +225,7 @@ The equivalent manual commands (use the build-tools directory because
     "$BT/zipalign" -c -P 16 -v 4 "$APK"
 
 Expect `aapt2` to report `package: name='dev.benyamin.kumiho.debug'`,
-`versionCode='500'`, `versionName='0.5.0-debug'`, `minSdkVersion:'26'` and
+`versionCode='501'`, `versionName='0.5.1-debug'`, `minSdkVersion:'26'` and
 `targetSdkVersion:'36'`; `zipalign` to say `Verification successful`; and the
 archive to contain only the expected ABI(s). For a signed APK the signature
 check is:
@@ -255,7 +257,7 @@ check is:
     CERT_SHA256=$(keytool -list -v \
       -keystore ~/kumiho-android-release.jks -alias kumiho \
       | awk '/SHA256:/ { print $2; exit }' | tr -d ':')
-    make android-release KUMIHO_VERSION=0.5.0 \
+    make android-release KUMIHO_VERSION=0.5.1 \
       KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256"
     KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256" make android-verify
 
@@ -269,7 +271,8 @@ unless `KUMIHO_ALLOW_DIRTY=1` is set for a local experiment. The outputs are:
     dist/kumiho-v<version>-android-universal.apk
 
 The per-ABI names are the release assets; the universal APK is capped at 60 MiB
-by the verifier. No Android APK or Android checksum has been published yet.
+by the verifier. The v0.5.0 APKs are published on GitHub; no v0.5.1 APK has
+been published yet.
 
 ### Creating a release keystore (offline, once)
 
@@ -293,7 +296,7 @@ Never commit the keystore or passwords. For a local signed build, create
 
 `storeFile` is resolved with `rootProject.file(...)`: an absolute path is used
 as-is; a relative path is relative to `android/`. Then run
-`make android-release KUMIHO_VERSION=0.5.0 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
+`make android-release KUMIHO_VERSION=0.5.1 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
 as shown above. The fingerprint is public metadata, not a secret.
 
 ### GitHub Actions secrets and tagged release

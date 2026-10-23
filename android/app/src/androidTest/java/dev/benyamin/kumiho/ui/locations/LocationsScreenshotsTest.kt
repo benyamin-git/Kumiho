@@ -125,6 +125,8 @@ class LocationsScreenshotsTest {
         onRefresh = {},
         onRetryLoad = {},
         onTestSpeed = {},
+        onPingAll = {},
+        onToggleAll = {},
         onDismissNotice = {},
         onRetryNotice = {},
     )

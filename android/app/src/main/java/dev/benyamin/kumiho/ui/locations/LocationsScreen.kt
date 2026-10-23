@@ -50,6 +50,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -110,6 +112,8 @@ fun LocationsRoute(
             onRefresh = locationsViewModel::refresh,
             onRetryLoad = locationsViewModel::retryLoad,
             onTestSpeed = locationsViewModel::testSpeed,
+            onPingAll = locationsViewModel::pingAll,
+            onToggleAll = locationsViewModel::toggleAll,
             onDismissNotice = locationsViewModel::dismissNotice,
             onRetryNotice = locationsViewModel::retryNotice,
         ),
@@ -127,6 +131,8 @@ data class LocationsActions(
     val onRefresh: () -> Unit,
     val onRetryLoad: () -> Unit,
     val onTestSpeed: () -> Unit,
+    val onPingAll: () -> Unit,
+    val onToggleAll: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onRetryNotice: () -> Unit,
 )
@@ -162,14 +168,7 @@ fun LocationsScreen(
                 top = Dimens.Space4,
             ),
         )
-        Toolbar(
-            refreshing = state.refreshing,
-            testing = state.testing,
-            canTest = state.canTest,
-            targetCount = state.testTargets.size,
-            onRefresh = actions.onRefresh,
-            onTestSpeed = actions.onTestSpeed,
-        )
+        Toolbar(state = state, actions = actions)
         SelectionSummary(
             selection = state.selection,
             modifier = Modifier.padding(
@@ -257,78 +256,128 @@ private fun SearchField(
 }
 
 @Composable
-private fun Toolbar(
-    refreshing: Boolean,
-    testing: Boolean,
-    canTest: Boolean,
-    targetCount: Int,
-    onRefresh: () -> Unit,
-    onTestSpeed: () -> Unit,
-) {
-    Row(
+private fun Toolbar(state: LocationsState, actions: LocationsActions) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space1),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = onRefresh,
-            enabled = !refreshing,
-            modifier = Modifier
-                .size(Dimens.TouchTarget)
-                .testTag(LocationsTags.REFRESH),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (refreshing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = stringResource(R.string.locations_refresh),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Box(modifier = Modifier.weight(1f))
-        Column(horizontalAlignment = Alignment.End) {
-            TextButton(
-                onClick = onTestSpeed,
-                enabled = canTest,
+            IconButton(
+                onClick = actions.onRefresh,
+                enabled = !state.refreshing,
                 modifier = Modifier
-                    .heightIn(min = Dimens.TouchTarget)
-                    .testTag(LocationsTags.TEST_SPEED),
+                    .size(Dimens.TouchTarget)
+                    .testTag(LocationsTags.REFRESH),
             ) {
-                if (testing) {
+                if (state.refreshing) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.primary,
                     )
-                    Spacer(modifier = Modifier.size(Dimens.Space1))
-                }
-                Text(
-                    text = if (testing) {
-                        stringResource(R.string.locations_testing)
-                    } else {
-                        stringResource(R.string.locations_test_speed)
-                    },
-                )
-            }
-            Text(
-                text = if (targetCount == 0) {
-                    stringResource(R.string.locations_test_helper_none)
                 } else {
-                    pluralStringResource(R.plurals.locations_test_helper, targetCount, targetCount)
-                },
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.locations_refresh),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = stringResource(
+                    R.string.locations_targets_helper,
+                    state.testTargets.size,
+                    state.allTargets.size,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.End,
-                modifier = Modifier.testTag(LocationsTags.TEST_HELPER),
+                maxLines = 1,
+                modifier = Modifier.testTag(LocationsTags.TARGETS_HELPER),
             )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ToolbarAction(
+                label = if (state.testing) {
+                    stringResource(R.string.locations_testing)
+                } else {
+                    stringResource(R.string.locations_test_speed)
+                },
+                tag = LocationsTags.TEST_SPEED,
+                enabled = state.canTest,
+                loading = state.testing,
+                onClick = actions.onTestSpeed,
+                modifier = Modifier.weight(1f),
+            )
+            ToolbarAction(
+                label = if (state.pingingAll) {
+                    stringResource(R.string.locations_pinging_all, state.pingAllCount)
+                } else {
+                    stringResource(R.string.locations_ping_all)
+                },
+                tag = LocationsTags.PING_ALL,
+                enabled = state.canPingAll,
+                loading = state.pingingAll,
+                onClick = actions.onPingAll,
+                modifier = Modifier.weight(1f),
+            )
+            ToolbarAction(
+                label = stringResource(
+                    if (state.anyExpanded) {
+                        R.string.locations_collapse_all
+                    } else {
+                        R.string.locations_expand_all
+                    },
+                ),
+                tag = LocationsTags.TOGGLE_ALL,
+                enabled = state.canToggleAll,
+                onClick = actions.onToggleAll,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** One equal-width action in the toolbar's second row, with an optional spinner. */
+@Composable
+private fun ToolbarAction(
+    label: String,
+    tag: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    loading: Boolean = false,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = Dimens.Space2, vertical = Dimens.Space2),
+        modifier = modifier
+            .heightIn(min = Dimens.TouchTarget)
+            .testTag(tag),
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.size(Dimens.Space1))
+        }
+        Text(
+            text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -355,8 +404,15 @@ private fun SelectionSummary(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val plain = selectionText(selection)
+            val flag = selection?.flag.orEmpty()
             Text(
-                text = selectionText(selection),
+                text = if (flag.isEmpty()) plain else "$flag $plain",
+                modifier = if (flag.isEmpty()) {
+                    Modifier
+                } else {
+                    Modifier.clearAndSetSemantics { contentDescription = plain }
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
@@ -509,6 +565,7 @@ private fun messageResource(message: LocationsMessage): Int = when (message) {
     LocationsMessage.REFRESH_FAILED -> R.string.locations_message_refresh_failed
     LocationsMessage.SELECT_FAILED -> R.string.locations_message_select_failed
     LocationsMessage.TEST_FAILED -> R.string.locations_message_test_failed
+    LocationsMessage.PING_ALL_FAILED -> R.string.locations_message_ping_all_failed
 }
 
 // ---- content states -----------------------------------------------------
@@ -640,8 +697,10 @@ private fun CountryRow(
     } else {
         row.country.name
     }
+    val flag = CountryFlags.emoji(row.country.code)
     KumihoRow(
         title = name,
+        titlePrefix = flag.takeIf { it.isNotEmpty() },
         modifier = Modifier
             .semantics { heading() }
             .testTag(countryRowTag(row.country.code)),

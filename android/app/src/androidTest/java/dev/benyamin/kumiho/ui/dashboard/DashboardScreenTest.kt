@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.dashboard
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -215,6 +216,9 @@ class DashboardScreenTest {
 
         rule.onNodeWithTag(DashboardTags.PICKER_SAVED).performScrollTo()
         rule.onNodeWithTag(DashboardTags.PICKER_RECOMMENDED).performScrollTo().performClick()
+        rule.onNodeWithTag(countryTag("us")).performScrollTo()
+            .assertTextContains("United States")
+        rule.onNodeWithText("🇺🇸").assertDoesNotExist()
         rule.onNodeWithTag(countryTag("us")).performScrollTo().performClick()
         rule.onNodeWithTag(cityTag("us", "nyc")).performScrollTo().performClick()
         rule.onNodeWithTag(DashboardTags.SHEET_PROXY_ONLY).performScrollTo().performClick()

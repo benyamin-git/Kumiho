@@ -6,8 +6,8 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.5.0**
-(`versionCode` 500). Read the honesty note below before relying on it.
+This guide describes the app as implemented for **v0.5.1**
+(`versionCode` 501). Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
@@ -139,8 +139,8 @@ state word under it is the service's own state:
 While connected the hero shows the real location and server and the session
 uptime. Four cards appear only when their data exists:
 
-- **Location** — country and city when the engine's server is known, with the
-  `host:port` beneath it;
+- **Location** — the country flag, country and city when the engine's server
+  is known, with the `host:port` beneath it;
 - **Exit IP** — the public address the engine observed;
 - **Quota** — remaining and limit, with the reset date when reported;
 - **Session** — uptime and up/down totals.
@@ -162,7 +162,7 @@ replaces a live tunnel with an error.
 The options sheet (from the power control's entry point) has:
 
 - a **compact location picker** — Recommended, the saved location if there is
-  one, and countries expanding to cities;
+  one, and flagged countries expanding to cities;
 - **Proxy only** — start the local proxies without the VPN interface;
 - a **Lockdown** row that explains it is managed in Android VPN settings and
   opens them;
@@ -178,16 +178,28 @@ system dialog; a denial closes the sheet and shows the reason.
 ### Locations
 
 **Locations** loads the full country/city/server tree, with the engine's
-recommended entry first. Search matches country name/code, city name and
-server hostname, case-insensitively; matching branches open while the query is
-active and closing the search restores the previous expansion. Refresh keeps
-the previous tree on failure and offers one Retry.
+recommended entry first. Country rows carry their country-flag emoji, and so
+do the connect-sheet country picker and the current-selection summary;
+Recommended, cities and servers stay unprefixed. Search matches country
+name/code, city name and server hostname, case-insensitively; matching
+branches open while the query is active and closing the search restores the
+previous expansion. Refresh keeps the previous tree on failure and offers one
+Retry.
 
-**Test speed** pings only the currently visible, non-quarantined `host:port`
-targets through the engine's 24-way ping, deduped. A measured round trip shows
-milliseconds, an unanswered probe shows **timeout**, and an untested host
-shows **—**; nothing pings on load, typing, expanding, refreshing or resuming.
-The *Testing…* state ends when every target answers or after 12 seconds.
+Row 1 of the toolbar shows `X visible · Y total`: the targets Test speed would
+probe and the whole loaded list. Row 2 holds **Test speed**, **Ping all** and
+**Expand all**/**Collapse all**. Test speed pings only the currently visible,
+non-quarantined `host:port` targets through the engine's 24-way ping, deduped.
+Ping all pings every usable server in the loaded list regardless of the filter
+or expansion, deduped by address and skipping quarantined entries; its button
+reads **Pinging N…**, and both run buttons stay disabled until the run ends. A
+measured round trip shows milliseconds, an unanswered probe shows **timeout**,
+and an untested host shows **—**; nothing pings on load, typing, expanding,
+refreshing or resuming. The run window is 12 seconds for a normal list and
+scales with the target count (1.5 seconds per 24-host batch plus margin).
+Expand all opens every country and city,
+and the label flips to Collapse all while anything is open; the control is
+disabled while the search field is non-empty.
 
 Selecting a row saves it for the **next** connection — the current session
 keeps its server and exit IP — so the screen says to disconnect on Home and
@@ -629,7 +641,7 @@ sign-off has happened.
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
-| Locations tree, refresh, Test speed | Locations screen, live filter, 24-way ping |
+| Locations tree, refresh, Test speed/Ping all, Expand all | Locations screen, live filter, 24-way ping |
 | 19 settings rows, overrides/reset | Settings groups with the same 19 rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
 | Account entitlement and sign-out | Account screen |

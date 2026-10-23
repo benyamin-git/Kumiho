@@ -90,14 +90,179 @@ func TestLocationsView(t *testing.T) {
 		},
 	}
 	view := m.View()
-	for _, want := range []string{"Locations", "Recomended Location", "p.m1.fastly-masque.net", "Germany"} {
+	for _, want := range []string{"Locations", "Recomended Location", "p.m1.fastly-masque.net", "Germany", "🇩🇪 Germany"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("locations view missing %q:\n%s", want, view)
 		}
 	}
+	if strings.Contains(view, "🇷🇪") {
+		t.Errorf("recommended row must not carry a flag:\n%s", view)
+	}
 	// REC (country) + its city + server + DE country = 4 visible rows.
 	if rows := m.locationRows(); len(rows) != 4 {
 		t.Fatalf("rows = %d, want 4", len(rows))
+	}
+}
+
+// testLocationsModel returns a REC/US/DE tree with a duplicate, a quarantined
+// and a no-connect server, all collapsed.
+func testLocationsModel() *Model {
+	return &Model{
+		screen: screenLocations,
+		loc: locationsState{
+			countries: []serverlist.Country{
+				{
+					Code: "REC", Name: "Recommended Location",
+					Cities: []serverlist.City{{
+						Code: "p", Name: "Recommended",
+						Servers: []serverlist.Server{{Hostname: "p.m1.fastly-masque.net", Port: 2499}},
+					}},
+				},
+				{
+					Code: "US", Name: "United States",
+					Cities: []serverlist.City{{
+						Code: "NYC", Name: "New York",
+						Servers: []serverlist.Server{
+							{Hostname: "a.example.net", Port: 2499},
+							{Hostname: "A.EXAMPLE.NET", Port: 2499},
+							{Hostname: "down.example.net", Port: 2499, Quarantined: true},
+							{
+								Hostname: "noc.example.net", Port: 2499,
+								Protocols: []serverlist.Protocol{{Name: "http", Host: "noc.example.net", Port: 80}},
+							},
+						},
+					}},
+				},
+				{
+					Code: "DE", Name: "Germany",
+					Cities: []serverlist.City{{
+						Code: "FRA", Name: "Frankfurt",
+						Servers: []serverlist.Server{{Hostname: "fra1.example.net", Port: 2499}},
+					}},
+				},
+			},
+			expandedCountries: map[string]bool{},
+			expandedCities:    map[string]bool{},
+			rtts:              map[string]*float64{},
+		},
+	}
+}
+
+func TestLocationsToggleAll(t *testing.T) {
+	m := testLocationsModel()
+	if m.anyExpanded() {
+		t.Fatal("fixture should start collapsed")
+	}
+	m.toggleAllExpanded()
+	if !m.anyExpanded() {
+		t.Fatal("toggle should expand every group")
+	}
+	if got, want := len(m.loc.expandedCountries), 3; got != want {
+		t.Fatalf("expanded countries = %d, want %d", got, want)
+	}
+	if got, want := len(m.loc.expandedCities), 3; got != want {
+		t.Fatalf("expanded cities = %d, want %d", got, want)
+	}
+	for _, key := range []string{"REC", "US", "DE", "REC/p", "US/NYC", "DE/FRA"} {
+		if key == "REC" || key == "US" || key == "DE" {
+			if !m.loc.expandedCountries[key] {
+				t.Errorf("country %q not expanded", key)
+			}
+			continue
+		}
+		if !m.loc.expandedCities[key] {
+			t.Errorf("city %q not expanded", key)
+		}
+	}
+	m.toggleAllExpanded()
+	if m.anyExpanded() {
+		t.Fatal("second toggle should collapse every group")
+	}
+	if len(m.loc.expandedCountries) != 0 || len(m.loc.expandedCities) != 0 {
+		t.Fatalf("maps not emptied: %d countries, %d cities", len(m.loc.expandedCountries), len(m.loc.expandedCities))
+	}
+}
+
+func TestLocationsToggleAllIgnoredWhileFiltering(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.filter = "fra"
+	m.loc.expandedCountries["DE"] = true
+	m.loc.expandedCities["DE/FRA"] = true
+	m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if !m.loc.expandedCountries["DE"] || !m.loc.expandedCities["DE/FRA"] {
+		t.Fatal("x must not change expansion while filtering")
+	}
+	if len(m.loc.expandedCountries) != 1 || len(m.loc.expandedCities) != 1 {
+		t.Fatalf("unexpected expansion mutation: %d countries, %d cities", len(m.loc.expandedCountries), len(m.loc.expandedCities))
+	}
+
+	m = &Model{screen: screenLocations, loc: locationsState{
+		expandedCountries: map[string]bool{},
+		expandedCities:    map[string]bool{},
+	}}
+	m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if m.anyExpanded() {
+		t.Fatal("x with no loaded tree must do nothing")
+	}
+}
+
+func TestAllLocationHosts(t *testing.T) {
+	m := testLocationsModel()
+	got := m.allLocationHosts()
+	want := []string{
+		"p.m1.fastly-masque.net:2499",
+		"a.example.net:2499",
+		"fra1.example.net:2499",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("hosts = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("hosts[%d] = %q, want %q (all: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestLocationsPingAllStartsAndAcks(t *testing.T) {
+	m := testLocationsModel()
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")}); cmd == nil {
+		t.Fatal("P should start a ping command")
+	}
+	run := m.loc.ping
+	if run == nil || !run.all {
+		t.Fatalf("ping run = %+v, want an all-run", run)
+	}
+	if run.total != 3 || len(run.pending) != 3 {
+		t.Fatalf("total = %d, pending = %d, want 3/3", run.total, len(run.pending))
+	}
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")}); cmd != nil {
+		t.Fatal("a second P must be ignored while pinging")
+	}
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}); cmd != nil {
+		t.Fatal("p must be ignored while Ping all runs")
+	}
+	m.ackPing("not-requested.example.net:2499")
+	if m.loc.ping == nil {
+		t.Fatal("an unrequested result must not clear the run")
+	}
+	for host := range run.pending {
+		m.ackPing(host)
+	}
+	if m.loc.ping != nil {
+		t.Fatalf("run not cleared after every host acked: %+v", m.loc.ping)
+	}
+}
+
+func TestLocationsFooterShowsPingAllCount(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.ping = &pingRun{all: true, total: 35, pending: map[string]bool{"a": true}}
+	if view := m.View(); !strings.Contains(view, "pinging 35 servers...") {
+		t.Fatalf("all-run footer missing count:\n%s", view)
+	}
+	m.loc.ping = &pingRun{all: false, total: 35, pending: map[string]bool{"a": true}}
+	if view := m.View(); strings.Contains(view, "pinging 35 servers...") {
+		t.Fatalf("visible-only run must not show the all-run footer:\n%s", view)
 	}
 }
 
