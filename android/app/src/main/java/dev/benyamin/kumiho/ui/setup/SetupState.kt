@@ -1,5 +1,7 @@
 package dev.benyamin.kumiho.ui.setup
 
+import dev.benyamin.kumiho.ui.account.BrowserSignIn
+
 /**
  * The four setup steps, in the order the user walks them. [number] is the real
  * sequence number shown in the step indicator (the Ban 11 carve-out: this is a
@@ -38,6 +40,7 @@ enum class SetupMessage {
     PASSWORD_REQUIRED,
     CODE_REQUIRED,
     UNEXPECTED_STEP,
+    NO_BROWSER,
 }
 
 /**
@@ -95,6 +98,10 @@ data class SetupState(
     val finishing: Boolean = false,
     /** A failure that keeps the user on the current step. */
     val error: String? = null,
+    /** The engine-owned browser flow, while one is in flight. */
+    val browser: BrowserSignIn? = null,
+    /** A newly returned URL the screen should open once. */
+    val browserLaunchURL: String? = null,
 ) {
     /** The account is signed in, so the sign-in step is satisfied. */
     val signedIn: Boolean get() = signIn.phase == SignInPhase.AUTHENTICATED

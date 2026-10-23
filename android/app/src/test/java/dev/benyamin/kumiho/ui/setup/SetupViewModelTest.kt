@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.setup
 
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.test.MainDispatcherRule
@@ -107,6 +108,57 @@ class SetupViewModelTest {
             assertEquals(SignInPhase.AUTHENTICATED, viewModel.state.value.signIn.phase)
             assertEquals("user@example.com", viewModel.state.value.signIn.accountEmail)
             assertTrue(viewModel.state.value.canContinue)
+        }
+
+    @Test
+    fun `first run can start browser sign-in`() = runTest(mainRule.testDispatcher) {
+        engine.loginStartResult = { _, _ ->
+            LoginState(
+                "browser",
+                null,
+                null,
+                null,
+                null,
+                method = "browser",
+                url = "http://127.0.0.1:49152/callback",
+                loginId = "setup-1",
+            )
+        }
+        val viewModel = viewModel()
+        reachSignIn(viewModel)
+
+        viewModel.startBrowser()
+        runCurrent()
+
+        assertEquals(listOf("browser" to null), engine.loginStartCalls)
+        assertEquals("setup-1", viewModel.state.value.browser?.id)
+        assertEquals("http://127.0.0.1:49152/callback", viewModel.state.value.browser?.url)
+        assertEquals("http://127.0.0.1:49152/callback", viewModel.state.value.browserLaunchURL)
+
+        engine.loginStatusResult = {
+            LoginState("done", "user@example.com", null, null, null)
+        }
+        advance(1_000)
+
+        assertNull(viewModel.state.value.browser)
+        assertNull(viewModel.state.value.browserLaunchURL)
+        assertEquals(SignInPhase.AUTHENTICATED, viewModel.state.value.signIn.phase)
+        assertTrue(viewModel.state.value.canContinue)
+    }
+
+    @Test
+    fun `password fallback still works after browser sign-in is available`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("pw")
+            runCurrent()
+
+            assertEquals(SignInPhase.AUTHENTICATED, viewModel.state.value.signIn.phase)
+            assertEquals(listOf("user@example.com"), engine.emailCalls)
+            assertEquals(listOf("pw"), engine.passwordCalls)
         }
 
     @Test
@@ -503,6 +555,9 @@ private class FakeEngine : SetupEngine {
     val emailCalls = mutableListOf<String>()
     val passwordCalls = mutableListOf<String>()
     val codeCalls = mutableListOf<String>()
+    val loginStartCalls = mutableListOf<Pair<String, String?>>()
+    val loginStatusCalls = mutableListOf<String>()
+    val loginCancelCalls = mutableListOf<String>()
 
     var status: EngineStatus = status()
     var statusFailure: Exception? = null
@@ -513,6 +568,12 @@ private class FakeEngine : SetupEngine {
     var onEmail: (String) -> LoginState = { LoginState("password", it, null, null, null) }
     var onPassword: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
     var onCode: (String) -> LoginState = { LoginState("email", null, null, null, null) }
+    var accountsResult: suspend () -> Accounts = {
+        Accounts(emptyList(), null, false, 10, null, null, null)
+    }
+    var accountsFailure: Exception? = null
+    var loginStartResult: suspend (String, String?) -> LoginState = { _, _ -> error("no browser start configured") }
+    var loginStatusResult: suspend (String) -> LoginState = { error("sign-in flow not found") }
 
     override suspend fun loginEmail(email: String): LoginState {
         emailCalls += email
@@ -535,6 +596,25 @@ private class FakeEngine : SetupEngine {
     override suspend fun refreshStatus(): EngineStatus {
         statusFailure?.let { throw it }
         return status
+    }
+
+    override suspend fun accountsList(): Accounts {
+        accountsFailure?.let { throw it }
+        return accountsResult()
+    }
+
+    override suspend fun loginStart(method: String, email: String?): LoginState {
+        loginStartCalls += method to email
+        return loginStartResult(method, email)
+    }
+
+    override suspend fun loginStatus(id: String): LoginState {
+        loginStatusCalls += id
+        return loginStatusResult(id)
+    }
+
+    override suspend fun loginCancel(id: String) {
+        loginCancelCalls += id
     }
 }
 

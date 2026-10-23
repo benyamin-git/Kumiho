@@ -10,6 +10,7 @@ activityCompose = "1.13.0"
 lifecycle = "2.11.0"
 navigation = "2.10.2"
 datastore = "1.2.1"
+browser = "1.10.0"
 splashscreen = "1.2.0"
 coroutines = "1.11.0"
 junit = "4.13.2"
@@ -40,6 +41,7 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
 
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

@@ -1,6 +1,7 @@
 package dev.benyamin.kumiho.ui.account
 
 import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.test.MainDispatcherRule
 import dev.benyamin.kumiho.ui.setup.SignInPhase
@@ -347,6 +348,30 @@ class AccountStateTest {
             logoutError?.let { throw it }
             signedIn = false
         }
+
+        override suspend fun accountsList(): Accounts =
+            Accounts(emptyList(), null, false, 10, null, null, null)
+
+        override suspend fun loginCancel(id: String) = Unit
+
+        override suspend fun accountsAddStart(
+            method: String,
+            email: String?,
+            accountId: String?,
+        ): LoginState = error("browser sign-in is not used in this test")
+
+        override suspend fun accountsAddStatus(id: String): LoginState =
+            error("no browser flow")
+
+        override suspend fun accountsAddCancel(id: String) = Unit
+
+        override suspend fun useAccount(id: String) = Unit
+
+        override suspend fun removeAccount(id: String) = Unit
+
+        override suspend fun renameAccount(id: String, label: String) = Unit
+
+        override suspend fun setRotation(enabled: Boolean, threshold: Int) = Unit
     }
 
     private companion object {

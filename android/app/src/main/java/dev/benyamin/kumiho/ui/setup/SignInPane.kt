@@ -49,6 +49,7 @@ fun SignInPane(
     onSubmitPassword: (String) -> Unit,
     onSubmitCode: (String) -> Unit,
     onRecheck: () -> Unit,
+    onBrowser: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     signedInNote: String? = null,
 ) {
@@ -62,6 +63,23 @@ fun SignInPane(
     ) {
         when (state.phase) {
             SignInPhase.EMAIL -> {
+                if (onBrowser != null) {
+                    Button(
+                        onClick = onBrowser,
+                        enabled = !state.busy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = Dimens.ControlHeight)
+                            .testTag(SetupTags.SIGN_IN_BROWSER),
+                    ) {
+                        Text(stringResource(R.string.sign_in_browser))
+                    }
+                    Text(
+                        text = stringResource(R.string.sign_in_browser_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = stringResource(R.string.sign_in_intro),
                     style = MaterialTheme.typography.bodyMedium,
@@ -311,5 +329,6 @@ internal fun setupMessageText(message: SetupMessage): String = stringResource(
         SetupMessage.PASSWORD_REQUIRED -> R.string.sign_in_password_required
         SetupMessage.CODE_REQUIRED -> R.string.sign_in_code_required
         SetupMessage.UNEXPECTED_STEP -> R.string.sign_in_unexpected_step
+        SetupMessage.NO_BROWSER -> R.string.sign_in_no_browser
     },
 )

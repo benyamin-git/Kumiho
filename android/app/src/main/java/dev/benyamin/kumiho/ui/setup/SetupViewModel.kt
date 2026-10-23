@@ -2,7 +2,9 @@ package dev.benyamin.kumiho.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.ui.account.BrowserSignIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /**
  * The four-step setup state machine: consent, Firefox Accounts sign-in, the two
@@ -32,6 +35,7 @@ class SetupViewModel(
     private val persistSetupComplete: suspend () -> Unit,
     private val connectNow: () -> Unit,
     private val pollIntervalMillis: Long = DEFAULT_POLL_INTERVAL_MS,
+    private val browserPollIntervalMillis: Long = DEFAULT_BROWSER_POLL_INTERVAL_MS,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(
@@ -53,6 +57,8 @@ class SetupViewModel(
     private var resumed = true
 
     private var pollJob: Job? = null
+    private var browserJob: Job? = null
+    private var browserAdoptionAttempted = false
 
     // ---- consent --------------------------------------------------------
 
@@ -87,13 +93,17 @@ class SetupViewModel(
     fun back(): Boolean {
         val previous = mutableState.value.step.previous ?: return false
         stopPolling()
+        if (mutableState.value.step == SetupStep.SIGN_IN) cancelBrowser()
         mutableState.update { it.copy(step = previous, error = null) }
         if (previous == SetupStep.SIGN_IN) refreshSignInStatus()
         return true
     }
 
     private fun advanceTo(step: SetupStep) {
-        if (step != SetupStep.SIGN_IN) stopPolling()
+        if (step != SetupStep.SIGN_IN) {
+            stopPolling()
+            stopBrowserPolling()
+        }
         mutableState.update { it.copy(step = step, error = null) }
     }
 
@@ -103,6 +113,8 @@ class SetupViewModel(
     private fun enterSignIn() {
         mutableState.update { it.copy(step = SetupStep.SIGN_IN, error = null) }
         refreshSignInStatus()
+        loadLastMethod()
+        adoptBrowser()
     }
 
     /**
@@ -123,6 +135,244 @@ class SetupViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Prefills the last password account without demoting the browser: the
+     * browser stays the primary action and the email field only helps a
+     * returning password user avoid retyping their address.
+     */
+    private fun loadLastMethod() {
+        viewModelScope.launch {
+            try {
+                val accounts = withTimeout(ACCOUNTS_TIMEOUT_MS) { engine.accountsList() }
+                if (accounts.lastMethod != "password") return@launch
+                val candidate = accounts.accounts.firstOrNull { it.active }
+                    ?: accounts.accounts.firstOrNull()
+                    ?: return@launch
+                mutableState.update { current ->
+                    if (current.step != SetupStep.SIGN_IN ||
+                        current.signIn.phase != SignInPhase.EMAIL ||
+                        current.signIn.email.isNotBlank()
+                    ) {
+                        current
+                    } else {
+                        current.copy(signIn = current.signIn.copy(email = candidate.email))
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The prefill is a convenience; the fields still work without it.
+            }
+        }
+    }
+
+    /** Starts the daemon-owned browser flow for the active account. */
+    fun startBrowser() {
+        val current = mutableState.value
+        if (current.step != SetupStep.SIGN_IN ||
+            current.signIn.phase != SignInPhase.EMAIL ||
+            current.signIn.busy ||
+            current.browser != null
+        ) {
+            return
+        }
+        mutableState.update {
+            it.copy(
+                browser = BrowserSignIn("", null),
+                browserLaunchURL = null,
+                signIn = it.signIn.copy(busy = true, error = null, message = null),
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val login = withTimeout(BROWSER_TIMEOUT_MS) {
+                    engine.loginStart("browser", null)
+                }
+                when {
+                    login.step == STEP_BROWSER && !login.loginId.isNullOrBlank() -> {
+                        val url = login.url
+                        mutableState.update {
+                            it.copy(
+                                browser = BrowserSignIn(login.loginId, url, login.error),
+                                browserLaunchURL = url ?: it.browserLaunchURL,
+                                signIn = it.signIn.copy(busy = false, error = null),
+                            )
+                        }
+                        if (login.error == null) restartBrowserPolling(immediate = false)
+                    }
+                    login.step == STEP_DONE -> {
+                        clearBrowserState()
+                        markAuthenticated(login.email)
+                        refreshAccountEmail()
+                    }
+                    else -> {
+                        clearBrowserState()
+                        mutableState.update {
+                            it.copy(
+                                signIn = it.signIn.copy(
+                                    busy = false,
+                                    error = login.error ?: "browser sign-in did not start",
+                                ),
+                            )
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                clearBrowserState()
+                mutableState.update {
+                    it.copy(signIn = it.signIn.copy(busy = false, error = messageOf(error)))
+                }
+            }
+        }
+    }
+
+    /** Shows the password fallback banner while keeping the flow cancellable. */
+    fun browserUnavailable() {
+        mutableState.update {
+            it.copy(
+                browserLaunchURL = null,
+                signIn = it.signIn.copy(busy = false, message = SetupMessage.NO_BROWSER),
+            )
+        }
+    }
+
+    /** Cancels the daemon-owned flow and returns to the email pane. */
+    fun cancelBrowser() {
+        val browser = mutableState.value.browser ?: return
+        stopBrowserPolling()
+        clearBrowserState()
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = false, error = null, message = null))
+        }
+        if (browser.id.isBlank()) return
+        viewModelScope.launch {
+            try {
+                engine.loginCancel(browser.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The engine drops a flow whose callback never arrives; the UI
+                // must not stay stuck on a browser the user closed.
+            }
+        }
+    }
+
+    /**
+     * Empty-id status is the engine's adoption hook: after an Activity
+     * recreation it returns the in-flight browser flow and its URL.
+     */
+    private fun adoptBrowser() {
+        if (browserAdoptionAttempted) return
+        if (mutableState.value.step != SetupStep.SIGN_IN) return
+        browserAdoptionAttempted = true
+        viewModelScope.launch {
+            try {
+                val login = withTimeout(BROWSER_TIMEOUT_MS) { engine.loginStatus("") }
+                if (mutableState.value.browser == null && login.step == STEP_BROWSER) {
+                    applyBrowser(login)
+                    if (login.error == null) restartBrowserPolling(immediate = false)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // No flow is the normal first-run outcome.
+            }
+        }
+    }
+
+    private fun shouldPollBrowser(): Boolean {
+        val current = mutableState.value
+        val browser = current.browser
+        return resumed &&
+            current.step == SetupStep.SIGN_IN &&
+            browser != null &&
+            browser.error == null
+    }
+
+    private fun restartBrowserPolling(immediate: Boolean) {
+        stopBrowserPolling()
+        if (!shouldPollBrowser()) return
+        browserJob = viewModelScope.launch {
+            if (immediate) pollBrowser()
+            while (isActive && shouldPollBrowser()) {
+                delay(browserPollIntervalMillis)
+                if (!shouldPollBrowser()) return@launch
+                pollBrowser()
+            }
+        }
+    }
+
+    private fun stopBrowserPolling() {
+        browserJob?.cancel()
+        browserJob = null
+    }
+
+    private suspend fun pollBrowser() {
+        val id = mutableState.value.browser?.id.orEmpty()
+        try {
+            val login = withTimeout(BROWSER_TIMEOUT_MS) { engine.loginStatus(id) }
+            applyBrowser(login)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            mutableState.update {
+                it.copy(browser = it.browser?.copy(error = messageOf(error)))
+            }
+        }
+    }
+
+    private fun applyBrowser(login: LoginState) {
+        when (login.step) {
+            STEP_BROWSER -> {
+                val current = mutableState.value.browser
+                val id = login.loginId ?: current?.id
+                if (id.isNullOrBlank()) {
+                    mutableState.update {
+                        it.copy(browser = it.browser?.copy(error = "the engine did not return a sign-in id"))
+                    }
+                    return
+                }
+                val url = login.url ?: current?.url
+                val changed = current == null || current.id != id || current.url != url
+                mutableState.update {
+                    it.copy(
+                        browser = BrowserSignIn(id, url, login.error),
+                        browserLaunchURL = if (changed && url != null) url else it.browserLaunchURL,
+                    )
+                }
+            }
+            STEP_DONE -> {
+                clearBrowserState()
+                markAuthenticated(login.email)
+                refreshAccountEmail()
+                if (!login.error.isNullOrBlank()) {
+                    mutableState.update { it.copy(signIn = it.signIn.copy(error = login.error)) }
+                }
+            }
+            STEP_CANCELLED -> clearBrowserState()
+            STEP_ERROR -> mutableState.update {
+                it.copy(
+                    browser = it.browser?.copy(
+                        error = login.error ?: "browser sign-in failed",
+                    ),
+                )
+            }
+            else -> mutableState.update {
+                it.copy(
+                    browser = it.browser?.copy(
+                        error = login.error ?: "unexpected sign-in step ${login.step}",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun clearBrowserState() {
+        mutableState.update { it.copy(browser = null, browserLaunchURL = null) }
     }
 
     /** Sends the email to the engine; the engine decides the next step. */
@@ -298,6 +548,8 @@ class SetupViewModel(
         stopPolling()
         mutableState.update {
             it.copy(
+                browser = null,
+                browserLaunchURL = null,
                 signIn = it.signIn.copy(
                     phase = SignInPhase.AUTHENTICATED,
                     accountEmail = email ?: it.signIn.accountEmail
@@ -341,9 +593,20 @@ class SetupViewModel(
         if (this.resumed == resumed) return
         this.resumed = resumed
         if (resumed) {
+            if (mutableState.value.step == SetupStep.SIGN_IN) {
+                if (mutableState.value.browser != null) {
+                    restartBrowserPolling(immediate = true)
+                } else {
+                    // A new Activity can resume while the engine still owns a
+                    // flow. One empty-ID status call per resume adopts it.
+                    browserAdoptionAttempted = false
+                    adoptBrowser()
+                }
+            }
             if (shouldPoll()) restartPolling(immediate = false)
         } else {
             stopPolling()
+            stopBrowserPolling()
         }
     }
 
@@ -467,7 +730,13 @@ private const val PENDING_LINK_SENTINEL = "not confirmed yet"
 private const val STEP_EMAIL = "email"
 private const val STEP_PASSWORD = "password"
 private const val STEP_2FA = "2fa"
+private const val STEP_BROWSER = "browser"
 private const val STEP_DONE = "done"
+private const val STEP_CANCELLED = "cancelled"
+private const val STEP_ERROR = "error"
 
 /** The plan's polling floor: never more than one check every 3 s. */
 private const val DEFAULT_POLL_INTERVAL_MS = 3_000L
+private const val DEFAULT_BROWSER_POLL_INTERVAL_MS = 1_000L
+private const val BROWSER_TIMEOUT_MS = 10_000L
+private const val ACCOUNTS_TIMEOUT_MS = 10_000L

@@ -36,8 +36,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -57,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.permissions.PermissionController
+import dev.benyamin.kumiho.ui.account.openBrowserSignIn
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.PillShape
@@ -159,6 +164,14 @@ fun SetupFlow(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var openedURL by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(state.step, state.browserLaunchURL) {
+        val url = state.browserLaunchURL ?: return@LaunchedEffect
+        if (state.step != SetupStep.SIGN_IN || openedURL == url) return@LaunchedEffect
+        openedURL = url
+        if (!openBrowserSignIn(context, url)) viewModel.browserUnavailable()
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val vpnLauncher = rememberLauncherForActivityResult(
@@ -260,6 +273,15 @@ fun SetupFlow(
                         SetupStep.CONSENT -> ConsentStep()
                         SetupStep.SIGN_IN -> SignInStep(
                             state = state.signIn,
+                            browser = state.browser,
+                            onBrowser = viewModel::startBrowser,
+                            onOpenBrowser = {
+                                val url = viewModel.state.value.browser?.url
+                                if (url == null || !openBrowserSignIn(context, url)) {
+                                    viewModel.browserUnavailable()
+                                }
+                            },
+                            onCancelBrowser = viewModel::cancelBrowser,
                             onSubmitEmail = viewModel::submitEmail,
                             onSubmitPassword = viewModel::submitPassword,
                             onSubmitCode = viewModel::submitCode,

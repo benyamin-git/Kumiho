@@ -27,6 +27,10 @@ object SetupTags {
     const val SIGN_IN_RECHECK = "setup_sign_in_recheck"
     const val SIGN_IN_ERROR = "setup_sign_in_error"
     const val SIGN_IN_WAITING = "setup_sign_in_waiting"
+    const val SIGN_IN_BROWSER = "setup_sign_in_browser"
+    const val SIGN_IN_BROWSER_WAITING = "setup_sign_in_browser_waiting"
+    const val SIGN_IN_BROWSER_OPEN = "setup_sign_in_browser_open"
+    const val SIGN_IN_BROWSER_CANCEL = "setup_sign_in_browser_cancel"
     const val SIGN_IN_ACCOUNT = "setup_sign_in_account"
 
     const val PERMISSIONS_STEP = "setup_step_permissions"

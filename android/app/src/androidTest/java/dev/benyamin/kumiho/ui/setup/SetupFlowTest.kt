@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.semantics.getOrNull
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
@@ -246,6 +247,17 @@ internal class FakeSetupEngine : SetupEngine {
     }
 
     override suspend fun refreshStatus(): EngineStatus = signedOutStatus()
+
+    override suspend fun loginStart(method: String, email: String?): LoginState =
+        error("browser sign-in is not used in this test")
+
+    override suspend fun loginStatus(id: String): LoginState =
+        error("no browser flow")
+
+    override suspend fun loginCancel(id: String) = Unit
+
+    override suspend fun accountsList(): Accounts =
+        Accounts(emptyList(), null, false, 10, null, null, null)
 
     private fun pending(): LoginState = LoginState(
         step = "2fa",
