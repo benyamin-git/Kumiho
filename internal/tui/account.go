@@ -449,7 +449,14 @@ func accountQuota(q *api.Quota) string {
 	if q == nil || q.Limit == nil || q.Remaining == nil || *q.Limit <= 0 {
 		return "quota unknown"
 	}
-	return fmt.Sprintf("%d%% left", *q.Remaining*100 / *q.Limit)
+	if *q.Remaining <= 0 {
+		return "quota exhausted"
+	}
+	percent := *q.Remaining * 100 / *q.Limit
+	if percent > 100 {
+		percent = 100
+	}
+	return fmt.Sprintf("%d%% left", percent)
 }
 
 func renderEntitlementCard(b *strings.Builder, info api.AccountInfo) {

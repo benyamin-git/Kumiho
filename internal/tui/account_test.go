@@ -122,6 +122,27 @@ func TestAccountScreenListsAndMarksActive(t *testing.T) {
 	}
 }
 
+func TestAccountQuota(t *testing.T) {
+	limit := accountTestI64(100)
+	tests := []struct {
+		name string
+		q    *api.Quota
+		want string
+	}{
+		{name: "nil", q: nil, want: "quota unknown"},
+		{name: "exhausted", q: &api.Quota{Limit: limit, Remaining: accountTestI64(0)}, want: "quota exhausted"},
+		{name: "over limit", q: &api.Quota{Limit: limit, Remaining: accountTestI64(120)}, want: "100% left"},
+		{name: "normal", q: &api.Quota{Limit: limit, Remaining: accountTestI64(80)}, want: "80% left"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := accountQuota(tt.q); got != tt.want {
+				t.Fatalf("accountQuota() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAccountScreenShowsDaemonNoticeAndError(t *testing.T) {
 	view := accountTestView()
 	view.Notice = "skipping other@example.com: sign in again"

@@ -67,6 +67,28 @@ func TestFormatAccounts(t *testing.T) {
 	}
 }
 
+func TestFormatQuota(t *testing.T) {
+	limit := int64Ptr(100)
+	tests := []struct {
+		name string
+		q    *api.Quota
+		want string
+	}{
+		{name: "nil", q: nil, want: "quota unknown"},
+		{name: "missing limit", q: &api.Quota{Remaining: int64Ptr(10)}, want: "quota unknown"},
+		{name: "exhausted", q: &api.Quota{Limit: limit, Remaining: int64Ptr(0)}, want: "quota exhausted"},
+		{name: "over limit", q: &api.Quota{Limit: limit, Remaining: int64Ptr(120)}, want: "quota 100%"},
+		{name: "normal", q: &api.Quota{Limit: limit, Remaining: int64Ptr(42)}, want: "quota 42%"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatQuota(tt.q); got != tt.want {
+				t.Fatalf("formatQuota() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFormatAccountsRotationOn(t *testing.T) {
 	got := formatAccounts(api.AccountsView{Rotation: true, Threshold: 20})
 	if !strings.Contains(got, "Rotation: on (threshold 20%)") {
