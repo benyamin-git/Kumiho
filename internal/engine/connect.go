@@ -622,6 +622,7 @@ func (c *Controller) Disconnect() error {
 // it; a stopped service must leave no residue behind (the kill-switch rules
 // would otherwise outlive the engine).
 func (c *Controller) Shutdown() {
+	c.cancelBrowser()
 	c.stopTunnel("daemon shutdown")
 }
 

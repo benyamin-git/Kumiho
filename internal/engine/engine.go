@@ -27,6 +27,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/socks"
 	"github.com/benyamin-git/kumiho/internal/tlsplit"
 	"github.com/benyamin-git/kumiho/internal/upstream"
+	"github.com/benyamin-git/kumiho/internal/webauth"
 )
 
 // State is the daemon connection state machine (PLAN.md §4.1). Only the
@@ -119,6 +120,13 @@ type Controller struct {
 	accounts       *accountsFile
 	activeID       string
 	rotationNotice string
+	// Browser sign-in is daemon-owned: the loopback callback, PKCE session and
+	// status polling all live here, never in a client.
+	browser         *browserLogin
+	browserBaseURL  string
+	browserTimeout  time.Duration
+	browserPlatform string
+	newBrowserFlow  func() *webauth.Flow
 	// authGen fences network work that started under one account session
 	// from publishing into the next. It is bumped on every sign-in and
 	// sign-out, under mu.
@@ -180,6 +188,9 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		serverListCache: filepath.Join(filepath.Dir(store.Paths().State), "serverlist.json"),
 		guardian:        guardian.NewClient(),
 		exitCheckURL:    "https://www.cloudflare.com/cdn-cgi/trace",
+		browserBaseURL:  "https://vpn.mozilla.org",
+		browserTimeout:  5 * time.Minute,
+		browserPlatform: plat.Name(),
 		dialUpstream: func(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
 			return upstream.Dial(ctx, opts)
 		},
@@ -192,6 +203,16 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		routeProbe:       plat.HasDefaultRoute,
 	}
 	c.guardian.UserAgent = ua
+	c.newBrowserFlow = func() *webauth.Flow {
+		return webauth.New(webauth.Config{
+			BaseURL:   c.browserBaseURL,
+			Platform:  c.browserPlatform,
+			UserAgent: c.userAgent,
+			HTTP:      c.httpClient,
+			Solver:    c.solver,
+			Timeout:   c.browserTimeout,
+		})
+	}
 	if ls, ok := c.nc.(netcfgLogfSetter); ok {
 		ls.SetLogf(ringLogf(ring))
 	}
@@ -702,7 +723,36 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 	if target != nil && email == "" {
 		email = target.Email
 	}
-	if email == "" {
+	if c.browser != nil {
+		if c.browser.active {
+			if method == MethodBrowser {
+				state := c.browser.state
+				state.Error = "a browser sign-in is already in progress; cancel it first"
+				c.mu.Unlock()
+				return state
+			}
+			c.mu.Unlock()
+			return api.LoginState{
+				Step:   "error",
+				Method: "email",
+				Email:  email,
+				Error:  "cancel the browser sign-in first",
+			}
+		}
+		// A terminal browser state belongs to the previous attempt; clear it
+		// before starting a new sign-in of either method.
+		c.browser = nil
+	}
+	if method == MethodBrowser && c.pending != nil {
+		c.mu.Unlock()
+		return api.LoginState{
+			Step:   "error",
+			Method: MethodBrowser,
+			Email:  email,
+			Error:  "finish or cancel the password sign-in first",
+		}
+	}
+	if method == MethodPassword && email == "" {
 		c.mu.Unlock()
 		return api.LoginState{Step: "email", Method: "email", Error: "email is required"}
 	}
@@ -716,14 +766,39 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 		}
 	}
 	if method == MethodBrowser {
-		c.mu.Unlock()
-		// Task 5 replaces this branch with the daemon-owned PKCE flow.
-		return api.LoginState{
-			Step:   "error",
-			Method: MethodBrowser,
-			Email:  email,
-			Error:  "browser sign-in is not available yet; use the password flow",
+		flow := c.newBrowserFlow()
+		if flow == nil {
+			c.mu.Unlock()
+			return api.LoginState{Step: "error", Method: MethodBrowser, Error: "browser sign-in is not configured"}
 		}
+		ctx, cancel := context.WithCancel(context.Background())
+		session, err := flow.Start(ctx)
+		if err != nil {
+			cancel()
+			c.mu.Unlock()
+			return api.LoginState{
+				Step:   "error",
+				Method: MethodBrowser,
+				Email:  email,
+				Error:  friendlyBrowserError(err),
+			}
+		}
+		b := &browserLogin{
+			id:       session.ID,
+			session:  session,
+			state:    api.LoginState{Step: "browser", Method: MethodBrowser, URL: session.URL, LoginID: session.ID},
+			targetID: accountID,
+			active:   true,
+			cancel:   cancel,
+			done:     make(chan struct{}),
+			ctx:      ctx,
+		}
+		c.browser = b
+		gen := c.authGen
+		state := b.state
+		c.mu.Unlock()
+		go c.runBrowserLogin(b, gen)
+		return state
 	}
 	// Clearing the old password before replacing the pending state means an
 	// in-flight unblock/TOTP retry can never reuse a previous password.
@@ -1169,6 +1244,10 @@ func accountSettingError(key string, err error) error {
 // pendingStateLocked returns the sign-in step visible in Snapshot. Callers
 // hold c.mu.
 func (c *Controller) pendingStateLocked() *api.LoginState {
+	if c.browser != nil {
+		state := c.browser.state
+		return &state
+	}
 	if c.pending == nil || c.pending.email == "" {
 		return nil
 	}
@@ -1204,6 +1283,10 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 		c.mu.Unlock()
 		return false
 	}
+	// A browser flow must not outlive the session: cancel it before the
+	// account swap and tunnel teardown. Its Wait result is discarded by the
+	// generation fence below even if it completed concurrently.
+	c.cancelBrowserLocked()
 	// Bump the generation before clearing the token file below: an in-flight
 	// refresh that captured the old generation must neither publish nor save
 	// after sign-out, whichever side wins the race.
