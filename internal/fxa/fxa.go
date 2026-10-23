@@ -43,9 +43,11 @@ type Tokens struct {
 
 // APIError is a structured FxA error response.
 type APIError struct {
-	StatusCode int
-	Errno      int
-	Message    string
+	StatusCode         int
+	Errno              int
+	Message            string
+	VerificationMethod string
+	VerificationReason string
 }
 
 func (e *APIError) Error() string {

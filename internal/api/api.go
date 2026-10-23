@@ -69,6 +69,7 @@ type Login2FAPayload struct {
 type LoginState struct {
 	Step               string `json:"step"` // email|password|2fa|done
 	Email              string `json:"email,omitempty"`
+	Method             string `json:"method,omitempty"` // email|totp|unblock|2fa
 	VerificationMethod string `json:"verification_method,omitempty"`
 	VerificationReason string `json:"verification_reason,omitempty"`
 	Error              string `json:"error,omitempty"`

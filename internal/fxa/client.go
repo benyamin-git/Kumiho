@@ -36,12 +36,18 @@ func NewClient() *Client {
 	}
 }
 
-// Login performs POST /account/login. On errno 107 it retries without the
-// verificationMethod hint, matching the reference client.
+// Login performs POST /account/login with a password.
 func (c *Client) Login(ctx context.Context, email, password string) (*LoginResult, error) {
+	return c.LoginWithAuthPW(ctx, email, AuthPW(email, password))
+}
+
+// LoginWithAuthPW performs POST /account/login with a precomputed AuthPW.
+// On errno 107 it retries without the verificationMethod hint, matching the
+// reference client.
+func (c *Client) LoginWithAuthPW(ctx context.Context, email, authPW string) (*LoginResult, error) {
 	body := map[string]any{
 		"email":              email,
-		"authPW":             AuthPW(email, password),
+		"authPW":             authPW,
 		"verificationMethod": verificationMethodEmail2FA,
 	}
 
@@ -56,7 +62,30 @@ func (c *Client) Login(ctx context.Context, email, password string) (*LoginResul
 			return nil, err
 		}
 	}
+	return parseLoginResult(raw)
+}
 
+// LoginUnblock retries a login that was blocked by the unblock-code
+// verification reason. It deliberately omits verificationMethod.
+func (c *Client) LoginUnblock(ctx context.Context, email, authPW, unblockCode string) (*LoginResult, error) {
+	raw, err := c.doJSON(ctx, http.MethodPost, "/account/login", "", map[string]any{
+		"email":       email,
+		"authPW":      authPW,
+		"unblockCode": unblockCode,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return parseLoginResult(raw)
+}
+
+// SendUnblockCode emails a new unblock code.
+func (c *Client) SendUnblockCode(ctx context.Context, email string) error {
+	_, err := c.doJSON(ctx, http.MethodPost, "/account/login/send_unblock_code", "", map[string]string{"email": email})
+	return err
+}
+
+func parseLoginResult(raw []byte) (*LoginResult, error) {
 	var resp struct {
 		SessionToken       string `json:"sessionToken"`
 		Verified           bool   `json:"verified"`
@@ -75,6 +104,13 @@ func (c *Client) Login(ctx context.Context, email, password string) (*LoginResul
 		VerificationMethod: resp.VerificationMethod,
 		VerificationReason: resp.VerificationReason,
 	}, nil
+}
+
+// VerifyTOTP submits an authenticator code
+// (POST /session/verify/totp), Hawk-signed like VerifyCode.
+func (c *Client) VerifyTOTP(ctx context.Context, sessionToken, code string) error {
+	_, err := c.doJSON(ctx, http.MethodPost, "/session/verify/totp", sessionToken, map[string]string{"code": code})
+	return err
 }
 
 // VerifyCode submits the emailed 2FA code (POST /session/verify_code).
@@ -266,14 +302,18 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 func apiErrorFrom(status int, body []byte) *APIError {
 	e := &APIError{StatusCode: status, Message: strings.TrimSpace(string(body))}
 	var parsed struct {
-		Errno   int    `json:"errno"`
-		Message string `json:"message"`
+		Errno              int    `json:"errno"`
+		Message            string `json:"message"`
+		VerificationMethod string `json:"verificationMethod"`
+		VerificationReason string `json:"verificationReason"`
 	}
 	if json.Unmarshal(body, &parsed) == nil {
 		e.Errno = parsed.Errno
 		if parsed.Message != "" {
 			e.Message = parsed.Message
 		}
+		e.VerificationMethod = parsed.VerificationMethod
+		e.VerificationReason = parsed.VerificationReason
 	}
 	if e.Message == "" {
 		e.Message = http.StatusText(status)

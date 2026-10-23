@@ -42,9 +42,21 @@ const (
 	StateFatal           State = "FATAL"
 )
 
+const (
+	// errnoAccountUnverified is FxA's login error for an account that needs
+	// an emailed unblock code.
+	errnoAccountUnverified = 125
+)
+
 type pendingLogin struct {
-	email        string
-	sessionToken string
+	email              string
+	sessionToken       string
+	authPW             string
+	verificationMethod string
+	verificationReason string
+	method             string
+	step               string
+	targetID           string
 }
 
 var (
@@ -368,16 +380,16 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 func (c *Controller) LoginEmail(email string) api.LoginState {
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return api.LoginState{Step: "email", Error: "email is required"}
+		return api.LoginState{Step: "email", Method: "email", Error: "email is required"}
 	}
 	c.mu.Lock()
 	if c.tokens != nil {
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: c.email, Error: "already signed in; log out first to switch accounts"}
 	}
-	c.pending = &pendingLogin{email: email}
+	c.pending = &pendingLogin{email: email, method: "email", step: "password"}
 	c.mu.Unlock()
-	return api.LoginState{Step: "password", Email: email}
+	return api.LoginState{Step: "password", Email: email, Method: "email"}
 }
 
 // LoginPassword performs the FxA login and either completes it or moves to
@@ -388,29 +400,75 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 	gen := c.authGen
 	c.mu.Unlock()
 	if pending == nil || pending.email == "" {
-		return api.LoginState{Step: "email", Error: "enter your email first"}
+		return api.LoginState{Step: "email", Method: "email", Error: "enter your email first"}
 	}
 	if password == "" {
-		return api.LoginState{Step: "password", Email: pending.email, Error: "password is required"}
+		return api.LoginState{Step: "password", Email: pending.email, Method: "email", Error: "password is required"}
 	}
 
-	res, err := c.fxa.Login(ctx, pending.email, password)
+	authPW := fxa.AuthPW(pending.email, password)
+	res, err := c.fxa.LoginWithAuthPW(ctx, pending.email, authPW)
 	if err != nil {
+		var apiErr *fxa.APIError
+		if errors.As(err, &apiErr) && apiErr.Errno == errnoAccountUnverified &&
+			apiErr.VerificationReason == "unblock-code" {
+			c.mu.Lock()
+			if c.authGen != gen || c.pending != pending {
+				c.mu.Unlock()
+				return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
+			}
+			pending.authPW = authPW
+			pending.verificationMethod = apiErr.VerificationMethod
+			pending.verificationReason = apiErr.VerificationReason
+			pending.method = "unblock"
+			pending.step = "2fa"
+			c.mu.Unlock()
+
+			state := api.LoginState{
+				Step:               "2fa",
+				Email:              pending.email,
+				Method:             "unblock",
+				VerificationMethod: apiErr.VerificationMethod,
+				VerificationReason: apiErr.VerificationReason,
+			}
+			if sendErr := c.fxa.SendUnblockCode(ctx, pending.email); sendErr != nil {
+				c.log.Logf(logging.Warn, "auth", "could not send unblock code for %s: %v", pending.email, sendErr)
+				state.Error = "could not send the unblock code: " + friendlyLoginError(sendErr) +
+					"; enter a code if you already have one"
+			} else {
+				c.log.Logf(logging.Info, "auth", "unblock code sent to %s", pending.email)
+			}
+			return state
+		}
+		c.mu.Lock()
+		if c.pending == pending {
+			pending.authPW = ""
+		}
+		c.mu.Unlock()
 		c.log.Logf(logging.Warn, "auth", "login failed for %s: %v", pending.email, err)
-		return api.LoginState{Step: "password", Email: pending.email, Error: friendlyLoginError(err)}
+		return api.LoginState{Step: "password", Email: pending.email, Method: "email", Error: friendlyLoginError(err)}
 	}
 	if !res.Verified {
+		method := "2fa"
+		if res.VerificationMethod == "totp-2fa" {
+			method = "totp"
+		}
 		c.mu.Lock()
 		if c.authGen != gen || c.pending != pending {
 			c.mu.Unlock()
 			return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
 		}
-		c.pending.sessionToken = res.SessionToken
+		pending.sessionToken = res.SessionToken
+		pending.verificationMethod = res.VerificationMethod
+		pending.verificationReason = res.VerificationReason
+		pending.method = method
+		pending.step = "2fa"
 		c.mu.Unlock()
 		c.log.Logf(logging.Info, "auth", "verification required (%s) for %s", res.VerificationMethod, pending.email)
 		return api.LoginState{
 			Step:               "2fa",
 			Email:              pending.email,
+			Method:             method,
 			VerificationMethod: res.VerificationMethod,
 			VerificationReason: res.VerificationReason,
 		}
@@ -418,31 +476,88 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 	return c.completeLogin(ctx, pending.email, res.SessionToken, gen)
 }
 
-// Login2FA verifies the emailed code, or with an empty code re-checks the
-// email-link flow via GET /session/status.
+// Login2FA verifies an authenticator code, an unblock code, the emailed
+// code, or with an empty code re-checks the email-link flow via
+// GET /session/status.
 func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
 	c.mu.Lock()
 	pending := c.pending
 	gen := c.authGen
 	c.mu.Unlock()
-	if pending == nil || pending.sessionToken == "" {
-		return api.LoginState{Step: "email", Error: "sign-in was interrupted; start again"}
+	if pending == nil || pending.email == "" {
+		return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
+	}
+	code = strings.TrimSpace(code)
+	method := pending.method
+	if method == "" {
+		method = "2fa"
 	}
 
-	if strings.TrimSpace(code) == "" {
-		state, err := c.fxa.SessionStatus(ctx, pending.sessionToken)
-		if err != nil {
-			return api.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
+	switch {
+	case pending.verificationMethod == "totp-2fa":
+		if pending.sessionToken == "" {
+			return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
 		}
-		if state != "verified" {
+		if code == "" {
+			return api.LoginState{Step: "2fa", Email: pending.email, Method: "totp", Error: "enter the authenticator code"}
+		}
+		if err := c.fxa.VerifyTOTP(ctx, pending.sessionToken, code); err != nil {
+			return api.LoginState{Step: "2fa", Email: pending.email, Method: "totp", Error: friendlyLoginError(err)}
+		}
+	case pending.verificationMethod == "email-2fa" && pending.verificationReason == "unblock-code":
+		if code == "" {
+			return api.LoginState{Step: "2fa", Email: pending.email, Method: "unblock", Error: "enter the unblock code sent to your email"}
+		}
+		res, err := c.fxa.LoginUnblock(ctx, pending.email, pending.authPW, code)
+		if err != nil {
+			return api.LoginState{Step: "2fa", Email: pending.email, Method: "unblock", Error: friendlyLoginError(err)}
+		}
+		if !res.Verified {
+			c.mu.Lock()
+			if c.authGen != gen || c.pending != pending {
+				c.mu.Unlock()
+				return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
+			}
+			pending.sessionToken = res.SessionToken
+			if res.VerificationMethod != "" {
+				pending.verificationMethod = res.VerificationMethod
+			}
+			if res.VerificationReason != "" {
+				pending.verificationReason = res.VerificationReason
+			}
+			pending.method = "unblock"
+			pending.step = "2fa"
+			c.mu.Unlock()
 			return api.LoginState{
-				Step:  "2fa",
-				Email: pending.email,
-				Error: "email link not confirmed yet; click the link in the email, then press Enter",
+				Step:               "2fa",
+				Email:              pending.email,
+				Method:             "unblock",
+				VerificationMethod: pending.verificationMethod,
+				VerificationReason: pending.verificationReason,
 			}
 		}
-	} else if err := c.fxa.VerifyCode(ctx, pending.sessionToken, strings.TrimSpace(code)); err != nil {
-		return api.LoginState{Step: "2fa", Email: pending.email, Error: friendlyLoginError(err)}
+		return c.completeLogin(ctx, pending.email, res.SessionToken, gen)
+
+	default:
+		if pending.sessionToken == "" {
+			return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
+		}
+		if code == "" {
+			state, err := c.fxa.SessionStatus(ctx, pending.sessionToken)
+			if err != nil {
+				return api.LoginState{Step: "2fa", Email: pending.email, Method: method, Error: friendlyLoginError(err)}
+			}
+			if state != "verified" {
+				return api.LoginState{
+					Step:   "2fa",
+					Email:  pending.email,
+					Method: method,
+					Error:  "email link not confirmed yet; click the link in the email, then press Enter",
+				}
+			}
+		} else if err := c.fxa.VerifyCode(ctx, pending.sessionToken, code); err != nil {
+			return api.LoginState{Step: "2fa", Email: pending.email, Method: method, Error: friendlyLoginError(err)}
+		}
 	}
 	return c.completeLogin(ctx, pending.email, pending.sessionToken, gen)
 }

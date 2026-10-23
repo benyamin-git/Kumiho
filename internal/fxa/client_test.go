@@ -281,3 +281,133 @@ func TestChallengeSolverDisabledReachesCaller(t *testing.T) {
 		t.Fatalf("solver calls = %d, want 1", solver.calls)
 	}
 }
+
+func TestLoginWithAuthPWPreservesAuthPW(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/login" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	got, err := c.LoginWithAuthPW(context.Background(), "user@example.com", "deadbeef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body["authPW"] != "deadbeef" {
+		t.Fatalf("authPW = %v, want deadbeef", body["authPW"])
+	}
+	if body["email"] != "user@example.com" {
+		t.Fatalf("email = %v", body["email"])
+	}
+	if body["verificationMethod"] != verificationMethodEmail2FA {
+		t.Fatalf("verificationMethod = %v", body["verificationMethod"])
+	}
+	if got.SessionToken != testSessionTokenHex() || !got.Verified {
+		t.Fatalf("login result = %+v", got)
+	}
+}
+
+func TestLoginUnblockSendsUnblockCode(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/login" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	if _, err := c.LoginUnblock(context.Background(), "user@example.com", "deadbeef", "ABCD-1234"); err != nil {
+		t.Fatal(err)
+	}
+	if body["email"] != "user@example.com" || body["authPW"] != "deadbeef" || body["unblockCode"] != "ABCD-1234" {
+		t.Fatalf("body = %#v", body)
+	}
+	if _, ok := body["verificationMethod"]; ok {
+		t.Fatalf("unblock login must omit verificationMethod: %#v", body)
+	}
+}
+
+func TestSendUnblockCode(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/account/login/send_unblock_code" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	if err := c.SendUnblockCode(context.Background(), "user@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 1 || body["email"] != "user@example.com" {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
+func TestVerifyTOTPUsesHawkSession(t *testing.T) {
+	var authHeader, body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/session/verify/totp" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		authHeader = r.Header.Get("Authorization")
+		raw, _ := io.ReadAll(r.Body)
+		body = string(raw)
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	if err := c.VerifyTOTP(context.Background(), testSessionTokenHex(), "123456"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(authHeader, `Hawk id="`+testHawkID+`", ts="`) {
+		t.Fatalf("Authorization = %q", authHeader)
+	}
+	if !strings.Contains(body, `"code":"123456"`) {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestAPIErrorParsesVerificationFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"errno":125,"message":"locked","verificationMethod":"email-2fa","verificationReason":"unblock-code"}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	_, err := c.LoginWithAuthPW(context.Background(), "user@example.com", "deadbeef")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %v, want *APIError", err)
+	}
+	if apiErr.StatusCode != http.StatusBadRequest || apiErr.Errno != 125 || apiErr.Message != "locked" {
+		t.Fatalf("APIError = %+v", apiErr)
+	}
+	if apiErr.VerificationMethod != "email-2fa" || apiErr.VerificationReason != "unblock-code" {
+		t.Fatalf("verification fields = %q / %q", apiErr.VerificationMethod, apiErr.VerificationReason)
+	}
+}
