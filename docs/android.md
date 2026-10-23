@@ -14,7 +14,7 @@ This guide describes the app as implemented for **v0.5.1**
 > Galaxy S25 FE; the remaining checklist items were explicitly accepted by the
 > user as exceptions, so this is a **partial acceptance**, not a full pass. The
 > production-signed
-> [v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+> [v0.5.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1)
 > is published with the three Android APKs and `SHA256SUMS`; the signing key and
 > GitHub Actions secret values remain user-owned. Local builds are test builds,
 > not published releases.
@@ -57,7 +57,7 @@ instructions are in [android-testing.md](android-testing.md).
 
 ### From a release
 
-The [v0.5.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0)
+The [v0.5.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1)
 is published. Each GitHub release carries three APKs and the usual
 `SHA256SUMS`:
 
@@ -624,7 +624,7 @@ daemon or your Firefox Account.
 - **Non-DNS UDP is blocked** inside the tunnel (QUIC/HTTP3 falls back to TCP;
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
 - **Physical acceptance is a partial pass with user-accepted exceptions.**
-  The signed `v0.5.0` release is published, but the untested checklist items
+  The signed `v0.5.1` release is published, but the untested checklist items
   remain exceptions; see [android-testing.md](android-testing.md).
 
 ## Desktop parity
