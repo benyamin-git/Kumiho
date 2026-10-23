@@ -144,6 +144,20 @@ class VpnInterfaceSpecTest {
         )
     }
 
+    @Test
+    fun allowBypassIsOffByDefaultAndCopiedWhenRequested() {
+        assertFalse(spec(33).allowBypass)
+        assertTrue(
+            buildVpnInterfaceSpec(
+                apiLevel = 33,
+                config = config(),
+                split = SplitSettings(),
+                appPackage = appPackage,
+                allowBypass = true,
+            ).allowBypass,
+        )
+    }
+
     // ---- split tunnel ---------------------------------------------------
 
     @Test

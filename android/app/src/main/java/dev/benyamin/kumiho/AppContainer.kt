@@ -2,11 +2,13 @@ package dev.benyamin.kumiho
 
 import android.content.Context
 import android.content.res.Configuration
+import dev.benyamin.kumiho.data.AllowBypassRepository
 import dev.benyamin.kumiho.data.AppPrefs
 import dev.benyamin.kumiho.data.InstalledAppsRepository
 import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.vpn.BypassSettingsProvider
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +53,18 @@ class AppContainer(context: Context) {
     val splitSettingsProvider: SplitSettingsProvider = splitTunnelRepository
 
     /**
+     * The opt-in allow-bypass choice and the provider the VPN bridge reads.
+     * The snapshot is synchronous and Off until the DataStore loads.
+     */
+    val allowBypassRepository = AllowBypassRepository(
+        store = appPrefs,
+        scope = scope,
+    )
+
+    /** The seam `KumihoVpnService` hands to the bridge. */
+    val bypassSettingsProvider: BypassSettingsProvider = allowBypassRepository
+
+    /**
      * The app-scoped binding to the VPN service. It binds with
      * `BIND_AUTO_CREATE` in its constructor, so the engine is available to
      * every activity without any of them creating a session.
@@ -61,6 +75,7 @@ class AppContainer(context: Context) {
     fun start() {
         themeRepository.start()
         splitTunnelRepository.start()
+        allowBypassRepository.start()
     }
 }
 

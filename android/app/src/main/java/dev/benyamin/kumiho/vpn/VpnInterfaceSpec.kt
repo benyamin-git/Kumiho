@@ -11,6 +11,7 @@ data class VpnInterfaceSpec(
     val excludedRoutes: List<String>,
     val allowedApps: List<String>,
     val disallowedApps: List<String>,
+    val allowBypass: Boolean = false,
 ) {
     companion object {
         /** The engine's in-tunnel IPv4 address (C1); the DNS host is separate. */
@@ -56,6 +57,7 @@ fun buildVpnInterfaceSpec(
     config: VpnConfig,
     split: SplitSettings,
     appPackage: String,
+    allowBypass: Boolean = false,
 ): VpnInterfaceSpec {
     require(appPackage.isNotBlank()) { "the app package is required" }
 
@@ -103,5 +105,6 @@ fun buildVpnInterfaceSpec(
         excludedRoutes = excludedRoutes,
         allowedApps = allowedApps,
         disallowedApps = disallowedApps,
+        allowBypass = allowBypass,
     )
 }

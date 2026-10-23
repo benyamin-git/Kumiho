@@ -100,8 +100,12 @@ class KumihoVpnService : VpnService() {
         super.onCreate()
         notifications = NotificationFactory(this)
         engine = EngineClient(GomobileEngineTransport())
-        val split = (application as KumihoApplication).container.splitSettingsProvider
-        bridge = KumihoDeviceBridge(this, split)
+        val container = (application as KumihoApplication).container
+        bridge = KumihoDeviceBridge(
+            this,
+            container.splitSettingsProvider,
+            container.bypassSettingsProvider,
+        )
         refreshOsPolicy()
 
         // Engine status is advisory; the service mirrors it for the UI.
