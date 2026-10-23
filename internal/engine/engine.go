@@ -601,32 +601,10 @@ func (c *Controller) EnsureFreshToken(ctx context.Context) error {
 	return c.refreshAccessToken(ctx)
 }
 
-// markBrowserReauth persists the durable re-authentication flag for the
-// active browser account. It never touches tokens.json.
+// markBrowserReauth persists the durable re-authentication flag for a browser
+// account. It never touches tokens.json.
 func (c *Controller) markBrowserReauth(id, reason string) {
-	if strings.TrimSpace(id) == "" {
-		return
-	}
-	c.mu.Lock()
-	a := findAccountLocked(c.accounts, id)
-	if a == nil || c.activeID != id || a.Method != MethodBrowser {
-		c.mu.Unlock()
-		return
-	}
-	if a.Browser == nil {
-		a.Browser = &BrowserToken{}
-	}
-	if a.Browser.ReauthRequired && a.LastError == reason {
-		c.mu.Unlock()
-		return
-	}
-	a.Browser.ReauthRequired = true
-	a.LastError = reason
-	if err := c.saveAccountsLocked(false); err != nil {
-		c.log.Logf(logging.Warn, "auth", "could not persist browser re-auth flag: %v", err)
-	}
-	c.mu.Unlock()
-	c.notify()
+	c.markReauth(id, reason)
 }
 
 // refreshAccessToken force-renews the access token (also used when Guardian

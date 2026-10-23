@@ -74,6 +74,10 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	c.mu.Unlock()
 	c.notify()
 
+	if err := c.selectAccount(ctx); err != nil {
+		c.connectFailed(err)
+		return err
+	}
 	if err := c.EnsureFreshToken(ctx); err != nil {
 		c.connectFailed(fmt.Errorf("refresh access token: %w", err))
 		return err
@@ -216,6 +220,7 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	cfg := c.store.EffectiveConfig()
 	c.startMetrics(stop)
 	c.startPassRenewal(stop, pass)
+	c.startQuotaPoll(stop)
 	c.startWatchdog(stop)
 	if cfg.ExitCheck && c.exitCheckURL != "" {
 		go c.exitCheck(stop, socksAddr.String(), cand.CountryCode)
