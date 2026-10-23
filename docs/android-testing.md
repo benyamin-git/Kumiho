@@ -389,8 +389,8 @@ build was `0.5.0-debug` with the pre-commit Go label
 `0.5.0-debug` (versionCode 500), SHA-256
 `53b08383ca34bebb33329350d782efa42eb140bb4b2cde6a80535d9378a02b8a`.
 
-These are the only physical results recorded so far. Every box below and the
-sign-off table remain open.
+These are the only captured device results so far. Unchecked boxes below
+remain open.
 
 ### Devices and prerequisites
 
@@ -548,6 +548,11 @@ This is the physical acceptance for **Keep connections outside the tunnel**
 - [ ] With lockdown on, the setting stays visible and editable, the override
       line is shown, and Android still drops the session when the VPN changes.
 
+**User-reported pass (2026-10-23).** The user tested the v0.5.2 build on a
+Galaxy S25 FE and reported it working flawlessly; the SSH host, client app and
+Android build were not captured. The boxes above stay open until the per-item
+details are recorded.
+
 ### Account, logs, diagnostics and lifecycle
 
 - [ ] Account shows email, UID, subscription, quota, bandwidth and token
@@ -585,13 +590,14 @@ This is the physical acceptance for **Keep connections outside the tunnel**
 ## Sign-off
 
 The user accepted the remaining unchecked boxes as release exceptions on
-2026-10-22. The row below is a **partial pass**, not a full checklist pass;
+2026-10-22. The rows below are **partial passes**, not full checklist passes;
 future releases should complete the open boxes. Attach logs/screenshots
 elsewhere.
 
 | Date | Device | Android version / API | App version / build | Tester | Result |
 |---|---|---|---|---|---|
 | 2026-10-22 | Samsung SM-S731B (Galaxy S25 FE) | SDK 37 | 0.5.0-debug (500), source 78237c9 | user | Partial pass with exceptions: connect/DNS/browse/exit IP verified; remaining checklist waived; no P0/P1 reported |
+| 2026-10-23 | Samsung SM-S731B (Galaxy S25 FE) | SDK 37 | 0.5.2 (502) | user | Keep connections outside the tunnel: user-reported pass — tested the v0.5.2 build and reported it working flawlessly; per-item details not recorded |
 |  |  |  |  |  |  |
 |  |  |  |  |  |  |
 
