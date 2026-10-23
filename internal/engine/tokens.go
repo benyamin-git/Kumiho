@@ -47,3 +47,12 @@ func clearTokens(path string) error {
 	}
 	return nil
 }
+
+// syncTokensCopy keeps tokens.json as a rollback copy of the active account.
+// A nil or empty token set removes the file.
+func syncTokensCopy(path string, t *fxa.Tokens) error {
+	if t == nil || strings.TrimSpace(t.AccessToken) == "" {
+		return clearTokens(path)
+	}
+	return saveTokens(path, t)
+}

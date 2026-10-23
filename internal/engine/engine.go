@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +114,11 @@ type Controller struct {
 	since  time.Time
 	email  string
 	tokens *fxa.Tokens
+	// accounts is the v2 account store; activeID selects one account and
+	// rotationNotice is shown by the Account screen after a skipped rotation.
+	accounts       *accountsFile
+	activeID       string
+	rotationNotice string
 	// authGen fences network work that started under one account session
 	// from publishing into the next. It is bumped on every sign-in and
 	// sign-out, under mu.
@@ -299,20 +306,45 @@ func (c *Controller) noteAuthRejected() {
 	}
 }
 
-// Start loads the persisted session. It never performs network I/O; call
-// EnsureFreshToken in the background to renew stale access tokens.
+// Start loads the persisted account store. It never performs network I/O;
+// call EnsureFreshToken in the background to renew stale access tokens.
 func (c *Controller) Start(_ context.Context) error {
-	tokens, err := loadTokens(c.store.Paths().Tokens)
+	paths := c.store.Paths()
+	f, exists, err := loadAccounts(accountsPath(paths))
 	if err != nil {
 		return err
+	}
+	if !exists {
+		f, err = migrateAccounts(paths, c.store.State())
+		if err != nil {
+			return err
+		}
+	}
+	active := findAccountLocked(f, f.Active)
+	if active == nil && f != nil && len(f.Accounts) > 0 {
+		active = mostRecentlyUsedAccount(f)
+		f.Active = active.ID
+		if err := saveAccounts(accountsPath(paths), f); err != nil {
+			return err
+		}
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.email = c.store.State().Email
+	c.accounts = f
 	c.since = time.Now()
-	if tokens != nil && (c.fxa.AccessTokenValid(tokens) || tokens.RefreshToken != "") {
-		c.tokens = tokens
+	if active == nil {
+		f.Active = ""
+		c.activeID = ""
+		c.email = ""
+		c.tokens = nil
+		c.state = StateUnauthenticated
+		return nil
+	}
+	c.activeID = active.ID
+	c.email = active.Email
+	c.tokens = active.Tokens()
+	if c.accountSessionUsable(active) {
 		c.state = StateIdle
 		c.log.Logf(logging.Info, "auth", "restored session for %s", c.email)
 	} else {
@@ -321,12 +353,226 @@ func (c *Controller) Start(_ context.Context) error {
 	return nil
 }
 
-// EnsureFreshToken renews the access token when it is stale, clearing the
-// session on a permanent rejection.
+// accountSessionUsable reports whether Start may present the active account
+// as a usable session. Browser tokens with no expiry are usable until Guardian
+// rejects them; password tokens need either a live access token or a refresh
+// token.
+func (c *Controller) accountSessionUsable(a *Account) bool {
+	if a == nil || a.ReauthRequired() {
+		return false
+	}
+	tokens := a.Tokens()
+	if tokens == nil {
+		return false
+	}
+	if b := selectedBrowserToken(a); b != nil {
+		return browserTokenUsable(b)
+	}
+	return c.fxa.AccessTokenValid(tokens) || strings.TrimSpace(tokens.RefreshToken) != ""
+}
+
+func selectedBrowserToken(a *Account) *BrowserToken {
+	if a == nil || a.Method != MethodBrowser || a.Browser == nil ||
+		strings.TrimSpace(a.Browser.Token) == "" {
+		return nil
+	}
+	return a.Browser
+}
+
+func browserTokenUsable(b *BrowserToken) bool {
+	if b == nil || strings.TrimSpace(b.Token) == "" || b.ReauthRequired {
+		return false
+	}
+	return b.ExpiresAt <= 0 || b.ExpiresAt > time.Now().Unix()
+}
+
+func findAccountLocked(f *accountsFile, id string) *Account {
+	if f == nil || strings.TrimSpace(id) == "" {
+		return nil
+	}
+	for _, a := range f.Accounts {
+		if a != nil && a.ID == id {
+			return a
+		}
+	}
+	return nil
+}
+
+func mostRecentlyUsedAccount(f *accountsFile) *Account {
+	if f == nil {
+		return nil
+	}
+	var best *Account
+	for _, a := range f.Accounts {
+		if a == nil {
+			continue
+		}
+		if best == nil || a.LastUsedAt.After(best.LastUsedAt) ||
+			(a.LastUsedAt.Equal(best.LastUsedAt) && a.AddedAt.After(best.AddedAt)) {
+			best = a
+		}
+	}
+	return best
+}
+
+func emailAccount(f *accountsFile, email string) *Account {
+	if f == nil {
+		return nil
+	}
+	email = strings.TrimSpace(email)
+	for _, a := range f.Accounts {
+		if a != nil && strings.EqualFold(strings.TrimSpace(a.Email), email) {
+			return a
+		}
+	}
+	return nil
+}
+
+// tunnelActiveLocked reports whether switching accounts would race a live
+// data path. Callers hold c.mu.
+func (c *Controller) tunnelActiveLocked() bool {
+	return c.session != nil || c.socksSrv != nil || c.resources != nil ||
+		c.state == StateConnecting || c.state == StateConnected || c.state == StateProxyOnly
+}
+
+// activeAccountLocked returns the selected account. Callers hold c.mu.
+func (c *Controller) activeAccountLocked() *Account {
+	if c.accounts == nil {
+		return nil
+	}
+	id := c.activeID
+	if id == "" {
+		id = c.accounts.Active
+	}
+	return findAccountLocked(c.accounts, id)
+}
+
+// setActiveLocked selects a, updates the session fields and bumps the auth
+// generation. It does not clear browser.reauth_required or persist; the
+// caller saves after mutating the file. Callers hold c.mu.
+func (c *Controller) setActiveLocked(a *Account) {
+	c.authGen++
+	now := time.Now()
+	c.since = now
+	if a == nil {
+		c.activeID = ""
+		c.email = ""
+		c.tokens = nil
+		if c.accounts != nil {
+			c.accounts.Active = ""
+		}
+		if !c.tunnelActiveLocked() {
+			c.state = StateUnauthenticated
+		}
+		return
+	}
+	c.activeID = a.ID
+	c.email = a.Email
+	c.tokens = a.Tokens()
+	a.LastUsedAt = now
+	a.LastError = ""
+	if c.accounts != nil {
+		c.accounts.Active = a.ID
+		c.accounts.LastMethod = a.Method
+	}
+	if !c.tunnelActiveLocked() {
+		c.state = StateIdle
+	}
+}
+
+// ensureAccountsLocked loads accounts.json for entry points that run before
+// Start (the embedded Android engine and tests call login directly). Callers
+// hold c.mu.
+func (c *Controller) ensureAccountsLocked() error {
+	if c.accounts != nil {
+		return nil
+	}
+	paths := c.store.Paths()
+	f, exists, err := loadAccounts(accountsPath(paths))
+	if err != nil {
+		return err
+	}
+	if !exists {
+		f, err = migrateAccounts(paths, c.store.State())
+		if err != nil {
+			return err
+		}
+	}
+	c.accounts = f
+	if c.activeID == "" {
+		c.activeID = f.Active
+	}
+	if c.activeAccountLocked() == nil && len(f.Accounts) > 0 {
+		if a := mostRecentlyUsedAccount(f); a != nil {
+			c.activeID = a.ID
+			f.Active = a.ID
+		}
+	}
+	return nil
+}
+
+// saveAccountsLocked persists the account file and the legacy state/token
+// pair. Callers hold c.mu. A legacy token-copy failure is logged, never
+// returned: accounts.json is the authoritative store.
+func (c *Controller) saveAccountsLocked(syncLegacy bool) error {
+	if c.accounts == nil {
+		c.accounts = &accountsFile{Version: 2}
+	}
+	active := c.activeAccountLocked()
+	if active == nil {
+		c.accounts.Active = ""
+	} else {
+		c.accounts.Active = active.ID
+	}
+	path := accountsPath(c.store.Paths())
+	if len(c.accounts.Accounts) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	} else if err := saveAccounts(path, c.accounts); err != nil {
+		return err
+	}
+	email := ""
+	if active != nil {
+		email = active.Email
+	}
+	if err := c.store.UpdateState(func(s *settings.State) { s.Email = email }); err != nil {
+		c.log.Logf(logging.Warn, "auth", "could not persist account email: %v", err)
+	}
+	if syncLegacy {
+		c.syncLegacyTokensLocked()
+	}
+	return nil
+}
+
+// syncLegacyTokensLocked rewrites the rollback copy. Callers hold c.mu.
+func (c *Controller) syncLegacyTokensLocked() {
+	var tokens *fxa.Tokens
+	if a := c.activeAccountLocked(); a != nil {
+		tokens = a.Tokens()
+	}
+	if err := syncTokensCopy(c.store.Paths().Tokens, tokens); err != nil {
+		c.log.Logf(logging.Warn, "auth", "could not sync tokens.json: %v", err)
+	}
+}
+
+// EnsureFreshToken renews the access token when it is stale, dropping only
+// the active account on a permanent rejection.
 func (c *Controller) EnsureFreshToken(ctx context.Context) error {
-	tokens := c.currentTokens()
+	c.mu.Lock()
+	active := c.activeAccountLocked()
+	tokens := c.tokens
+	browser := selectedBrowserToken(active)
+	c.mu.Unlock()
 	if tokens == nil {
 		return errors.New("not signed in")
+	}
+	if browser != nil {
+		if browserTokenUsable(browser) {
+			return nil
+		}
+		c.markBrowserReauth(active.ID, "browser sign-in expired; sign in again")
+		return errors.New("browser sign-in expired; sign in again (kumiho login)")
 	}
 	if c.fxa.AccessTokenValid(tokens) {
 		return nil
@@ -334,18 +580,53 @@ func (c *Controller) EnsureFreshToken(ctx context.Context) error {
 	return c.refreshAccessToken(ctx)
 }
 
+// markBrowserReauth persists the durable re-authentication flag for the
+// active browser account. It never touches tokens.json.
+func (c *Controller) markBrowserReauth(id, reason string) {
+	if strings.TrimSpace(id) == "" {
+		return
+	}
+	c.mu.Lock()
+	a := findAccountLocked(c.accounts, id)
+	if a == nil || c.activeID != id || a.Method != MethodBrowser {
+		c.mu.Unlock()
+		return
+	}
+	if a.Browser == nil {
+		a.Browser = &BrowserToken{}
+	}
+	if a.Browser.ReauthRequired && a.LastError == reason {
+		c.mu.Unlock()
+		return
+	}
+	a.Browser.ReauthRequired = true
+	a.LastError = reason
+	if err := c.saveAccountsLocked(false); err != nil {
+		c.log.Logf(logging.Warn, "auth", "could not persist browser re-auth flag: %v", err)
+	}
+	c.mu.Unlock()
+	c.notify()
+}
+
 // refreshAccessToken force-renews the access token (also used when Guardian
-// rejects it mid-session).
+// rejects it mid-session). Browser tokens are never refreshed; a rejected
+// browser token gets the durable re-auth flag instead.
 func (c *Controller) refreshAccessToken(ctx context.Context) error {
 	c.mu.Lock()
+	active := c.activeAccountLocked()
 	tokens := c.tokens
 	gen := c.authGen
+	browser := selectedBrowserToken(active)
 	c.mu.Unlock()
 	if tokens == nil {
 		return errors.New("not signed in")
 	}
-	if tokens.RefreshToken == "" {
-		c.clearSessionIf(gen, true, "stored session cannot be renewed")
+	if browser != nil {
+		c.markBrowserReauth(active.ID, "browser token rejected; sign in again")
+		return errors.New("the browser sign-in cannot be refreshed; sign in again (kumiho login)")
+	}
+	if strings.TrimSpace(tokens.RefreshToken) == "" {
+		c.dropActiveIf(gen, true, "stored session cannot be renewed")
 		return errors.New("stored session cannot be renewed; sign in again")
 	}
 
@@ -353,7 +634,7 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 	if err != nil {
 		var apiErr *fxa.APIError
 		if errors.As(err, &apiErr) && apiErr.PermanentRefreshRejection() {
-			c.clearSessionIf(gen, true, "refresh token rejected")
+			c.dropActiveIf(gen, true, "refresh token rejected")
 		}
 		return err
 	}
@@ -363,11 +644,23 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 		c.mu.Unlock()
 		return errRefreshSessionChanged
 	}
-	// Persist while still holding mu so a sign-out cannot bump the
-	// generation and delete tokens.json between the check and the write.
-	if err := saveTokens(c.store.Paths().Tokens, refreshed); err != nil {
-		c.mu.Unlock()
-		return err
+	active = c.activeAccountLocked()
+	if active == nil {
+		// Legacy callers can still hold a token set without an account.
+		if err := saveTokens(c.store.Paths().Tokens, refreshed); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+	} else {
+		old := active.FxA
+		active.FxA = refreshed
+		// Persist while still holding mu so a sign-out cannot bump the
+		// generation and delete the account file between check and write.
+		if err := c.saveAccountsLocked(true); err != nil {
+			active.FxA = old
+			c.mu.Unlock()
+			return err
+		}
 	}
 	c.tokens = refreshed
 	c.mu.Unlock()
@@ -376,20 +669,82 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 	return nil
 }
 
-// LoginEmail starts the login state machine.
+// LoginEmail starts the password login state machine. It no longer refuses
+// when another account is signed in: accounts switch on completion.
 func (c *Controller) LoginEmail(email string) api.LoginState {
+	return c.LoginStart(MethodPassword, email, "")
+}
+
+// LoginStart starts a browser or password sign-in. accountID selects an
+// existing account for re-authentication; an empty value adds/switches to the
+// email's account.
+func (c *Controller) LoginStart(method, email, accountID string) api.LoginState {
+	method = strings.ToLower(strings.TrimSpace(method))
+	if method == "" {
+		method = MethodPassword
+	}
 	email = strings.TrimSpace(email)
+	accountID = strings.TrimSpace(accountID)
+	if method != MethodPassword && method != MethodBrowser {
+		return api.LoginState{Step: "error", Error: fmt.Sprintf("unknown sign-in method %q", method)}
+	}
+
+	c.mu.Lock()
+	if err := c.ensureAccountsLocked(); err != nil {
+		c.mu.Unlock()
+		return api.LoginState{Step: "error", Method: loginMethod(method), Email: email, Error: err.Error()}
+	}
+	target := findAccountLocked(c.accounts, accountID)
+	if accountID != "" && target == nil {
+		c.mu.Unlock()
+		return api.LoginState{Step: "error", Method: loginMethod(method), Email: email, Error: "account not found"}
+	}
+	if target != nil && email == "" {
+		email = target.Email
+	}
 	if email == "" {
+		c.mu.Unlock()
 		return api.LoginState{Step: "email", Method: "email", Error: "email is required"}
 	}
-	c.mu.Lock()
-	if c.tokens != nil {
+	if c.tunnelActiveLocked() && (accountID == "" || accountID != c.activeID) {
 		c.mu.Unlock()
-		return api.LoginState{Step: "done", Email: c.email, Error: "already signed in; log out first to switch accounts"}
+		return api.LoginState{
+			Step:   "error",
+			Method: loginMethod(method),
+			Email:  email,
+			Error:  "disconnect first; adding or switching accounts needs the tunnel off",
+		}
 	}
-	c.pending = &pendingLogin{email: email, method: "email", step: "password"}
+	if method == MethodBrowser {
+		c.mu.Unlock()
+		// Task 5 replaces this branch with the daemon-owned PKCE flow.
+		return api.LoginState{
+			Step:   "error",
+			Method: MethodBrowser,
+			Email:  email,
+			Error:  "browser sign-in is not available yet; use the password flow",
+		}
+	}
+	// Clearing the old password before replacing the pending state means an
+	// in-flight unblock/TOTP retry can never reuse a previous password.
+	if c.pending != nil {
+		c.pending.authPW = ""
+	}
+	c.pending = &pendingLogin{
+		email:    email,
+		method:   "email",
+		step:     "password",
+		targetID: accountID,
+	}
 	c.mu.Unlock()
 	return api.LoginState{Step: "password", Email: email, Method: "email"}
+}
+
+func loginMethod(method string) string {
+	if method == MethodBrowser {
+		return MethodBrowser
+	}
+	return "email"
 }
 
 // LoginPassword performs the FxA login and either completes it or moves to
@@ -563,40 +918,271 @@ func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
 }
 
 func (c *Controller) completeLogin(ctx context.Context, email, sessionToken string, gen uint64) api.LoginState {
+	c.mu.Lock()
+	pending := c.pending
+	targetID := ""
+	if pending != nil {
+		targetID = pending.targetID
+	}
+	c.mu.Unlock()
+
 	tokens, err := c.fxa.OAuthToken(ctx, sessionToken)
 	if err != nil {
 		return api.LoginState{Step: "2fa", Email: email, Error: "could not fetch OAuth tokens: " + friendlyLoginError(err)}
 	}
 
 	c.mu.Lock()
-	if c.authGen != gen {
+	if c.authGen != gen || c.pending != pending {
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
 	}
-	// Persist and publish under one lock so a sign-out cannot interleave
-	// between the generation check, the token write and the in-memory swap.
-	if err := saveTokens(c.store.Paths().Tokens, tokens); err != nil {
-		c.mu.Unlock()
-		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting tokens failed: " + err.Error()}
+	if targetID != "" {
+		target := findAccountLocked(c.accounts, targetID)
+		if target == nil {
+			c.pending = nil
+			c.mu.Unlock()
+			return api.LoginState{Step: "error", Email: email, Error: "account not found"}
+		}
+		if !strings.EqualFold(strings.TrimSpace(target.Email), strings.TrimSpace(email)) {
+			c.pending = nil
+			c.mu.Unlock()
+			return api.LoginState{
+				Step:  "error",
+				Email: email,
+				Error: "the sign-in email does not match the account being re-authenticated",
+			}
+		}
 	}
-	c.authGen++
-	c.tokens = tokens
-	c.state = StateIdle
-	c.email = email
+	if c.accounts == nil {
+		c.accounts = &accountsFile{Version: 2}
+	}
+	existing := emailAccount(c.accounts, email)
+	if c.tunnelActiveLocked() && (existing == nil || existing.ID != c.activeID) {
+		c.pending = nil
+		c.mu.Unlock()
+		return api.LoginState{
+			Step:  "error",
+			Email: email,
+			Error: "disconnect first; the tunnel came up while signing in to another account",
+		}
+	}
+	candidate := &Account{
+		Email:      email,
+		Method:     MethodPassword,
+		FxA:        tokens,
+		LastUsedAt: time.Now(),
+	}
+	account, err := c.accounts.upsert(candidate)
+	if errors.Is(err, ErrAccountLimit) {
+		c.pending = nil
+		c.mu.Unlock()
+		return api.LoginState{Step: "done", Email: email, Error: "account limit reached (5); remove one first"}
+	}
+	if err != nil {
+		c.pending = nil
+		c.mu.Unlock()
+		return api.LoginState{Step: "done", Email: email, Error: "signed in, but saving the account failed: " + err.Error()}
+	}
+	// A successful password sign-in also clears a stale browser re-auth flag
+	// on the same email. Only login clears it; switching accounts does not.
+	if account.Browser != nil {
+		account.Browser.ReauthRequired = false
+	}
+	account.LastError = ""
+	c.accounts.LastMethod = MethodPassword
+	// Save the account and rollback token copy before publishing the new
+	// session fields. c.mu is held throughout, so no client can observe the
+	// temporary active ID.
+	previousActive := c.activeID
+	c.activeID = account.ID
+	account.LastUsedAt = time.Now()
+	if err := c.saveAccountsLocked(true); err != nil {
+		c.activeID = previousActive
+		c.accounts.Active = previousActive
+		c.mu.Unlock()
+		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting the account failed: " + err.Error()}
+	}
+	c.setActiveLocked(account)
 	c.pending = nil
-	c.since = time.Now()
-	// Persist the email under the same lock as the token publish, so a
-	// sign-out cannot clear state.json and then have a delayed login write
-	// restore the old account.
-	stateErr := c.store.UpdateState(func(s *settings.State) { s.Email = email })
+	activeEmail := account.Email
 	c.mu.Unlock()
 
-	if stateErr != nil {
-		c.log.Logf(logging.Warn, "auth", "could not persist account email: %v", stateErr)
-	}
-	c.log.Logf(logging.Info, "auth", "signed in as %s", email)
+	c.log.Logf(logging.Info, "auth", "signed in as %s", activeEmail)
 	c.notify()
-	return api.LoginState{Step: "done", Email: email}
+	return api.LoginState{Step: "done", Email: activeEmail}
+}
+
+func badRequestError(message string) error {
+	return &api.RemoteError{Code: api.CodeBadRequest, Message: message}
+}
+
+// Accounts returns the Account screen snapshot.
+func (c *Controller) Accounts() api.AccountsView {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var loadErr error
+	if c.accounts == nil {
+		loadErr = c.ensureAccountsLocked()
+	}
+	view := summarizeAccounts(c.accounts, c.store.EffectiveConfig())
+	view.Notice = c.rotationNotice
+	if loadErr != nil {
+		view.Error = loadErr.Error()
+	}
+	return view
+}
+
+// UseAccount switches the active account. It refuses while a tunnel is up so
+// an account never changes under live streams.
+func (c *Controller) UseAccount(id string) error {
+	id = strings.TrimSpace(id)
+	c.mu.Lock()
+	if err := c.ensureAccountsLocked(); err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	a := findAccountLocked(c.accounts, id)
+	if a == nil {
+		c.mu.Unlock()
+		return badRequestError("account not found")
+	}
+	if c.tunnelActiveLocked() {
+		c.mu.Unlock()
+		return badRequestError("disconnect first; switching accounts needs the tunnel off")
+	}
+	c.setActiveLocked(a)
+	err := c.saveAccountsLocked(true)
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	c.notify()
+	return nil
+}
+
+// RemoveAccount removes one account and selects the most recently used
+// remaining account when the active one was removed.
+func (c *Controller) RemoveAccount(id string) error {
+	id = strings.TrimSpace(id)
+	c.mu.Lock()
+	if err := c.ensureAccountsLocked(); err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	a := findAccountLocked(c.accounts, id)
+	if a == nil {
+		c.mu.Unlock()
+		return badRequestError("account not found")
+	}
+	activeRemoved := a.ID == c.activeID
+	if activeRemoved && c.tunnelActiveLocked() {
+		c.mu.Unlock()
+		return badRequestError("disconnect first; removing the active account needs the tunnel off")
+	}
+	if len(c.accounts.Accounts) == 1 {
+		c.mu.Unlock()
+		c.clearSession("account removed")
+		return nil
+	}
+	kept := c.accounts.Accounts[:0]
+	for _, existing := range c.accounts.Accounts {
+		if existing.ID != a.ID {
+			kept = append(kept, existing)
+		}
+	}
+	c.accounts.Accounts = kept
+	if activeRemoved {
+		c.setActiveLocked(mostRecentlyUsedAccount(c.accounts))
+	}
+	if c.pending != nil && c.pending.targetID == a.ID {
+		c.pending = nil
+	}
+	err := c.saveAccountsLocked(true)
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	c.notify()
+	return nil
+}
+
+// UpdateAccount renames one account. An empty label resets it to the email.
+func (c *Controller) UpdateAccount(id, label string) error {
+	id = strings.TrimSpace(id)
+	c.mu.Lock()
+	if err := c.ensureAccountsLocked(); err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	a := findAccountLocked(c.accounts, id)
+	if a == nil {
+		c.mu.Unlock()
+		return badRequestError("account not found")
+	}
+	normalized, err := normalizeLabel(label, a.Email)
+	if err != nil {
+		c.mu.Unlock()
+		return badRequestError(err.Error())
+	}
+	a.Label = normalized
+	err = c.saveAccountsLocked(false)
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	c.notify()
+	return nil
+}
+
+// SetAccountRotation changes the next-connect rotation settings. A threshold
+// of zero keeps the current value; otherwise it must be 1-50.
+func (c *Controller) SetAccountRotation(enabled bool, threshold int) error {
+	if threshold < 0 || threshold > 50 {
+		return badRequestError("rotation_threshold must be between 1 and 50 (or 0 to keep it)")
+	}
+	value := "off"
+	if enabled {
+		value = "on"
+	}
+	if err := c.store.SetOverride("account_rotation", value); err != nil {
+		return accountSettingError("account_rotation", err)
+	}
+	if threshold > 0 {
+		if err := c.store.SetOverride("rotation_threshold", strconv.Itoa(threshold)); err != nil {
+			return accountSettingError("rotation_threshold", err)
+		}
+	}
+	c.notify()
+	return nil
+}
+
+func accountSettingError(key string, err error) error {
+	if errors.Is(err, settings.ErrUnknownSetting) {
+		return &api.RemoteError{
+			Code:    api.CodeUnsupportedSetting,
+			Message: fmt.Sprintf("setting %q is not runtime-changeable yet", key),
+		}
+	}
+	return &api.RemoteError{Code: api.CodeBadRequest, Message: err.Error()}
+}
+
+// pendingStateLocked returns the sign-in step visible in Snapshot. Callers
+// hold c.mu.
+func (c *Controller) pendingStateLocked() *api.LoginState {
+	if c.pending == nil || c.pending.email == "" {
+		return nil
+	}
+	step := c.pending.step
+	if step == "" {
+		step = "password"
+	}
+	return &api.LoginState{
+		Step:               step,
+		Email:              c.pending.email,
+		Method:             c.pending.method,
+		VerificationMethod: c.pending.verificationMethod,
+		VerificationReason: c.pending.verificationReason,
+	}
 }
 
 // Logout clears tokens and returns to UNAUTHENTICATED.
@@ -626,6 +1212,9 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	c.tokens = nil
 	c.pending = nil
 	c.email = ""
+	c.accounts = nil
+	c.activeID = ""
+	c.rotationNotice = ""
 	c.state = StateUnauthenticated
 	c.since = time.Now()
 	// Signing out wipes the account and usage view: an unauthenticated
@@ -644,21 +1233,27 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 
 	c.stopTunnel("session cleared")
 
-	var clearErr, stateErr error
+	var clearErr, accountsErr, stateErr error
 	cleared := false
 	c.mu.Lock()
 	// A new sign-in may have completed while the tunnel was tearing down.
-	// Keep its token file and persisted email; the old generation must not
-	// delete or overwrite the newer session's credentials.
+	// Keep its files and persisted email; the old generation must not delete
+	// or overwrite the newer session's credentials.
 	if c.authGen == clearedGen {
 		cleared = true
 		clearErr = clearTokens(c.store.Paths().Tokens)
+		if err := os.Remove(accountsPath(c.store.Paths())); err != nil && !os.IsNotExist(err) {
+			accountsErr = err
+		}
 		stateErr = c.store.UpdateState(func(s *settings.State) { s.Email = "" })
 	}
 	c.mu.Unlock()
 
 	if clearErr != nil {
 		c.log.Logf(logging.Warn, "auth", "could not remove tokens: %v", clearErr)
+	}
+	if accountsErr != nil {
+		c.log.Logf(logging.Warn, "auth", "could not remove accounts: %v", accountsErr)
 	}
 	if stateErr != nil {
 		c.log.Logf(logging.Warn, "auth", "could not clear stored email: %v", stateErr)
@@ -668,6 +1263,57 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	} else {
 		c.log.Logf(logging.Info, "auth", "session cleared (%s); a newer sign-in kept its credentials", reason)
 	}
+	c.notify()
+	return true
+}
+
+// dropActiveIf removes only the active account after a permanent token
+// failure and selects the most recently used remaining account. It runs only
+// without a live tunnel: an active tunnel is torn down first, so streams never
+// switch accounts underneath. When no account remains the whole session is
+// cleared. The generation fence prevents an in-flight refresh from dropping a
+// newer login.
+func (c *Controller) dropActiveIf(gen uint64, requireMatch bool, reason string) bool {
+	c.mu.Lock()
+	if requireMatch && c.authGen != gen {
+		c.mu.Unlock()
+		return false
+	}
+	if c.accounts == nil || len(c.accounts.Accounts) == 0 || c.activeAccountLocked() == nil {
+		c.mu.Unlock()
+		return c.clearSessionIf(gen, requireMatch, reason)
+	}
+	if c.tunnelActiveLocked() {
+		c.mu.Unlock()
+		c.stopTunnel("account removed")
+		c.mu.Lock()
+		if requireMatch && c.authGen != gen {
+			c.mu.Unlock()
+			return false
+		}
+	}
+	if c.accounts == nil || len(c.accounts.Accounts) <= 1 || c.activeAccountLocked() == nil {
+		c.mu.Unlock()
+		return c.clearSessionIf(gen, requireMatch, reason)
+	}
+	active := c.activeAccountLocked()
+	kept := c.accounts.Accounts[:0]
+	for _, a := range c.accounts.Accounts {
+		if a.ID != active.ID {
+			kept = append(kept, a)
+		}
+	}
+	c.accounts.Accounts = kept
+	c.setActiveLocked(mostRecentlyUsedAccount(c.accounts))
+	if c.pending != nil && c.pending.targetID == active.ID {
+		c.pending = nil
+	}
+	err := c.saveAccountsLocked(true)
+	c.mu.Unlock()
+	if err != nil {
+		c.log.Logf(logging.Warn, "auth", "could not persist account removal: %v", err)
+	}
+	c.log.Logf(logging.Warn, "auth", "account removed: %s", reason)
 	c.notify()
 	return true
 }
@@ -726,6 +1372,12 @@ func (c *Controller) Snapshot() api.Status {
 		st.DNS = "system (proxy-only mode)"
 		st.IPv6 = "untouched"
 	}
+	view := summarizeAccounts(c.accounts, c.store.EffectiveConfig())
+	st.Accounts = view.Accounts
+	if active := c.activeAccountLocked(); active != nil {
+		st.ActiveAccount = active.ID
+	}
+	st.Login = c.pendingStateLocked()
 	return st
 }
 
@@ -844,9 +1496,21 @@ func (c *Controller) applyLoggingSettings() {
 // best-effort Guardian entitlement lookup (PLAN.md §6). Failures of the
 // online lookup are reported in Error without hiding the local fields.
 func (c *Controller) Account(ctx context.Context) api.AccountInfo {
-	tokens := c.currentTokens()
 	c.mu.Lock()
+	active := c.activeAccountLocked()
+	tokens := c.tokens
+	activeID := ""
+	browserSelected := false
 	info := api.AccountInfo{Email: c.email}
+	if active != nil {
+		activeID = active.ID
+		browserSelected = selectedBrowserToken(active) != nil
+		info.ID = active.ID
+		info.Label = active.Label
+		info.Method = active.Method
+		info.ReauthRequired = active.ReauthRequired()
+		info.Email = active.Email
+	}
 	c.mu.Unlock()
 	if tokens == nil {
 		info.Error = "not signed in"
@@ -856,6 +1520,18 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 
 	ent, err := c.guardian.Account(ctx, tokens.AccessToken)
 	if err != nil && guardian.IsUnauthorized(err) {
+		if browserSelected {
+			c.markBrowserReauth(activeID, "Guardian rejected the browser token; sign in again")
+			c.mu.Lock()
+			if a := findAccountLocked(c.accounts, activeID); a != nil {
+				info.ReauthRequired = a.ReauthRequired()
+				info.Label = a.Label
+				info.Method = a.Method
+			}
+			c.mu.Unlock()
+			info.Error = err.Error()
+			return info
+		}
 		if rerr := c.refreshAccessToken(ctx); rerr == nil {
 			if t := c.currentTokens(); t != nil {
 				info.TokenExpires = t.ExpiresAt
@@ -872,6 +1548,16 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 	info.MaxBytes = ent.MaxBytes
 	info.LimitedBandwidth = ent.LimitedBandwidth
 	info.QuotaRemaining = ent.QuotaRemaining
+	if activeID != "" {
+		c.mu.Lock()
+		if a := findAccountLocked(c.accounts, activeID); a != nil {
+			if ent.MaxBytes != nil || ent.QuotaRemaining != nil {
+				a.Quota = &api.Quota{Limit: ent.MaxBytes, Remaining: ent.QuotaRemaining}
+			}
+			info.ReauthRequired = a.ReauthRequired()
+		}
+		c.mu.Unlock()
+	}
 	return info
 }
 
