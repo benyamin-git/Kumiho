@@ -15,8 +15,9 @@ func (m *Model) renderHelp(b *strings.Builder) {
 		"             x expand/collapse all • / filter • r refresh • esc back",
 		"settings     arrows move • enter change • d reset to default • r refresh • esc back",
 		"logs         f follow • v level • / search • c clear • e export • esc back",
-		"account      r refresh • x sign out • esc back",
-		"login        enter submits each step (password masked); esc back",
+		"account      ↑/↓ select • u use • d remove • a add browser • p add password • R sign in again",
+		"             n rename • t rotation • +/- threshold • r refresh • x sign out • esc back",
+		"login        b browser • p password; enter submits each password step; esc back",
 	}
 	for _, l := range lines {
 		fmt.Fprintln(b, dimStyle.Render(l))

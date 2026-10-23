@@ -267,6 +267,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lg.err = "logs: " + msg.err.Error()
 		}
 		return m, nil
+	case accountsMsg:
+		m.ac.loaded = true
+		if msg.err != nil {
+			m.ac.err = msg.err.Error()
+			return m, nil
+		}
+		m.ac.err = ""
+		m.ac.view = msg.view
+		if m.ac.selected < 0 {
+			m.ac.selected = 0
+		}
+		if m.ac.selected >= len(m.ac.view.Accounts) && len(m.ac.view.Accounts) > 0 {
+			m.ac.selected = len(m.ac.view.Accounts) - 1
+		}
+		if msg.infoErr != nil {
+			m.ac.err = "account: " + msg.infoErr.Error()
+		} else {
+			m.ac.info = msg.info
+		}
+		return m, nil
 	case accountMsg:
 		m.ac.loaded = true
 		if msg.err != nil {
@@ -276,6 +296,107 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ac.err = ""
 		m.ac.info = msg.info
 		return m, nil
+	case accountActionMsg:
+		if msg.err != nil {
+			m.ac.err = msg.err.Error()
+			m.ac.notice = ""
+			return m, nil
+		}
+		m.ac.err = ""
+		m.ac.notice = msg.notice
+		return m, tea.Batch(fetchAccounts(m.client), fetchStatus(m.client))
+	case browserStartMsg:
+		m.busy = false
+		m.ac.adding = msg.adding
+		if msg.err != nil {
+			return m.browserFailed(msg.adding, msg.err.Error())
+		}
+		state := msg.state
+		if state.Step == "browser" {
+			m.ac.browserURL = state.URL
+			m.ac.browserID = state.LoginID
+			m.ac.polling = true
+			m.ac.err = ""
+			m.loginErr = ""
+			if state.Error != "" {
+				if msg.adding {
+					m.ac.err = state.Error
+				} else {
+					m.loginErr = state.Error
+				}
+			}
+			if msg.adding {
+				return m, pollBrowserLogin(m.client, state.LoginID)
+			}
+			return m, pollLoginBrowser(m.client, state.LoginID)
+		}
+		switch state.Step {
+		case "done":
+			if state.Error != "" {
+				return m.browserFailed(msg.adding, state.Error)
+			}
+			return m.finishSignIn(msg.adding, state.Email)
+		case "cancelled":
+			return m.browserCancelled(msg.adding)
+		default:
+			message := state.Error
+			if message == "" {
+				message = "browser sign-in failed"
+			}
+			return m.browserFailed(msg.adding, message)
+		}
+	case browserPollMsg:
+		if !m.ac.polling {
+			return m, nil
+		}
+		if msg.err != nil {
+			return m.browserFailed(msg.adding, msg.err.Error())
+		}
+		state := msg.state
+		if state.Step == "browser" {
+			if state.URL != "" {
+				m.ac.browserURL = state.URL
+			}
+			if state.LoginID != "" {
+				m.ac.browserID = state.LoginID
+			}
+			if state.Error != "" {
+				if msg.adding {
+					m.ac.err = state.Error
+				} else {
+					m.loginErr = state.Error
+				}
+			}
+			if msg.adding {
+				return m, pollBrowserLogin(m.client, state.LoginID)
+			}
+			return m, pollLoginBrowser(m.client, state.LoginID)
+		}
+		m.ac.polling = false
+		m.ac.browserURL, m.ac.browserID = "", ""
+		switch state.Step {
+		case "done":
+			if state.Error != "" {
+				return m.browserFailed(msg.adding, state.Error)
+			}
+			return m.finishSignIn(msg.adding, state.Email)
+		case "cancelled":
+			return m.browserCancelled(msg.adding)
+		case "error":
+			message := state.Error
+			if message == "" {
+				message = "browser sign-in failed"
+			}
+			return m.browserFailed(msg.adding, message)
+		default:
+			return m.browserCancelled(msg.adding)
+		}
+	case browserCancelMsg:
+		if msg.err != nil {
+			m.ac.err = "cancel sign-in: " + msg.err.Error()
+			return m, nil
+		}
+		return m.browserCancelled(m.ac.adding)
 	case logoutDoneMsg:
 		if msg.err != nil {
 			m.ac.err = "sign out: " + msg.err.Error()
@@ -321,9 +442,58 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAccountKey(k)
 	}
 	if m.screen == screenLogin {
+		if m.ac.polling {
+			switch k.String() {
+			case "esc":
+				id, adding := m.ac.browserID, m.ac.adding
+				m.ac.polling, m.ac.browserURL, m.ac.browserID = false, "", ""
+				if adding {
+					m.screen = screenAccount
+				} else {
+					m.step = "method"
+				}
+				return m, cancelBrowserLogin(m.client, id, adding)
+			case "ctrl+c":
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		if m.step == "method" || m.step == "" {
+			switch k.String() {
+			case "esc":
+				if m.ac.adding {
+					m.screen = screenAccount
+				} else {
+					m.screen = screenDashboard
+				}
+				m.ac.adding = false
+				m.loginErr = ""
+				return m, nil
+			case "b", "B":
+				m.ac.adding = false
+				m.loginErr = ""
+				m.busy = true
+				return m, startLoginBrowser(m.client)
+			case "p", "P":
+				m.step = "email"
+				m.loginErr = ""
+				return m, nil
+			case "ctrl+c":
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		switch k.String() {
 		case "esc":
-			m.screen = screenDashboard
+			if m.ac.adding {
+				m.screen = screenAccount
+			} else {
+				m.screen = screenDashboard
+			}
+			m.ac.adding = false
+			m.step = "method"
 			m.password, m.code = "", ""
 			m.loginErr = ""
 			return m, nil
@@ -352,10 +522,12 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "l":
 		if !m.status.Authenticated {
 			m.screen = screenLogin
-			m.step = "email"
+			m.step = "method"
 			m.email, m.password, m.code = "", "", ""
 			m.loginErr = ""
 			m.notice = ""
+			m.ac.adding = false
+			return m, fetchAccounts(m.client)
 		}
 		return m, nil
 	case "o":
@@ -375,7 +547,7 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenAccount
 		m.ac.err = ""
 		m.ac.notice = ""
-		return m, fetchAccount(m.client)
+		return m, fetchAccounts(m.client)
 	case "g":
 		m.screen = screenLogs
 		m.lg.err = ""
@@ -466,10 +638,7 @@ func (m *Model) handleLoginState(msg loginStateMsg) (tea.Model, tea.Cmd) {
 	switch ls.Step {
 	case "done":
 		if ls.Error == "" {
-			m.screen = screenDashboard
-			m.notice = "signed in as " + ls.Email
-			m.password, m.code = "", ""
-			return m, fetchStatus(m.client)
+			return m.finishSignIn(m.ac.adding, ls.Email)
 		}
 		return m, nil
 	case "email", "password", "2fa":
@@ -486,6 +655,63 @@ func (m *Model) handleLoginState(msg loginStateMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	return m, nil
+}
+
+// finishSignIn closes a successful browser or password sign-in. Adding an
+// account returns to the account list; a normal sign-in returns to the
+// dashboard.
+func (m *Model) finishSignIn(adding bool, email string) (tea.Model, tea.Cmd) {
+	m.busy = false
+	m.ac.polling = false
+	m.ac.browserURL, m.ac.browserID = "", ""
+	m.ac.adding = false
+	m.password, m.code = "", ""
+	if adding {
+		m.screen = screenAccount
+		m.ac.notice = "account added: " + email
+		m.ac.err = ""
+		return m, tea.Batch(fetchAccounts(m.client), fetchStatus(m.client))
+	}
+	m.screen = screenDashboard
+	m.step = "method"
+	m.notice = "signed in as " + email
+	m.loginErr = ""
+	return m, tea.Batch(fetchStatus(m.client), fetchAccounts(m.client))
+}
+
+func (m *Model) browserFailed(adding bool, message string) (tea.Model, tea.Cmd) {
+	m.busy = false
+	m.ac.polling = false
+	m.ac.browserURL, m.ac.browserID = "", ""
+	if adding {
+		m.screen = screenAccount
+		m.ac.err = message
+		m.ac.notice = ""
+		m.ac.adding = false
+		return m, nil
+	}
+	m.screen = screenLogin
+	m.step = "method"
+	m.loginErr = message
+	m.ac.adding = false
+	return m, nil
+}
+
+func (m *Model) browserCancelled(adding bool) (tea.Model, tea.Cmd) {
+	m.busy = false
+	m.ac.polling = false
+	m.ac.browserURL, m.ac.browserID = "", ""
+	m.ac.adding = false
+	if adding || m.screen == screenAccount {
+		m.screen = screenAccount
+		m.ac.notice = "sign-in cancelled"
+		m.ac.err = ""
+		return m, nil
+	}
+	m.screen = screenLogin
+	m.step = "method"
+	m.loginErr = "sign-in cancelled"
 	return m, nil
 }
 
@@ -654,7 +880,23 @@ func (m *Model) renderLogin(b *strings.Builder) {
 	fmt.Fprintln(b, titleStyle.Render("Sign in to Firefox Accounts"))
 	fmt.Fprintln(b)
 
+	if m.ac.polling {
+		m.renderBrowserWaiting(b)
+		fmt.Fprintln(b)
+		fmt.Fprintln(b, dimStyle.Render("press Esc to cancel"))
+		return
+	}
+
 	switch m.step {
+	case "", "method":
+		fmt.Fprintln(b, "How do you want to sign in?")
+		fmt.Fprintln(b)
+		fmt.Fprintln(b, "  b  browser sign-in (recommended)")
+		fmt.Fprintln(b, "  p  email and password")
+		if m.ac.view.LastMethod != "" {
+			fmt.Fprintln(b)
+			fmt.Fprintf(b, "%s\n", dimStyle.Render("last used: "+m.ac.view.LastMethod))
+		}
 	case "email":
 		fmt.Fprintf(b, "Email:    %s\n", m.email+"_")
 	case "password":
@@ -662,10 +904,13 @@ func (m *Model) renderLogin(b *strings.Builder) {
 		fmt.Fprintf(b, "Password: %s\n", strings.Repeat("•", utf8.RuneCountInString(m.password))+"_")
 	case "2fa":
 		fmt.Fprintf(b, "Email:    %s\n", dimStyle.Render(m.email))
-		if m.twoFAMeth == "email" {
+		switch m.twoFAMeth {
+		case "totp":
+			fmt.Fprintln(b, dimStyle.Render("Enter the code from your authenticator app."))
+		case "unblock":
+			fmt.Fprintln(b, dimStyle.Render("Enter the unblock code Mozilla emailed you."))
+		default:
 			fmt.Fprintln(b, dimStyle.Render("Open the sign-in link in your email, then press Enter (leave the code empty)."))
-		} else {
-			fmt.Fprintln(b, dimStyle.Render("Enter the code from the email you received."))
 		}
 		fmt.Fprintf(b, "Code:     %s\n", m.code+"_")
 	}
@@ -677,7 +922,11 @@ func (m *Model) renderLogin(b *strings.Builder) {
 		fmt.Fprintf(b, "\n%s\n", errStyle.Render(m.loginErr))
 	}
 	fmt.Fprintln(b)
-	fmt.Fprintln(b, dimStyle.Render("enter continue • esc cancel"))
+	if m.step == "" || m.step == "method" {
+		fmt.Fprintln(b, dimStyle.Render("b browser • p password • esc cancel"))
+	} else {
+		fmt.Fprintln(b, dimStyle.Render("enter continue • esc cancel"))
+	}
 
 	if m.notice != "" {
 		fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.notice))
