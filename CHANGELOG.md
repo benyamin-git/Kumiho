@@ -18,6 +18,17 @@ Android: keep LAN connections alive across a VPN transition.
   host — stay open when Kumiho connects or disconnects. It is off by default,
   applies on the next connect, and Android lockdown still overrides it.
 
+### Changed
+
+- Android Locations is now one expandable level: countries open directly to
+  their servers, the city name moves into each server row, the
+  `X visible · Y total` helper and the separate `Test speed` action are gone,
+  and a single **Ping all** still measures the whole list.
+- Android country rows show their best latency and server count, and the list
+  re-sorts live by measured speed while **Ping all** runs: measured countries
+  first, ascending, with **Recommended** pinned and unmeasured or timed-out
+  entries keeping their original order.
+
 ### Fixed
 
 - Android no longer destroys every live TCP socket of VPN-routed apps on a
@@ -31,6 +42,9 @@ Android: keep LAN connections alive across a VPN transition.
 - Android-only: no engine, IPC, daemon, mobile-facade or desktop change; the
   DataStore key is absent (Off) on existing installs. No version bump yet; the
   next 0.5.2 change shares this section.
+- The Android list now shows one expansion level and sorts by measured speed;
+  the desktop trees keep country → city → server. Latency is session-local and
+  never persisted.
 
 ## [0.5.1] - 2026-10-22
 

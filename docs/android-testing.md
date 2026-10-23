@@ -125,10 +125,9 @@ cache is warm. The unit/lint/assemble gate directly:
 
 Current expected result on the current tree:
 
-- **438 JVM tests, 0 failures, 0 errors, 0 skipped**;
-- **lint 0 errors, 9 warnings** — the pre-existing `OldTargetApi`,
-  `UnusedAttribute`, `ObsoleteSdkInt` and three `UnusedResources`, plus a
-  `PluralsCandidate` on the toolbar's `visible · total` helper and two
+- **454 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **lint 0 errors, 8 warnings** — the pre-existing `OldTargetApi`,
+  `UnusedAttribute`, `ObsoleteSdkInt` and three `UnusedResources`, plus two
   dependency-update notices;
 - `app/build/outputs/apk/debug/app-debug.apk`.
 
@@ -173,7 +172,7 @@ Then run:
     cd android
     ./gradlew --offline -PkumihoEmulator=true :app:connectedDebugAndroidTest
 
-Current expected result: **133 tests, 0 failures, 0 errors, 0 skipped**. The
+Current expected result: **139 tests, 0 failures, 0 errors, 0 skipped**. The
 suite includes the AAR probe, setup, dashboard, locations, settings, split
 tunneling, account, logs, diagnostics, notification/tile reducers and the
 screenshot capture tests. A connected run uninstalls the app and its external

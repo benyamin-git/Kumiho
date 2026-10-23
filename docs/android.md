@@ -177,34 +177,40 @@ system dialog; a denial closes the sheet and shows the reason.
 
 ### Locations
 
-**Locations** loads the full country/city/server tree, with the engine's
+**Locations** loads the full country/server list, with the engine's
 recommended entry first. Country rows carry their country-flag emoji, and so
 do the connect-sheet country picker and the current-selection summary;
-Recommended, cities and servers stay unprefixed. Search matches country
-name/code, city name and server hostname, case-insensitively; matching
-branches open while the query is active and closing the search restores the
-previous expansion. Refresh keeps the previous tree on failure and offers one
-Retry.
+Recommended and servers stay unprefixed. A country row expands directly to
+its servers — there is no city level — and its subtitle counts them
+(`N servers`, quarantined included). Server rows name the city as context:
+`City · protocols · port`, with the per-server latency trailing. Search
+matches country name/code, city name and server hostname, case-insensitively;
+matching branches open while the query is active and closing the search
+restores the previous expansion. Refresh keeps the previous tree on failure
+and offers one Retry.
 
-Row 1 of the toolbar shows `X visible · Y total`: the targets Test speed would
-probe and the whole loaded list. Row 2 holds **Test speed**, **Ping all** and
-**Expand all**/**Collapse all**. Test speed pings only the currently visible,
-non-quarantined `host:port` targets through the engine's 24-way ping, deduped.
-Ping all pings every usable server in the loaded list regardless of the filter
-or expansion, deduped by address and skipping quarantined entries; its button
-reads **Pinging N…**, and both run buttons stay disabled until the run ends. A
-measured round trip shows milliseconds, an unanswered probe shows **timeout**,
-and an untested host shows **—**; nothing pings on load, typing, expanding,
-refreshing or resuming. The run window is 12 seconds for a normal list and
-scales with the target count (1.5 seconds per 24-host batch plus margin).
-Expand all opens every country and city,
-and the label flips to Collapse all while anything is open; the control is
-disabled while the search field is non-empty.
+The toolbar is one row: Refresh, **Ping all** and
+**Expand all**/**Collapse all**. Ping all pings every usable server in the
+loaded list regardless of the filter or expansion, deduped by `host:port`
+and skipping quarantined entries; its button reads **Pinging N…**, and the
+button stays disabled until the run ends. A measured round trip shows
+milliseconds, an unanswered probe shows **timeout**, and an untested host
+shows **—**; nothing pings on load, typing, expanding, refreshing or
+resuming. The run window is 12 seconds for a normal list and scales with
+the target count (1.5 seconds per 24-host batch plus margin). Expand all
+opens every country, and the label flips to Collapse all while anything is
+open; the control is disabled while the search field is non-empty.
+
+Collapsed country rows show their best latency — the fastest measured RTT
+among their servers, or **timeout** when only timeouts came back, or **—**
+before any run — and the list re-sorts live as results arrive: measured
+countries first, ascending, then the rest in engine order, with
+Recommended pinned first; servers inside a country the same way.
 
 Selecting a row saves it for the **next** connection — the current session
 keeps its server and exit IP — so the screen says to disconnect on Home and
 connect again. A server the engine quarantined (three failed connects) is
-marked, skipped by the speed test and not selectable.
+marked, skipped by Ping all and not selectable.
 
 ## Settings
 
@@ -680,7 +686,7 @@ sign-off has happened.
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
-| Locations tree, refresh, Test speed/Ping all, Expand all | Locations screen, live filter, 24-way ping |
+| Locations tree, refresh, Ping all, Expand all | Locations one-level list, live filter, speed order, 24-way ping |
 | 19 settings rows, overrides/reset | Settings groups with the same 19 rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
 | Account entitlement and sign-out | Account screen |
@@ -695,6 +701,10 @@ sign-off has happened.
 | Crash/diagnostics | Local `crash.log` replayed into the engine log |
 | No telemetry/backups | No telemetry, no backup, no-backup token storage |
 | Protocol v1 / desktop untouched | No IPC change; the mobile facade and Android provider are additive |
+
+Android deliberately diverges in one place: the Locations tab is one expandable
+level (country → server, city as row context) and re-sorts by measured speed,
+while the desktop trees keep country → city → server.
 
 ## Related documentation
 

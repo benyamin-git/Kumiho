@@ -342,12 +342,12 @@ no Play or F-Droid build.
 The app has a four-step setup (consent, native Firefox Accounts sign-in, VPN
 and notification permissions, Always-on guidance), then the same surfaces as
 the desktop clients: a dashboard with connect options and live status,
-locations with country flags, a filter, Test speed/Ping all and Expand
-all/Collapse all, and all 19 settings rows (the 17
-engine settings plus the read-only Always-on/lockdown rows Android owns),
-with overrides and Reset. Split tunneling, account, logs with sharing,
-diagnostics and proxy-only mode (local SOCKS5/HTTP without a VPN interface)
-are all there too.
+locations with country flags, a search, one **Ping all** action that
+orders the list by measured speed, and Expand all/Collapse all, and all 19
+settings rows (the 17 engine settings plus the read-only Always-on/lockdown
+rows Android owns), with overrides and Reset. Split tunneling, account, logs
+with sharing, diagnostics and proxy-only mode (local SOCKS5/HTTP without a
+VPN interface) are all there too.
 
 > **Release status.** The app builds and its unit, lint, assemble and
 > emulator suites pass. Physical first-connect/DNS/browsing/exit-IP acceptance
