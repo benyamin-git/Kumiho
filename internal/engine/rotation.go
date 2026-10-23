@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
@@ -38,6 +39,12 @@ type rotationCandidate struct {
 	quota    *api.Quota
 	usable   bool
 	skip     string
+}
+
+type rotationResult struct {
+	candidate rotationCandidate
+	notices   []string
+	quota     *api.Quota
 }
 
 // selectAccount prepares the active account and, when rotation is enabled,
@@ -223,109 +230,43 @@ func (c *Controller) rotateIfNeeded(ctx context.Context, gen uint64) error {
 	}
 	c.mu.Unlock()
 
-	candidates := make([]rotationCandidate, 0, len(snapshots))
-	var notices []string
-	quotas := make(map[string]*api.Quota)
-	for _, snap := range snapshots {
-		if err := c.selectionFence(gen); err != nil {
+	budget := c.rotationBudget
+	if budget <= 0 {
+		budget = 15 * time.Second
+	}
+	rotationCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+
+	results := make([]rotationResult, len(snapshots))
+	errs := make([]error, len(snapshots))
+	var wg sync.WaitGroup
+	for i := range snapshots {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if err := c.selectionFence(gen); err != nil {
+				errs[i] = err
+				return
+			}
+			results[i], errs[i] = c.rotationCandidate(rotationCtx, gen, snapshots[i])
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
 			return err
 		}
-		candidate := rotationCandidate{id: snap.id, email: snap.email, lastUsed: snap.lastUsed}
-		accessToken := ""
-		refreshable := false
+	}
 
-		switch snap.method {
-		case MethodBrowser:
-			if snap.reauth || snap.browser == nil || strings.TrimSpace(snap.browser.Token) == "" {
-				candidate.skip = "sign in again"
-				break
-			}
-			if !browserTokenUsable(snap.browser) {
-				c.markReauth(snap.id, "browser sign-in expired; sign in again")
-				candidate.skip = "sign in again"
-				break
-			}
-			accessToken = snap.browser.Token
-		default:
-			if snap.reauth {
-				candidate.skip = "sign in again"
-				break
-			}
-			tokens := snap.tokens
-			if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-				candidate.skip = "sign in again"
-				break
-			}
-			if !c.fxa.AccessTokenValid(tokens) {
-				if strings.TrimSpace(tokens.RefreshToken) == "" {
-					candidate.skip = "sign in again"
-					break
-				}
-				if err := c.refreshAccountToken(ctx, snap.id, gen); err != nil {
-					if fenceErr := c.selectionFence(gen); fenceErr != nil {
-						return fenceErr
-					}
-					c.log.Logf(logging.Warn, "auth", "account %s token refresh failed: %v", snap.email, err)
-					candidate.skip = "sign in again"
-					break
-				}
-				tokens = c.accountTokens(snap.id)
-				if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-					candidate.skip = "sign in again"
-					break
-				}
-			}
-			accessToken = tokens.AccessToken
-			refreshable = strings.TrimSpace(tokens.RefreshToken) != ""
+	candidates := make([]rotationCandidate, 0, len(results))
+	var notices []string
+	quotas := make(map[string]*api.Quota)
+	for _, result := range results {
+		notices = append(notices, result.notices...)
+		candidates = append(candidates, result.candidate)
+		if result.quota != nil {
+			quotas[result.candidate.id] = result.quota
 		}
-		if candidate.skip != "" {
-			notices = append(notices, fmt.Sprintf("skipping %s: %s", candidate.email, candidate.skip))
-			candidates = append(candidates, candidate)
-			continue
-		}
-
-		quota, err := c.guardian.Quota(ctx, accessToken)
-		if err != nil && guardian.IsUnauthorized(err) && snap.method == MethodBrowser {
-			c.markReauth(snap.id, "browser token rejected; sign in again")
-			candidate.skip = "sign in again"
-			notices = append(notices, fmt.Sprintf("skipping %s: %s", candidate.email, candidate.skip))
-			candidates = append(candidates, candidate)
-			continue
-		}
-		if err != nil && guardian.IsUnauthorized(err) && refreshable {
-			if refreshErr := c.refreshAccountToken(ctx, snap.id, gen); refreshErr != nil {
-				if fenceErr := c.selectionFence(gen); fenceErr != nil {
-					return fenceErr
-				}
-				c.log.Logf(logging.Warn, "auth", "account %s token refresh after 401 failed: %v", snap.email, refreshErr)
-				candidate.skip = "sign in again"
-			} else if tokens := c.accountTokens(snap.id); tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-				candidate.skip = "sign in again"
-			} else {
-				quota, err = c.guardian.Quota(ctx, tokens.AccessToken)
-			}
-		}
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if guardian.IsUnauthorized(err) {
-				c.log.Logf(logging.Warn, "auth", "Guardian rejected the token for %s", snap.email)
-				candidate.skip = "sign in again"
-				notices = append(notices, fmt.Sprintf("skipping %s: %s", candidate.email, candidate.skip))
-				candidates = append(candidates, candidate)
-				continue
-			}
-			c.log.Logf(logging.Warn, "guardian", "quota lookup for %s failed: %v", snap.email, err)
-			notices = append(notices, fmt.Sprintf("quota unknown for %s", candidate.email))
-			candidate.usable = true
-			candidates = append(candidates, candidate)
-			continue
-		}
-		candidate.usable = true
-		candidate.quota = apiQuotaFromGuardian(quota)
-		quotas[candidate.id] = candidate.quota
-		candidates = append(candidates, candidate)
 	}
 
 	if err := c.selectionFence(gen); err != nil {
@@ -338,6 +279,107 @@ func (c *Controller) rotateIfNeeded(ctx context.Context, gen uint64) error {
 		return c.rotationFailure(candidates)
 	}
 	return c.publishRotation(gen, chosen, quotas, notice)
+}
+
+// rotationCandidate resolves one account's tokens and quota. It runs for every
+// account concurrently; callers correlate results by slice index so the
+// notice order stays stable.
+func (c *Controller) rotationCandidate(ctx context.Context, gen uint64, snap rotationSnapshot) (rotationResult, error) {
+	candidate := rotationCandidate{id: snap.id, email: snap.email, lastUsed: snap.lastUsed}
+	var notices []string
+	skip := func(reason string) (rotationResult, error) {
+		candidate.skip = reason
+		notices = append(notices, fmt.Sprintf("skipping %s: %s", candidate.email, reason))
+		return rotationResult{candidate: candidate, notices: notices}, nil
+	}
+	unknownQuota := func() (rotationResult, error) {
+		notices = append(notices, fmt.Sprintf("quota unknown for %s", candidate.email))
+		candidate.usable = true
+		return rotationResult{candidate: candidate, notices: notices}, nil
+	}
+
+	accessToken := ""
+	refreshable := false
+	switch snap.method {
+	case MethodBrowser:
+		if snap.reauth || snap.browser == nil || strings.TrimSpace(snap.browser.Token) == "" {
+			return skip("sign in again")
+		}
+		if !browserTokenUsable(snap.browser) {
+			c.markReauth(snap.id, "browser sign-in expired; sign in again")
+			return skip("sign in again")
+		}
+		accessToken = snap.browser.Token
+	default:
+		if snap.reauth {
+			return skip("sign in again")
+		}
+		tokens := snap.tokens
+		if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
+			return skip("sign in again")
+		}
+		if !c.fxa.AccessTokenValid(tokens) {
+			if strings.TrimSpace(tokens.RefreshToken) == "" {
+				return skip("sign in again")
+			}
+			if err := c.refreshAccountToken(ctx, snap.id, gen); err != nil {
+				if fenceErr := c.selectionFence(gen); fenceErr != nil {
+					return rotationResult{}, fenceErr
+				}
+				c.log.Logf(logging.Warn, "auth", "account %s token refresh failed: %v", snap.email, err)
+				return skip("sign in again")
+			}
+			tokens = c.accountTokens(snap.id)
+			if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
+				return skip("sign in again")
+			}
+		}
+		accessToken = tokens.AccessToken
+		refreshable = strings.TrimSpace(tokens.RefreshToken) != ""
+	}
+
+	quota, err := c.rotationQuota(ctx, accessToken)
+	if err != nil && guardian.IsUnauthorized(err) && snap.method == MethodBrowser {
+		c.markReauth(snap.id, "browser token rejected; sign in again")
+		return skip("sign in again")
+	}
+	if err != nil && guardian.IsUnauthorized(err) && refreshable {
+		if refreshErr := c.refreshAccountToken(ctx, snap.id, gen); refreshErr != nil {
+			if fenceErr := c.selectionFence(gen); fenceErr != nil {
+				return rotationResult{}, fenceErr
+			}
+			c.log.Logf(logging.Warn, "auth", "account %s token refresh after 401 failed: %v", snap.email, refreshErr)
+			candidate.skip = "sign in again"
+		} else if tokens := c.accountTokens(snap.id); tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
+			candidate.skip = "sign in again"
+		} else {
+			quota, err = c.rotationQuota(ctx, tokens.AccessToken)
+		}
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return rotationResult{}, ctx.Err()
+		}
+		if guardian.IsUnauthorized(err) {
+			c.log.Logf(logging.Warn, "auth", "Guardian rejected the token for %s", snap.email)
+			return skip("sign in again")
+		}
+		c.log.Logf(logging.Warn, "guardian", "quota lookup for %s failed: %v", snap.email, err)
+		return unknownQuota()
+	}
+	candidate.usable = true
+	candidate.quota = apiQuotaFromGuardian(quota)
+	return rotationResult{candidate: candidate, notices: notices, quota: candidate.quota}, nil
+}
+
+func (c *Controller) rotationQuota(ctx context.Context, accessToken string) (*guardian.Quota, error) {
+	timeout := c.rotationQuotaTimeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	quotaCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return c.guardian.Quota(quotaCtx, accessToken)
 }
 
 func (c *Controller) accountTokens(id string) *fxa.Tokens {

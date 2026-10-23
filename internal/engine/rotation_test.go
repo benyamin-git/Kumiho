@@ -233,6 +233,140 @@ func TestRotationKeepsActiveAboveThreshold(t *testing.T) {
 	}
 }
 
+func TestRotationFetchesQuotasConcurrently(t *testing.T) {
+	now := time.Now()
+	a := rotationPasswordAccount("a", "a@example.com", "token-a", now)
+	b := rotationPasswordAccount("b", "b@example.com", "token-b", now.Add(-time.Hour))
+	starts := make(chan string, 2)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/fpn/token" {
+			http.NotFound(w, r)
+			return
+		}
+		token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		starts <- token
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		remaining := "80"
+		if token == "token-a" {
+			remaining = "5"
+		}
+		w.Header().Set("X-Quota-Limit", "100")
+		w.Header().Set("X-Quota-Remaining", remaining)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(releaseAll)
+
+	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	enableRotation(t, ctrl, 10)
+	ctrl.guardian = &guardian.Client{BaseURL: srv.URL, HTTP: srv.Client()}
+	f := &accountsFile{Version: 2, Active: "a", LastMethod: MethodPassword, Accounts: []*Account{a, b}}
+	if err := saveAccounts(accountsPath(paths), f); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctrl.mu.Lock()
+	ctrl.setStateLocked(StateConnecting)
+	ctrl.mu.Unlock()
+	t.Cleanup(func() {
+		ctrl.mu.Lock()
+		if ctrl.state == StateConnecting || ctrl.state == StateFatal {
+			ctrl.setStateLocked(StateIdle)
+		}
+		ctrl.mu.Unlock()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- ctrl.selectAccount(ctx) }()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-starts:
+		case <-time.After(time.Second):
+			t.Fatalf("quota requests did not overlap; only %d started", i)
+		}
+	}
+	releaseAll()
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+	if got := selectActiveID(t, ctrl); got != "b" {
+		t.Fatalf("active account = %q, want b", got)
+	}
+}
+
+func TestRotationQuotaTimeoutIsUnknown(t *testing.T) {
+	now := time.Now()
+	a := rotationPasswordAccount("a", "a@example.com", "token-a", now)
+	b := rotationPasswordAccount("b", "b@example.com", "token-b", now.Add(-time.Hour))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/fpn/token" {
+			http.NotFound(w, r)
+			return
+		}
+		token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		if token == "token-a" {
+			<-r.Context().Done()
+			return
+		}
+		w.Header().Set("X-Quota-Limit", "100")
+		w.Header().Set("X-Quota-Remaining", "90")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	enableRotation(t, ctrl, 10)
+	ctrl.rotationQuotaTimeout = 50 * time.Millisecond
+	ctrl.rotationBudget = 2 * time.Second
+	ctrl.guardian = &guardian.Client{BaseURL: srv.URL, HTTP: srv.Client()}
+	f := &accountsFile{Version: 2, Active: "a", LastMethod: MethodPassword, Accounts: []*Account{a, b}}
+	if err := saveAccounts(accountsPath(paths), f); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctrl.mu.Lock()
+	ctrl.setStateLocked(StateConnecting)
+	ctrl.mu.Unlock()
+	t.Cleanup(func() {
+		ctrl.mu.Lock()
+		if ctrl.state == StateConnecting || ctrl.state == StateFatal {
+			ctrl.setStateLocked(StateIdle)
+		}
+		ctrl.mu.Unlock()
+	})
+
+	started := time.Now()
+	if err := ctrl.selectAccount(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("rotation waited %v for a stalled quota lookup", elapsed)
+	}
+	if got := selectActiveID(t, ctrl); got != "b" {
+		t.Fatalf("active account = %q, want b", got)
+	}
+	if view := ctrl.Accounts(); !strings.Contains(view.Notice, "quota unknown for a@example.com") {
+		t.Fatalf("rotation notice = %q", view.Notice)
+	}
+}
+
 func TestRotationSkipsReauthAndExpiredBrowser(t *testing.T) {
 	now := time.Now()
 	a := rotationBrowserAccount("a", "reauth@example.com", "reauth-token", now.Add(time.Hour).Unix(), true, now)

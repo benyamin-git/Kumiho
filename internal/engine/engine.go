@@ -90,11 +90,13 @@ type Controller struct {
 	// and guardian.OnChallenge.
 	solver *fastly.Solver
 
-	guardian     *guardian.Client
-	exitCheckURL string
-	plat         platform.Provider
-	nc           platform.NetConfig
-	userAgent    string
+	guardian             *guardian.Client
+	rotationBudget       time.Duration
+	rotationQuotaTimeout time.Duration
+	exitCheckURL         string
+	plat                 platform.Provider
+	nc                   platform.NetConfig
+	userAgent            string
 
 	// upstreamDialer is the bypass dialer for edge connections (nil until
 	// UseBypassDialer runs, which is fine for tests).
@@ -187,10 +189,14 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		serverListURL:   serverlist.RecordsURL,
 		serverListCache: filepath.Join(filepath.Dir(store.Paths().State), "serverlist.json"),
 		guardian:        guardian.NewClient(),
-		exitCheckURL:    "https://www.cloudflare.com/cdn-cgi/trace",
-		browserBaseURL:  "https://vpn.mozilla.org",
-		browserTimeout:  5 * time.Minute,
-		browserPlatform: plat.Name(),
+		rotationBudget:  15 * time.Second,
+		// Quota is one HEAD (or a pass fallback) per account; a short cap
+		// keeps a stalled Guardian from holding up the whole connect.
+		rotationQuotaTimeout: 5 * time.Second,
+		exitCheckURL:         "https://www.cloudflare.com/cdn-cgi/trace",
+		browserBaseURL:       "https://vpn.mozilla.org",
+		browserTimeout:       5 * time.Minute,
+		browserPlatform:      plat.Name(),
 		dialUpstream: func(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
 			return upstream.Dial(ctx, opts)
 		},
