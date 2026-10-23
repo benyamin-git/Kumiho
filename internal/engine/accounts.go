@@ -160,9 +160,12 @@ func loadAccounts(path string) (*accountsFile, bool, error) {
 		return nil, true, fmt.Errorf("accounts.json %s: unsupported version %d; move it aside to recover (tokens.json is untouched)", path, f.Version)
 	}
 	seen := make(map[string]struct{}, len(f.Accounts))
-	for _, a := range f.Accounts {
-		if a == nil || a.ID == "" {
-			continue
+	for i, a := range f.Accounts {
+		if a == nil {
+			return nil, true, fmt.Errorf("accounts.json %s: account %d is null; move it aside to recover (tokens.json is untouched)", path, i)
+		}
+		if strings.TrimSpace(a.ID) == "" {
+			return nil, true, fmt.Errorf("accounts.json %s: account %d is missing an id; move it aside to recover (tokens.json is untouched)", path, i)
 		}
 		if _, ok := seen[a.ID]; ok {
 			return nil, true, fmt.Errorf("accounts.json %s: duplicate account id %q; move it aside to recover (tokens.json is untouched)", path, a.ID)

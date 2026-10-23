@@ -374,6 +374,33 @@ func TestCorruptAccountsLeavesLegacyTokens(t *testing.T) {
 	}
 }
 
+func TestLoadAccountsRejectsNilEmptyAndDuplicateEntries(t *testing.T) {
+	valid := `{"id":"a","email":"a@example.com","method":"password"}`
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "nil account", body: `{"version":2,"accounts":[null]}`},
+		{name: "nil before valid", body: `{"version":2,"accounts":[null,` + valid + `]}`},
+		{name: "empty id", body: `{"version":2,"accounts":[{"email":"a@example.com"}]}`},
+		{name: "duplicate id", body: `{"version":2,"accounts":[` + valid + `,` + valid + `]}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := accountTestPaths(t)
+			path := accountsPath(paths)
+			if err := os.WriteFile(path, []byte(tt.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := loadAccounts(path)
+			if err == nil || !strings.Contains(err.Error(), "move it aside") ||
+				!strings.Contains(err.Error(), "tokens.json") {
+				t.Fatalf("loadAccounts error = %v, want recoverable rejection", err)
+			}
+		})
+	}
+}
+
 func TestMigratedAccountIDsAreStable(t *testing.T) {
 	paths := accountTestPaths(t)
 	if err := saveTokens(paths.Tokens, &fxa.Tokens{AccessToken: "a"}); err != nil {
