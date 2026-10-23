@@ -7,7 +7,8 @@ separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
 This guide describes the app as implemented for **v0.5.1**
-(`versionCode` 501). Read the honesty note below before relying on it.
+(`versionCode` 501) plus the unreleased **0.5.2** Android change noted under
+Settings. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
@@ -373,11 +374,13 @@ process to another network and leave the VPN. Android lockdown overrides the
 setting and still forces bypass off, and the row stays visible and editable
 in that state.
 
-The value is saved immediately and applies on the **next** connect. While a
-full tunnel is up, changing it shows *The tunnel is up. Reconnect to apply
-this setting.*; Kumiho never reconnects on its own. A proxy-only session
-builds no interface, so the setting has no effect there and shows no
-warning.
+The value is saved immediately and applies on the **next** connect. On a
+cold start that connects before the saved choice has loaded, that first
+interface uses Off (the safe default); the reconnect line appears when the
+choice loads, and reconnecting applies it. While a full tunnel is up, changing
+it shows *The tunnel is up. Reconnect to apply this setting.*; Kumiho never
+reconnects on its own. A proxy-only session builds no interface, so the
+setting has no effect there and shows no warning.
 
 Connections carried **through** the tunnel still drop on a connect or
 disconnect because their exit IP changes; TCP cannot migrate the stream.
