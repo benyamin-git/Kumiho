@@ -238,13 +238,10 @@
     <string name="locations_search_clear">Clear search</string>
     <string name="locations_refresh">Refresh locations</string>
     <string name="locations_refresh_action">Refresh</string>
-    <string name="locations_test_speed">Test speed</string>
-    <string name="locations_testing">Testing…</string>
     <string name="locations_ping_all">Ping all</string>
     <string name="locations_pinging_all">Pinging %1$d…</string>
     <string name="locations_expand_all">Expand all</string>
     <string name="locations_collapse_all">Collapse all</string>
-    <string name="locations_targets_helper">%1$d visible · %2$d total</string>
     <string name="locations_selected">Selected</string>
     <string name="locations_summary_label">Current selection</string>
     <string name="locations_selection_none">No server selected yet — the dashboard uses Recommended</string>
@@ -273,7 +270,6 @@
     <string name="locations_load_failed_title">Locations did not load</string>
     <string name="locations_message_refresh_failed">The refresh failed. The list below is the last one that loaded.</string>
     <string name="locations_message_select_failed">The location could not be saved.</string>
-    <string name="locations_message_test_failed">The speed test could not start.</string>
     <string name="locations_message_ping_all_failed">Ping all could not start.</string>
 
     <!-- Settings (T13). -->

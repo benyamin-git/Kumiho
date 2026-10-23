@@ -80,29 +80,6 @@ object LocationTree {
         return rows
     }
 
-    /** Every server row in view order. */
-    fun visibleServers(rows: List<LocationRow>): List<Server> =
-        rows.mapNotNull { (it as? LocationRow.ServerRow)?.server }
-
-    /**
-     * The `host:port` targets a manual Test speed sends: the visible server
-     * rows, in order, deduped by address, without quarantined servers (the
-     * engine's candidate resolver skips them) or entries without a usable
-     * address. The first spelling of an address wins.
-     */
-    fun pingTargets(rows: List<LocationRow>): List<String> {
-        val targets = ArrayList<String>()
-        val seen = HashSet<String>()
-        for (row in rows) {
-            val server = (row as? LocationRow.ServerRow)?.server ?: continue
-            if (server.quarantined) continue
-            if (server.hostname.isBlank() || server.port <= 0) continue
-            val address = addressOf(server)
-            if (seen.add(addressKey(address))) targets += address
-        }
-        return targets
-    }
-
     /**
      * The whole loaded tree's ping targets: every country/city/server, skipping
      * quarantined and unusable entries, deduped by lowercased host:port. The
@@ -361,10 +338,8 @@ object LocationsTags {
     const val SEARCH = "locations_search"
     const val SEARCH_CLEAR = "locations_search_clear"
     const val REFRESH = "locations_refresh"
-    const val TEST_SPEED = "locations_test_speed"
     const val PING_ALL = "locations_ping_all"
     const val TOGGLE_ALL = "locations_toggle_all"
-    const val TARGETS_HELPER = "locations_targets_helper"
     const val SUMMARY = "locations_summary"
     const val CONNECTED_HINT = "locations_connected_hint"
     const val NOTICE = "locations_notice"

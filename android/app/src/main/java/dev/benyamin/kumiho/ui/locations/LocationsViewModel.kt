@@ -90,7 +90,6 @@ data class SelectionRequest(
 enum class LocationsMessage {
     REFRESH_FAILED,
     SELECT_FAILED,
-    TEST_FAILED,
     PING_ALL_FAILED,
 }
 
@@ -105,9 +104,9 @@ sealed interface LocationsNoticeText {
 enum class LocationsNoticeTone { WARNING, ERROR }
 
 /** The one retry a notice can offer. */
-enum class LocationsNoticeAction { NONE, RETRY_REFRESH, RETRY_SELECT, RETRY_TEST, RETRY_PING_ALL }
+enum class LocationsNoticeAction { NONE, RETRY_REFRESH, RETRY_SELECT, RETRY_PING_ALL }
 
-/** The latest advisory message from a load, a save or a speed test. */
+/** The latest advisory message from a load, a save or a ping run. */
 data class LocationsNotice(
     val text: LocationsNoticeText,
     val tone: LocationsNoticeTone,
@@ -127,12 +126,6 @@ data class LocationsNotice(
             tone = LocationsNoticeTone.ERROR,
             action = LocationsNoticeAction.RETRY_SELECT,
             request = request,
-        )
-
-        fun testFailed(detail: String): LocationsNotice = LocationsNotice(
-            text = LocationsNoticeText.Local(LocationsMessage.TEST_FAILED, detail),
-            tone = LocationsNoticeTone.WARNING,
-            action = LocationsNoticeAction.RETRY_TEST,
         )
 
         fun pingAllFailed(detail: String): LocationsNotice = LocationsNotice(
@@ -167,8 +160,6 @@ data class LocationsState(
     val selection: LocationSelection? = null,
     /** The last RTT per address key; a null value is a timeout, an absent key is untested. */
     val latency: Map<String, Double?> = emptyMap(),
-    /** A Test speed run is in flight (its command plus the results it is waiting for). */
-    val testing: Boolean = false,
     /** A Ping all run is in flight. */
     val pingingAll: Boolean = false,
     /** The static target count shown on the Ping all button for this run. */
@@ -186,9 +177,6 @@ data class LocationsState(
     val rows: List<LocationRow>
         get() = LocationTree.rows(countries, query, expandedCountries, latency)
 
-    /** The `host:port` targets a Test speed would send. */
-    val testTargets: List<String> get() = LocationTree.pingTargets(rows)
-
     /** The whole loaded tree's `host:port` targets, independent of filter and expansion. */
     val allTargets: List<String> get() = LocationTree.pingAllTargets(countries)
 
@@ -205,13 +193,9 @@ data class LocationsState(
 
     val showNoMatch: Boolean get() = hasTree && searching && rows.isEmpty()
 
-    /** Test speed is offered only when there is something visible to test and no run is active. */
-    val canTest: Boolean
-        get() = !testing && !pingingAll && !loading && loadError == null && testTargets.isNotEmpty()
-
     /** Ping all is offered whenever the loaded tree has a usable target and no run is active. */
     val canPingAll: Boolean
-        get() = !testing && !pingingAll && !loading && loadError == null && allTargets.isNotEmpty()
+        get() = !pingingAll && !loading && loadError == null && allTargets.isNotEmpty()
 
     /** The expansion toggle only acts on a loaded tree without a search filter. */
     val canToggleAll: Boolean get() = hasTree && query.isEmpty()
@@ -454,37 +438,31 @@ class LocationsViewModel(
         }
     }
 
-    // ---- speed tests -----------------------------------------------------
-
-    /** Test speed: only the server rows currently in view, deduped by address. */
-    fun testSpeed() = startPing(mutableState.value.testTargets, all = false)
+    // ---- ping runs -------------------------------------------------------
 
     /** Ping all: every usable server in the loaded tree, whatever the filter shows. */
-    fun pingAll() = startPing(mutableState.value.allTargets, all = true)
+    fun pingAll() = startPing(mutableState.value.allTargets)
 
     /**
-     * The only path that pings. Test speed and Ping all share one run state, so
-     * starting either while the other runs is ignored. Results replace the
-     * values for the hosts this run tested as they arrive; every other host
-     * keeps its last value.
+     * The only path that pings. A second tap while a run is in flight is
+     * ignored. Results replace the values for the run's hosts as they arrive;
+     * every other host keeps its last value.
      */
-    private fun startPing(targets: List<String>, all: Boolean) {
+    private fun startPing(targets: List<String>) {
         val current = mutableState.value
-        if (targets.isEmpty() || current.testing || current.pingingAll) return
+        if (targets.isEmpty() || current.pingingAll) return
 
         pendingPings.clear()
         targets.mapTo(pendingPings, LocationTree::addressKey)
-        val cleared = if (all) {
-            LocationsNoticeAction.RETRY_PING_ALL
-        } else {
-            LocationsNoticeAction.RETRY_TEST
-        }
         mutableState.update {
             it.copy(
-                testing = !all,
-                pingingAll = all,
-                pingAllCount = if (all) targets.size else 0,
-                notice = if (it.notice?.action == cleared) null else it.notice,
+                pingingAll = true,
+                pingAllCount = targets.size,
+                notice = if (it.notice?.action == LocationsNoticeAction.RETRY_PING_ALL) {
+                    null
+                } else {
+                    it.notice
+                },
             )
         }
         pingJob?.cancel()
@@ -502,15 +480,8 @@ class LocationsViewModel(
                 throw cancelled
             } catch (error: Exception) {
                 stopPing()
-                val detail = messageOf(error)
                 mutableState.update {
-                    it.copy(
-                        notice = if (all) {
-                            LocationsNotice.pingAllFailed(detail)
-                        } else {
-                            LocationsNotice.testFailed(detail)
-                        },
-                    )
+                    it.copy(notice = LocationsNotice.pingAllFailed(messageOf(error)))
                 }
             }
         }
@@ -533,7 +504,7 @@ class LocationsViewModel(
         pendingPings.clear()
         pingJob?.cancel()
         pingJob = null
-        mutableState.update { it.copy(testing = false, pingingAll = false, pingAllCount = 0) }
+        mutableState.update { it.copy(pingingAll = false, pingAllCount = 0) }
     }
 
     // ---- notices ---------------------------------------------------------
@@ -554,10 +525,6 @@ class LocationsViewModel(
                 val request = notice.request ?: return
                 mutableState.update { it.copy(notice = null) }
                 select(request)
-            }
-            LocationsNoticeAction.RETRY_TEST -> {
-                mutableState.update { it.copy(notice = null) }
-                testSpeed()
             }
             LocationsNoticeAction.RETRY_PING_ALL -> {
                 mutableState.update { it.copy(notice = null) }

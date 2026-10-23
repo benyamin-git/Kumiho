@@ -337,11 +337,6 @@ class LocationsViewModelTest {
                 filtered.rows.filterIsInstance<LocationRow.ServerRow>()
                     .map { LocationTree.addressOf(it.server) },
             )
-            assertEquals(
-                "only the matching branch is probed",
-                listOf("ber.example.net:443"),
-                filtered.testTargets,
-            )
 
             viewModel.clearQuery()
             runCurrent()
@@ -363,37 +358,12 @@ class LocationsViewModelTest {
             assertTrue(state.showNoMatch)
             assertFalse(state.showEmpty)
             assertTrue(state.rows.isEmpty())
-            assertTrue(state.testTargets.isEmpty())
         }
 
-    // ---- speed test ------------------------------------------------------
+    // ---- ping runs -------------------------------------------------------
 
     @Test
-    fun `ping targets are the visible servers deduped and skip quarantined ones`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-
-            assertEquals(
-                listOf(EDGE, "share.example.net:443", "west.example.net:443"),
-                viewModel.state.value.testTargets,
-            )
-            assertTrue(viewModel.state.value.canTest)
-
-            viewModel.onQueryChange("germany")
-            runCurrent()
-            assertEquals(
-                "the quarantined server is never probed",
-                listOf("ber.example.net:443"),
-                viewModel.state.value.testTargets,
-            )
-        }
-
-    @Test
-    fun `nothing pings until Test speed is tapped`() =
+    fun `nothing pings until Ping all is tapped`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
@@ -408,32 +378,8 @@ class LocationsViewModelTest {
             runCurrent()
 
             assertTrue(gateway.pingCalls.isEmpty())
-            assertFalse(viewModel.state.value.testing)
+            assertFalse(viewModel.state.value.pingingAll)
             assertTrue(viewModel.state.value.latency.isEmpty())
-        }
-
-    @Test
-    fun `Test speed sends one ping command for the visible targets`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-
-            viewModel.testSpeed()
-            runCurrent()
-
-            assertEquals(
-                listOf(listOf(EDGE, "share.example.net:443", "west.example.net:443")),
-                gateway.pingCalls,
-            )
-            assertTrue(viewModel.state.value.testing)
-            assertFalse(viewModel.state.value.canTest)
-
-            viewModel.testSpeed()
-            runCurrent()
-            assertEquals("a second tap while testing is ignored", 1, gateway.pingCalls.size)
         }
 
     @Test
@@ -446,7 +392,7 @@ class LocationsViewModelTest {
             runCurrent()
             assertEquals(LatencyState.Untested, viewModel.state.value.latencyOf(EDGE_SERVER))
 
-            viewModel.testSpeed()
+            viewModel.pingAll()
             runCurrent()
             gateway.emitPing(EDGE, rttMs = null)
             runCurrent()
@@ -460,137 +406,87 @@ class LocationsViewModelTest {
         }
 
     @Test
-    fun `testing ends when every target has answered`() =
+    fun `a run ends when every target has answered`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
             runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-            viewModel.testSpeed()
+
+            viewModel.pingAll()
             runCurrent()
 
             gateway.emitPing(EDGE, rttMs = 42.4)
             runCurrent()
-            assertTrue("not every host has answered yet", viewModel.state.value.testing)
+            assertTrue("not every host has answered yet", viewModel.state.value.pingingAll)
 
             gateway.emitPing(SHARE.uppercase(), rttMs = 9.0)
             gateway.emitPing(WEST, rttMs = 88.0)
+            gateway.emitPing(AUTO, rttMs = 20.0)
+            gateway.emitPing(BER_ADDRESS, rttMs = 61.0)
             runCurrent()
 
-            assertFalse(viewModel.state.value.testing)
+            assertFalse(viewModel.state.value.pingingAll)
             assertEquals(LatencyState.Measured(42), viewModel.state.value.latencyOf(EDGE_SERVER))
             assertEquals(LatencyState.Measured(9), viewModel.state.value.latencyOf(SHARE_SERVER))
         }
 
     @Test
-    fun `testing ends after the ping window even without answers`() =
+    fun `a run ends after the window even without answers`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US)
             val viewModel = viewModel()
             runCurrent()
-            viewModel.toggleCountry("us")
+
+            viewModel.pingAll()
             runCurrent()
-            viewModel.testSpeed()
-            runCurrent()
-            assertTrue(viewModel.state.value.testing)
+            assertTrue(viewModel.state.value.pingingAll)
 
             advanceTimeBy(WINDOW + 1)
             runCurrent()
 
-            assertFalse(viewModel.state.value.testing)
+            assertFalse(viewModel.state.value.pingingAll)
             assertTrue(
                 "an unanswered host stays untested, not a timeout",
                 viewModel.state.value.latency.isEmpty(),
             )
-            assertTrue(viewModel.state.value.canTest)
+            assertTrue(viewModel.state.value.canPingAll)
         }
 
     @Test
-    fun `a new test replaces the hosts it probed and keeps the others`() =
+    fun `a new run replaces its hosts' previous results`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(REC, US, DE)
             val viewModel = viewModel()
             runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-            viewModel.testSpeed()
+
+            viewModel.pingAll()
             runCurrent()
             gateway.emitPing(EDGE, rttMs = 42.0)
             gateway.emitPing(SHARE, rttMs = null)
-            gateway.emitPing("west.example.net:443", rttMs = 88.0)
+            gateway.emitPing(WEST, rttMs = 88.0)
+            gateway.emitPing(AUTO, rttMs = 20.0)
+            gateway.emitPing(BER_ADDRESS, rttMs = 61.0)
             runCurrent()
-            assertFalse(viewModel.state.value.testing)
+            assertFalse(viewModel.state.value.pingingAll)
 
-            // Narrow the view to one city and test again; only its hosts are probed.
-            viewModel.onQueryChange("new york")
+            viewModel.pingAll()
             runCurrent()
-            viewModel.testSpeed()
-            runCurrent()
-            assertEquals(listOf(listOf(EDGE, SHARE)), gateway.pingCalls.drop(1))
             assertEquals(2, gateway.pingCalls.size)
             gateway.emitPing(EDGE, rttMs = 7.0)
-            gateway.emitPing(SHARE, rttMs = 12.0)
             runCurrent()
 
-            val latency = viewModel.state.value.latency
             assertEquals(LatencyState.Measured(7), viewModel.state.value.latencyOf(EDGE_SERVER))
-            assertEquals(LatencyState.Measured(12), viewModel.state.value.latencyOf(SHARE_SERVER))
             assertEquals(
-                "a host outside this run keeps its last measurement",
-                LatencyState.Measured(88),
-                viewModel.state.value.latencyOf(WEST_SERVER),
+                "a host without a fresh answer keeps its last measurement",
+                LatencyState.Timeout,
+                viewModel.state.value.latencyOf(SHARE_SERVER),
             )
-            assertEquals(3, latency.size)
-        }
-
-    @Test
-    fun `a failed ping command stops testing and offers a retry`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-
-            gateway.pingError = IllegalStateException("ping unavailable")
-            viewModel.testSpeed()
-            runCurrent()
-
-            val notice = viewModel.state.value.notice
-            requireNotNull(notice)
-            assertEquals(LocationsNoticeAction.RETRY_TEST, notice.action)
-            assertEquals(LocationsNoticeTone.WARNING, notice.tone)
-            assertFalse(viewModel.state.value.testing)
-
-            gateway.pingError = null
-            viewModel.retryNotice()
-            runCurrent()
-
-            assertEquals(2, gateway.pingCalls.size)
-            assertNull(viewModel.state.value.notice)
-            assertTrue(viewModel.state.value.testing)
-
-            advanceTimeBy(WINDOW + 1)
-            runCurrent()
-            assertFalse(viewModel.state.value.testing)
-        }
-
-    @Test
-    fun `Test speed with nothing visible is a no-op`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.onQueryChange("zzz")
-            runCurrent()
-
-            viewModel.testSpeed()
-            runCurrent()
-
-            assertTrue(gateway.pingCalls.isEmpty())
-            assertFalse(viewModel.state.value.testing)
-            assertFalse(viewModel.state.value.canTest)
+            assertEquals(LatencyState.Measured(88), viewModel.state.value.latencyOf(WEST_SERVER))
+            assertEquals(LatencyState.Measured(61), viewModel.state.value.latencyOf(BER_SERVER))
+            assertEquals(
+                LatencyState.Measured(20),
+                viewModel.state.value.latencyOf(server("auto.example.net")),
+            )
         }
 
     // ---- ping all --------------------------------------------------------
@@ -604,7 +500,6 @@ class LocationsViewModelTest {
 
             viewModel.onQueryChange("berlin")
             runCurrent()
-            assertEquals(listOf(BER_ADDRESS), viewModel.state.value.testTargets)
 
             viewModel.pingAll()
             runCurrent()
@@ -628,7 +523,6 @@ class LocationsViewModelTest {
 
             val running = viewModel.state.value
             assertTrue(running.pingingAll)
-            assertFalse(running.testing)
             assertEquals(5, running.pingAllCount)
             assertFalse(running.canPingAll)
 
@@ -696,36 +590,6 @@ class LocationsViewModelTest {
                 listOf("country:rec", "country:de", "country:us"),
                 viewModel.state.value.rows.map { it.key },
             )
-        }
-
-    @Test
-    fun `Test speed and Ping all are mutually exclusive in both orders`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-
-            viewModel.testSpeed()
-            runCurrent()
-            viewModel.pingAll()
-            runCurrent()
-            assertEquals("Ping all is ignored while Test speed runs", 1, gateway.pingCalls.size)
-            assertTrue(viewModel.state.value.testing)
-
-            advanceTimeBy(WINDOW + 1)
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-            assertEquals(2, gateway.pingCalls.size)
-            assertTrue(viewModel.state.value.pingingAll)
-
-            viewModel.testSpeed()
-            runCurrent()
-            assertEquals("Test speed is ignored while Ping all runs", 2, gateway.pingCalls.size)
-            assertTrue(viewModel.state.value.pingingAll)
         }
 
     @Test

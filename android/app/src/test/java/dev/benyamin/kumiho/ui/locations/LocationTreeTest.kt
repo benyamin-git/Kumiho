@@ -13,7 +13,7 @@ import org.junit.Test
 
 /**
  * The pure tree rules: REC first, the visible rows for one expansion state,
- * the ping targets those rows describe, and the current selection resolved from
+ * the whole tree's ping targets, and the current selection resolved from
  * the engine's `location` + `server`. No Android, no engine.
  */
 class LocationTreeTest {
@@ -127,41 +127,6 @@ class LocationTreeTest {
     // ---- ping targets ----------------------------------------------------
 
     @Test
-    fun `ping targets are the visible servers deduped by address`() {
-        val rows = LocationTree.rows(ORDERED, expandedCountries = setOf("us"))
-
-        // share.example.net:443 appears under both cities; it is probed once.
-        assertEquals(
-            listOf("edge.example.net:2499", "share.example.net:443"),
-            LocationTree.pingTargets(rows),
-        )
-    }
-
-    @Test
-    fun `ping targets skip quarantined servers and broken addresses`() {
-        val country = Country(
-            code = "us",
-            name = "United States",
-            cities = listOf(
-                City(
-                    code = "nyc",
-                    name = "New York",
-                    servers = listOf(
-                        server("edge.example.net", 2499),
-                        server("quarantined.example.net", quarantined = true),
-                        server("", 443),
-                        server("noport.example.net", 0),
-                    ),
-                ),
-            ),
-        )
-
-        val rows = LocationTree.rows(listOf(country), expandedCountries = setOf("us"))
-
-        assertEquals(listOf("edge.example.net:2499"), LocationTree.pingTargets(rows))
-    }
-
-    @Test
     fun `ping all targets walk every country including REC`() {
         assertEquals(
             listOf(
@@ -199,11 +164,8 @@ class LocationTreeTest {
 
     @Test
     fun `ping all targets are independent of expansion and filtering`() {
-        assertEquals(
-            "a collapsed tree has nothing for Test speed to probe",
-            emptyList<String>(),
-            LocationTree.pingTargets(LocationTree.rows(ORDERED)),
-        )
+        assertTrue(LocationTree.rows(ORDERED).none { it is LocationRow.ServerRow })
+
         assertEquals(4, LocationTree.pingAllTargets(ORDERED).size)
     }
 
@@ -211,8 +173,7 @@ class LocationTreeTest {
     fun `a quarantined server is still visible for context`() {
         val rows = LocationTree.rows(ORDERED, expandedCountries = setOf("de"))
 
-        assertTrue(LocationTree.visibleServers(rows).any { it.quarantined })
-        assertFalse(LocationTree.pingTargets(rows).any { it.contains("quarantined") })
+        assertTrue(rows.filterIsInstance<LocationRow.ServerRow>().any { it.server.quarantined })
     }
 
     // ---- current selection ----------------------------------------------

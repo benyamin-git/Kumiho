@@ -110,7 +110,6 @@ fun LocationsRoute(
             onSelect = locationsViewModel::select,
             onRefresh = locationsViewModel::refresh,
             onRetryLoad = locationsViewModel::retryLoad,
-            onTestSpeed = locationsViewModel::testSpeed,
             onPingAll = locationsViewModel::pingAll,
             onToggleAll = locationsViewModel::toggleAll,
             onDismissNotice = locationsViewModel::dismissNotice,
@@ -128,7 +127,6 @@ data class LocationsActions(
     val onSelect: (Country, City, Server) -> Unit,
     val onRefresh: () -> Unit,
     val onRetryLoad: () -> Unit,
-    val onTestSpeed: () -> Unit,
     val onPingAll: () -> Unit,
     val onToggleAll: () -> Unit,
     val onDismissNotice: () -> Unit,
@@ -255,97 +253,63 @@ private fun SearchField(
 
 @Composable
 private fun Toolbar(state: LocationsState, actions: LocationsActions) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space1),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        IconButton(
+            onClick = actions.onRefresh,
+            enabled = !state.refreshing,
+            modifier = Modifier
+                .size(Dimens.TouchTarget)
+                .testTag(LocationsTags.REFRESH),
         ) {
-            IconButton(
-                onClick = actions.onRefresh,
-                enabled = !state.refreshing,
-                modifier = Modifier
-                    .size(Dimens.TouchTarget)
-                    .testTag(LocationsTags.REFRESH),
-            ) {
-                if (state.refreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = stringResource(R.string.locations_refresh),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            if (state.refreshing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = stringResource(R.string.locations_refresh),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = stringResource(
-                    R.string.locations_targets_helper,
-                    state.testTargets.size,
-                    state.allTargets.size,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                modifier = Modifier.testTag(LocationsTags.TARGETS_HELPER),
-            )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ToolbarAction(
-                label = if (state.testing) {
-                    stringResource(R.string.locations_testing)
+        ToolbarAction(
+            label = if (state.pingingAll) {
+                stringResource(R.string.locations_pinging_all, state.pingAllCount)
+            } else {
+                stringResource(R.string.locations_ping_all)
+            },
+            tag = LocationsTags.PING_ALL,
+            enabled = state.canPingAll,
+            loading = state.pingingAll,
+            onClick = actions.onPingAll,
+            modifier = Modifier.weight(1f),
+        )
+        ToolbarAction(
+            label = stringResource(
+                if (state.anyExpanded) {
+                    R.string.locations_collapse_all
                 } else {
-                    stringResource(R.string.locations_test_speed)
+                    R.string.locations_expand_all
                 },
-                tag = LocationsTags.TEST_SPEED,
-                enabled = state.canTest,
-                loading = state.testing,
-                onClick = actions.onTestSpeed,
-                modifier = Modifier.weight(1f),
-            )
-            ToolbarAction(
-                label = if (state.pingingAll) {
-                    stringResource(R.string.locations_pinging_all, state.pingAllCount)
-                } else {
-                    stringResource(R.string.locations_ping_all)
-                },
-                tag = LocationsTags.PING_ALL,
-                enabled = state.canPingAll,
-                loading = state.pingingAll,
-                onClick = actions.onPingAll,
-                modifier = Modifier.weight(1f),
-            )
-            ToolbarAction(
-                label = stringResource(
-                    if (state.anyExpanded) {
-                        R.string.locations_collapse_all
-                    } else {
-                        R.string.locations_expand_all
-                    },
-                ),
-                tag = LocationsTags.TOGGLE_ALL,
-                enabled = state.canToggleAll,
-                onClick = actions.onToggleAll,
-                modifier = Modifier.weight(1f),
-            )
-        }
+            ),
+            tag = LocationsTags.TOGGLE_ALL,
+            enabled = state.canToggleAll,
+            onClick = actions.onToggleAll,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
-/** One equal-width action in the toolbar's second row, with an optional spinner. */
+/** One equal-width action in the toolbar row, with an optional spinner. */
 @Composable
 private fun ToolbarAction(
     label: String,
@@ -562,7 +526,6 @@ private fun noticeText(text: LocationsNoticeText): String = when (text) {
 private fun messageResource(message: LocationsMessage): Int = when (message) {
     LocationsMessage.REFRESH_FAILED -> R.string.locations_message_refresh_failed
     LocationsMessage.SELECT_FAILED -> R.string.locations_message_select_failed
-    LocationsMessage.TEST_FAILED -> R.string.locations_message_test_failed
     LocationsMessage.PING_ALL_FAILED -> R.string.locations_message_ping_all_failed
 }
 

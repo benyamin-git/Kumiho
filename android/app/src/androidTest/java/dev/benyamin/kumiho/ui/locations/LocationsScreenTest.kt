@@ -324,54 +324,12 @@ class LocationsScreenTest {
         assertEquals(listOf("retry-notice", "dismiss-notice"), calls)
     }
 
-    // ---- speed test ------------------------------------------------------
-
-    @Test
-    fun TestSpeedIsOfferedForTheVisibleServers() {
-        show(state())
-
-        val helper = rule.activity.getString(R.string.locations_targets_helper, 4, 6)
-        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER).assertExists()
-        rule.onNodeWithText(helper).assertExists()
-        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsEnabled().performClick()
-
-        assertEquals(listOf("test-speed"), calls)
-    }
-
-    @Test
-    fun TestSpeedIsDisabledAndNamedWhileItRuns() {
-        show(state(testing = true))
-
-        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
-        rule.onNodeWithText(text(R.string.locations_testing)).assertExists()
-    }
-
-    @Test
-    fun TestSpeedIsDisabledWhenTheQueryMatchesNothing() {
-        show(state(query = "atlantis"))
-
-        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
-        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER)
-            .assertTextEquals(rule.activity.getString(R.string.locations_targets_helper, 0, 6))
-    }
-
     // ---- ping all and expand all ----------------------------------------
-
-    @Test
-    fun theToolbarCountsVisibleAndTotalTargets() {
-        show(state())
-
-        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER)
-            .assertTextEquals(rule.activity.getString(R.string.locations_targets_helper, 4, 6))
-    }
 
     @Test
     fun PingAllTestsTheWholeTreeEvenWhenTheQueryShowsNothing() {
         show(state(query = "atlantis"))
 
-        rule.onNodeWithTag(LocationsTags.TARGETS_HELPER)
-            .assertTextEquals(rule.activity.getString(R.string.locations_targets_helper, 0, 6))
-        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
         rule.onNodeWithTag(LocationsTags.PING_ALL).assertIsEnabled().performClick()
 
         assertEquals(listOf("ping-all"), calls)
@@ -386,18 +344,20 @@ class LocationsScreenTest {
     }
 
     @Test
-    fun PingAllIsDisabledWhileTestSpeedRuns() {
-        show(state(testing = true))
+    fun theToolbarIsOneRowWithRefreshPingAllAndTheToggle() {
+        show(state())
 
-        rule.onNodeWithTag(LocationsTags.PING_ALL).assertIsNotEnabled()
-        rule.onNodeWithText(text(R.string.locations_testing)).assertExists()
-    }
+        rule.onNodeWithTag(LocationsTags.REFRESH).assertExists()
+        rule.onNodeWithTag(LocationsTags.PING_ALL).assertExists()
+        rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertExists()
+        rule.onNodeWithTag("locations_test_speed").assertDoesNotExist()
+        rule.onNodeWithTag("locations_targets_helper").assertDoesNotExist()
 
-    @Test
-    fun TestSpeedIsDisabledWhilePingAllRuns() {
-        show(state(pingingAll = true, pingAllCount = 6))
-
-        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertIsNotEnabled()
+        val top = rule.onNodeWithTag(LocationsTags.REFRESH).fetchSemanticsNode().boundsInRoot.top
+        val pingTop = rule.onNodeWithTag(LocationsTags.PING_ALL).fetchSemanticsNode().boundsInRoot.top
+        val toggleTop = rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).fetchSemanticsNode().boundsInRoot.top
+        assertEquals(top, pingTop, 2f)
+        assertEquals(top, toggleTop, 2f)
     }
 
     @Test
@@ -431,10 +391,9 @@ class LocationsScreenTest {
 
     @Test
     fun everyPrimaryControlMeetsTheTouchTargetFloor() {
-        show(state(notice = LocationsNotice.testFailed("no probes")))
+        show(state(notice = LocationsNotice.pingAllFailed("no probes")))
 
         rule.onNodeWithTag(LocationsTags.REFRESH).assertHeightIsAtLeast(48.dp)
-        rule.onNodeWithTag(LocationsTags.TEST_SPEED).assertHeightIsAtLeast(48.dp)
         rule.onNodeWithTag(LocationsTags.PING_ALL).assertHeightIsAtLeast(48.dp)
         rule.onNodeWithTag(LocationsTags.TOGGLE_ALL).assertHeightIsAtLeast(48.dp)
         rule.onNodeWithTag(LocationsTags.NOTICE_ACTION).assertHeightIsAtLeast(48.dp)
@@ -460,7 +419,6 @@ class LocationsScreenTest {
         },
         onRefresh = { calls += "refresh" },
         onRetryLoad = { calls += "retry-load" },
-        onTestSpeed = { calls += "test-speed" },
         onPingAll = { calls += "ping-all" },
         onToggleAll = { calls += "toggle-all" },
         onDismissNotice = { calls += "dismiss-notice" },
@@ -476,7 +434,6 @@ class LocationsScreenTest {
         expandedCountries: Set<String> = setOf("us"),
         selection: LocationSelection? = null,
         latency: Map<String, Double?> = emptyMap(),
-        testing: Boolean = false,
         pingingAll: Boolean = false,
         pingAllCount: Int = 0,
         savingServer: String? = null,
@@ -493,7 +450,6 @@ class LocationsScreenTest {
         expandedCountries = expandedCountries,
         selection = selection,
         latency = latency,
-        testing = testing,
         pingingAll = pingingAll,
         pingAllCount = pingAllCount,
         savingServer = savingServer,
