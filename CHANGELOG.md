@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2]
+
+Android: keep LAN connections alive across a VPN transition.
+
+### Added
+
+- **Keep connections outside the tunnel** on Android: an opt-in setting in
+  Settings → Kumiho app that marks the VPN bypassable, so LAN and other
+  route-excluded connections — for example an open SSH session to a local
+  host — stay open when Kumiho connects or disconnects. It is off by default,
+  applies on the next connect, and Android lockdown still overrides it.
+
+### Fixed
+
+- Android no longer destroys every live TCP socket of VPN-routed apps on a
+  connect or disconnect when **Keep connections outside the tunnel** is on.
+  Connections carried through the tunnel still drop on a transition because
+  their exit IP changes; only LAN and other route-excluded connections
+  survive.
+
+### Notes
+
+- Android-only: no engine, IPC, daemon, mobile-facade or desktop change; the
+  DataStore key is absent (Off) on existing installs. No version bump yet; the
+  next 0.5.2 change shares this section.
+
 ## [0.5.1] - 2026-10-22
 
 Locations polish across every client.
@@ -318,6 +344,7 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
+[0.5.2]: https://github.com/benyamin-git/kumiho/compare/v0.5.1...HEAD
 [Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.5.1...HEAD
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0

@@ -209,8 +209,10 @@ marked, skipped by the speed test and not selectable.
 ## Settings
 
 Settings has four groups. The catalog is the desktop engine's settings, one
-row per key, plus two Android-owned read-only rows; there are **19 rows in
-total** (17 engine settings and the 2 Android-owned Always-on/lockdown rows).
+row per key, plus two Android-owned read-only rows; there are **19 catalog
+rows** (17 engine settings and the 2 Android-owned Always-on/lockdown rows).
+The Kumiho app group also has the Split tunneling shortcut and the app-owned
+Keep connections outside the tunnel setting.
 
 ### Kumiho app
 
@@ -226,6 +228,11 @@ total** (17 engine settings and the 2 Android-owned Always-on/lockdown rows).
 - **Split tunneling** — the next section's entry point, with its Off /
   Excluding N apps / Including N apps summary. It stays reachable even when
   engine settings fail to load.
+- **Keep connections outside the tunnel** — off by default. When on, Android
+  treats the VPN as bypassable, so LAN and other route-excluded connections
+  (for example an SSH session to a local host) stay open when Kumiho connects
+  or disconnects. Normal traffic still uses the tunnel. Android lockdown
+  overrides it, and it applies on the next connect.
 
 ### Connection (7 engine rows)
 
@@ -348,6 +355,35 @@ Per-app rules and route exclusions are established when the interface is
 created; changing either while connected takes effect on the next connect. The
 OS may apply its own policy under lockdown; see the next section.
 
+### Keeping connections open across a transition
+
+Android closes every live TCP socket belonging to a VPN-routed app when the
+VPN's UID ranges change, unless the VPN is marked bypassable. `allow_lan`
+and `exclude_cidrs` change routing only; they do not stop that per-UID
+socket teardown. That is why an SSH session to a LAN host could drop when
+Kumiho connected or disconnected even though its packets never entered the
+tunnel.
+
+**Keep connections outside the tunnel** (Kumiho app, off by default) asks
+Android to treat the VPN as bypassable. With it on, a LAN or other
+route-excluded connection keeps the same local and remote addresses across a
+connect or disconnect and can stay open. Normal traffic still uses the
+tunnel; the trade-off is that an app can deliberately bind a socket or
+process to another network and leave the VPN. Android lockdown overrides the
+setting and still forces bypass off, and the row stays visible and editable
+in that state.
+
+The value is saved immediately and applies on the **next** connect. While a
+full tunnel is up, changing it shows *The tunnel is up. Reconnect to apply
+this setting.*; Kumiho never reconnects on its own. A proxy-only session
+builds no interface, so the setting has no effect there and shows no
+warning.
+
+Connections carried **through** the tunnel still drop on a connect or
+disconnect because their exit IP changes; TCP cannot migrate the stream.
+Only LAN and other route-excluded connections survive. The setting is
+independent of split tunneling and `allow_lan`.
+
 ## Always-on VPN and lockdown
 
 Both are **Android settings**, not Kumiho settings. Kumiho reads the state,
@@ -379,6 +415,9 @@ or off, and there is no engine-side kill switch or autoconnect on Android.
   per-app rules when it establishes the interface and shows the mode it
   actually sent; Android may still ignore per-app filters or restart the
   service under lockdown. This combination is on the physical checklist.
+- Lockdown forces the VPN to be non-bypassable. **Keep connections outside
+  the tunnel** stays stored and editable, but Android still closes
+  connections when the VPN changes while lockdown is on.
 
 ## Proxy-only and local proxies
 
