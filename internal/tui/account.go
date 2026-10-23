@@ -401,11 +401,19 @@ func (m *Model) renderAccount(b *strings.Builder) {
 	renderEntitlementCard(b, ac.info)
 	renderAccountPrompt(b, ac)
 
-	if ac.err != "" {
-		fmt.Fprintf(b, "\n%s\n", errStyle.Render(ac.err))
+	errText := ac.err
+	if errText == "" {
+		errText = ac.view.Error
 	}
-	if ac.notice != "" {
-		fmt.Fprintf(b, "\n%s\n", okStyle.Render(ac.notice))
+	if errText != "" {
+		fmt.Fprintf(b, "\n%s\n", errStyle.Render(errText))
+	}
+	notice := ac.notice
+	if notice == "" {
+		notice = ac.view.Notice
+	}
+	if notice != "" {
+		fmt.Fprintf(b, "\n%s\n", okStyle.Render(notice))
 	}
 
 	fmt.Fprintln(b)

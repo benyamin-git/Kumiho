@@ -122,6 +122,22 @@ func TestAccountScreenListsAndMarksActive(t *testing.T) {
 	}
 }
 
+func TestAccountScreenShowsDaemonNoticeAndError(t *testing.T) {
+	view := accountTestView()
+	view.Notice = "skipping other@example.com: sign in again"
+	view.Error = "accounts: token store unavailable"
+	m := &Model{
+		screen: screenAccount,
+		ac:     accountState{loaded: true, view: view},
+	}
+	rendered := m.View()
+	for _, want := range []string{view.Notice, view.Error} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("account view missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
 func TestAccountScreenKeys(t *testing.T) {
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		switch req.typ {
