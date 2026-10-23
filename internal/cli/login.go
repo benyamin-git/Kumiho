@@ -201,11 +201,7 @@ func runPasswordSignIn(ctx context.Context, client *ipc.Client, startType, email
 			if ls.Error != "" {
 				return 1
 			}
-			if adding {
-				fmt.Fprintf(stdout, "Added account %s.\n", ls.Email)
-			} else {
-				fmt.Fprintf(stdout, "Signed in as %s.\n", ls.Email)
-			}
+			printSignInDone(stdout, adding, ls.Email)
 			return 0
 
 		case "error", "cancelled":
@@ -248,7 +244,7 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
 			return 1
 		}
-		fmt.Fprintf(stdout, "Signed in as %s.\n", ls.Email)
+		printSignInDone(stdout, adding, ls.Email)
 		return 0
 	}
 	if ls.URL == "" {
@@ -301,11 +297,7 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 				fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
 				return 1
 			}
-			if adding {
-				fmt.Fprintf(stdout, "Added account %s.\n", ls.Email)
-			} else {
-				fmt.Fprintf(stdout, "Signed in as %s.\n", ls.Email)
-			}
+			printSignInDone(stdout, adding, ls.Email)
 			return 0
 		case "cancelled":
 			fmt.Fprintln(stderr, "Sign-in cancelled.")
@@ -383,6 +375,16 @@ func loginStartCall(ctx context.Context, client *ipc.Client, typ string, payload
 		return nil
 	}
 	return &ls
+}
+
+// printSignInDone reports a finished login with the wording that matches the
+// command: `login` signs in, `accounts add` adds an account.
+func printSignInDone(w io.Writer, adding bool, email string) {
+	if adding {
+		fmt.Fprintf(w, "Added account %s.\n", email)
+		return
+	}
+	fmt.Fprintf(w, "Signed in as %s.\n", email)
 }
 
 func loginCall(ctx context.Context, client *ipc.Client, typ string, payload any, stderr io.Writer, command string) *api.LoginState {
