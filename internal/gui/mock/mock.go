@@ -12,6 +12,7 @@ package mock
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,16 @@ type Mock struct {
 
 	lastConnect api.ConnectPayload
 	haveConnect bool
+
+	// browserPolls counts the status polls of the current browser flow. The
+	// fixture keeps the flow pending for a few polls so the harness can show
+	// its waiting card and exercise Cancel before completing. browserSeq
+	// makes each flow's ID and URL unique, like the daemon's one-shot loopback
+	// listener; the URL is opened only once per flow by the UI.
+	browserPolls int
+	browserSeq   int
+	browserID    string
+	browserURL   string
 
 	events chan *ipc.Envelope
 }
@@ -270,6 +281,82 @@ func (m *Mock) Account(ctx context.Context) (api.AccountInfo, error) {
 	return accountFor(m.currentScenario()), nil
 }
 
+// AccountsList implements gui.Daemon: the canned account rows for the
+// current scenario (see accountsFor).
+func (m *Mock) AccountsList(ctx context.Context) (api.AccountsView, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.AccountsView{}, err
+	}
+	return accountsFor(m.currentScenario()), nil
+}
+
+// AccountsAddStart implements gui.Daemon. Browser sign-in reports a browser
+// step with a deterministic loopback-shaped URL; password sign-in asks for
+// the email first, then the password, exactly like the real daemon's flow.
+func (m *Mock) AccountsAddStart(ctx context.Context, p api.LoginStartPayload) (api.LoginState, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.LoginState{}, err
+	}
+	return m.startLogin(p), nil
+}
+
+// AccountsAddStatus implements gui.Daemon: the browser flow stays pending
+// for mockBrowserPolls polls, then completes (so the waiting card is usable
+// in the harness).
+func (m *Mock) AccountsAddStatus(ctx context.Context, _ api.LoginStatusPayload) (api.LoginState, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.LoginState{}, err
+	}
+	return m.browserStatus(), nil
+}
+
+// AccountsAddCancel implements gui.Daemon. It acknowledges.
+func (m *Mock) AccountsAddCancel(ctx context.Context, _ api.LoginCancelPayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	m.mu.Lock()
+	m.browserPolls = 0
+	m.mu.Unlock()
+	return api.Result{OK: true}, nil
+}
+
+// AccountsRemove implements gui.Daemon. It acknowledges; the canned list
+// does not change (switch scenarios for different reported state).
+func (m *Mock) AccountsRemove(ctx context.Context, _ api.AccountsRemovePayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	return api.Result{OK: true}, nil
+}
+
+// AccountsUse implements gui.Daemon. It acknowledges; the canned list keeps
+// its active row.
+func (m *Mock) AccountsUse(ctx context.Context, _ api.AccountsUsePayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	return api.Result{OK: true}, nil
+}
+
+// AccountsUpdate implements gui.Daemon. It acknowledges; the canned list
+// keeps its labels.
+func (m *Mock) AccountsUpdate(ctx context.Context, _ api.AccountsUpdatePayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	return api.Result{OK: true}, nil
+}
+
+// AccountsSetRotation implements gui.Daemon. It acknowledges; the canned
+// rotation settings do not change.
+func (m *Mock) AccountsSetRotation(ctx context.Context, _ api.AccountsRotationPayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	return api.Result{OK: true}, nil
+}
+
 // LogsSnapshot implements gui.Daemon: the canned entries at or above level.
 // A level of "" means everything; an unknown level is a bad_request, exactly
 // like the daemon.
@@ -333,12 +420,12 @@ func (m *Mock) LoginEmail(ctx context.Context, p api.LoginEmailPayload) (api.Log
 	}
 	email := strings.TrimSpace(p.Email)
 	if email == "" {
-		return api.LoginState{Step: "email"}, nil
+		return api.LoginState{Step: "email", Method: "email"}, nil
 	}
 	if strings.HasPrefix(strings.ToLower(email), "2fa") {
-		return api.LoginState{Step: "2fa", Email: email, VerificationMethod: "email-otp"}, nil
+		return api.LoginState{Step: "2fa", Email: email, Method: "email", VerificationMethod: "email-otp"}, nil
 	}
-	return api.LoginState{Step: "password", Email: email}, nil
+	return api.LoginState{Step: "password", Email: email, Method: "email"}, nil
 }
 
 // LoginPassword implements gui.Daemon: the flow signs in immediately.
@@ -355,6 +442,99 @@ func (m *Mock) Login2FA(ctx context.Context, _ api.Login2FAPayload) (api.LoginSt
 		return api.LoginState{}, err
 	}
 	return api.LoginState{Step: "done"}, nil
+}
+
+// LoginStart implements gui.Daemon: it starts the browser or password flow
+// with the same deterministic replies as AccountsAddStart.
+func (m *Mock) LoginStart(ctx context.Context, p api.LoginStartPayload) (api.LoginState, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.LoginState{}, err
+	}
+	return m.startLogin(p), nil
+}
+
+// LoginStatus implements gui.Daemon: the browser flow stays pending for
+// mockBrowserPolls polls, then completes.
+func (m *Mock) LoginStatus(ctx context.Context, _ api.LoginStatusPayload) (api.LoginState, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.LoginState{}, err
+	}
+	return m.browserStatus(), nil
+}
+
+// LoginCancel implements gui.Daemon. It acknowledges.
+func (m *Mock) LoginCancel(ctx context.Context, _ api.LoginCancelPayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	m.mu.Lock()
+	m.browserPolls = 0
+	m.mu.Unlock()
+	return api.Result{OK: true}, nil
+}
+
+// mockBrowserPolls is how many status polls the fixture keeps a browser
+// flow pending. Two polls plus the one-second UI cadence leave a few seconds
+// to see the waiting card and press Cancel in the harness.
+const mockBrowserPolls = 2
+
+// browserStatus advances the fixture's browser flow: pending for the first
+// polls, done after them. The count resets on every start and cancel.
+func (m *Mock) browserStatus() api.LoginState {
+	m.mu.Lock()
+	m.browserPolls++
+	polls := m.browserPolls
+	st := api.LoginState{
+		Step:    "browser",
+		Method:  "browser",
+		URL:     m.browserURL,
+		LoginID: m.browserID,
+	}
+	if polls > mockBrowserPolls {
+		m.browserPolls = 0
+		st = api.LoginState{Step: "done"}
+	}
+	m.mu.Unlock()
+	return st
+}
+
+// startLogin resets the fixture's browser progress and gives each browser
+// flow a unique ID and URL (the UI opens a URL once per flow).
+func (m *Mock) startLogin(p api.LoginStartPayload) api.LoginState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := loginStartState(p)
+	m.browserPolls = 0
+	if st.Step == "browser" {
+		m.browserSeq++
+		m.browserID = fmt.Sprintf("mock-browser-%d", m.browserSeq)
+		m.browserURL = fmt.Sprintf("https://example.test/mozilla-account/signin?flow=%d", m.browserSeq)
+		st.LoginID = m.browserID
+		st.URL = m.browserURL
+	}
+	return st
+}
+
+// loginStartState is the deterministic sign-in machine shared by the login
+// and account-add verbs.
+func loginStartState(p api.LoginStartPayload) api.LoginState {
+	email := strings.TrimSpace(p.Email)
+	switch strings.ToLower(strings.TrimSpace(p.Method)) {
+	case "browser":
+		return api.LoginState{
+			Step:    "browser",
+			Method:  "browser",
+			URL:     "https://example.test/mozilla-account/signin",
+			LoginID: "mock-browser-1",
+		}
+	case "", "password":
+		if email == "" {
+			return api.LoginState{Step: "email", Method: "email"}
+		}
+		return api.LoginState{Step: "password", Email: email, Method: "email"}
+	default:
+		return api.LoginState{Step: "error", Error: "unknown sign-in method"}
+	}
 }
 
 // Logout implements gui.Daemon. It acknowledges; the reported session does not

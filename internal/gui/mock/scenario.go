@@ -58,8 +58,10 @@ const (
 	demoExitIP      = "203.0.113.7"
 	demoExitCountry = "Germany"
 
-	quotaLimit     = 50 * gib
-	quotaRemaining = 38 * gib
+	quotaLimit            = 50 * gib
+	quotaRemaining        = 38 * gib
+	accountQuotaRemaining = 41 * gib // 82% of the 50 GiB plan
+	demoSecondEmail       = "work@example.com"
 
 	// ScenarioError's FATAL state reports an exhausted quota.
 	errorQuotaRemaining = 0
@@ -114,6 +116,35 @@ func statusFor(s Scenario) api.Status {
 		st.State = "IDLE"
 	}
 	return st
+}
+
+// accountsFor builds the canned account list for one scenario. The fixtures
+// exercise every row state the screen renders: one active browser account
+// with an 82%-left quota, one labelled password account that needs re-auth,
+// and rotation on at 20%. The signed-out scenario has no accounts.
+func accountsFor(s Scenario) api.AccountsView {
+	if s.normalize() == ScenarioSignedOut {
+		return api.AccountsView{Threshold: 10, LastMethod: "browser"}
+	}
+	remaining := accountQuotaRemaining
+	if s.normalize() == ScenarioError {
+		remaining = errorQuotaRemaining
+	}
+	return api.AccountsView{
+		Accounts: []api.AccountSummary{
+			{
+				ID: "primary", Email: demoEmail, Label: "Home", Method: "browser",
+				Active: true, LastUsedAt: mockEpoch.Add(-2 * time.Hour).Unix(),
+				Quota: quota(remaining),
+			},
+			{
+				ID: "work", Email: demoSecondEmail, Label: "Work", Method: "password",
+				ReauthRequired: true, LastUsedAt: mockEpoch.Add(-72 * time.Hour).Unix(),
+				Quota: quota(quotaRemaining),
+			},
+		},
+		Active: "primary", Rotation: true, Threshold: 20, LastMethod: "browser",
+	}
 }
 
 // accountFor builds the canned api.AccountInfo for one scenario. The error

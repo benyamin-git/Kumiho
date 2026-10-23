@@ -78,6 +78,14 @@ type Daemon interface {
 	Settings(context.Context) (api.SettingsView, error)
 	SetSetting(context.Context, api.SettingsSetPayload) (api.Result, error)
 	Account(context.Context) (api.AccountInfo, error)
+	AccountsList(context.Context) (api.AccountsView, error)
+	AccountsAddStart(context.Context, api.LoginStartPayload) (api.LoginState, error)
+	AccountsAddStatus(context.Context, api.LoginStatusPayload) (api.LoginState, error)
+	AccountsAddCancel(context.Context, api.LoginCancelPayload) (api.Result, error)
+	AccountsRemove(context.Context, api.AccountsRemovePayload) (api.Result, error)
+	AccountsUse(context.Context, api.AccountsUsePayload) (api.Result, error)
+	AccountsUpdate(context.Context, api.AccountsUpdatePayload) (api.Result, error)
+	AccountsSetRotation(context.Context, api.AccountsRotationPayload) (api.Result, error)
 	LogsSnapshot(context.Context, string) (api.LogSnapshot, error)
 	LogsSubscribe(context.Context, string) (api.Result, error)
 	LogsUnsubscribe(context.Context) (api.Result, error)
@@ -85,6 +93,9 @@ type Daemon interface {
 	LoginEmail(context.Context, api.LoginEmailPayload) (api.LoginState, error)
 	LoginPassword(context.Context, api.LoginPasswordPayload) (api.LoginState, error)
 	Login2FA(context.Context, api.Login2FAPayload) (api.LoginState, error)
+	LoginStart(context.Context, api.LoginStartPayload) (api.LoginState, error)
+	LoginStatus(context.Context, api.LoginStatusPayload) (api.LoginState, error)
+	LoginCancel(context.Context, api.LoginCancelPayload) (api.Result, error)
 	Logout(context.Context) (api.Result, error)
 	// Events yields the daemon's unsolicited, pushed events (status
 	// snapshots, ping results, live log entries) that drive live refreshes.
@@ -130,9 +141,13 @@ type StatusView struct {
 
 // LoginView is the daemon-driven sign-in projection (inventory §Onboarding).
 type LoginView struct {
-	Step               string `json:"step,omitempty"` // email|password|2fa|done
+	Step               string `json:"step,omitempty"` // email|password|2fa|browser|done|error|cancelled
 	Email              string `json:"email,omitempty"`
+	Method             string `json:"method,omitempty"` // email|browser
 	VerificationMethod string `json:"verification_method,omitempty"`
+	VerificationReason string `json:"verification_reason,omitempty"`
+	URL                string `json:"url,omitempty"`
+	ID                 string `json:"id,omitempty"`
 	Error              string `json:"error,omitempty"`
 }
 
@@ -235,12 +250,23 @@ type Controller struct {
 	lastStatusTry time.Time
 
 	login *LoginView
+	// accountFlow marks a password/browser sign-in started through
+	// accounts_add_start. Its password steps reuse login_password/login_2fa
+	// (the protocol has no account-specific variants), so the terminal
+	// success still belongs on the Account screen's notice.
+	accountFlow bool
 
 	// Account snapshot and the authentication it was loaded for.
 	account        *api.AccountInfo
 	accountLoaded  bool
 	accountAuth    bool
 	accountLoading bool
+
+	// Account-list snapshot (v0.6.0). accountsFetch serialises the snapshot
+	// loads; the main mutex protects the fields.
+	accounts       *api.AccountsView
+	accountsLoaded bool
+	accountsFetch  sync.Mutex
 
 	// Server list snapshot.
 	locations        []serverlist.Country
@@ -343,6 +369,7 @@ func (c *Controller) Snapshot() State {
 		Doctor:            copyDoctor(c.doctor),
 		Settings:          copySettings(c.settings),
 		Account:           copyAccount(c.account),
+		Accounts:          copyAccounts(c.accounts),
 		LocationsLoaded:   c.locationsLoaded,
 		Locations:         c.locations,
 		RTTs:              copyRTTs(c.rtts),
@@ -370,8 +397,11 @@ func (c *Controller) Snapshot() State {
 // action's notice per the inventory.
 //
 // Handled here: connect, disconnect, select_location, ping, settings_get,
-// settings_set, login_email, login_password, login_2fa, logout,
-// logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear, logs_export,
+// settings_set, login_email, login_password, login_2fa, login_start,
+// login_status, login_cancel, accounts_list, accounts_add_start,
+// accounts_add_status, accounts_add_cancel, accounts_remove, accounts_use,
+// accounts_update, accounts_set_rotation, logout, logs_snapshot,
+// logs_subscribe, logs_unsubscribe, logs_clear, logs_export,
 // open_logs_folder, doctor_run, refresh, update_check. window_show, quit and
 // open_external are recognized no-ops: the shell owns window visibility,
 // process exit and opening links (D34). cleanup, service_start, service_stop
@@ -394,8 +424,20 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchSettingsSet(act)
 	case ActionUpdateCheck:
 		return c.dispatchUpdateCheck()
-	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA:
+	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA,
+		ActionLoginStart, ActionLoginStatus, ActionLoginCancel,
+		ActionAccountsAddStart, ActionAccountsAddStatus, ActionAccountsAddCancel:
 		return c.dispatchLogin(act)
+	case ActionAccountsList:
+		return c.dispatchAccountsList()
+	case ActionAccountsUse:
+		return c.dispatchAccountsUse(act)
+	case ActionAccountsRemove:
+		return c.dispatchAccountsRemove(act)
+	case ActionAccountsUpdate:
+		return c.dispatchAccountsUpdate(act)
+	case ActionAccountsSetRotation:
+		return c.dispatchAccountsSetRotation(act)
 	case ActionLogout:
 		return c.dispatchLogout()
 	case ActionLogsSnapshot:
@@ -584,12 +626,22 @@ func (c *Controller) dispatchLogin(act Action) error {
 		st  api.LoginState
 		err error
 	)
+	accountAction := strings.HasPrefix(act.Name, "accounts_add_")
+	statusAction := act.Name == ActionLoginStatus || act.Name == ActionAccountsAddStatus
+	c.mu.Lock()
+	accountFlow := c.accountFlow
+	c.mu.Unlock()
 	switch act.Name {
 	case ActionLoginEmail:
 		var p api.LoginEmailPayload
 		if p, err = decodePayload[api.LoginEmailPayload](act); err != nil {
 			return err
 		}
+		// The onboarding password flow is separate from an Account-screen
+		// add; an interrupted add must not claim its terminal reply.
+		c.mu.Lock()
+		c.accountFlow = false
+		c.mu.Unlock()
 		st, err = c.d.LoginEmail(ctx, p)
 	case ActionLoginPassword:
 		var p api.LoginPasswordPayload
@@ -597,6 +649,62 @@ func (c *Controller) dispatchLogin(act Action) error {
 			return err
 		}
 		st, err = c.d.LoginPassword(ctx, p)
+	case ActionLoginStart, ActionAccountsAddStart:
+		var p api.LoginStartPayload
+		if p, err = decodePayload[api.LoginStartPayload](act); err != nil {
+			return err
+		}
+		if accountAction {
+			c.mu.Lock()
+			c.accountFlow = true
+			c.mu.Unlock()
+			st, err = c.d.AccountsAddStart(ctx, p)
+		} else {
+			c.mu.Lock()
+			c.accountFlow = false
+			c.mu.Unlock()
+			st, err = c.d.LoginStart(ctx, p)
+		}
+	case ActionLoginStatus, ActionAccountsAddStatus:
+		var p api.LoginStatusPayload
+		if p, err = decodePayload[api.LoginStatusPayload](act); err != nil {
+			return err
+		}
+		if accountAction {
+			st, err = c.d.AccountsAddStatus(ctx, p)
+		} else {
+			st, err = c.d.LoginStatus(ctx, p)
+		}
+	case ActionLoginCancel, ActionAccountsAddCancel:
+		var p api.LoginCancelPayload
+		if p, err = decodePayload[api.LoginCancelPayload](act); err != nil {
+			return err
+		}
+		if accountAction {
+			_, err = c.d.AccountsAddCancel(ctx, p)
+		} else {
+			_, err = c.d.LoginCancel(ctx, p)
+		}
+		if err != nil {
+			c.observe(err)
+			c.loginActionError(act.Name, err)
+			return err
+		}
+		c.observe(nil)
+		c.mu.Lock()
+		login := c.ensureLoginLocked()
+		login.Step = "cancelled"
+		login.URL = ""
+		login.ID = ""
+		login.Error = ""
+		c.accountFlow = false
+		c.mu.Unlock()
+		slot := slotShared
+		if accountAction {
+			slot = slotAccount
+		}
+		c.setNotice(slot, "Sign-in cancelled", toneInfo, c.opts.NoticeTTL)
+		return nil
 	default:
 		var p api.Login2FAPayload
 		if p, err = decodePayload[api.Login2FAPayload](act); err != nil {
@@ -607,21 +715,215 @@ func (c *Controller) dispatchLogin(act Action) error {
 	if err != nil {
 		c.observe(err)
 		c.mu.Lock()
-		c.ensureLoginLocked().Error = err.Error()
+		if accountAction {
+			c.accountFlow = false
+		}
+		login := c.ensureLoginLocked()
+		login.Error = err.Error()
+		if statusAction {
+			// A failed poll ends the browser wait: the UI keys its polling
+			// on the browser step, and a transient error must not spin
+			// forever with a stale URL on screen.
+			login.Step = "error"
+		}
 		c.mu.Unlock()
-		c.setNotice(slotShared, "sign-in failed: "+err.Error(), toneBad, 0)
+		c.loginActionError(act.Name, err)
 		return err
 	}
 	c.observe(nil)
+	terminal := st.Step == "done" || st.Step == "error" || st.Step == "cancelled"
+	owned := accountAction || accountFlow
 	if c.mergeLogin(st) {
-		// A terminal reply refreshes the status either way: a fresh
-		// authenticated snapshot clears the stale "already signed in" error
-		// so the wizard can show the live session instead of dead-ending
-		// (inventory §behavioral).
+		if owned && st.Step == "done" {
+			message := "Account added"
+			if st.Email != "" {
+				message = "Signed in as " + st.Email
+			}
+			c.setNotice(slotAccount, message, toneGood, c.opts.NoticeTTL)
+		}
+		// A terminal reply refreshes the status and both account snapshots:
+		// a fresh authenticated snapshot clears the stale "already signed
+		// in" error so the wizard can show the live session instead of
+		// dead-ending (inventory §behavioral), and the account list learns
+		// the new account, active selection and quota.
 		c.refreshStatus(ctx)
 		c.ensureAccount(ctx)
+		_ = c.loadAccounts(ctx)
+	}
+	if terminal && owned {
+		c.mu.Lock()
+		c.accountFlow = false
+		c.mu.Unlock()
 	}
 	return nil
+}
+
+// loginActionError writes the sign-in action's notice. Account-add actions
+// report on the Account screen; the onboarding verbs keep the shared notice
+// (the wizard renders it on its status line).
+func (c *Controller) loginActionError(name string, err error) {
+	prefix := "sign-in failed: "
+	slot := slotShared
+	switch name {
+	case ActionAccountsAddStart:
+		prefix, slot = "could not start sign-in: ", slotAccount
+	case ActionAccountsAddStatus:
+		prefix, slot = "could not check sign-in: ", slotAccount
+	case ActionAccountsAddCancel:
+		prefix, slot = "could not cancel sign-in: ", slotAccount
+	case ActionLoginStart:
+		prefix = "could not start sign-in: "
+	case ActionLoginStatus:
+		prefix = "could not check sign-in: "
+	case ActionLoginCancel:
+		prefix = "could not cancel sign-in: "
+	}
+	c.setNotice(slot, prefix+err.Error(), toneBad, 0)
+}
+
+// dispatchAccountsList refreshes the account list and active selection.
+func (c *Controller) dispatchAccountsList() error {
+	return c.loadAccounts(context.Background())
+}
+
+// loadAccounts fetches the accounts_list snapshot. The fetch mutex serialises
+// concurrent loads (the pump and an explicit refresh) so an older reply can
+// never overwrite a newer one.
+func (c *Controller) loadAccounts(ctx context.Context) error {
+	c.accountsFetch.Lock()
+	defer c.accountsFetch.Unlock()
+	actx, cancel := context.WithTimeout(ctx, accountTimeout)
+	defer cancel()
+	view, err := c.d.AccountsList(actx)
+	if err != nil {
+		c.observe(err)
+		c.setNotice(slotAccount, "could not load accounts: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	c.mu.Lock()
+	c.accounts = copyAccounts(&view)
+	c.accountsLoaded = true
+	c.accountNotice = clearAccountListNotice(c.accountNotice)
+	c.mu.Unlock()
+	return nil
+}
+
+// ensureAccounts loads the account list once in the background. The Account
+// screen's explicit accounts_list action always reloads it; this only covers
+// the first paint and the onboarding wizard's last-method hint.
+func (c *Controller) ensureAccounts(ctx context.Context) {
+	c.mu.Lock()
+	loaded := c.accountsLoaded
+	c.mu.Unlock()
+	if loaded {
+		return
+	}
+	go func() { _ = c.loadAccounts(ctx) }()
+}
+
+// accountChangeBlocked reports whether the tunnel is up. Switching or
+// removing an account would tear the live session out from under the tunnel;
+// the daemon enforces the same rule, but the GUI refuses first so the user
+// sees the reason without a round trip.
+func (c *Controller) accountChangeBlocked() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.statusLoaded && (c.status.State == "CONNECTED" || c.status.State == "PROXY_ONLY" || c.status.ProxyOnly)
+}
+
+func (c *Controller) dispatchAccountsUse(act Action) error {
+	p, err := decodePayload[api.AccountsUsePayload](act)
+	if err != nil {
+		return err
+	}
+	if c.accountChangeBlocked() {
+		err := errors.New("disconnect before switching accounts")
+		c.setNotice(slotAccount, err.Error(), toneBad, 0)
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), accountTimeout)
+	defer cancel()
+	if _, err := c.d.AccountsUse(ctx, p); err != nil {
+		c.observe(err)
+		c.setNotice(slotAccount, "could not switch account: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	c.setNotice(slotAccount, "Account switched", toneGood, c.opts.NoticeTTL)
+	c.afterAccountChange(ctx)
+	return c.loadAccounts(ctx)
+}
+
+func (c *Controller) dispatchAccountsRemove(act Action) error {
+	p, err := decodePayload[api.AccountsRemovePayload](act)
+	if err != nil {
+		return err
+	}
+	if c.accountChangeBlocked() {
+		err := errors.New("disconnect before removing an account")
+		c.setNotice(slotAccount, err.Error(), toneBad, 0)
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), accountTimeout)
+	defer cancel()
+	if _, err := c.d.AccountsRemove(ctx, p); err != nil {
+		c.observe(err)
+		c.setNotice(slotAccount, "could not remove the account: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	c.setNotice(slotAccount, "Account removed", toneGood, c.opts.NoticeTTL)
+	c.afterAccountChange(ctx)
+	return c.loadAccounts(ctx)
+}
+
+func (c *Controller) dispatchAccountsUpdate(act Action) error {
+	p, err := decodePayload[api.AccountsUpdatePayload](act)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), accountTimeout)
+	defer cancel()
+	if _, err := c.d.AccountsUpdate(ctx, p); err != nil {
+		c.observe(err)
+		c.setNotice(slotAccount, "could not rename the account: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	c.setNotice(slotAccount, "Account renamed", toneGood, c.opts.NoticeTTL)
+	c.afterAccountChange(ctx)
+	return c.loadAccounts(ctx)
+}
+
+func (c *Controller) dispatchAccountsSetRotation(act Action) error {
+	p, err := decodePayload[api.AccountsRotationPayload](act)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), accountTimeout)
+	defer cancel()
+	if _, err := c.d.AccountsSetRotation(ctx, p); err != nil {
+		c.observe(err)
+		c.setNotice(slotAccount, "could not save rotation settings: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	state := "off"
+	if p.Enabled {
+		state = fmt.Sprintf("on at %d%%", p.Threshold)
+	}
+	c.setNotice(slotAccount, "Account rotation "+state, toneGood, c.opts.NoticeTTL)
+	return c.loadAccounts(ctx)
+}
+
+// afterAccountChange refreshes the session and entitlement projections that
+// follow the active account, without turning their failures into the account
+// action's error: the mutation already succeeded, and the account screen
+// shows the reload failure on its own status line.
+func (c *Controller) afterAccountChange(ctx context.Context) {
+	_ = c.refreshStatus(ctx)
+	c.ensureAccount(ctx)
 }
 
 func (c *Controller) dispatchLogout() error {
@@ -633,9 +935,13 @@ func (c *Controller) dispatchLogout() error {
 		return err
 	}
 	c.observe(nil)
+	c.mu.Lock()
+	c.accountFlow = false
+	c.mu.Unlock()
 	c.setNotice(slotAccount, "Signed out", toneGood, c.opts.NoticeTTL)
 	c.refreshStatus(ctx)
 	c.ensureAccount(ctx)
+	_ = c.loadAccounts(ctx)
 	return nil
 }
 
@@ -962,6 +1268,7 @@ func (c *Controller) dispatchRefresh(act Action) error {
 		return err
 	}
 	c.ensureAccount(context.Background())
+	c.ensureAccounts(context.Background())
 	if req.Locations {
 		c.loadLocations(context.Background(), true, true)
 	} else {
@@ -980,6 +1287,7 @@ func (c *Controller) Poll(ctx context.Context) {
 	c.refreshStatus(ctx)
 	c.loadSettings(ctx)
 	c.ensureAccount(ctx)
+	c.ensureAccounts(ctx)
 	c.ensureLocations(ctx)
 
 	ticker := time.NewTicker(c.opts.PumpInterval)
@@ -1004,6 +1312,7 @@ func (c *Controller) tick(ctx context.Context, now time.Time) {
 	if c.statusDue(now) {
 		if c.refreshStatus(ctx) == nil {
 			c.ensureAccount(ctx)
+			c.ensureAccounts(ctx)
 			c.ensureLocations(ctx)
 		}
 	}
@@ -1242,7 +1551,11 @@ func (c *Controller) mergeLogin(st api.LoginState) bool {
 	if st.Email != "" {
 		login.Email = st.Email
 	}
+	login.Method = st.Method
 	login.VerificationMethod = st.VerificationMethod
+	login.VerificationReason = st.VerificationReason
+	login.URL = st.URL
+	login.ID = st.LoginID
 	login.Error = st.Error
 	if st.Step == "done" && st.Error == "" {
 		if login.Email != "" {
@@ -1319,6 +1632,16 @@ func (c *Controller) clearNoticeError(slot noticeSlot) {
 	case slotDiagnostics:
 		c.diagnosticsNotice = clearNoticeError(c.diagnosticsNotice)
 	}
+}
+
+// clearAccountListNotice clears only the account-list load error. The Account
+// screen shares one notice slot with the entitlement load, so a successful
+// accounts_list must not erase a Guardian failure (and vice versa).
+func clearAccountListNotice(n *Notice) *Notice {
+	if n != nil && n.Tone == toneBad && strings.HasPrefix(n.Message, "could not load accounts: ") {
+		return nil
+	}
+	return n
 }
 
 func clearNoticeError(n *Notice) *Notice {
@@ -1454,6 +1777,36 @@ func copyAccount(a *api.AccountInfo) *api.AccountInfo {
 		return nil
 	}
 	cp := *a
+	return &cp
+}
+
+// copyAccounts returns a detached account-list projection: the slice and
+// every row's quota pointers, so a snapshot can never alias the controller's
+// live state.
+func copyAccounts(v *api.AccountsView) *api.AccountsView {
+	if v == nil {
+		return nil
+	}
+	cp := *v
+	cp.Accounts = append([]api.AccountSummary(nil), v.Accounts...)
+	for i := range cp.Accounts {
+		if q := cp.Accounts[i].Quota; q != nil {
+			qc := *q
+			if q.Limit != nil {
+				limit := *q.Limit
+				qc.Limit = &limit
+			}
+			if q.Remaining != nil {
+				remaining := *q.Remaining
+				qc.Remaining = &remaining
+			}
+			if q.Reset != nil {
+				reset := *q.Reset
+				qc.Reset = &reset
+			}
+			cp.Accounts[i].Quota = &qc
+		}
+	}
 	return &cp
 }
 

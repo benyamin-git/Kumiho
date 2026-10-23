@@ -61,6 +61,24 @@ const (
 	ActionDoctorRun = "doctor_run"
 )
 
+// Action names added by the v0.6.0 sign-in/accounts work, appended after the
+// original and 2026-10-15 frozen lists. The names are the control protocol's
+// exact command names (internal/ipc), so the GUI, CLI and TUI speak the same
+// vocabulary for browser sign-in and account management.
+const (
+	ActionAccountsList        = "accounts_list"
+	ActionAccountsAddStart    = "accounts_add_start"
+	ActionAccountsAddStatus   = "accounts_add_status"
+	ActionAccountsAddCancel   = "accounts_add_cancel"
+	ActionAccountsRemove      = "accounts_remove"
+	ActionAccountsUse         = "accounts_use"
+	ActionAccountsUpdate      = "accounts_update"
+	ActionAccountsSetRotation = "accounts_set_rotation"
+	ActionLoginStart          = "login_start"
+	ActionLoginStatus         = "login_status"
+	ActionLoginCancel         = "login_cancel"
+)
+
 // actionNames lists every action the bridge accepts, in plan order.
 var actionNames = []string{
 	ActionConnect,
@@ -89,6 +107,17 @@ var actionNames = []string{
 	ActionRefresh,
 	ActionPrefsSet,
 	ActionDoctorRun,
+	ActionAccountsList,
+	ActionAccountsAddStart,
+	ActionAccountsAddStatus,
+	ActionAccountsAddCancel,
+	ActionAccountsRemove,
+	ActionAccountsUse,
+	ActionAccountsUpdate,
+	ActionAccountsSetRotation,
+	ActionLoginStart,
+	ActionLoginStatus,
+	ActionLoginCancel,
 }
 
 // knownActions is the set of accepted names, built from actionNames.
@@ -133,6 +162,11 @@ type State struct {
 
 	// Account is the account snapshot; nil until loaded.
 	Account *api.AccountInfo `json:"account,omitempty"`
+
+	// Accounts is the v0.6.0 account list, active selection and rotation
+	// settings; nil until loaded. The account screen renders its rows above
+	// the entitlement card.
+	Accounts *api.AccountsView `json:"accounts,omitempty"`
 
 	// LocationsLoaded reports whether the server list has been loaded at
 	// all. The Locations screen must distinguish "Loading locations…" from a

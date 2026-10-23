@@ -39,6 +39,18 @@ var frozenActions = []string{
 	"refresh",
 	"prefs_set",
 	"doctor_run",
+	// v0.6.0 sign-in and accounts.
+	"accounts_list",
+	"accounts_add_start",
+	"accounts_add_status",
+	"accounts_add_cancel",
+	"accounts_remove",
+	"accounts_use",
+	"accounts_update",
+	"accounts_set_rotation",
+	"login_start",
+	"login_status",
+	"login_cancel",
 }
 
 // TestEncodeStateEnvelopeShape pins the host → UI wire shape for the zero
@@ -210,12 +222,12 @@ func TestDecodeActionRejects(t *testing.T) {
 	}
 }
 
-// TestFrozenActionVocabulary pins the list to the plan's 23 names plus the
-// three controller-ruled additions: same members, same count, and every one
-// decodes.
+// TestFrozenActionVocabulary pins the list to the plan's 23 names, the three
+// controller-ruled additions, and the eleven v0.6.0 account/sign-in actions:
+// same members, same count, and every one decodes.
 func TestFrozenActionVocabulary(t *testing.T) {
-	if len(frozenActions) != 26 {
-		t.Fatalf("frozenActions has %d entries, want 26", len(frozenActions))
+	if len(frozenActions) != 37 {
+		t.Fatalf("frozenActions has %d entries, want 37", len(frozenActions))
 	}
 	if len(actionNames) != len(frozenActions) {
 		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))

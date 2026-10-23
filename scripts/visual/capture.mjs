@@ -113,6 +113,31 @@ const STATES = [
   { name: "connect-options", screen: "dashboard", hint: "connect-options" },
   { name: "signout-confirm", screen: "account", hint: "signout-confirm" },
   {
+    // The v0.6.0 account list's Add account dialog, browser and password
+    // choices, and the browser waiting card. The mock flow stays pending for
+    // a few polls, so the waiting card is captureable.
+    name: "account-add",
+    screen: "account",
+    click: [".acct__add"],
+    waitAfter: ".acct__add-dialog[open]",
+  },
+  {
+    // A theme change forces a full reload, which closes the previous
+    // dialog; this state also proves the password form in the Light theme.
+    name: "account-add-password",
+    screen: "account",
+    theme: "light",
+    click: [".acct__add", ".acct__add-password"],
+    waitAfter: "#acct-add-email",
+  },
+  {
+    name: "account-add-browser",
+    screen: "account",
+    theme: "oled",
+    click: [".acct__add", ".acct__add-browser"],
+    waitAfter: ".acct__waiting:not([hidden])",
+  },
+  {
     // The cleanup confirmation (T3.3, hint-driven, scripts/visual/README.md).
     name: "cleanup-confirm",
     screen: "diagnostics",
@@ -236,7 +261,7 @@ const STATES = [
     scenario: "signed-out",
     prefs: { onboarded: false },
     action: { name: "login_email", payload: { email: "" } },
-    waitAfter: "#onb-email",
+    waitAfter: "#onb-method-alt",
   },
   {
     // The already-signed-in variant: the same reset against a live session.
@@ -246,6 +271,30 @@ const STATES = [
     prefs: { onboarded: false },
     action: { name: "login_email", payload: { email: "" } },
     waitAfter: ".onb__signed",
+  },
+  {
+    // The recommended browser flow's waiting card. The mock keeps it pending
+    // for two status polls, then completes; the capture is taken first.
+    name: "login-browser",
+    screen: "onboarding",
+    hint: "login",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "" } },
+    click: [".onb__primary"],
+    waitAfter: "#onb-browser-cancel",
+  },
+  {
+    // The password fallback's email page, reached through the secondary
+    // method button.
+    name: "login-choice-password",
+    screen: "onboarding",
+    hint: "login",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_email", payload: { email: "" } },
+    click: ["#onb-method-alt"],
+    waitAfter: "#onb-email",
   },
   {
     // The password page: the daemon asks for one.
@@ -301,7 +350,7 @@ const STATES = [
     scenario: "signed-out",
     prefs: { onboarded: false },
     action: { name: "login_email", payload: { email: "" } },
-    waitAfter: "#onb-email",
+    waitAfter: "#onb-method-alt",
   },
   {
     name: "health-check",

@@ -54,6 +54,37 @@ type fakeDaemon struct {
 	accountErr   error
 	accountCalls int
 
+	accounts      api.AccountsView
+	accountsErr   error
+	accountsCalls int
+
+	accountsAddStartState  api.LoginState
+	accountsAddStartErr    error
+	accountsAddStarts      []api.LoginStartPayload
+	accountsAddStatusState api.LoginState
+	accountsAddStatusErr   error
+	accountsAddStatuses    []api.LoginStatusPayload
+	accountsAddCancelErr   error
+	accountsAddCancels     []api.LoginCancelPayload
+
+	accountsRemoveErr   error
+	accountsRemoves     []api.AccountsRemovePayload
+	accountsUseErr      error
+	accountsUses        []api.AccountsUsePayload
+	accountsUpdateErr   error
+	accountsUpdates     []api.AccountsUpdatePayload
+	accountsRotationErr error
+	accountsRotations   []api.AccountsRotationPayload
+
+	loginStartState  api.LoginState
+	loginStartErr    error
+	loginStarts      []api.LoginStartPayload
+	loginStatusState api.LoginState
+	loginStatusErr   error
+	loginStatuses    []api.LoginStatusPayload
+	loginCancelErr   error
+	loginCancels     []api.LoginCancelPayload
+
 	locations         api.LocationsResult
 	locationsErr      error
 	locationCalls     int
@@ -145,6 +176,42 @@ func (f *fakeDaemon) subscribeLevels() []string {
 	return append([]string(nil), f.subscribes...)
 }
 
+func (f *fakeDaemon) accountAddStartPayloads() []api.LoginStartPayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.LoginStartPayload(nil), f.accountsAddStarts...)
+}
+
+func (f *fakeDaemon) accountAddStatusPayloads() []api.LoginStatusPayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.LoginStatusPayload(nil), f.accountsAddStatuses...)
+}
+
+func (f *fakeDaemon) accountRemovePayloads() []api.AccountsRemovePayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.AccountsRemovePayload(nil), f.accountsRemoves...)
+}
+
+func (f *fakeDaemon) accountUsePayloads() []api.AccountsUsePayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.AccountsUsePayload(nil), f.accountsUses...)
+}
+
+func (f *fakeDaemon) accountUpdatePayloads() []api.AccountsUpdatePayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.AccountsUpdatePayload(nil), f.accountsUpdates...)
+}
+
+func (f *fakeDaemon) accountRotationPayloads() []api.AccountsRotationPayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.AccountsRotationPayload(nil), f.accountsRotations...)
+}
+
 func (f *fakeDaemon) count(field func(*fakeDaemon) int) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -225,6 +292,70 @@ func (f *fakeDaemon) Account(context.Context) (api.AccountInfo, error) {
 	return f.account, f.accountErr
 }
 
+func (f *fakeDaemon) AccountsList(context.Context) (api.AccountsView, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_list")
+	f.accountsCalls++
+	return f.accounts, f.accountsErr
+}
+
+func (f *fakeDaemon) AccountsAddStart(_ context.Context, p api.LoginStartPayload) (api.LoginState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_add_start")
+	f.accountsAddStarts = append(f.accountsAddStarts, p)
+	return f.accountsAddStartState, f.accountsAddStartErr
+}
+
+func (f *fakeDaemon) AccountsAddStatus(_ context.Context, p api.LoginStatusPayload) (api.LoginState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_add_status")
+	f.accountsAddStatuses = append(f.accountsAddStatuses, p)
+	return f.accountsAddStatusState, f.accountsAddStatusErr
+}
+
+func (f *fakeDaemon) AccountsAddCancel(_ context.Context, p api.LoginCancelPayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_add_cancel")
+	f.accountsAddCancels = append(f.accountsAddCancels, p)
+	return api.Result{OK: true}, f.accountsAddCancelErr
+}
+
+func (f *fakeDaemon) AccountsRemove(_ context.Context, p api.AccountsRemovePayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_remove")
+	f.accountsRemoves = append(f.accountsRemoves, p)
+	return api.Result{OK: true}, f.accountsRemoveErr
+}
+
+func (f *fakeDaemon) AccountsUse(_ context.Context, p api.AccountsUsePayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_use")
+	f.accountsUses = append(f.accountsUses, p)
+	return api.Result{OK: true}, f.accountsUseErr
+}
+
+func (f *fakeDaemon) AccountsUpdate(_ context.Context, p api.AccountsUpdatePayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_update")
+	f.accountsUpdates = append(f.accountsUpdates, p)
+	return api.Result{OK: true}, f.accountsUpdateErr
+}
+
+func (f *fakeDaemon) AccountsSetRotation(_ context.Context, p api.AccountsRotationPayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "accounts_set_rotation")
+	f.accountsRotations = append(f.accountsRotations, p)
+	return api.Result{OK: true}, f.accountsRotationErr
+}
+
 func (f *fakeDaemon) LogsSnapshot(_ context.Context, level string) (api.LogSnapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -266,6 +397,30 @@ func (f *fakeDaemon) LoginPassword(_ context.Context, p api.LoginPasswordPayload
 
 func (f *fakeDaemon) Login2FA(_ context.Context, p api.Login2FAPayload) (api.LoginState, error) {
 	return f.login("login_2fa", p.Code)
+}
+
+func (f *fakeDaemon) LoginStart(_ context.Context, p api.LoginStartPayload) (api.LoginState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "login_start")
+	f.loginStarts = append(f.loginStarts, p)
+	return f.loginStartState, f.loginStartErr
+}
+
+func (f *fakeDaemon) LoginStatus(_ context.Context, p api.LoginStatusPayload) (api.LoginState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "login_status")
+	f.loginStatuses = append(f.loginStatuses, p)
+	return f.loginStatusState, f.loginStatusErr
+}
+
+func (f *fakeDaemon) LoginCancel(_ context.Context, p api.LoginCancelPayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "login_cancel")
+	f.loginCancels = append(f.loginCancels, p)
+	return api.Result{OK: true}, f.loginCancelErr
 }
 
 func (f *fakeDaemon) login(method, value string) (api.LoginState, error) {
@@ -1930,5 +2085,265 @@ func TestClientNoResendAfterLostReply(t *testing.T) {
 	}
 	if got := conns.Load(); got < 2 {
 		t.Errorf("connections = %d, want a re-dial", got)
+	}
+}
+
+// TestControllerProjectsAccounts pins the account-list projection: the rows,
+// the active ID, rotation settings and the daemon's notice all ride the
+// state envelope unchanged.
+func TestControllerProjectsAccounts(t *testing.T) {
+	f := newFakeDaemon()
+	limit, remaining := int64(50<<30), int64(41<<30)
+	f.set(func(d *fakeDaemon) {
+		d.accounts = api.AccountsView{
+			Accounts: []api.AccountSummary{
+				{ID: "a1", Email: "user@example.com", Method: "browser", Active: true, Quota: &api.Quota{Limit: &limit, Remaining: &remaining}},
+				{ID: "a2", Email: "work@example.com", Label: "Work", Method: "password", ReauthRequired: true},
+			},
+			Active: "a1", Rotation: true, Threshold: 20, LastMethod: "browser", Notice: "2 accounts",
+		}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsList}); err != nil {
+		t.Fatalf("Dispatch(accounts_list) = %v", err)
+	}
+	got := ctrl.Snapshot().Accounts
+	if got == nil || len(got.Accounts) != 2 || got.Active != "a1" || !got.Rotation || got.Threshold != 20 || got.Notice != "2 accounts" {
+		t.Fatalf("accounts = %+v", got)
+	}
+	if !got.Accounts[0].Active || got.Accounts[0].Quota == nil || *got.Accounts[0].Quota.Remaining != remaining {
+		t.Fatalf("active account = %+v", got.Accounts[0])
+	}
+	if !got.Accounts[1].ReauthRequired || got.Accounts[1].Label != "Work" {
+		t.Fatalf("reauth account = %+v", got.Accounts[1])
+	}
+}
+
+func TestControllerBrowserLoginAction(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.accounts = api.AccountsView{
+			Accounts: []api.AccountSummary{{ID: "a1", Email: "user@example.com", Active: true}},
+			Active:   "a1", Notice: "2 accounts",
+		}
+		d.accountsAddStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-1",
+		}
+		d.accountsAddStatusState = api.LoginState{Step: "done", Email: "new@example.com"}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_start) = %v", err)
+	}
+	login := ctrl.Snapshot().Login
+	if login == nil || login.Step != "browser" || login.Method != "browser" ||
+		login.URL != "https://example.test/signin" || login.ID != "login-1" {
+		t.Fatalf("login = %+v", login)
+	}
+	if got := f.accountAddStartPayloads(); len(got) != 1 || got[0].Method != "browser" || got[0].AccountID != "" {
+		t.Fatalf("accounts_add_start payloads = %+v", got)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStatus, Payload: []byte(`{"login_id":"login-1"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_status) = %v", err)
+	}
+	login = ctrl.Snapshot().Login
+	if login == nil || login.Step != "done" || login.Email != "new@example.com" {
+		t.Fatalf("login after done = %+v", login)
+	}
+	if got := f.accountAddStatusPayloads(); len(got) != 1 || got[0].LoginID != "login-1" {
+		t.Fatalf("accounts_add_status payloads = %+v", got)
+	}
+	if got := f.count(func(d *fakeDaemon) int { return d.accountsCalls }); got < 1 {
+		t.Fatalf("accounts_list calls = %d, want the add completion reload", got)
+	}
+	if got := ctrl.Snapshot().Accounts; got == nil || got.Notice != "2 accounts" {
+		t.Fatalf("accounts after add = %+v", got)
+	}
+	if n := ctrl.Snapshot().AccountNotice; n == nil || n.Message != "Signed in as new@example.com" || n.Tone != toneGood {
+		t.Fatalf("account notice after browser add = %+v", n)
+	}
+}
+
+// TestControllerAccountPasswordFlowKeepsAccountNotice pins the ownership of a
+// password sign-in started from Add account: its terminal login_password reply
+// reuses the shared login verb, but the success belongs on the Account screen.
+// A later onboarding sign-in must not inherit that ownership.
+func TestControllerAccountPasswordFlowKeepsAccountNotice(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.accountsAddStartState = api.LoginState{Step: "password", Email: "new@example.com", Method: "email"}
+		d.loginReplies["login_password"] = api.LoginState{Step: "done", Email: "new@example.com"}
+		d.accounts = api.AccountsView{
+			Accounts: []api.AccountSummary{{ID: "a1", Email: "new@example.com", Active: true}},
+			Active:   "a1", Notice: "2 accounts",
+		}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStart, Payload: []byte(`{"method":"password","email":"new@example.com"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_start) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "password" {
+		t.Fatalf("login after start = %+v", login)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLoginPassword, Payload: []byte(`{"password":"hunter2"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_password) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "done" {
+		t.Fatalf("login after password = %+v", login)
+	}
+	if n := ctrl.Snapshot().AccountNotice; n == nil || n.Message != "Signed in as new@example.com" || n.Tone != toneGood {
+		t.Fatalf("account notice after password add = %+v", n)
+	}
+	if got := f.count(func(d *fakeDaemon) int { return d.accountsCalls }); got < 1 {
+		t.Fatalf("accounts_list calls = %d, want the password completion reload", got)
+	}
+
+	// Onboarding owns its own terminal notice. Reset the fake's reply and use
+	// a fresh controller so the old Account notice cannot mask a leak.
+	f.set(func(d *fakeDaemon) {
+		d.loginStartState = api.LoginState{Step: "password", Email: "other@example.com", Method: "email"}
+		d.loginReplies["login_password"] = api.LoginState{Step: "done", Email: "other@example.com"}
+	})
+	onboarding := NewController(f, Options{})
+	if err := onboarding.Dispatch(Action{Name: ActionLoginStart, Payload: []byte(`{"method":"password","email":"other@example.com"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_start) = %v", err)
+	}
+	if err := onboarding.Dispatch(Action{Name: ActionLoginPassword, Payload: []byte(`{"password":"hunter2"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_password, onboarding) = %v", err)
+	}
+	if n := onboarding.Snapshot().AccountNotice; n != nil {
+		t.Fatalf("onboarding password sign-in claimed the account notice: %+v", n)
+	}
+}
+
+func TestControllerAccountActions(t *testing.T) {
+	f := newFakeDaemon()
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsList}); err != nil {
+		t.Fatalf("Dispatch(accounts_list) = %v", err)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsUse, Payload: []byte(`{"id":"a2"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_use) = %v", err)
+	}
+	if got := f.accountUsePayloads(); len(got) != 1 || got[0].ID != "a2" {
+		t.Fatalf("accounts_use payloads = %+v", got)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsUpdate, Payload: []byte(`{"id":"a2","label":"Home"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_update) = %v", err)
+	}
+	if got := f.accountUpdatePayloads(); len(got) != 1 || got[0].ID != "a2" || got[0].Label != "Home" {
+		t.Fatalf("accounts_update payloads = %+v", got)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsSetRotation, Payload: []byte(`{"enabled":true,"rotation_threshold":20}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_set_rotation) = %v", err)
+	}
+	if got := f.accountRotationPayloads(); len(got) != 1 || !got[0].Enabled || got[0].Threshold != 20 {
+		t.Fatalf("accounts_set_rotation payloads = %+v", got)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsRemove, Payload: []byte(`{"id":"a2"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_remove) = %v", err)
+	}
+	if got := f.accountRemovePayloads(); len(got) != 1 || got[0].ID != "a2" {
+		t.Fatalf("accounts_remove payloads = %+v", got)
+	}
+
+	f.set(func(d *fakeDaemon) { d.accountsRemoveErr = errors.New("still active") })
+	err := ctrl.Dispatch(Action{Name: ActionAccountsRemove, Payload: []byte(`{"id":"a2"}`)})
+	if !errors.Is(err, f.accountsRemoveErr) {
+		t.Fatalf("Dispatch(accounts_remove, failure) = %v", err)
+	}
+	if n := ctrl.Snapshot().AccountNotice; n == nil || n.Message != "could not remove the account: still active" || n.Tone != toneBad {
+		t.Fatalf("account notice = %+v", n)
+	}
+}
+
+func TestControllerAccountActionsRefuseWhileConnected(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) { d.status = api.Status{State: "CONNECTED"} })
+	ctrl := NewController(f, Options{})
+	if err := ctrl.refreshStatus(context.Background()); err != nil {
+		t.Fatalf("refreshStatus: %v", err)
+	}
+	for _, act := range []Action{
+		{Name: ActionAccountsUse, Payload: []byte(`{"id":"a2"}`)},
+		{Name: ActionAccountsRemove, Payload: []byte(`{"id":"a2"}`)},
+	} {
+		err := ctrl.Dispatch(act)
+		if err == nil || !strings.Contains(err.Error(), "disconnect") {
+			t.Fatalf("Dispatch(%s) = %v, want the client-side connected refusal", act.Name, err)
+		}
+	}
+	if got := f.callLog(); slices.Contains(got, "accounts_use") || slices.Contains(got, "accounts_remove") {
+		t.Fatalf("connected guard reached the daemon: %v", got)
+	}
+}
+
+func TestControllerLoginObject(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.loginReplies["login_email"] = api.LoginState{Step: "password", Email: "user@example.com", Method: "email"}
+		d.loginStartState = api.LoginState{
+			Step: "browser", Method: "browser", URL: "https://example.test/login",
+			LoginID: "login-2", VerificationReason: "browser sign-in",
+		}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionLoginEmail, Payload: []byte(`{"email":"user@example.com"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_email) = %v", err)
+	}
+	login := ctrl.Snapshot().Login
+	if login == nil || login.Step != "password" || login.Method != "email" || login.Email != "user@example.com" {
+		t.Fatalf("password login = %+v", login)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_start) = %v", err)
+	}
+	login = ctrl.Snapshot().Login
+	if login == nil || login.Step != "browser" || login.Method != "browser" ||
+		login.URL != "https://example.test/login" || login.ID != "login-2" ||
+		login.VerificationReason != "browser sign-in" {
+		t.Fatalf("browser login = %+v", login)
+	}
+}
+
+// TestAccountActionNamesAreAccepted pins the bridge vocabulary: the new
+// actions are appended after the existing frozen list, in IPC-name order, and
+// every one is accepted by DecodeAction's known set.
+func TestAccountActionNamesAreAccepted(t *testing.T) {
+	want := []string{
+		ActionAccountsList,
+		ActionAccountsAddStart,
+		ActionAccountsAddStatus,
+		ActionAccountsAddCancel,
+		ActionAccountsRemove,
+		ActionAccountsUse,
+		ActionAccountsUpdate,
+		ActionAccountsSetRotation,
+		ActionLoginStart,
+		ActionLoginStatus,
+		ActionLoginCancel,
+	}
+	if len(actionNames) < len(want) {
+		t.Fatalf("actionNames has %d entries, want at least %d", len(actionNames), len(want))
+	}
+	tail := actionNames[len(actionNames)-len(want):]
+	if !slices.Equal(tail, want) {
+		t.Fatalf("appended action names = %v, want %v", tail, want)
+	}
+	for _, name := range want {
+		if _, ok := knownActions[name]; !ok {
+			t.Errorf("knownActions is missing %q", name)
+		}
 	}
 }

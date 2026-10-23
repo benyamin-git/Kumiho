@@ -942,3 +942,99 @@ func TestControllerSettingsStateless(t *testing.T) {
 		t.Fatalf("canned settings changed: %q", snap.Settings.LogLevel)
 	}
 }
+
+// TestAccountsFixture pins the account rows the harness shows: one active
+// browser account with an 82%-left quota, one labelled password account that
+// needs re-authentication, rotation on at 20%, and the signed-out variant.
+func TestAccountsFixture(t *testing.T) {
+	ctx := context.Background()
+	m := New()
+
+	got, err := m.AccountsList(ctx)
+	if err != nil {
+		t.Fatalf("AccountsList: %v", err)
+	}
+	if len(got.Accounts) != 2 || got.Active != "primary" || !got.Rotation ||
+		got.Threshold != 20 || got.LastMethod != "browser" {
+		t.Fatalf("accounts = %+v", got)
+	}
+	home, work := got.Accounts[0], got.Accounts[1]
+	if !home.Active || home.Label != "Home" || home.Method != "browser" ||
+		home.Quota == nil || home.Quota.Remaining == nil || *home.Quota.Remaining != accountQuotaRemaining {
+		t.Fatalf("active account = %+v", home)
+	}
+	if work.ReauthRequired != true || work.Label != "Work" || work.Method != "password" {
+		t.Fatalf("reauth account = %+v", work)
+	}
+
+	// Mutating the reply must not leak into the fixture.
+	got.Accounts[0].Label = "bogus"
+	*home.Quota.Remaining = 0
+	again, err := m.AccountsList(ctx)
+	if err != nil {
+		t.Fatalf("AccountsList (second call): %v", err)
+	}
+	if again.Accounts[0].Label != "Home" || *again.Accounts[0].Quota.Remaining != accountQuotaRemaining {
+		t.Fatalf("mutation leaked into the fixture: %+v", again.Accounts[0])
+	}
+
+	m.SetScenario(ScenarioSignedOut)
+	signedOut, err := m.AccountsList(ctx)
+	if err != nil {
+		t.Fatalf("AccountsList (signed out): %v", err)
+	}
+	if len(signedOut.Accounts) != 0 || signedOut.Active != "" || signedOut.LastMethod != "browser" {
+		t.Fatalf("signed-out accounts = %+v", signedOut)
+	}
+}
+
+// TestBrowserLoginFixtures pins the harness's browser flow: each start gets a
+// unique ID and URL, the status stays pending for two polls, then completes.
+// Passwords still start at the email page.
+func TestBrowserLoginFixtures(t *testing.T) {
+	ctx := context.Background()
+	m := New()
+
+	first, err := m.AccountsAddStart(ctx, api.LoginStartPayload{Method: "browser"})
+	if err != nil {
+		t.Fatalf("AccountsAddStart: %v", err)
+	}
+	if first.Step != "browser" || first.LoginID != "mock-browser-1" ||
+		first.URL != "https://example.test/mozilla-account/signin?flow=1" {
+		t.Fatalf("first browser start = %+v", first)
+	}
+	for i := 0; i < mockBrowserPolls; i++ {
+		st, err := m.AccountsAddStatus(ctx, api.LoginStatusPayload{LoginID: first.LoginID})
+		if err != nil {
+			t.Fatalf("AccountsAddStatus (%d): %v", i, err)
+		}
+		if st.Step != "browser" || st.LoginID != first.LoginID || st.URL != first.URL {
+			t.Fatalf("pending status %d = %+v", i, st)
+		}
+	}
+	done, err := m.AccountsAddStatus(ctx, api.LoginStatusPayload{LoginID: first.LoginID})
+	if err != nil {
+		t.Fatalf("AccountsAddStatus (done): %v", err)
+	}
+	if done.Step != "done" {
+		t.Fatalf("terminal status = %+v", done)
+	}
+
+	second, err := m.LoginStart(ctx, api.LoginStartPayload{Method: "browser"})
+	if err != nil {
+		t.Fatalf("LoginStart: %v", err)
+	}
+	if second.LoginID == first.LoginID || second.URL == first.URL ||
+		second.LoginID != "mock-browser-2" ||
+		second.URL != "https://example.test/mozilla-account/signin?flow=2" {
+		t.Fatalf("second browser start = %+v, first = %+v", second, first)
+	}
+
+	password, err := m.AccountsAddStart(ctx, api.LoginStartPayload{Method: "password"})
+	if err != nil {
+		t.Fatalf("AccountsAddStart (password): %v", err)
+	}
+	if password.Step != "email" || password.Method != "email" || password.URL != "" {
+		t.Fatalf("password start = %+v", password)
+	}
+}

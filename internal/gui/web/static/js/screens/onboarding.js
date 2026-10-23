@@ -78,6 +78,10 @@ const HINT_STEPS = {
 // these guards are the closest the data allows.
 const SETTLE_MS = 3000;
 
+// Browser sign-in polls the daemon once a second (the protocol's status
+// cadence).
+const POLL_MS = 1000;
+
 // The consent copy: the D16 gate, transcribed from the inventory.
 const CONSENT_INTRO =
   "Kumiho is an unofficial desktop client for the VPN proxy included with a " +
@@ -102,7 +106,9 @@ const CONSENT_GROUPS = [
 ];
 const CONSENT_TICK = 'Tick "I understand" below to unlock Continue.';
 
-// The login pages' bodies (inventory §Sign in).
+// The login pages' bodies (inventory §Sign in, extended by v0.6.0).
+const LOGIN_CHOICE_BODY =
+  "Sign in with the Firefox account that has the VPN. Continue in your browser (recommended), or use your account password.";
 const LOGIN_EMAIL_BODY =
   "Sign in with the Firefox account that has the VPN. Kumiho stores the sign-in tokens on this PC, never your password.";
 const LOGIN_PASSWORD_BODY = "Enter your Firefox account password.";
@@ -111,6 +117,8 @@ const LOGIN_LINK_BODY =
   "Check your email and open the Mozilla sign-in link, then choose Continue with the code empty to finish signing in.";
 const LOGIN_SIGNED_BODY =
   "Kumiho already has a signed-in Firefox account. Choose Continue to finish setting up, or sign out to use a different account.";
+const LOGIN_WAITING_BODY =
+  "Finish signing in in your browser. This page continues automatically when Mozilla sends you back.";
 
 // The remaining steps' bodies and the shared sign-out dialog copy.
 const HEALTH_BODY =
@@ -125,6 +133,11 @@ const SIGNOUT_DETAIL = "The stored sign-in tokens are cleared and the tunnel dis
 // consent tick (never persisted; a fresh launch reloads the module).
 let currentStep = STEP_WELCOME;
 let consentTicked = false;
+
+// The browser URL opened once across remounts. A loopback URL is one-shot,
+// so re-opening the same flow after a screen switch would be a navigation
+// error; a new flow carries a new port/state.
+let openedBrowserURL = "";
 
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
 // time, so one slot is enough).
@@ -168,9 +181,15 @@ function summaryLine(checks) {
   return { text: "All " + checksWord + " passed", tone: "good" };
 }
 
-/** The 2FA body: the code flow unless the daemon asked for the email link. */
+/** The 2FA body: TOTP, the unblock code, or the emailed link/code flow. */
 function twoFactorBody(login) {
+  const flow = String((login && login.method) || "").toLowerCase();
   const method = String((login && login.verification_method) || "").toLowerCase();
+  const reason = String((login && login.verification_reason) || "").toLowerCase();
+  if (flow === "totp") return "Enter the code from your authenticator app.";
+  if (flow === "unblock" || reason === "unblock-code") {
+    return "Enter the unblock code Mozilla emailed you.";
+  }
   if (method === "email" || method.indexOf("link") >= 0) return LOGIN_LINK_BODY;
   return LOGIN_CODE_BODY;
 }
@@ -243,7 +262,16 @@ function build(host) {
   const login = el("section", "onb__step");
   login.dataset.step = "login";
   login.hidden = true;
-  const loginBody = el("p", "onb__body", LOGIN_EMAIL_BODY);
+  const loginBody = el("p", "onb__body", LOGIN_CHOICE_BODY);
+  // The first page offers both methods. The primary button is the default
+  // (the last successful method, browser on first run); this secondary
+  // choice is the other one.
+  const methods = el("div", "onb__methods");
+  const altMethod = el("button", "button button--tonal onb__method", "Use password");
+  altMethod.type = "button";
+  altMethod.id = "onb-method-alt";
+  methods.append(altMethod);
+  methods.hidden = true;
   const signed = el("div", "onb__signed");
   const signedIdentity = el("p", "onb__signed-identity");
   const signout = el("button", "button button--tonal onb__signout", "Sign out");
@@ -255,7 +283,21 @@ function build(host) {
   const code = fieldBox("onb-code", "Verification code", "text", "");
   password.wrap.hidden = true;
   code.wrap.hidden = true;
-  login.append(loginBody, signed, email.wrap, password.wrap, code.wrap);
+  // The browser waiting card: the loopback URL, Open again and Cancel.
+  const browser = el("div", "onb__browser");
+  browser.hidden = true;
+  const browserBody = el("p", "onb__body", LOGIN_WAITING_BODY);
+  const browserURL = el("p", "onb__browser-url");
+  const browserActions = el("div", "onb__browser-actions");
+  const browserOpen = el("button", "button button--tonal onb__browser-open", "Open again");
+  browserOpen.type = "button";
+  browserOpen.id = "onb-browser-open";
+  const browserCancel = el("button", "button button--text onb__browser-cancel", "Cancel");
+  browserCancel.type = "button";
+  browserCancel.id = "onb-browser-cancel";
+  browserActions.append(browserOpen, browserCancel);
+  browser.append(browserBody, browserURL, browserActions);
+  login.append(loginBody, methods, signed, email.wrap, password.wrap, code.wrap, browser);
 
   // Step 3: health check (the run summary lives on the status line; the
   // rows render compactly, one line per check).
@@ -346,12 +388,18 @@ function build(host) {
     sections: [welcome, login, health, autoconnect, finish],
     consentToggle: consentToggle,
     loginBody: loginBody,
+    methods: methods,
+    altMethod: altMethod,
     signed: signed,
     signedIdentity: signedIdentity,
     signout: signout,
     email: email,
     password: password,
     code: code,
+    browser: browser,
+    browserURL: browserURL,
+    browserOpen: browserOpen,
+    browserCancel: browserCancel,
     rerun: rerun,
     checks: checks,
     checksEmpty: checksEmpty,
@@ -379,6 +427,14 @@ export default {
       pagePinMark: "",
       renderedPage: null,
       submitted: false,
+      // The first page's default method (last successful method, browser on
+      // first run) and the browser flow's timer state.
+      defaultMethod: "",
+      pollTimer: 0,
+      pollID: "",
+      pollInFlight: false,
+      openedURL: "",
+      cancelling: false,
       busy: null, // "signin" while a login round trip runs
       busyMark: "",
       busyTimer: 0,
@@ -423,7 +479,16 @@ export default {
     function loginMark(snapshot) {
       const login = snapshot.login || null;
       if (!login) return "";
-      return [login.step || "", login.email || "", login.verification_method || "", login.error || ""].join("\u0000");
+      return [
+        login.step || "",
+        login.email || "",
+        login.method || "",
+        login.verification_method || "",
+        login.verification_reason || "",
+        login.url || "",
+        login.id || "",
+        login.error || "",
+      ].join("\u0000");
     }
 
     /** The notice identity used by the sign-out guard. */
@@ -440,16 +505,21 @@ export default {
 
     /**
      * The login page the session/step state calls for: password/2FA while
-     * the daemon asks for them, the signed-in variant while a live session
-     * exists (any login page — the refusal never dead-ends), the email page
-     * otherwise.
+     * the daemon asks for them, the browser waiting card during a loopback
+     * flow, the signed-in variant while a live session exists (any login
+     * page — the refusal never dead-ends), the choice page otherwise. An
+     * email-step error is the password form's failed start, so it stays on
+     * the email field.
      */
     function derivePage(snapshot) {
       const login = snapshot.login || null;
       const step = (login && login.step) || "";
       if (step === "password") return "password";
       if (step === "2fa") return "2fa";
-      return signedIn(snapshot) ? "signedin" : "email";
+      if (signedIn(snapshot)) return "signedin";
+      if (step === "browser") return "browser";
+      if (step === "email" && login.error) return "email";
+      return "choice";
     }
 
     // ------------------------------------------------------------- guards
@@ -538,6 +608,13 @@ export default {
       if (view.autoBusy && settingsMark(snapshot) !== view.autoMark) {
         endAuto();
       }
+      const login = snapshot.login || null;
+      if (view.cancelling && (!login || login.step !== "browser")) {
+        view.cancelling = false;
+      }
+      if (login && (login.step === "error" || login.step === "cancelled")) {
+        view.submitted = false;
+      }
     }
 
     // --------------------------------------------------------------- flow
@@ -546,7 +623,9 @@ export default {
      * completion advancing to Health, and the wizard finishing on the
      * onboarded flip. */
     function autoAdvance(snapshot) {
-      if (currentStep === STEP_LOGIN && view.submitted) {
+      // Never advance on a stale `done` from the previous flow: the start
+      // request is in flight while busy, and its reply replaces the step.
+      if (currentStep === STEP_LOGIN && view.submitted && !view.busy) {
         const login = snapshot.login || null;
         if (login && login.step === "done" && !login.error) {
           view.submitted = false;
@@ -582,6 +661,7 @@ export default {
           if (page === "password") target = ui.password.input;
           else if (page === "2fa") target = ui.code.input;
           else if (page === "email") target = ui.email.input;
+          else if (page === "browser") target = ui.browserCancel;
           else target = ui.primary;
           break;
         case STEP_AUTOCONNECT:
@@ -595,6 +675,93 @@ export default {
     }
 
     // --------------------------------------------------------------- login
+
+    function openURL(url) {
+      if (!url) return;
+      ctx.send("open_external", { url: url }).then(function (err) {
+        if (err) console.warn("kumiho: open browser sign-in refused: " + err);
+      });
+    }
+
+    function stopPolling() {
+      if (view.pollTimer) clearInterval(view.pollTimer);
+      view.pollTimer = 0;
+      view.pollID = "";
+      view.pollInFlight = false;
+    }
+
+    function startPolling(loginID) {
+      if (!loginID) {
+        stopPolling();
+        return;
+      }
+      if (view.pollTimer && view.pollID === loginID) return;
+      stopPolling();
+      view.pollID = loginID;
+      view.pollTimer = setInterval(pollBrowser, POLL_MS);
+    }
+
+    function pollBrowser() {
+      if (disposed || view.pollInFlight) return;
+      const login = ctx.store.get().login || null;
+      if (!login || login.step !== "browser" || !login.id) {
+        stopPolling();
+        return;
+      }
+      view.pollInFlight = true;
+      ctx.send("login_status", { login_id: login.id }).then(function (err) {
+        view.pollInFlight = false;
+        if (err) {
+          stopPolling();
+          console.warn("kumiho: browser sign-in status refused: " + err);
+        }
+      });
+    }
+
+    /** The first page's default method: the last successful method, browser
+     * when the daemon has no history. */
+    function defaultMethod(snapshot) {
+      if (!view.defaultMethod && snapshot.accounts) {
+        view.defaultMethod = snapshot.accounts.last_method === "password" ? "password" : "browser";
+      }
+      return view.defaultMethod || "browser";
+    }
+
+    function startBrowserLogin() {
+      if (view.busy) return;
+      view.submitted = true;
+      view.pagePinned = false;
+      view.cancelling = false;
+      beginBusy();
+      ctx.send("login_start", { method: "browser" }).then(function (err) {
+        if (!err) return;
+        endBusy();
+        render();
+        console.warn("kumiho: login_start refused: " + err);
+      });
+    }
+
+    function choosePassword() {
+      view.submitted = false;
+      view.cancelling = false;
+      pinPage("email");
+      render();
+      focusStep();
+    }
+
+    function cancelBrowserLogin() {
+      const login = ctx.store.get().login || null;
+      if (!login || !login.id || view.cancelling) return;
+      view.cancelling = true;
+      view.submitted = false;
+      render();
+      ctx.send("login_cancel", { login_id: login.id }).then(function (err) {
+        if (!err) return;
+        view.cancelling = false;
+        render();
+        console.warn("kumiho: login_cancel refused: " + err);
+      });
+    }
 
     function submitLogin() {
       const page = view.page;
@@ -680,13 +847,21 @@ export default {
           if (!consentTicked) return;
           goTo(STEP_LOGIN);
           break;
-        case STEP_LOGIN:
-          if (view.page === "signedin") {
+        case STEP_LOGIN: {
+          const page = view.page || derivePage(ctx.store.get());
+          if (page === "signedin") {
             goTo(STEP_HEALTH);
+            return;
+          }
+          if (page === "browser") return;
+          if (page === "choice") {
+            if (defaultMethod(ctx.store.get()) === "password") choosePassword();
+            else startBrowserLogin();
             return;
           }
           submitLogin();
           break;
+        }
         case STEP_HEALTH:
           goTo(STEP_AUTOCONNECT);
           break;
@@ -699,6 +874,16 @@ export default {
       }
     }
 
+    /** The choice page's alternate method button (the primary is the
+     * last-used method). */
+    function onSecondary() {
+      if (currentStep !== STEP_LOGIN) return;
+      const page = view.page || derivePage(ctx.store.get());
+      if (page !== "choice") return;
+      if (defaultMethod(ctx.store.get()) === "password") startBrowserLogin();
+      else choosePassword();
+    }
+
     /** Pin the login page against the projection (Back's local override). */
     function pinPage(page) {
       view.page = page;
@@ -709,11 +894,18 @@ export default {
     function onBack() {
       if (view.busy || view.logoutBusy) return;
       switch (currentStep) {
-        case STEP_LOGIN:
-          if (view.page === "password") {
+        case STEP_LOGIN: {
+          const page = view.page || derivePage(ctx.store.get());
+          if (page === "browser") {
+            cancelBrowserLogin();
+            return;
+          }
+          if (page === "password") {
             pinPage("email");
-          } else if (view.page === "2fa") {
+          } else if (page === "2fa") {
             pinPage("password");
+          } else if (page === "email") {
+            pinPage("choice");
           } else {
             goTo(STEP_WELCOME);
             return;
@@ -721,6 +913,7 @@ export default {
           render();
           focusStep();
           break;
+        }
         case STEP_HEALTH:
           // Back always returns to the sign-in page (inventory); the render
           // resolves it against the live session (the signed-in variant) and
@@ -858,6 +1051,8 @@ export default {
         if (!view.busy) view.page = derivePage(snapshot);
       }
       const page = view.page;
+      const login = snapshot.login || null;
+      const def = defaultMethod(snapshot);
 
       // Carried-over text: the email is restored when the page is shown
       // again (only from a failed email reply, so a signed-out session's
@@ -871,7 +1066,6 @@ export default {
         view.renderedPage = page;
       }
       if (page === "email" && !ui.email.input.value) {
-        const login = snapshot.login || null;
         // Restore only from a step the user actually reached: a submitted
         // email (the daemon asking for password/2FA) or a failed email
         // submit (step email with the error). A bare email step without an
@@ -883,28 +1077,70 @@ export default {
         if (inFlow && login.email) ui.email.input.value = login.email;
       }
 
+      const showChoice = page === "choice";
+      const showBrowser = page === "browser" && !!login && login.step === "browser";
       const showEmail = page === "email";
       const showPassword = page === "password";
       const showCode = page === "2fa";
       const showSigned = page === "signedin";
+      if (ui.methods.hidden !== !showChoice) ui.methods.hidden = !showChoice;
       if (ui.email.wrap.hidden !== !showEmail) ui.email.wrap.hidden = !showEmail;
       if (ui.password.wrap.hidden !== !showPassword) ui.password.wrap.hidden = !showPassword;
       if (ui.code.wrap.hidden !== !showCode) ui.code.wrap.hidden = !showCode;
       if (ui.signed.hidden !== !showSigned) ui.signed.hidden = !showSigned;
+      if (ui.browser.hidden !== !showBrowser) ui.browser.hidden = !showBrowser;
+      if (ui.loginBody.hidden !== showBrowser) ui.loginBody.hidden = showBrowser;
       if (showSigned) {
         const identity = identityLine(snapshot);
         if (ui.signedIdentity.textContent !== identity) ui.signedIdentity.textContent = identity;
       }
 
       let body = LOGIN_SIGNED_BODY;
-      if (showEmail) body = LOGIN_EMAIL_BODY;
+      if (showChoice) body = LOGIN_CHOICE_BODY;
+      else if (showEmail) body = LOGIN_EMAIL_BODY;
       else if (showPassword) body = LOGIN_PASSWORD_BODY;
-      else if (showCode) body = twoFactorBody(snapshot.login);
+      else if (showCode) body = twoFactorBody(login);
+      else if (showBrowser) body = LOGIN_WAITING_BODY;
       if (ui.loginBody.textContent !== body) ui.loginBody.textContent = body;
+
+      // The first page's primary is the last-used method; the secondary
+      // offers the other one.
+      if (showChoice) {
+        const alt = def === "password" ? "Continue in browser" : "Use password";
+        if (ui.altMethod.textContent !== alt) ui.altMethod.textContent = alt;
+        const disabled = !!view.busy || !!view.logoutBusy;
+        if (ui.altMethod.disabled !== disabled) ui.altMethod.disabled = disabled;
+      }
+
+      if (showBrowser) {
+        const url = login.url || "";
+        const text = url || "Waiting for the sign-in link…";
+        if (ui.browserURL.textContent !== text) {
+          ui.browserURL.textContent = text;
+          ui.browserURL.title = text;
+        }
+        // Open the loopback URL once per flow (module-level so a screen
+        // switch does not navigate a one-shot URL twice). "Open again" is
+        // the explicit repeat.
+        if (currentStep === STEP_LOGIN && url && view.openedURL !== url && openedBrowserURL !== url) {
+          openedBrowserURL = url;
+          openURL(url);
+        }
+        view.openedURL = url;
+        if (currentStep === STEP_LOGIN && login.id) startPolling(login.id);
+        else stopPolling();
+        ui.browserOpen.disabled = !url;
+        ui.browserCancel.disabled = !login.id || view.cancelling;
+        const cancelLabel = view.cancelling ? "Cancelling…" : "Cancel";
+        if (ui.browserCancel.textContent !== cancelLabel) ui.browserCancel.textContent = cancelLabel;
+      } else {
+        stopPolling();
+        view.openedURL = "";
+      }
 
       // The credential fields mirror the wire's login error (aria-invalid);
       // the message itself lives on the status line.
-      const invalid = !!(snapshot.login && snapshot.login.error);
+      const invalid = !!((showEmail || showPassword || showCode) && login && login.error);
       const activeField = showEmail ? ui.email.input : showPassword ? ui.password.input : showCode ? ui.code.input : null;
       for (const input of [ui.email.input, ui.password.input, ui.code.input]) {
         if (input === activeField && invalid) input.setAttribute("aria-invalid", "true");
@@ -979,6 +1215,9 @@ export default {
         const checks = (doctor && doctor.checks) || [];
         if (checks.length > 0) return summaryLine(checks);
       }
+      if (currentStep === STEP_LOGIN && login && login.step === "browser") {
+        return { text: "Waiting for sign-in in your browser...", tone: "" };
+      }
       if (login && login.error) return { text: login.error, tone: "bad" };
       const notice = snapshot.notice;
       const stale =
@@ -1005,12 +1244,23 @@ export default {
     }
 
     function renderNav() {
-      if (ui.primary.textContent !== PRIMARY_LABELS[currentStep]) {
-        ui.primary.textContent = PRIMARY_LABELS[currentStep];
+      let label = PRIMARY_LABELS[currentStep];
+      let waiting = false;
+      if (currentStep === STEP_LOGIN) {
+        const page = view.page || derivePage(ctx.store.get());
+        if (page === "choice") {
+          label = defaultMethod(ctx.store.get()) === "password" ? "Use password" : "Continue in browser";
+        } else if (page === "browser") {
+          label = "Waiting for sign-in...";
+          waiting = true;
+        } else {
+          label = "Continue";
+        }
       }
+      if (ui.primary.textContent !== label) ui.primary.textContent = label;
       const busy = !!view.busy || view.logoutBusy || view.finishBusy;
       const consentOK = currentStep !== STEP_WELCOME || consentTicked;
-      const disabled = busy || !consentOK;
+      const disabled = busy || !consentOK || waiting;
       if (ui.primary.disabled !== disabled) ui.primary.disabled = disabled;
       if (ui.back.disabled !== (!!view.busy || view.logoutBusy)) {
         ui.back.disabled = !!view.busy || view.logoutBusy;
@@ -1034,6 +1284,11 @@ export default {
 
     ui.consentToggle.addEventListener("click", onConsentToggle);
     ui.primary.addEventListener("click", onPrimary);
+    ui.altMethod.addEventListener("click", onSecondary);
+    ui.browserOpen.addEventListener("click", function () {
+      openURL((ctx.store.get().login || {}).url || "");
+    });
+    ui.browserCancel.addEventListener("click", cancelBrowserLogin);
     ui.back.addEventListener("click", onBack);
     ui.rerun.addEventListener("click", onRerun);
     ui.autoToggle.addEventListener("click", onAutoToggle);
@@ -1060,6 +1315,13 @@ export default {
 
     const unsubscribe = ctx.store.subscribe(render);
 
+    // The last-method hint rides the account list; ask for it explicitly so
+    // the first page's default is right even when the controller's start-up
+    // load raced this mount.
+    ctx.send("accounts_list", {}).then(function (err) {
+      if (err) console.warn("kumiho: accounts list refused: " + err);
+    });
+
     // The first step's field takes focus after the router's own host focus
     // (a microtask runs after show()'s synchronous focus call, before paint).
     queueMicrotask(function () {
@@ -1073,6 +1335,7 @@ export default {
       clearTimeout(view.logoutTimer);
       clearTimeout(view.autoTimer);
       clearTimeout(view.finishTimer);
+      stopPolling();
       if (ui.dialog.open) ui.dialog.close();
     };
   },

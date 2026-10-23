@@ -246,6 +246,62 @@ func (c *DaemonClient) Account(ctx context.Context) (api.AccountInfo, error) {
 	return info, err
 }
 
+// AccountsList implements Daemon.
+func (c *DaemonClient) AccountsList(ctx context.Context) (api.AccountsView, error) {
+	var view api.AccountsView
+	err := c.dec(ctx, ipc.TypeAccountsList, nil, &view)
+	return view, err
+}
+
+// AccountsAddStart implements Daemon.
+func (c *DaemonClient) AccountsAddStart(ctx context.Context, p api.LoginStartPayload) (api.LoginState, error) {
+	var st api.LoginState
+	err := c.dec(ctx, ipc.TypeAccountsAddStart, p, &st)
+	return st, err
+}
+
+// AccountsAddStatus implements Daemon.
+func (c *DaemonClient) AccountsAddStatus(ctx context.Context, p api.LoginStatusPayload) (api.LoginState, error) {
+	var st api.LoginState
+	err := c.dec(ctx, ipc.TypeAccountsAddStatus, p, &st)
+	return st, err
+}
+
+// AccountsAddCancel implements Daemon.
+func (c *DaemonClient) AccountsAddCancel(ctx context.Context, p api.LoginCancelPayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeAccountsAddCancel, p, &res)
+	return res, err
+}
+
+// AccountsRemove implements Daemon.
+func (c *DaemonClient) AccountsRemove(ctx context.Context, p api.AccountsRemovePayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeAccountsRemove, p, &res)
+	return res, err
+}
+
+// AccountsUse implements Daemon.
+func (c *DaemonClient) AccountsUse(ctx context.Context, p api.AccountsUsePayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeAccountsUse, p, &res)
+	return res, err
+}
+
+// AccountsUpdate implements Daemon.
+func (c *DaemonClient) AccountsUpdate(ctx context.Context, p api.AccountsUpdatePayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeAccountsUpdate, p, &res)
+	return res, err
+}
+
+// AccountsSetRotation implements Daemon.
+func (c *DaemonClient) AccountsSetRotation(ctx context.Context, p api.AccountsRotationPayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeAccountsSetRotation, p, &res)
+	return res, err
+}
+
 // LogsSnapshot implements Daemon.
 func (c *DaemonClient) LogsSnapshot(ctx context.Context, level string) (api.LogSnapshot, error) {
 	var snap api.LogSnapshot
@@ -293,6 +349,27 @@ func (c *DaemonClient) Login2FA(ctx context.Context, p api.Login2FAPayload) (api
 	var st api.LoginState
 	err := c.dec(ctx, ipc.TypeLogin2FA, p, &st)
 	return st, err
+}
+
+// LoginStart implements Daemon.
+func (c *DaemonClient) LoginStart(ctx context.Context, p api.LoginStartPayload) (api.LoginState, error) {
+	var st api.LoginState
+	err := c.dec(ctx, ipc.TypeLoginStart, p, &st)
+	return st, err
+}
+
+// LoginStatus implements Daemon.
+func (c *DaemonClient) LoginStatus(ctx context.Context, p api.LoginStatusPayload) (api.LoginState, error) {
+	var st api.LoginState
+	err := c.dec(ctx, ipc.TypeLoginStatus, p, &st)
+	return st, err
+}
+
+// LoginCancel implements Daemon.
+func (c *DaemonClient) LoginCancel(ctx context.Context, p api.LoginCancelPayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeLoginCancel, p, &res)
+	return res, err
 }
 
 // Logout implements Daemon.

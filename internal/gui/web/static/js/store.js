@@ -62,3 +62,42 @@ export function connectionStatus(snapshot, hasState) {
   if (snapshot.status_error) return { word: "Status unavailable", tone: "bad" };
   return { word: "Loading...", tone: "muted" };
 }
+
+/**
+ * The account row's display name: the user label when one is set, else the
+ * email, else the opaque id. (The daemon's `accounts_list` rows always carry
+ * an email; the id is only a defensive fallback.)
+ */
+export function accountName(account) {
+  if (!account) return "";
+  const label = String(account.label || "").trim();
+  if (label) return label;
+  return account.email || account.id || "";
+}
+
+/** The account row's method word (`Browser`/`Password`). */
+export function accountMethodWord(method) {
+  switch (String(method || "").toLowerCase()) {
+    case "browser":
+      return "Browser";
+    case "password":
+      return "Password";
+    default:
+      return method ? String(method) : "";
+  }
+}
+
+/**
+ * Percent of the quota remaining, rounded to a whole percent, or null when
+ * the list snapshot has no complete quota. Values are clamped to 0–100: a
+ * stale daemon sample can report remaining > limit after a plan change, and
+ * the row must never print 118%.
+ */
+export function accountQuotaPercent(account) {
+  const quota = account && account.quota;
+  if (!quota || typeof quota.limit !== "number" || typeof quota.remaining !== "number" || quota.limit <= 0) {
+    return null;
+  }
+  const pct = Math.round((quota.remaining / quota.limit) * 100);
+  return Math.max(0, Math.min(100, pct));
+}

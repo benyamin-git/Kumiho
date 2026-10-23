@@ -105,3 +105,265 @@
 .acct__status[data-tone="bad"] {
   color: var(--loss);
 }
+
+/* --------------------------------------------------- v0.6.0 account rows */
+
+.acct__actions {
+  flex-wrap: wrap;
+}
+
+.acct__add {
+  margin-inline-start: auto;
+}
+
+.acct__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.acct__section-title {
+  font-size: var(--text-md);
+}
+
+.acct__section-hint,
+.acct__empty {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.acct__accounts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.acct__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  list-style: none;
+}
+
+.acct__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 64px;
+  padding: var(--space-3) var(--space-4);
+}
+
+.acct__row + .acct__row {
+  border-block-start: 1px solid var(--hairline);
+}
+
+.acct__row[data-active="true"] {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.acct__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.acct__name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct__email {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct__marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-block-start: var(--space-1);
+}
+
+.acct__mark {
+  min-height: 20px;
+  font-size: var(--text-xs);
+}
+
+.acct__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 2px;
+  text-align: end;
+}
+
+.acct__quota {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.acct__method {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* The row overflow menu: a native details disclosure (keyboard and focus
+ * behaviour for free), positioned under its trigger. */
+.acct__menu {
+  position: relative;
+}
+
+.acct__menu-summary {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-h);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-input);
+  color: var(--primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.acct__menu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.acct__menu-summary:hover {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.acct__menu-list {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-1));
+  inset-inline-end: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 180px;
+  padding: var(--space-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-container-2);
+}
+
+.acct__menu-action {
+  justify-content: flex-start;
+  inline-size: 100%;
+}
+
+.acct__menu-action[data-tone="bad"] {
+  color: var(--loss);
+}
+
+/* ----------------------------------------------------- browser waiting */
+
+.acct__waiting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.acct__waiting-title {
+  font-size: var(--text-md);
+}
+
+.acct__waiting-body {
+  color: var(--text-muted);
+}
+
+.acct__waiting-url {
+  padding: var(--space-2);
+  overflow-wrap: anywhere;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-input);
+  background: var(--background);
+  font-size: var(--text-xs);
+  user-select: all;
+}
+
+.acct__waiting-actions,
+.acct__form-actions {
+  display: flex;
+  justify-content: end;
+  gap: var(--space-2);
+}
+
+/* ------------------------------------------------------ password adding */
+
+.acct__addform {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.acct__addform-title {
+  font-size: var(--text-md);
+}
+
+.acct__addform-body {
+  color: var(--text-muted);
+}
+
+.acct__field {
+  max-inline-size: 360px;
+}
+
+.acct__form-status {
+  color: var(--loss);
+  font-size: var(--text-sm);
+}
+
+/* --------------------------------------------------------- rotation */
+
+.acct__rotation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.acct__rotation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.acct__rotation-title {
+  font-size: var(--text-md);
+}
+
+.acct__rotation-body {
+  max-inline-size: var(--content-measure);
+  color: var(--text-muted);
+}
+
+.acct__rotation .field {
+  max-inline-size: 180px;
+}
+
+.acct__toggle {
+  min-inline-size: 72px;
+}
+
+/* --------------------------------------------------------- add dialog */
+
+.acct__add-dialog .dialog__body,
+.acct__rename-dialog .dialog__body,
+.acct__remove-dialog .dialog__body {
+  margin-block-end: var(--space-3);
+}
+
+.acct__rename-dialog .field {
+  margin-block-start: var(--space-2);
+}
