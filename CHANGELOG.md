@@ -6,9 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2]
+## [0.5.2] - 2026-10-23
 
-Android: keep LAN connections alive across a VPN transition.
+Android: keep LAN connections alive across a VPN transition and rework
+Locations to one level.
 
 ### Added
 
@@ -20,6 +21,7 @@ Android: keep LAN connections alive across a VPN transition.
 
 ### Changed
 
+- Android builds default to version `0.5.2` (`versionCode` 502).
 - Android Locations is now one expandable level: countries open directly to
   their servers, the city name moves into each server row, the
   `X visible · Y total` helper and the separate `Test speed` action are gone,
@@ -40,8 +42,7 @@ Android: keep LAN connections alive across a VPN transition.
 ### Notes
 
 - Android-only: no engine, IPC, daemon, mobile-facade or desktop change; the
-  DataStore key is absent (Off) on existing installs. No version bump yet; the
-  next 0.5.2 change shares this section.
+  DataStore key is absent (Off) on existing installs.
 - The Android list now shows one expansion level and sorts by measured speed;
   the desktop trees keep country → city → server. Latency is session-local and
   never persisted.
@@ -358,8 +359,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[0.5.2]: https://github.com/benyamin-git/kumiho/compare/v0.5.1...HEAD
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.5.1...HEAD
+[0.5.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.5.2...HEAD
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
