@@ -105,28 +105,73 @@ Global CLI mechanics (apply to every subcommand):
   IPC (it uses the installed service/Services API instead).
 - Standalone.
 
-## `kumiho login` — interactive Firefox Accounts sign-in
-- Invocation: `kumiho login` (no flags). Daemon required (the daemon runs the
-  login state machine).
-- Interactive terminal prompts via `golang.org/x/term`:
+## `kumiho login` — Firefox Accounts sign-in
+- Invocation: `kumiho login [--browser|--password] [--email <email>]
+  [--no-open]`. Daemon required (the daemon runs the login state machine).
+- Method choice: with a terminal and no method flag, prompts browser/password
+  with the last successful method preselected (browser on first run). Without
+  a terminal it uses the password flow for script compatibility; pass
+  `--browser` explicitly to use the browser. `--email` skips the email prompt.
+- **Browser:** `login_start` returns a Mozilla URL and `login_id`. Unless
+  `--no-open`, the CLI opens it with the platform opener. It prints `Open
+  this URL to sign in:` followed by the URL, then `Waiting for the browser
+  sign-in to finish...`, and polls `login_status` every 2 seconds. The daemon
+  owns a one-shot loopback callback and five-minute deadline; the CLI cancels
+  the flow if its deadline expires and prints `timed out waiting for the
+  browser sign-in`. Success prints `Signed in as <email>.`.
+- **Password:** interactive prompts via `golang.org/x/term`:
   - `Email: ` (plain read)
   - `Password: ` (hidden read)
-  - `Code: ` (plain read) for the 2FA step
-- Flow: `login_email` → `login_password` → optional `login_2fa` → `done`.
-  - 2FA with `verification_method == "email"` (link flow): prints `Check your
-    email and open the sign-in link, then press Enter (leave the code empty).`
-    Otherwise prints `Enter the code from the email you received.`
-  - Success prints `Signed in as <email>.` to stdout, exit 0.
-  - Errors: `login: <message>` / `kumiho login: <err>` to stderr; loop bounded
-    at 12 attempts → `kumiho login: too many attempts`, exit 1.
+  - `Code: ` (plain read) for the 2FA/TOTP/unblock step
+  Flow: `login_email` → `login_password` → optional `login_2fa` → `done`.
+  2FA with `verification_method == "email"` (link flow) prints `Check your
+  email and open the sign-in link, then press Enter (leave the code empty).`
+  Otherwise prints `Enter the code from the email you received.`
+- Errors: `login: <message>` / `kumiho login: <err>` to stderr; password loop
+  bounded at 12 attempts → `kumiho login: too many attempts`, exit 1.
 - Exit codes: 0 / 1 / 2 (flag parse).
-- Interactivity: prompts, no editor launching.
+- Interactivity: prompts and browser opener; no editor launching.
+- Signing in while another account is already active adds or switches to the
+  new account on completion; there is no sign-out-first requirement. Only an
+  in-flight browser/password flow blocks a second start.
+
+## `kumiho accounts` — list and manage stored accounts
+- Invocation: `kumiho accounts [list]`.
+- Prints one line per account: active marker `*`, email plus label, method,
+  quota percent (`quota 42%`, `quota exhausted`, or `quota unknown`) and
+  `re-auth required` when set. Ends with
+  `Rotation: on|off (threshold N%)` and, when present, `Notice: <text>` and
+  `Error: <text>`.
+- `accounts add [--browser|--password] [--email <email>]
+  [--account <id|email>] [--no-open]` reuses the login flow; `--account`
+  re-authenticates an existing row and selects its stored method when no flag
+  is given. A terminal asks for the method; a script uses password. Adding a
+  new row prints `Added account <email>.`
+- `accounts use <id|email>` switches the active account. The daemon refuses
+  while the tunnel is up (`disconnect first; switching accounts needs the
+  tunnel off`).
+- `accounts remove <id|email> [--yes]` deletes one account after a y/N prompt.
+  Removing the active account selects the most recently used remaining one;
+  removing the last account clears the session.
+- `accounts rename <id|email> <label>` replaces the label. The label is
+  trimmed, control characters are rejected, an empty CLI label is rejected,
+  and the 64-character limit is enforced. Clients use the `accounts_update`
+  IPC command for the same operation; there an empty label resets it to the
+  email.
+- `accounts rotation on|off` toggles the opt-in before-connect rotation and
+  leaves the threshold unchanged.
+- `accounts threshold <1-50>` sets the percentage and preserves the current
+  on/off state.
+- There is no separate `accounts update` CLI verb; `rename` is the CLI face of
+  `accounts_update`.
+- Exit codes: 0 / 1 / 2 (usage or range).
 
 ## `kumiho logout`
 - Invocation: `kumiho logout`. Daemon required (`logout` request).
-- Clears stored tokens, disconnects the tunnel and returns to
-  UNAUTHENTICATED. Prints `Signed out.` on success. Failure
-  `kumiho logout: <err>`, exit 1.
+- Clears **all** stored accounts (and the legacy `tokens.json` rollback copy),
+  disconnects the tunnel and returns to UNAUTHENTICATED. Prints `Signed out.`
+  on success. Failure `kumiho logout: <err>`, exit 1. Removing one account
+  (`accounts remove`) is not a logout: the other accounts stay signed in.
 
 ## `kumiho connect [--to CODE|CITY|HOST] [--proxy-only] [--kill-switch=on|off|last]`
 - Invocation example: `kumiho connect --to DE --proxy-only --kill-switch=last`.
@@ -272,13 +317,19 @@ Keys:
   → `l login • o locations • r refresh • ? help • q quit`.
 
 ## Login screen
-Steps: `email` → `password` → `2fa` → done; the daemon state machine drives
-step transitions (`login_state.step`).
+With no flow in progress the screen first offers a method: `b browser • p
+password` (browser on first run, the last successful method afterwards). `b`
+calls `login_start` with method browser and shows the waiting card; `p` enters
+the password flow. Steps in the password flow are `email` → `password` → `2fa`
+→ done; the daemon state machine drives transitions (`login_state.step`).
 - Shows: title `Sign in to Firefox Accounts`; email (dimmed once past the
   email step), password masked as `•` per rune with a trailing `_` cursor,
   2FA prompt with method-specific instructions (email-link text or
   "Enter the code from the email you received."), `contacting Mozilla
   Accounts...` while busy, red error line, footer `enter continue • esc cancel`.
+- Browser waiting card: shows the URL, `press Esc to cancel` and a dim
+  reminder that the page continues automatically. Any `esc` cancels the
+  flow (`login_cancel`); the URL is opened once with the platform opener.
 - Keys: printable runes append to the active field (email / password / code);
   `backspace` edits; `enter` submits (validation: empty email →
   `email is required`; empty password → `password is required`; empty 2FA code
@@ -288,8 +339,8 @@ step transitions (`login_state.step`).
   `signed in as <email>`, password/code cleared, status refreshed. Server-side
   errors (wrong password, link not confirmed, challenge, …) show in the error
   line; the TUI imposes no attempt cap (the CLI caps at 12 submit rounds).
-- The daemon refuses a second sign-in while signed in: `already signed in;
-  log out first to switch accounts`.
+- Starting a sign-in while another account is active adds or switches to the
+  new account on completion; only an in-flight flow blocks a second start.
 
 ## Locations screen
 Shows a tree: countries (`Name (CODE) - N cities`, `REC` first), cities nested
@@ -418,22 +469,43 @@ Keys:
   buffer only while subscribed.
 
 ## Account screen
-Shows (after load; `loading account...` before):
-- not signed in → `not signed in — press l on the dashboard to sign in`
-- otherwise `email:`, `uid:` (if present), `subscribed: yes/no`, or
-  `subscribed: unknown (<error>)` when the online Guardian lookup failed
-  (local fields remain valid), `quota:` (`<remaining> remaining of <max>` /
-  `<remaining> remaining` / `<max> per period`), `bandwidth: limited` when
-  flagged, `token expiry:` (UTC RFC3339).
-- Confirmation line while pending: `sign out and clear the stored tokens?
-  (y/N)`.
-Keys:
-- `r` — refresh (online entitlement lookup; up to 35 s).
-- `x` — sign out (only when loaded and an email is present): asks the
-  confirmation; `y`/`Y` confirms and issues `logout`; any other key cancels;
-  on success the app returns to the Dashboard with notice `signed out`; the
-  daemon clears tokens and disconnects.
-- `esc` — back. Footer: `r refresh • x sign out • esc back • ? help • q quit`.
+Shows (after load; `loading accounts...` before):
+- the account list, one row per stored account: selection marker, `*` for the
+  active account, email (plus label when it differs), method, `N% left` or
+  `quota unknown`, and `needs sign-in` for a browser account requiring
+  re-authentication. Empty: `No accounts on this device.`
+- the live Guardian entitlement below the list: `email:`, `uid:` (if
+  present), `subscribed: yes/no`, or `subscribed: unknown (<error>)` when the
+  online lookup failed (local fields remain valid), `quota:` (`<remaining>
+  remaining of <max>` / `<remaining> remaining` / `<max> per period`),
+  `bandwidth: limited` when flagged, `token expiry:` (UTC RFC3339).
+- pending confirmations: `remove <email>? (y/N)` (or the active/only-account
+  wording) and `Sign out of every account? (y/N)` / `sign out and clear the
+  stored tokens? (y/N)`.
+
+Keys (idle):
+- `↑`/`↓` or `k`/`j` — select an account.
+- `u` — make the selected account active (`accounts_use`). Refused while the
+  tunnel is up.
+- `d` — remove the selected account after y/N. Removing the active account
+  selects the most recently used remaining one; removing the last signs out.
+- `a` — add an account through browser sign-in; `p` — add through the
+  password screen. Both open the browser/password flow with `adding` set.
+- `R` — re-authenticate the selected account through the browser.
+- `n` — rename the selected account (inline field; `enter` saves, `esc`
+  cancels).
+- `t` — toggle account rotation; `+`/`=` and `-`/`_` change the threshold by
+  one within 1–50. The change applies on the next connect.
+- `r` — refresh the list and online entitlement (up to 35 s).
+- `x` — sign out of **every** account: asks the confirmation; `y`/`Y` confirms
+  and issues `logout`; any other key cancels; on success the app returns to the
+  Dashboard with notice `signed out`; the daemon clears the account files and
+  disconnects. Per-account `d` is different: the others stay signed in.
+- `esc` — back. Footer: `↑/↓ select • u use • d remove • a add browser • p add
+  password • R sign in again • n rename` / `t rotation • +/- threshold • r
+  refresh • x sign out • esc back • ? help • q quit`.
+- Browser waiting card: shows `Open this URL in any browser:` and the URL;
+  `esc` cancels through `accounts_add_cancel`.
 
 ## Help overlay (`?`)
 Full-screen replacement listing:
@@ -558,22 +630,61 @@ Gap flags (daemon-side abilities beyond the IPC surface):
 # Cross-cutting abilities
 
 ## Auth / token handling
-- Login is always daemon-mediated (`login_email`/`login_password`/`login_2fa`);
-  clients never see the password derivation. CLI prompts interactively;
-  TUI/CLI/GUI can all drive the same state machine.
-- Steps: email → password → optional 2FA (`email` link method or emailed code)
-  → done. `login_state.error` carries friendly messages (wrong password,
-  link-not-confirmed, anti-bot challenge wording, timeouts).
-- Already signed in: `login_email` returns step `done` with error
-  `already signed in; log out first to switch accounts`.
-- Tokens live only daemon-side: `/var/lib/kumiho/tokens.json` mode 0600
-  (Linux) / `%ProgramData%\kumiho\tokens.json` (Windows), fields
-  `{access_token, refresh_token, expires_at, scope}`. Clients never read them.
-- Access token: treated invalid 60 s before expiry; refreshed automatically at
-  daemon start, before connect, on Guardian 401/403, and on Account lookups;
-  permanent refresh rejection clears the session (sign-in required again).
-- Logout (`logout`, TUI `x` with y/N confirmation, CLI `logout`) disconnects
-  and removes tokens; the daemon writes the empty email back to state.
+- Login is always daemon-mediated. The password flow uses
+  `login_email`/`login_password`/`login_2fa`; the browser flow uses
+  `login_start`, `login_status` and `login_cancel` (add/re-authenticate use
+  the `accounts_*` aliases). Clients never see a password derivation, and no
+  client stores tokens.
+- Password steps: email → password → optional 2FA (`email` link method or
+  emailed code/TOTP/unblock) → done. `login_state.error` carries friendly
+  messages (wrong password, link-not-confirmed, anti-bot challenge wording,
+  timeouts). The CLI caps a password attempt loop at 12.
+- Browser steps: `login_start` returns `{method, login_id, url}` with step
+  `browser`; clients open the URL and poll `login_status(login_id)` until
+  `done`/`error`, or call `login_cancel`. The daemon runs a PKCE flow with a
+  one-shot callback on a random `127.0.0.1` port and a five-minute deadline.
+  The URL carries no state or bearer secret, the verifier stays daemon-side,
+  and a completed flow consumes its callback. Captcha, TOTP and unblock codes
+  are handled by Mozilla's page, never automated by Kumiho.
+- Signing in while an account is active adds/switches on completion; there is
+  no sign-out-first requirement. Only another in-flight login is refused. The
+  active account cannot change while the tunnel is up (`accounts_use` returns
+  `disconnect first; switching accounts needs the tunnel off`).
+- `accounts.json` v2 is authoritative and lives beside the token path (mode
+  0600, atomic replace). It stores `version`, `active`, `last_method` and up
+  to five accounts with `id`, `email`, `label`, `method`,
+  `browser{token, expires_at, reauth_required}` or
+  `fxa{access_token, refresh_token, expires_at, scope}`, plus
+  `added_at`/`last_used_at` and an optional `last_error`. The FxA uid is not
+  persisted.
+- `tokens.json` is the legacy layout and is migrated to `accounts.json` on
+  first load. It remains a synchronized rollback copy of the active account's
+  `{access_token, refresh_token, expires_at, scope}` tokens (mode 0600) and is
+  rewritten on login, active switch, refresh and account removal. Old clients
+  can read it until logout. A malformed/missing `accounts.json` is reported
+  without overwriting `tokens.json`, so the previous release can recover.
+- Password tokens are treated invalid 60 s before expiry and refreshed
+  automatically at daemon start, before connect, on Guardian 401/403, and on
+  Account lookups; a permanent refresh rejection marks only that account for
+  sign-in. Browser tokens have no refresh token: an expired or 401/403 token
+  sets `browser.reauth_required`, keeps the account listed, and requires
+  `accounts add --account <id|email>` (or the row action) to replace it.
+- Rotation is opt-in (`account_rotation`, default off) and before connect
+  only: at or below `rotation_threshold` (default 10, clamp 1–50) the engine
+  picks the best eligible account, preferring higher remaining quota and then
+  the least recently used account. Expired, rejected and sign-in-required
+  accounts are skipped with a notice; if every account is exhausted or
+  unusable, connect fails without opening the tunnel. Rotation never switches
+  mid-session.
+- Quota polling while connected uses `quota_poll_minutes` (default 15); a
+  success updates Account/status, failures back off exponentially to a
+  30-minute cap, and a 429 presents zero remaining without disconnecting. A
+  rejected browser token stops the poller and sets the reauth flag.
+- Logout (`logout`, TUI `x` with y/N confirmation, CLI `logout`) clears **all**
+  accounts, removes `accounts.json` and `tokens.json`, disconnects and writes
+  the empty email back to state. `accounts_remove` removes one row only:
+  removing the active row selects the most recently used remaining account,
+  and removing the last row clears the session like logout.
 - Windows pipe access is the real auth boundary (LocalSystem, Administrators,
   local `kumiho` group, installer allowlist in `pipe-users`); Linux socket is
   0660 root/`kumiho` group. `shutdown` additionally requires admin/root.
@@ -585,7 +696,14 @@ Gap flags (daemon-side abilities beyond the IPC surface):
 `exit_check=true`, `doh_provider="automatic"`, `dns_upstream=""` (provider
 default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
 `exclude_cidrs=[]`, `allow_lan=true`, `mtu=8500`, `log_level="info"`,
-`redact_targets=true`, `quota_poll_minutes=15`.
+`redact_targets=true`, `quota_poll_minutes=15`, `account_rotation=false`,
+`rotation_threshold=10`, `tls_split="off"`, `http_proxy=false`,
+`http_proxy_port=8080`, `solve_challenges=true`,
+`keepalive_profile="standard"`.
+- `account_rotation` and `rotation_threshold` are edited from the CLI
+  (`accounts rotation`/`accounts threshold`), the TUI Account screen and the
+  GUI/Android Account cards; they are not TUI Settings rows. The threshold is
+  clamped to 1–50 and the setting applies on the next connect.
 - Runtime edits from CLI/TUI are persisted as **overrides** in
   `state.json` (`/var/lib/kumiho/state.json` /
   `%ProgramData%\kumiho\state.json`) via `settings_set`; `reset` removes one
@@ -727,8 +845,15 @@ default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
 - `kumiho cleanup`/daemon teardown: system networking state (routes, policy
   rules, nft tables, resolved link config, Windows adapter/routes/WFP filters)
   — outside both the daemon and IPC.
-- Daemon-owned (for reference): `tokens.json`, `state.json`, `config.toml`
+- Daemon-owned (for reference): `accounts.json` (v2 account store),
+  `tokens.json` (synchronized rollback copy of the active account; migrated
+  from legacy installs and removed on logout), `state.json`, `config.toml`
   (read-only), log sink, control socket/pipe, `pipe-users` (installer).
+  `accounts.json` and `tokens.json` are rewritten atomically with 0600 on
+  Unix; on Windows the `%ProgramData%\kumiho` ACL is the boundary. The
+  Android app uses `noBackupFilesDir/accounts.json` and `tokens.json`.
+- API clients (GUI/Android): `gui.toml` is Windows GUI-only; Android owns its
+  DataStore preferences and split-tunneling file. Neither stores passwords.
 - Windows GUI (existing, outside CLI/TUI scope): `%APPDATA%\kumiho\gui.toml`
   (theme, accent, geometry, autostart, onboarding), log exports under
   `%LOCALAPPDATA%\kumiho\logs`.

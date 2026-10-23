@@ -97,13 +97,14 @@ disabled **Continue** so it is always visible.
    local-proxy warning. Tick *I understand what Kumiho routes…* to enable
    **Continue**. The tick is not persisted; quitting before finishing starts
    the wizard here again.
-2. **Sign in.** Enter the Firefox Account email, then the password, then a
-   verification code if Firefox Accounts asks for one. If Firefox Accounts
-   sends a confirmation link instead, the app waits and re-checks every three
-   seconds while the step is open; **Re-check** polls immediately. This is a
-   native sign-in with no browser hand-off — which also means an interactive
-   captcha cannot be completed in the app (see [Limitations](#limitations)).
-   Errors appear inline and the form stays usable.
+2. **Sign in.** Choose **Continue in browser** (the default) or **Use
+   password**. Browser sign-in opens Mozilla's Firefox Accounts page in a
+   Custom Tab; complete captcha, password, TOTP or unblock there and return to
+   Kumiho, which polls the daemon-owned flow and finishes automatically. The
+   password choice stays native: email, password, then a verification code if
+   Firefox Accounts asks for one. For an email-link 2FA, the app waits and
+   re-checks every three seconds while the step is open; **Re-check** polls
+   immediately. Errors appear inline and the form stays usable.
 3. **Permissions.** **Allow VPN** opens Android's VPN consent dialog;
    **Allow notifications** requests `POST_NOTIFICATIONS` on Android 13+ and
    otherwise shows the current state. Both are optional here: denying either
@@ -215,8 +216,8 @@ marked, skipped by Ping all and not selectable.
 ## Settings
 
 Settings has four groups. The catalog is the desktop engine's settings, one
-row per key, plus two Android-owned read-only rows; there are **19 catalog
-rows** (17 engine settings and the 2 Android-owned Always-on/lockdown rows).
+row per key, plus two Android-owned read-only rows; there are **21 catalog
+rows** (19 engine settings and the 2 Android-owned Always-on/lockdown rows).
 The Kumiho app group also has the Split tunneling shortcut and the app-owned
 Keep connections outside the tunnel setting.
 
@@ -240,7 +241,7 @@ Keep connections outside the tunnel setting.
   or disconnects. Normal traffic still uses the tunnel. Android lockdown
   overrides it, and it applies on the next connect.
 
-### Connection (7 engine rows)
+### Connection (9 engine rows)
 
 | Row | Values | Default | Applies |
 |---|---|---|---|
@@ -251,6 +252,8 @@ Keep connections outside the tunnel setting.
 | `dns_upstream` | resolver IP | empty (provider default) | next connect |
 | `allow_lan` | on/off | on | next connect |
 | `quota_poll_minutes` | 1–1440 | 15 | next connect |
+| `account_rotation` | on/off | off | next connect |
+| `rotation_threshold` | 1–50 | 10 | next connect; disabled while rotation is off |
 
 `allow_lan` bypasses the tunnel for `10.0.0.0/8`, `172.16.0.0/12`,
 `192.168.0.0/16`, `169.254.0.0/16` and `224.0.0.0/4`. The tunnel DNS address
@@ -458,13 +461,30 @@ proxies start and stop with the session.
 
 ## Account
 
-**Account** shows the live Guardian entitlement: email, UID, subscription,
-quota remaining and limit, bandwidth (limited or unlimited) and token expiry.
-**Refresh** re-reads it with a 35-second timeout; on failure the last known
-fields stay visible with a notice. **Sign out** asks for confirmation, clears
-the tokens, disconnects the tunnel and leaves you on Account in the signed-out
-state, where the same native sign-in pane lets you sign back in. Sign-out
-never touches your Firefox Account itself.
+**Account** shows up to five accounts and the live Guardian entitlement for
+the active one. Each row carries the label/email, method, active marker,
+quota percent and a re-authentication warning. Run actions from the row
+overflow menu: **Use**, **Re-authenticate** (browser), **Rename** and
+**Remove**. **Add** offers browser sign-in (the default) or the password
+pane. When the browser opens, the waiting card offers **Open again** and
+**Cancel**; completing the flow updates the list automatically. Removing one
+account leaves the others signed in; removing the active one selects the most
+recently used remaining account, and removing the last account is a full sign
+out.
+
+The **Account rotation** card controls the same `account_rotation` and
+`rotation_threshold` settings mirrored in Settings → Connection. Rotation is
+off by default, runs before the next connect and never mid-session; the
+threshold is 1–50% (default 10) and is disabled while rotation is off.
+Threshold edits are debounced and saved through `accounts_set_rotation`.
+
+The entitlement card shows email, UID, subscription, quota remaining and
+limit, bandwidth (limited or unlimited) and token expiry. **Refresh** re-reads
+it with a 35-second timeout; on failure the last known fields stay visible
+with a notice. **Sign out** asks for confirmation, clears every account and
+the token files, disconnects the tunnel and leaves you on Account in the
+signed-out state, where the browser/password sign-in pane lets you sign back
+in. Sign-out never touches your Firefox Account itself.
 
 ## Logs
 
@@ -511,11 +531,17 @@ the shortcuts are the only writes, and they open the system page for you.
   Kumiho developers. The only network calls are the engine's Firefox
   Accounts/Guardian/server-list/DoH traffic and the one GitHub update check you
   trigger.
-- **Tokens** are written to the app's no-backup storage
-  (`noBackupFilesDir/tokens.json`), and Android backup and device transfer are
-  disabled for the app (`allowBackup=false`, `fullBackupContent=false`,
-  extraction rules excluding every domain). Passwords and verification codes
-  are held only for the request that uses them and are not stored.
+- **Account state and tokens** are written to the app's no-backup storage
+  (`noBackupFilesDir/accounts.json`, plus `tokens.json` as the synchronized
+  rollback copy), and Android backup and device transfer are disabled for the
+  app (`allowBackup=false`, `fullBackupContent=false`, extraction rules
+  excluding every domain). Passwords and verification codes are held only for
+  the request that uses them and are not stored. The browser flow never gives
+  the app your Mozilla password.
+- **Loopback cleartext** is allowed only for `127.0.0.1` and `localhost` via
+  `res/xml/network_security_config.xml`, because the daemon-owned browser
+  callback is a local HTTP URL. Global cleartext traffic stays off; no remote
+  HTTP endpoint is permitted.
 - **Settings, the server list and logs** are private app files. A log leaves
   the phone only when you choose **Share**.
 - **Crashes** are written to `filesDir/crash.log` (capped at 64 KiB, no tokens
@@ -530,7 +556,9 @@ the shortcuts are the only writes, and they open the system page for you.
 - **Android Private DNS** is diagnosed, not changed. Diagnostics reports the
   mode and the VPN link's DNS; Kumiho does not silently switch resolvers or
   fall back to plaintext DNS. See the troubleshooting section.
-- **No browser fallback and no captcha** support; see Limitations.
+- **Browser sign-in is available** for interactive captcha, TOTP and unblock
+  codes. The native password flow still cannot solve a captcha; it says so and
+  leaves the choice available.
 
 ## Troubleshooting
 
@@ -628,11 +656,12 @@ tunneling and route exclusions.
 
 ### The sign-in fails with a captcha
 
-Firefox Accounts sometimes presents an interactive captcha. The engine solves
-the Fastly proof-of-work/PAT/clientmetrics challenges automatically but cannot
-solve a captcha, and v1 has no browser fallback. The error names the
-limitation. Sign in from a network/account state where the challenge is not
-presented, or use the desktop client to confirm the account, then retry.
+Firefox Accounts sometimes presents an interactive captcha. The native
+password flow solves the Fastly proof-of-work/PAT/clientmetrics challenges but
+cannot solve a captcha. Cancel it and choose **Continue in browser**; Mozilla's
+page in the Custom Tab can complete the captcha, and the app picks up the
+finished flow. If the browser cannot open, check that a browser is installed
+and that Kumiho is allowed to open links.
 
 ### Uninstalling and removing state
 
@@ -654,8 +683,6 @@ daemon or your Firefox Account.
 - **English-only** UI (logical start/end layout, but no translations).
 - **No home-screen widget and no launcher long-press shortcuts**; the Quick
   Settings tile is the fast path.
-- **No browser sign-in and no captcha solving.** Firefox Accounts is native
-  only.
 - **No auto-update and no in-app APK install.** The update check only opens
   the release page.
 - **Sideload only** — no Play/F-Droid distribution, so no store update
@@ -683,13 +710,14 @@ sign-off has happened.
 | Desktop / CLI ability | Android equivalent |
 |---|---|
 | Setup wizard | Four-step setup: consent, sign-in, permissions, Always-on |
-| FxA email/password/2FA/email link | Native Compose sign-in over the same engine state machine |
-| Logout | Account confirmation, `logout`, stays on Account |
+| FxA browser sign-in (captcha/TOTP/unblock) and password fallback | Custom Tabs browser flow plus native Compose password/2FA over the same engine |
+| Multiple accounts, labels, rotation and quota | Account list/add/rename/remove/re-auth plus the rotation card and Settings mirror |
+| Logout | Account confirmation, `logout`, clears every account and stays on Account |
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
 | Locations tree, refresh, Ping all, Expand all | Locations one-level list, live filter, speed order, 24-way ping |
-| 19 settings rows, overrides/reset | Settings groups with the same 19 rows, override chips and Reset |
+| Desktop runtime settings, overrides/reset | Settings groups with 19 engine rows and the 2 Android-owned rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
 | Account entitlement and sign-out | Account screen |
 | Logs: 2000 lines, filter/follow/search/clear/export | Logs screen, share sheet and a log file |

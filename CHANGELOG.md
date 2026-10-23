@@ -6,6 +6,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+v0.6.0: browser sign-in, multiple accounts, rotation and quota polling across
+the daemon, CLI, TUI, Windows GUI and Android.
+
+### Added
+
+- **Browser sign-in** on Linux, Windows and Android: Mozilla's Firefox Accounts
+  page handles captcha, TOTP and unblock codes, then returns through a one-shot
+  loopback PKCE callback. `kumiho login --browser [--no-open]` supports headless
+  shells; the CLI, TUI, GUI and Android app poll the daemon-owned flow.
+- **Password fallback** with email 2FA, TOTP and unblock codes, including on a
+  headless terminal. Passwords are never stored.
+- **Up to five accounts** with labels, an active marker, method, quota and a
+  durable browser re-authentication warning. The CLI (`kumiho accounts`), TUI
+  Account screen, Windows GUI and Android app can add, use, rename, remove and
+  re-authenticate accounts; the `accounts_update` IPC command exposes labels to
+  clients.
+- **Account rotation** (`account_rotation`, opt-in, off by default): before
+  connect, an active account at or below `rotation_threshold` (default 10%,
+  range 1–50) is replaced by the best eligible account, preferring higher
+  remaining quota and then the least recently used one. Expired or
+  sign-in-required accounts are skipped with a notice; connect fails only when
+  every account is unusable. Rotation never runs mid-session.
+- **Quota polling** while connected at `quota_poll_minutes` (default 15), with
+  exponential backoff to a 30-minute cap and no tunnel teardown on failure.
+- **`accounts.json` v2** stores the account set, labels, active id and last
+  method atomically (0600 on Unix, the protected data directory on Windows).
+  Legacy `tokens.json` is migrated and kept as a synchronized rollback copy
+  until logout.
+- Android browser sign-in uses AndroidX Custom Tabs and a loopback-only
+  cleartext exception; the account list, re-authentication and rotation card
+  mirror the desktop clients, and the two rotation settings appear in
+  Settings → Connection.
+
+### Changed
+
+- Signing in while another account is active now adds or switches that account
+  on completion instead of refusing with "already signed in".
+- `quota_poll_minutes` now polls quota while connected instead of only being
+  read at connect.
+- Global logout clears every account and both token files; removing a single
+  account preserves the other sessions.
+- Android Settings grows to 21 catalog rows (19 engine rows plus the two
+  Android-owned read-only Always-on/lockdown rows).
+
+### Security
+
+- Browser sign-in uses PKCE, keeps the verifier in daemon memory, accepts one
+  callback on a random `127.0.0.1` port and times out after five minutes. The
+  callback URL carries no state or bearer token, and Kumiho never automates
+  captcha or stores a password.
+- Account rotation and browser sign-in remain a documented ToS gray area; see
+  `PLAN.md` §13.
+
 ## [0.5.2] - 2026-10-23
 
 Android: keep LAN connections alive across a VPN transition and rework

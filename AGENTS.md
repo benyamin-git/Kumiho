@@ -139,6 +139,16 @@ them locally for any change under `android/`, `mobile/` or
   also serves the DNS-only `UDP ASSOCIATE` relay, and `http_proxy=on` starts
   the local HTTP proxy alongside the tunnel; both start and stop with the
   tunnel and stay out of the `internal/platform` seam.
+- **v0.6.0 sign-in/accounts**: `internal/webauth` owns the browser PKCE flow —
+  a one-shot callback on a random `127.0.0.1` port, a five-minute deadline and
+  the Mozilla VPN login/verify exchange. The engine consumes it in
+  `internal/engine/browser.go`; clients only open the returned URL and poll
+  `login_status`/`accounts_add_status`. `internal/engine/accounts.go` owns
+  `accounts.json` v2 (five-account cap, labels, active id, `last_method`,
+  browser/FxA tokens) and migration from legacy `tokens.json`, which remains a
+  synchronized rollback copy until logout. `internal/engine/rotation.go` owns
+  opt-in before-connect quota rotation and the connected quota poller; it
+  never rotates mid-session.
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
@@ -149,9 +159,14 @@ them locally for any change under `android/`, `mobile/` or
   Kotlin `VpnService`, not by Go) and `unsupported/` stubs. Prefer additive
   interface methods over breaking the seam.
 - **IPC**: `internal/ipc` is control protocol v1 (newline-delimited JSON) and
-  must stay byte-compatible. `ipc.DefaultTransport()` selects the platform
-  transport (`default_unix.go` / `default_windows.go`): Unix socket vs a
-  `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is
+  must stay byte-compatible. v0.6.0 adds the additive command types
+  `login_start`/`login_status`/`login_cancel`,
+  `accounts_list`/`accounts_add_start`/`accounts_add_status`/
+  `accounts_add_cancel`, `accounts_remove`, `accounts_use`,
+  `accounts_update`, `accounts_set_rotation` and `accounts_info`; existing
+  envelopes and fields are unchanged. `ipc.DefaultTransport()` selects the
+  platform transport (`default_unix.go` / `default_windows.go`): Unix socket
+  vs a `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is
   administrators-only (Linux root parity).
 - **Windows GUI** (`internal/gui`, `cmd/kumiho-gui*`): a Windows-only
   (build-tagged `*_windows.go`) WebView2 shell + tray client, plus an untagged
@@ -176,7 +191,11 @@ them locally for any change under `android/`, `mobile/` or
   coordinator, notifications and the QS tile; `engine/` is the pure-JVM client
   over the facade; `ui/` is the shell and screens; `data/` holds DataStore
   preferences and split tunneling; `crash/` the local crash log;
-  `diagnostics/` the Android facts. The Android provider adopts the detached
+  `diagnostics/` the Android facts. Browser sign-in uses AndroidX Custom Tabs
+  from `ui/account/AccountBrowser.kt` and the same daemon-owned loopback
+  callback; `res/xml/network_security_config.xml` permits cleartext only for
+  `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android
+  provider adopts the detached
   fd, drops IPv6, leaves interface route/DNS work to Kotlin and answers the
   advertised tunnel DNS in userspace (apps cannot bind port 53).
   Protocol v1, `internal/ipc`, the daemon and the desktop clients are
@@ -190,7 +209,8 @@ them locally for any change under `android/`, `mobile/` or
   `internal/netcfg/exec_*.go` / `mark_*.go`. `kumiho cleanup` reaches
   `Cleanup`/`CleanupStale` through interfaces, not OS switches.
 - **Settings/paths**: `internal/settings` owns the per-OS config/state/tokens
-  layout plus the `KUMIHO_*` overrides. The Android app passes its own
+  layout plus the `KUMIHO_*` overrides; `accounts.json` lives beside
+  `tokens.json` (the legacy rollback copy). The Android app passes its own
   app-private paths (`filesDir`, `noBackupFilesDir`, `cacheDir`) through the
   facade.
 

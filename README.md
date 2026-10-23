@@ -6,8 +6,11 @@ Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
 kill switch, watchdog with edge rotation, runtime settings, log viewer, account
 screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
-install. v0.5.2 adds an opt-in Android setting that keeps LAN connections
-alive across a VPN transition and reworks Locations to one level. v0.5.1
+install. The v0.6.0 work in this tree (unreleased) adds browser and password
+sign-in, up to five accounts with labels, rotation and quota polling, and the
+same account surface in the CLI, TUI, Windows GUI and Android app. v0.5.2 adds
+an opt-in Android setting that keeps LAN connections alive across a VPN
+transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
 screen on Android, the Windows GUI and the TUI. v0.5.0 adds the
 Android client (sideload-only; physical acceptance is a partial pass with
@@ -92,6 +95,31 @@ before release:
   (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
+## What's new in v0.6.0 (unreleased)
+
+- **Browser sign-in** — `kumiho login --browser` (or the browser choice in the
+  TUI, Windows GUI and Android setup) opens Mozilla's page, where captcha,
+  TOTP and unblock codes are completed interactively, then returns through a
+  one-shot loopback callback. `--no-open` prints the URL for a headless shell.
+- **Password fallback** — email, password, email-link 2FA and TOTP/unblock
+  codes still work, including on a headless terminal. No password is stored.
+- **Up to five accounts** — the Account screen lists label/email, method,
+  active marker, re-auth state and quota; it can add, use, rename, remove and
+  re-authenticate without signing out the other accounts.
+- **Quota rotation** — `account_rotation` is opt-in and runs only before
+  connect. At or below `rotation_threshold` (default 10%) the engine picks the
+  best eligible account, skips exhausted or expired accounts with a notice, and
+  fails clearly only when none can connect.
+- **Quota polling** — while connected, `quota_poll_minutes` (default 15)
+  refreshes the active account's quota; failures back off to a 30-minute cap
+  and never disconnect the tunnel.
+- **Storage** — `accounts.json` v2 is authoritative; a legacy `tokens.json` is
+  migrated and kept as a synchronized rollback copy until logout. Both are
+  mode 0600 and written atomically.
+
+The v0.6.0 browser/rotation behavior is a documented ToS gray area; see
+[PLAN.md §13](PLAN.md#13-risks-and-mitigations) before using multiple accounts.
+
 ## What's new in v0.4.0
 
 v0.4.0 brings the tunnel in line with the later FoxyVPN releases. The
@@ -162,7 +190,7 @@ Linux (Ubuntu 24.04):
     make build                  # dist/kumiho-linux-amd64 (vendored deps)
     sudo ./install.sh           # binary, systemd unit, polkit rule, config
     sudo systemctl start kumiho
-    kumiho login                # Firefox Accounts (2FA aware)
+    kumiho login                # browser or password (2FA aware)
     kumiho doctor               # preflight diagnostics
     kumiho                      # TUI
 
@@ -172,7 +200,7 @@ Windows 11, from a release zip in an Administrator PowerShell:
 
 Then, in a new shell:
 
-    kumiho login                # Firefox Accounts (2FA aware)
+    kumiho login                # browser or password (2FA aware)
     kumiho doctor               # preflight diagnostics
     kumiho                      # TUI
 
@@ -199,8 +227,9 @@ for common issues.
 - Non-DNS UDP (QUIC/HTTP3, VoIP, games) is intentionally blocked inside the
   tunnel; applications must fall back to TCP.
 - The anti-bot solver handles the Fastly proof-of-work/PAT/clientmetrics
-  challenge, but an interactive captcha is not supported — it fails with a
-  clear error instead of hanging.
+  challenge. An interactive captcha cannot be solved by the password flow; use
+  browser sign-in, where Mozilla's page handles captcha, TOTP and unblock
+  codes. The password flow fails with a clear message instead of hanging.
 - TLS fragmentation is best-effort: `first-byte` and `sni` only split the
   first ClientHello on a connection, and malformed or SNI-less hellos pass
   through unsplit.
@@ -219,13 +248,15 @@ for common issues.
 - On Android, IPv6 is captured and blackholed rather than tunneled, so apps
   can wait for an `AAAA` attempt to fail before falling back to IPv4. The UI
   is English-only, there is no home-screen widget or launcher shortcut (the
-  Quick Settings tile covers fast access), no browser/captcha sign-in and no
-  auto-update. Always-on and lockdown are Android settings and some OEM
-  battery managers delay or refuse Always-on starts. Physical acceptance is a
-  partial pass with user-accepted exceptions; the signed `v0.5.2` release is
-  published. See [docs/android.md](docs/android.md#limitations).
-- Using an unofficial client is a ToS gray area (see PLAN.md §13); Kumiho
-  never sees or stores your Firefox password, only the resulting tokens.
+  Quick Settings tile covers fast access), and there is no auto-update.
+  Always-on and lockdown are Android settings and some OEM battery managers
+  delay or refuse Always-on starts. Physical acceptance is a partial pass with
+  user-accepted exceptions; the signed `v0.5.2` release is published. See
+  [docs/android.md](docs/android.md#limitations).
+- Using an unofficial client is a ToS gray area (see PLAN.md §13); automatic
+  account rotation is an additional gray area, so it is opt-in and off by
+  default. Kumiho never sees or stores your Firefox password, only the
+  resulting tokens.
 
 ## Build
 
@@ -268,8 +299,9 @@ GUI needs no extra file at run time: the WebView2 loader is embedded in
 
     kumiho                 # TUI (requires a running daemon)
     kumiho daemon          # run the daemon in the foreground
-    kumiho login           # prompt-driven Firefox Accounts sign-in (2FA aware)
-    kumiho logout
+    kumiho login           # browser or password Firefox Accounts sign-in
+    kumiho accounts        # list, add, use, remove, rename, rotate
+    kumiho logout          # clear every account; disconnects
     kumiho status [--json]
     kumiho doctor [--json]
     kumiho version
@@ -297,15 +329,17 @@ that runs per logged-in user. It has six screens:
   Test speed, Ping all and Expand all/Collapse all;
 - **Settings** — Light/Dark/OLED theme, six accents, start at login, plus the
   daemon's own settings with per-setting overrides;
-- **Account** — the entitlement and a tonal sign-out;
+- **Account** — the account list (add, use, rename, remove, re-authenticate),
+  the entitlement, a rotation switch and threshold, a browser-waiting card,
+  and a session-wide sign-out;
 - **Logs** — the daemon log with level filter, follow, search and export;
 - **Diagnostics** — `kumiho doctor` checks, service start/stop and cleanup
   (the last two via UAC).
 
-A five-step wizard (consent, sign-in, health check, autoconnect, finish) runs
-on first launch. Closing the window hides it to the tray rather than quitting;
-the tray keeps Connect/Disconnect, location, Show, Diagnostics and Quit, and
-the app starts hidden at login by default.
+A five-step wizard (consent, browser/password sign-in, health check,
+autoconnect, finish) runs on first launch. Closing the window hides it to the
+tray rather than quitting; the tray keeps Connect/Disconnect, location, Show,
+Diagnostics and Quit, and the app starts hidden at login by default.
 
 Install it with the normal Windows installer (see [Quick start](#quick-start)):
 `install.ps1` places the app beside the CLI, adds a Start Menu shortcut and a
@@ -341,15 +375,16 @@ notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
 newer on `arm64-v8a` or `armeabi-v7a`, and is distributed as an APK — there is
 no Play or F-Droid build.
 
-The app has a four-step setup (consent, native Firefox Accounts sign-in, VPN
-and notification permissions, Always-on guidance), then the same surfaces as
-the desktop clients: a dashboard with connect options and live status,
-locations with country flags, a search, one **Ping all** action that
-orders the list by measured speed, and Expand all/Collapse all, and all 19
-settings rows (the 17 engine settings plus the read-only Always-on/lockdown
-rows Android owns), with overrides and Reset. Split tunneling, account, logs
-with sharing, diagnostics and proxy-only mode (local SOCKS5/HTTP without a
-VPN interface) are all there too.
+The app has a four-step setup (consent, browser or password Firefox Accounts
+sign-in, VPN and notification permissions, Always-on guidance), then the same
+surfaces as the desktop clients: a dashboard with connect options and live
+status, locations with country flags, a search, one **Ping all** action that
+orders the list by measured speed, and Expand all/Collapse all, and all 21
+settings rows (19 engine settings plus the read-only Always-on/lockdown rows
+Android owns), with overrides and Reset. Split tunneling, the five-account
+list with browser re-authentication and rotation, logs with sharing, diagnostics
+and proxy-only mode (local SOCKS5/HTTP without a VPN interface) are all there
+too.
 
 > **Release status.** The app builds and its unit, lint, assemble and
 > emulator suites pass. Physical first-connect/DNS/browsing/exit-IP acceptance

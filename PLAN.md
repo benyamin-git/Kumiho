@@ -309,7 +309,9 @@ Screens: **Dashboard** (state, location, server host, uptime, rates, totals, quo
 ```
 kumiho                      # TUI (default)
 kumiho daemon               # run daemon (systemd)
-kumiho login                # prompt-driven login through the daemon
+kumiho login                # browser or password login through the daemon
+kumiho accounts             # list accounts; add/use/remove/rename/rotate
+kumiho logout               # clear every account; disconnect
 kumiho connect [--to CODE|CITY|HOST] [--proxy-only] [--kill-switch=on|off]
 kumiho disconnect
 kumiho status [--json]
@@ -330,7 +332,8 @@ kumiho version
 |---|---|
 | `/usr/local/bin/kumiho` | static binary |
 | `/etc/kumiho/config.toml` | admin defaults (optional; see schema) |
-| `/var/lib/kumiho/tokens.json` | `{access_token, refresh_token, expires_at, scope}` mode 0600 |
+| `/var/lib/kumiho/accounts.json` | v2 account store: active id, last method, up to five accounts with labels, method, browser token or FxA tokens, timestamps; mode 0600 |
+| `/var/lib/kumiho/tokens.json` | rollback copy of the active account's `{access_token, refresh_token, expires_at, scope}` tokens, mode 0600; legacy installs migrate from it and old clients can still read it until logout |
 | `/var/lib/kumiho/state.json` | persisted location, failure counts, kill-switch/autoconnect last states, runtime settings overrides |
 | `/var/lib/kumiho/serverlist.json` | disposable raw server-list cache (0600, atomic; written after a successful fetch, read only when a fetch fails) |
 | `/run/kumiho/control.sock` | IPC |
@@ -358,7 +361,9 @@ kumiho version
 | `mtu` | `8500` | TUN MTU, 576–65535, next connect |
 | `log_level` | `info` | `debug\|info\|warn\|error` |
 | `redact_targets` | `true` | redact hostnames in logs |
-| `quota_poll_minutes` | `15` | quota refresh interval while connected |
+| `quota_poll_minutes` | `15` | quota refresh interval while connected; failures back off to a 30-minute cap |
+| `account_rotation` | `false` | opt-in before-connect rotation; never mid-session |
+| `rotation_threshold` | `10` | switch eligible accounts at or below this percent left, 1–50 |
 | `tls_split` | `off` | `off\|first-byte\|sni`; next connect |
 | `http_proxy` | `false` | local HTTP proxy; next connect |
 | `http_proxy_port` | `8080` | 1–65535 |
@@ -369,6 +374,13 @@ The five v0.4.0 keys (`tls_split`, `http_proxy`, `http_proxy_port`,
 `solve_challenges`, `keepalive_profile`) are additive runtime overrides in
 `state.json` and optional additive `SettingsView` fields: no IPC v1 envelope,
 command or existing-field change.
+
+The v0.6.0 account work is additive at the protocol layer: new `login_*` and
+`accounts_*` command types plus optional `AccountsView`/`AccountsSummary`
+fields. `accounts.json` v2 is authoritative; a one-account install is migrated
+from `tokens.json`, which stays as a synchronized rollback copy until logout.
+The active account is never switched while the tunnel is up, and rotation is
+opt-in, before connect only.
 
 ---
 
@@ -463,6 +475,10 @@ M3 is deliberately testable before any routing work, so the risky M4 can be vali
 | MTU 8500 issues on some networks | 8500 is the default; `mtu` is configurable (576–65535, next connect) and 1500 is a tested fallback, not the default |
 | Clock skew breaks Hawk/JWT | doctor compares to Mozilla `Date`; JWT time-correction like the reference |
 | Kubernetes/VPS missing TUN | doctor fails early with remediation; proxy-only mode still works |
+| Browser sign-in and automatic account rotation are a ToS gray area: the flow mimics the official client, and rotating several accounts can multiply entitlement use | browser sign-in uses Mozilla's own page, so captcha/TOTP/unblock stay interactive and are never automated; rotation is opt-in and off by default, runs only before connect, switches at most once per connect, and is documented in README/PLAN/docs. Users bring their own accounts and accept the risk; no password is stored and no captcha-solving service is used |
+| A local process reaches the browser callback or steals a callback code | the callback listens on a random `127.0.0.1` port for one request, the PKCE verifier stays in daemon memory, the URL carries no bearer secret, the flow is one-shot and times out after five minutes |
+| `tokens.json` rollback copy is stale or confusing after migration | `accounts.json` is authoritative and written atomically (0600); `tokens.json` is rewritten from the active account on login/switch/refresh/remove and removed on logout. A malformed/missing `accounts.json` is reported without overwriting `tokens.json`, so an old release can still recover the last active session |
+| Rotation marks an account re-auth or leaves the tunnel on an exhausted account | expired browser tokens get a durable `browser.reauth_required` flag, password tokens refresh once, unusable accounts are skipped with a notice, and connect fails with a clear error only when every account is exhausted or needs sign-in |
 | Using an unofficial client is a ToS gray area | documented in README; users bring their own Firefox-account entitlement |
 
 ---

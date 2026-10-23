@@ -164,16 +164,44 @@ and
 
   Expect: `failed` 0.
 
-## 5. Login
+## 5. Login and accounts
 
-- [ ] Sign in (2FA aware) and check the session:
+- [ ] Sign in with the password fallback (2FA/TOTP aware) and check the
+      session:
 
-      kumiho login
+      kumiho login --password
       kumiho status
 
   Expect: `Signed in as <email>.` after the email/password/(2FA) flow, and a
   status block with `account:` and `token expires:`; `state:` is not
   `UNAUTHENTICATED`.
+
+- [ ] In a second elevated shell, start the browser flow without opening a
+      browser, copy the printed URL into Edge/Chrome, complete Mozilla's page
+      and return to the waiting command:
+
+      kumiho login --browser --no-open
+
+  Expect: `Open this URL to sign in:` plus a `https://vpn.mozilla.org/...`
+  URL, then `Waiting for the browser sign-in to finish...`; the command exits
+  0 with `Signed in as <email>.` after the callback. An expired or cancelled
+  flow exits 1 with a clear message; the callback is loopback-only and the
+  flow times out after five minutes. Re-running this for the same email
+  switches to that account rather than refusing because a session exists.
+
+- [ ] Inspect and modify the account surface:
+
+      kumiho accounts
+      kumiho accounts rotation on
+      kumiho accounts threshold 20
+      kumiho accounts rotation off
+      kumiho accounts rename <id|email> "Test account"
+
+  Expect: one `*` row with email, method, quota, and
+  `Rotation: on (threshold 20%)`; turning rotation off keeps the 20% value.
+  `rename` prints the new label and a second `kumiho accounts` shows it. The
+  daemon writes `%ProgramData%\kumiho\accounts.json` (ACL protected) and
+  keeps `tokens.json` as a synchronized rollback copy; both exist now.
 
 ## 6. Locations and ping
 
@@ -461,7 +489,8 @@ and
 - [ ] TUI parity: run `kumiho` and exercise every screen:
       `?` help; `space` disconnect (`state: IDLE`) and connect again;
       `o` locations, `p` ping, `/` filter, `enter` select a country;
-      `s` settings (cycle a value, `d` reset it); `a` account (email, quota);
+      `s` settings (cycle a value, `d` reset it); `a` account (list, `u` use,
+      `n` rename, `t` rotation, `r` refresh);
       `g` logs (`v` level, `/` search, `f` follow, `c` clear);
       `e` export; `q` quit.
 
@@ -528,14 +557,15 @@ and
       .\install.ps1 -Uninstall
 
   Expect: service stopped and deleted; `C:\Program Files\Kumiho` removed;
-  the machine PATH entry removed; `%ProgramData%\kumiho` (tokens/state)
-  kept. Verify:
+  the machine PATH entry removed; `%ProgramData%\kumiho` (accounts/tokens/
+  state) kept. Verify:
 
       Get-Service kumiho -ErrorAction SilentlyContinue       # nothing
       sc.exe query kumiho                                     # "FAILED 1060"
       Test-Path 'C:\Program Files\Kumiho'                     # False
       [Environment]::GetEnvironmentVariable('Path','Machine') -split ';' -contains 'C:\Program Files\Kumiho'   # False
-      Test-Path "$env:ProgramData\kumiho\tokens.json"         # True (kept)
+      Test-Path "$env:ProgramData\kumiho\accounts.json"       # True (kept)
+      Test-Path "$env:ProgramData\kumiho\tokens.json"         # True (kept rollback copy)
       Get-LocalGroup kumiho                                   # still exists
       Get-NetAdapter -Name foxy0 -ErrorAction SilentlyContinue   # nothing
       Get-NetRoute -AddressFamily IPv4 | Where-Object RouteMetric -eq 9999   # nothing
@@ -651,13 +681,17 @@ never persisted).
   Expect: heading `Welcome to Kumiho`; **Continue** is disabled until the
   **I understand** box is ticked.
 
-- [ ] Step 2 — sign in with the Firefox account that holds the VPN (email →
-      password → 2FA code, or the "check your email and open the Mozilla
-      sign-in link" page). If the daemon already holds a session, the step
-      shows `Signed in as <email>` with **Continue** and **Sign out**.
+- [ ] Step 2 — sign in with the Firefox account that holds the VPN. The page
+      offers **Continue in browser** (default) or **Use password**; the
+      browser choice opens Mozilla's page for captcha/password/TOTP, then
+      shows the waiting card with **Open again** and **Cancel**. The password
+      choice runs email → password → 2FA/email-link inline. If the daemon
+      already holds a session, the step shows `Signed in as <email>` with
+      **Continue** and **Sign out**.
 
-  Expect: a successful sign-in advances the step; the daemon stores the tokens
-  on this PC and never the password.
+  Expect: a successful sign-in advances the step; the browser flow returns
+  automatically through the loopback callback and the daemon stores the
+  tokens on this PC and never the password.
 
 - [ ] Step 3 — health check. It runs automatically on first show.
 
@@ -892,22 +926,36 @@ and a **Refresh** action.
       with `kumiho login` — the wizard does not reopen after setup is
       complete).
 
-  Expect: rows `Email`, `UID`, `Subscription` (`Yes`/`No`/`Unknown`), `Quota`
-  (e.g. `38.0 GiB remaining of 512.0 GiB`), `Bandwidth`
-  (`Limited`/`Unlimited`), `Token expiry`; a **Refresh** action.
+  Expect: an **Accounts** list with label/email, method, active marker, quota
+  percent and any re-auth warning; **Add account**; the **Account rotation**
+  card with an on/off switch and `Switch below (%)`; and the entitlement rows
+  `Email`, `UID`, `Subscription` (`Yes`/`No`/`Unknown`), `Quota` (e.g.
+  `38.0 GiB remaining of 512.0 GiB`), `Bandwidth` (`Limited`/`Unlimited`),
+  `Token expiry`; a **Refresh** action.
+
+- [ ] Exercise the list and rotation.
+
+  Expect: the row menu offers **Use**, **Rename**, **Re-authenticate** and
+  **Remove**; **Rename** updates the row and the shell's `kumiho accounts`
+  label. **Add account** defaults to browser sign-in and shows the waiting
+  card; **Use password** reveals the inline email/password/2FA form. Toggling
+  rotation saves immediately; `Switch below (%)` accepts 1–50 and is disabled
+  while rotation is off. Removing the only account signs out; removing one of
+  several leaves the others signed in.
 
 - [ ] Sign out.
 
   Expect: **Sign out** opens a confirmation dialog — *Sign out of Kumiho?* /
   *The stored sign-in tokens are cleared and the tunnel disconnects.* — with
   **Cancel** focused by default. Confirm; you **stay on the Account screen**:
-  the card disappears and the status line reads `Not signed in` (the wizard
-  does **not** reopen, since setup is already complete). To restore a session
-  for later steps, sign in again from a shell (the daemon session is shared):
+  every account and the entitlement card disappear and the status line reads
+  `Not signed in` (the wizard does **not** reopen, since setup is already
+  complete). To restore a session for later steps, sign in again from a shell
+  (the daemon session is shared):
 
       kumiho login
 
-  Expect: after **Refresh**, the Account card reappears.
+  Expect: after **Refresh**, the account list and entitlement card reappear.
 
 ### 16.10 Uninstall and residue
 
@@ -929,7 +977,8 @@ Quit the app first (tray → **Quit**): a running GUI blocks its own deletion.
       Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Kumiho.lnk"   # False
       Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Kumiho GUI' -ErrorAction SilentlyContinue   # nothing
       Get-Content "$env:ProgramData\kumiho\pipe-users" -ErrorAction SilentlyContinue   # absent, or no line for you
-      Test-Path "$env:ProgramData\kumiho\tokens.json"          # True (kept)
+      Test-Path "$env:ProgramData\kumiho\accounts.json"        # True (kept)
+      Test-Path "$env:ProgramData\kumiho\tokens.json"          # True (kept rollback copy)
       Get-LocalGroup kumiho                                    # still exists
 
   Expect: all as annotated — no service, GUI exe, shortcut, Run entry or pipe
@@ -1025,6 +1074,7 @@ the upgrade-specific lines below are then N/A — record that.
 - [ ] Note the state, then run the installer from the extracted v0.4.1
       folder (it is idempotent and upgrades over v0.3.0):
 
+      Test-Path "$env:ProgramData\kumiho\accounts.json"
       Test-Path "$env:ProgramData\kumiho\tokens.json"
       Get-ChildItem "$env:ProgramData\kumiho" -ErrorAction SilentlyContinue | Select-Object Name
       Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -1047,6 +1097,7 @@ the upgrade-specific lines below are then N/A — record that.
       Get-Service kumiho | Format-List Name,Status,StartType
       kumiho version
       kumiho doctor
+      Test-Path "$env:ProgramData\kumiho\accounts.json"
       Test-Path "$env:ProgramData\kumiho\tokens.json"
       $cfg = "$env:ProgramData\kumiho\config.toml"
       $pattern = 'tls_split|http_proxy|solve_challenges|keepalive_profile'
@@ -1474,12 +1525,13 @@ observed unless it was.
 
       kumiho logout
       kumiho status
+      Test-Path "$env:ProgramData\kumiho\accounts.json"
       Test-Path "$env:ProgramData\kumiho\tokens.json"
 
   Expect: `Signed out.`; the tunnel is disconnected; `state:` is
   `UNAUTHENTICATED`; no `account:`, `token expires:`, `pass expires:`,
-  `quota:`, `exit ip:`, `totals:` or `rates:` lines; `False` for
-  `tokens.json`.
+  `quota:`, `exit ip:`, `totals:` or `rates:` lines; `False` for both token
+  files (logout clears every account).
 
 - [ ] Check the GUI: `Account` shows `Not signed in` (the card is gone) and
       `Dashboard` carries no account, quota, exit IP, totals or rates from

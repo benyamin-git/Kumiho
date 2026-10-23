@@ -45,7 +45,7 @@ The installer is idempotent and does the following:
 Then, for the first run:
 
     sudo systemctl start kumiho
-    kumiho login        # Firefox Accounts, 2FA aware
+    kumiho login        # browser or password, 2FA/captcha aware
     kumiho doctor       # preflight diagnostics with remediation hints
 
 If **autoconnect** is enabled (the first-install default), the daemon brings
@@ -91,7 +91,7 @@ The installer is idempotent and does the following:
 
 Then, for the first run (in a new shell):
 
-    kumiho login        # Firefox Accounts, 2FA aware
+    kumiho login        # browser or password, 2FA/captcha aware
     kumiho doctor       # preflight diagnostics with remediation hints
 
 If **autoconnect** is enabled (the first-install default), the daemon brings

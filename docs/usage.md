@@ -12,8 +12,17 @@ app process. Its guide is [android.md](android.md).
 
     kumiho                      # TUI (default)
     kumiho daemon               # run the daemon in the foreground
-    kumiho login                # prompt-driven Firefox Accounts sign-in
-    kumiho logout               # clear tokens; disconnects
+    kumiho login                # browser or password Firefox Accounts sign-in
+    kumiho login --browser      # print/open the URL and poll until done
+    kumiho login --password     # email → password → 2FA/TOTP code
+    kumiho accounts             # list accounts and the active one
+    kumiho accounts add [--browser|--password] [--account <id|email>] [--no-open]
+    kumiho accounts use <id|email>
+    kumiho accounts remove <id|email> [--yes]
+    kumiho accounts rename <id|email> <label>
+    kumiho accounts rotation on|off
+    kumiho accounts threshold <1-50>
+    kumiho logout               # clear every account; disconnects
     kumiho connect [--to CODE|CITY|HOST] [--proxy-only] [--kill-switch=on|off|last]
     kumiho disconnect
     kumiho status [--json]      # state, location, quota, exit IP, rates
@@ -63,8 +72,78 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   level filter, `/` searches, `c` clears, `f` toggles follow, `e` exports the
   visible entries to `~/.local/state/kumiho/kumiho-logs-<timestamp>.log`
   (`%LOCALAPPDATA%\kumiho\logs` on Windows).
-- **Account** — live Guardian lookup: email, uid, subscription, quota,
-  limited-bandwidth flag, token expiry; `x` signs out (with confirmation).
+- **Account** — the five-account list (active marker, method, quota, re-auth
+  warning) above the live Guardian entitlement. `↑/↓` select, `u` use, `d`
+  remove, `a` add through the browser, `p` add with a password, `R` sign the
+  selected account in again (browser), `n` rename, `t` toggle rotation,
+  `+`/`-` change the threshold by one, `r` refresh and `x` sign out of every
+  account (with confirmation). The login screen offers `b` browser and `p`
+  password when no login is in progress.
+
+## Sign-in and accounts (v0.6.0)
+
+`kumiho login` with a terminal asks for a method the first time: **browser**
+(recommended) or **password**. It remembers the last successful method, but the
+browser remains the default until a password sign-in succeeds. Without a
+terminal, `kumiho login` uses the password flow for script compatibility; pass
+`--browser` explicitly to use the browser.
+
+**Browser sign-in** starts a daemon-owned PKCE flow and prints (and, unless
+`--no-open` is given, opens) a `https://vpn.mozilla.org/...` URL on a
+one-shot `127.0.0.1` callback. Complete captcha, password, TOTP or unblock
+challenges in the browser; Kumiho polls every two seconds and finishes when
+Mozilla redirects to the loopback callback. The callback carries no bearer
+token, the flow accepts one callback, and it expires after five minutes. The
+CLI cancels the daemon-side flow on timeout. `--no-open` is useful over SSH or
+in a headless shell: copy the URL to a browser on the same machine (the
+callback is loopback-only) and keep the command running.
+
+**Password sign-in** sends the password only in the request that uses it; it
+is never stored. Email-link 2FA and TOTP/unblock codes are supported. A real
+interactive captcha cannot be solved by this flow, so use browser sign-in if
+Firefox Accounts presents one.
+
+`kumiho accounts` prints a table with the active marker, label, email, method,
+quota and re-authentication state. `accounts add` uses the same browser or
+password flow (without `--browser`/`--password`, a terminal asks; a script
+uses the password flow). `--account <id|email>` re-authenticates an existing
+account and, for browser, replaces its stored Guardian token. `accounts use`
+switches the active account and refuses while the tunnel is up. `accounts
+remove` removes one account; when it was the active one the engine selects the
+most recently used remaining account. `accounts rename` replaces the label.
+There is no `accounts update` CLI verb, but clients use the `accounts_update`
+IPC command for the same label change; an empty label from a client resets it
+to the email. Up to five accounts can be stored; labels are preserved when the
+same email is signed in again.
+
+**Rotation** is off by default. `kumiho accounts rotation on` enables it and
+`kumiho accounts threshold <1-50>` sets the percentage (default 10).
+`accounts rotation on|off` leaves the threshold unchanged. Rotation evaluates
+accounts only at connect, never mid-session:
+
+- an account at or above the threshold keeps the active role;
+- otherwise the engine picks the highest known remaining quota, using the
+  least recently used account to break ties;
+- unknown quotas are tried after known eligible accounts;
+- expired browser accounts, rejected tokens and accounts needing sign-in are
+  skipped with a notice, and password tokens are refreshed once;
+- if every account is at zero quota or needs sign-in, connect fails with the
+  account names instead of opening a tunnel.
+
+The Account notice appears in the TUI/GUI/Android and in `accounts list` as
+the `notice` field. Rotation never changes accounts under live streams.
+
+**Quota polling** runs while connected at `quota_poll_minutes` (default 15,
+range 1–1440). A success updates the active account's quota in the status and
+Account snapshot. Failures back off exponentially from the configured interval
+to a 30-minute cap; they never disconnect the tunnel. A browser token rejected
+by Guardian gets the durable `browser.reauth_required` flag and stops that
+poller; re-authenticate the account to clear it. A 429 is shown as zero
+remaining and does not drop the connection.
+
+`kumiho logout` clears every account (browser and password), removes the
+token files and disconnects. Removing one account leaves the others signed in
+and does not sign out your Firefox Account itself.
 
 ## v0.4.0 settings
 
@@ -102,8 +181,9 @@ does not intercept TLS: `curl -x` reaches HTTPS through `CONNECT`.
 `clientmetrics` challenges for the Firefox Accounts and Guardian control
 planes: on a `406` it fetches the challenged page, answers the challenge,
 installs the returned cookies and retries the request. A captcha or an
-unknown challenge type cannot be solved and fails with a clear error.
-Disable it to get that immediate failure while diagnosing, or if a network
+unknown challenge type cannot be solved by this path and fails with a clear
+error; browser sign-in lets Mozilla's page handle the captcha. Disable the
+solver to get that immediate failure while diagnosing, or if a network
 operator objects to the solver traffic.
 
 **`keepalive_profile`** sets the keepalive ping timeout. The ping is sent
@@ -145,7 +225,8 @@ works through the local resolver, including TCP.
 | Path | Contents |
 |---|---|
 | `/etc/kumiho/config.toml` | admin defaults (all keys optional) |
-| `/var/lib/kumiho/tokens.json` | Firefox Accounts tokens (mode 0600) |
+| `/var/lib/kumiho/accounts.json` | v2 account store: active account, last method, up to five labeled browser/password accounts (mode 0600) |
+| `/var/lib/kumiho/tokens.json` | rollback copy of the active account's tokens (mode 0600); migrated from legacy installs and removed on logout |
 | `/var/lib/kumiho/state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides |
 | `/var/lib/kumiho/serverlist.json` | cached server list; only used when a fetch fails |
 | `/run/kumiho/control.sock` | IPC socket (0660, group `kumiho`) |
@@ -157,7 +238,8 @@ LocalSystem and Administrators) and the control endpoint is a named pipe:
 | Path | Contents |
 |---|---|
 | `%ProgramData%\kumiho\config.toml` | admin defaults (all keys optional) |
-| `%ProgramData%\kumiho\tokens.json` | Firefox Accounts tokens |
+| `%ProgramData%\kumiho\accounts.json` | v2 account store (active id, last method, up to five accounts) |
+| `%ProgramData%\kumiho\tokens.json` | rollback copy of the active account's tokens; removed on logout |
 | `%ProgramData%\kumiho\state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides |
 | `%ProgramData%\kumiho\serverlist.json` | cached server list; only used when a fetch fails |
 | `%ProgramData%\kumiho\logs\kumiho.log` | daemon log; at each service start a file larger than 5 MiB rotates to `kumiho.log.1` |
@@ -167,7 +249,8 @@ LocalSystem and Administrators) and the control endpoint is a named pipe:
 The installer puts `kumiho.exe` in `%ProgramFiles%\Kumiho` and adds that
 directory to the machine `PATH`, so `kumiho` works in new shells. The
 `KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS` and `KUMIHO_RUNTIME_DIR`
-overrides work the same as on Linux, except that on Windows
+overrides work the same as on Linux (`accounts.json` stays beside the path
+set by `KUMIHO_TOKENS`), except that on Windows
 `KUMIHO_RUNTIME_DIR` relocates only the daemon log directory (default
 `%ProgramData%\kumiho\logs`); the control endpoint stays the fixed
 `\\.\pipe\kumiho\control` named pipe.

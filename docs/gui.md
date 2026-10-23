@@ -75,10 +75,14 @@ the screens. The rail and header are hidden while it runs. Its steps are:
    Kumiho does* and *What to keep in mind*), then tick **I understand** to
    unlock **Continue**. The tick itself is not persisted: if you quit before
    finishing, the wizard starts at this step again next launch.
-2. **Sign in** — sign in with the Firefox account that holds the VPN. Kumiho
-   stores the resulting tokens on this PC and never your password. Depending
-   on the account, this is email → password → a 2FA code, or a "check your
-   email and open the Mozilla sign-in link" page; if tokens already exist, the
+2. **Sign in** — sign in with the Firefox account that holds the VPN. The
+   first page offers **Continue in browser** (the default) or **Use
+   password**, and remembers the last successful method. Browser sign-in opens
+   Mozilla's page for captcha, password, TOTP or unblock codes, then returns
+   through a loopback callback; the step shows a waiting card with **Open
+   again** and **Cancel** and checks every second. Password sign-in keeps the
+   in-app email → password → 2FA/email-link pages. Kumiho stores the resulting
+   tokens on this PC and never your password. If tokens already exist, the
    step offers to continue or to sign out first.
 3. **Health check** — the daemon's preflight (`kumiho doctor`). Fix anything
    marked `Failed` before connecting; warnings are usually fine.
@@ -210,19 +214,36 @@ while a change is in flight. Only one change runs at a time.
 
 ## Account
 
-**Reached:** the `Account` rail item, which has a **Refresh** action. The card
-shows the entitlement:
+**Reached:** the `Account` rail item. The screen has **Refresh**, **Add
+account** and a session-wide **Sign out** action, an account list, a browser
+waiting card, a rotation card and the entitlement card.
 
-`Email`, `UID`, `Subscription` (`Yes`/`No`/`Unknown`), `Quota` (for example
-`38.0 GiB remaining of 512.0 GiB`), `Bandwidth` (`Limited` or `Unlimited`) and
-`Token expiry`.
+The list shows up to five accounts: label/email, method (`browser` or
+`password`), active marker, percent quota left and a re-authentication warning.
+The row overflow menu offers **Use**, **Rename**, **Re-authenticate** (browser)
+and **Remove**. **Add account** opens a dialog with **Continue in browser**
+(the default) or **Use password**; the password form is the onboarding
+credential flow inline. A browser flow shows the waiting card, opens the URL
+once automatically, polls `accounts_add_status` every second and offers
+**Open again** and **Cancel**. Removing one account leaves the others signed
+in; removing the active one selects the most recently used remaining account.
 
-A tonal **Sign out** button opens a confirmation dialog — *Sign out of
+The **Account rotation** card has an on/off switch and a **Switch below (%)**
+field (1–50, default 10), saved immediately. Rotation is off by default and
+runs only before the next connect; changing it never reconnects. Exhausted or
+expired accounts are skipped with a notice; connect fails only when every
+account is unusable.
+
+The entitlement card shows `Email`, `UID`, `Subscription`
+(`Yes`/`No`/`Unknown`), `Quota` (for example `38.0 GiB remaining of 512.0
+GiB`), `Bandwidth` (`Limited` or `Unlimited`) and `Token expiry`.
+
+The tonal **Sign out** button opens a confirmation dialog — *Sign out of
 Kumiho?* / *The stored sign-in tokens are cleared and the tunnel disconnects.*
-— before it clears the tokens. Signing out does not reopen the wizard: you
-stay on the Account screen, its card disappears, and the status line reads
-`Not signed in`. The wizard only reappears for a daemon that still reports
-setup as incomplete.
+— before it clears **every** account and disconnects. Signing out does not
+reopen the wizard: you stay on the Account screen, the cards disappear, and
+the status line reads `Not signed in`. The wizard only reappears for a daemon
+that still reports setup as incomplete.
 
 ## Logs
 

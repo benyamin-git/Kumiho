@@ -388,8 +388,33 @@ the way).
 **Visible elements:**
 
 1. Title row: heading `Account`.
-2. Action row: tonal `Refresh` (110).
-3. **Card** (hidden until a successful load confirms a signed-in session),
+2. Action row: tonal `Refresh`, filled `Add account`, and the session-wide
+   tonal `Sign out` (hidden until a signed-in snapshot loads).
+3. **Accounts** section (hidden/empty until the snapshot loads): heading
+   `Accounts`, hint `Switch accounts here; Kumiho keeps up to five.`, and one
+   row per account. A row shows label/email, method, active marker, quota
+   percent and `re-auth required` when applicable. The row overflow menu
+   offers `Use`, `Rename`, `Re-authenticate` (browser) and `Remove`.
+4. **Browser waiting card** (one flow at a time): title `Waiting for browser
+   sign-in`, body `Finish signing in in your browser. Kumiho stores the
+   sign-in tokens, never your password.`, the URL, `Open again` and `Cancel`.
+   The URL is opened once automatically and polled every second.
+5. **Add account dialog**: title `Add account`, body explaining browser is
+   the default, buttons `Cancel`, `Use password` and filled **Continue in
+   browser**. **Use password** reveals the onboarding-style email → password
+   → 2FA form inline.
+6. **Rename dialog**: title `Rename account`, body `Choose a short label for
+   this account.`, label field, `Cancel` and `Save`.
+7. **Remove dialog**: title `Remove account`, body `Remove this account?` /
+   `The stored sign-in tokens for this account are removed. Other accounts
+   stay signed in.` If it is the last account, the daemon clears the session
+   and disconnects; removing the active account of several selects the most
+   recently used remaining one (shown by the next snapshot).
+8. **Account rotation card**: heading `Account rotation`, on/off switch,
+   body `Before connecting, switch to another account when the active one
+   has less quota left than the threshold.`, and `Switch below (%)` (1–50,
+   default 10). Saved immediately; disabled while rotation is off.
+9. **Card** (hidden until a successful load confirms a signed-in session),
    rows in order (label column 140):
    - `Email` — account email.
    - `UID` — account id.
@@ -399,15 +424,15 @@ the way).
    - `Bandwidth` — `Limited` (warn tone) or `Unlimited`.
    - `Token expiry` — RFC3339 UTC.
    Rows with empty values are hidden; an anonymous session shows no card.
-4. **`Sign out`** (tonal, 140) below the card, hidden until a signed-in
-   snapshot loads. Clicking opens the sign-out confirmation popup (below);
-   only after confirming does it clear the stored tokens and disconnect
-   (15 s timeout). While signing out the button is disabled.
-5. **Status line**, priority: `Signing out...` (neutral) → `Loading
-   account...` → error (`could not load the account: <err>` or `could not
-   sign out: <err>`, bad tone) → 10 s notice (`Signed out`, good tone) →
-   `Loading account...` (never loaded) → `Not signed in` → `Subscription
-   details unavailable: <err>` (warn; local rows stay valid) → empty.
+10. **`Sign out`** (tonal) clears **every** account's stored tokens and
+    disconnects after confirmation (15 s timeout). While signing out the
+    button is disabled. Per-account `Remove` is a different action and leaves
+    the other sessions intact.
+11. **Status line**, priority: `Signing out...` (neutral) → `Loading
+    account...` → error (`could not load the account: <err>` or `could not
+    sign out: <err>`, bad tone) → 10 s notice (`Signed out`, good tone) →
+    `Loading account...` (never loaded) → `Not signed in` → `Subscription
+    details unavailable: <err>` (warn; local rows stay valid) → empty.
 
 **Interactions:** `Refresh`/`Retry` re-fetches; `Sign out` confirms first.
 A successful sign-out reloads the snapshot (the card disappears and the
@@ -427,8 +452,9 @@ the focused button. The popup is modal (the main window is blocked while it
 is open); it is centred over the window, clamped to the monitor, and rounded
 on Windows 11 (square before).
 
-**Data sources:** local session facts + best-effort Guardian entitlement via
-the daemon; nothing persisted locally.
+**Data sources:** the daemon's `accounts_list` projection (accounts, labels,
+rotation, threshold, last method and notice) plus local session facts and the
+best-effort Guardian entitlement; nothing persisted locally.
 
 ---
 
@@ -654,14 +680,20 @@ Steps (exact strings):
   disables it again. The gate is enforced by the model too.
 - Action: `Continue`.
 
-### 2. `Sign in` (email → password → 2FA)
+### 2. `Sign in` (browser or email → password → 2FA)
 
-Three pages share the title `Sign in`:
+The step opens on the **email page** with the last successful method
+preselected (browser on first run). Body: `Sign in with the Firefox account
+that has the VPN. Continue in your browser (recommended), or use your account
+password.` Field label `Email`, cue `you@example.com`; a tonal method button
+reads `Use password` or `Continue in browser` and flips the choice. The
+browser is the primary/`Continue` action; the password form is the secondary
+path. `Back` returns to consent.
 
-- **Email page.** Body: `Sign in with the Firefox account that has the VPN.
-  Kumiho stores the sign-in tokens on this PC, never your password.`
-  Field label `Email`, cue `you@example.com`, normal text. `Back` returns to
-  consent; `Continue` submits (60 s).
+- **Browser waiting card.** Title/body describe completing sign-in in the
+  browser, the loopback URL, **Open again** and **Cancel**. The GUI opens each
+  unique URL once through `open_external` and polls `login_status` every
+  second. Cancelling clears the waiter.
 - **Password page.** Body: `Enter your Firefox account password.` Field
   label `Password`, masked input. `Back` returns to email. `Continue`
   submits.
@@ -693,8 +725,8 @@ instead:
   <err>`. While signing out the status reads `Signing out...`.
 
 **Login failures** show the daemon/transport error on the status line (bad
-tone), e.g. the daemon's `already signed in; log out first to switch
-accounts` refusal; a fresh authenticated status clears the stale error.
+tone), e.g. `cancel the browser sign-in first` or a rejected password; a fresh
+authenticated status clears the stale error.
 
 ### 3. `Health check`
 
@@ -941,9 +973,9 @@ covering a missing/stopped service.
   / unsubscribe 5 s / clear 5 s; onboarding login 60 s and autoconnect 15 s;
   setup retry 15 s.
 - Busy guards: connect/disconnect buttons, tray action, Settings mutation,
-  Account sign-out, Onboarding busy state, Diagnostics run, Test speed,
-  Setup Retry, Logs reconcile — at most one in flight, repeat clicks ignored
-  or buttons disabled.
+  Account sign-out/add/use/remove/rename/re-auth/rotation, Onboarding busy
+  state, Diagnostics run, Test speed, Setup Retry, Logs reconcile — at most
+  one in flight, repeat clicks ignored or buttons disabled.
 - State words: `Off` (IDLE/empty), `Connected`, `Proxy only`, `Connecting`,
   `Reconnecting`, `Waiting for network`, `Not signed in`, `Error` (FATAL).
   The header additionally has `Loading...`, `Status unavailable`,
@@ -952,9 +984,9 @@ covering a missing/stopped service.
   redials/heals and the GUI reflects it (docs advise waiting ~10 s during an
   outage; the kill switch may block traffic meanwhile). The Dashboard
   `Retry` only exists for a failed initial status load (non-unreachable).
-- Login is resilient: the daemon's "already signed in; log out first to
-  switch accounts" refusal never dead-ends the wizard (a refreshed
-  authenticated status clears the stale error and shows the signed-in page).
+- Login is resilient: signing in while another account is active adds or
+  switches accounts on completion; only an in-flight browser/password flow
+  blocks a second start.
 
 **Notices / toasts**
 
@@ -1006,8 +1038,16 @@ covering a missing/stopped service.
 - Online entitlement failure is non-fatal: subscription shows `Unknown`
   (warn) and the status line warns `Subscription details unavailable:
   <err>` while local rows stay.
-- Sign-out clears tokens + disconnects only after confirmation; success
-  reloads the snapshot.
+- The list comes from `accounts_list`; use/remove/rename/re-auth each refresh
+  the list and entitlement. Adding a browser account shows the waiting card,
+  auto-opens each unique URL once and polls every second; password add reuses
+  the onboarding form inline.
+- Rotation runs only before connect. The switch saves immediately; the
+  threshold field validates 1–50 and stays disabled while rotation is off.
+  Expired/exhausted accounts are skipped with the daemon's notice.
+- Sign-out clears every account's tokens + disconnects only after
+  confirmation; per-account remove leaves the other sessions in place.
+  Success reloads the snapshot.
 
 **Diagnostics behavior**
 

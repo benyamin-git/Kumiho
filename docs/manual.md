@@ -15,7 +15,7 @@ A screen opens. That's the whole app.
 ## First-time setup (only once)
 
     sudo systemctl start kumiho     # Linux: start the background service
-    kumiho login                    # enter your Firefox email + password (2FA too)
+    kumiho login                    # continue in the browser or use password
     kumiho doctor                   # checks everything and says what to fix
 
 On Windows, install first with `.\install.ps1` in an Administrator PowerShell
@@ -32,7 +32,7 @@ Done. From then on it starts by itself, even after a reboot.
 | `o` | pick a country/server (`enter` select, `p` test speed, `esc` back) |
 | `s` | settings (kill switch, autoconnect, DNS, MTU, TLS split, proxies, challenge solving, keepalive…) — `enter` change, `d` reset |
 | `g` | live logs |
-| `a` | your account: email, subscription, data left |
+| `a` | accounts and your subscription: email, data left, add/use/rename, rotation |
 | `?` | help |
 | `q` | quit |
 
@@ -42,6 +42,30 @@ you've been connected, and how much data you have left.
 The default MTU is 8500. You only need to change it if a network has trouble
 with large packets; a new value takes effect on the next connect.
 
+## Signing in and keeping several accounts
+
+`kumiho login` asks whether to sign in with your browser or with your
+password. Browser sign-in is the easy choice: a Mozilla page opens where you
+can enter the password, a code, or solve a captcha, and Kumiho finishes by
+itself when you come back. Nothing about your password is stored.
+
+On the Account screen (`a`):
+
+- `↑`/`↓` choose an account, `u` makes it active, `n` renames it, `d` removes
+  it.
+- `a` adds another account (up to five), `p` adds one with a password, and `R`
+  signs the selected account in again through the browser.
+- `t` turns **account rotation** on or off, and `+`/`-` sets the percentage.
+  When rotation is on, connecting switches away from the active account if it
+  has that percentage of data or less left. It only switches before
+  connecting, never during a connection.
+- `x` signs out of **all** accounts and disconnects. Removing one account
+  (`d`) leaves the others signed in.
+
+Your Firefox account is unchanged either way; signing out only clears
+Kumiho's stored sign-in. If you choose browser sign-in, the browser must run on
+the same computer because Mozilla returns to a local address.
+
 ## New settings in v0.4.0
 
 You don't need any of these to use Kumiho. They are for networks that get in
@@ -49,9 +73,10 @@ the way. Change them in settings (`s`); most take effect the next time you
 connect, while solving challenges takes effect immediately.
 
 - **Solve challenges** (on by default) — Kumiho answers Mozilla's automated
-  "are you a robot?" check by itself. If a real picture captcha appears it
-  still fails, with a clear message. Turn it off only when you are diagnosing
-  a login problem.
+  "are you a robot?" check by itself. If a real picture captcha appears, the
+  password sign-in stops with a clear message; use browser sign-in instead,
+  where you can solve it on Mozilla's page. Turn the solver off only when you
+  are diagnosing a login problem.
 - **TLS split** (`off`, `first-byte` or `sni`) — try `first-byte`, then
   `sni`, if a network blocks the normal connection. It is best effort and
   nothing is guaranteed.
