@@ -1,11 +1,14 @@
 package dev.benyamin.kumiho.data
 
 import dev.benyamin.kumiho.test.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -33,17 +36,37 @@ class AllowBypassTest {
 
     private class FakeStore(initial: Boolean = false) : BypassSettingsStore {
         val backing = MutableStateFlow(initial)
+        val noise = MutableStateFlow(0)
         val writes = mutableListOf<Boolean>()
         var collections = 0
         var failWrites = false
 
-        override val allowBypass: Flow<Boolean> = flow {
-            collections += 1
-            emitAll(backing)
-        }
+        /** Emits a duplicate allow-bypass value when an unrelated key changes. */
+        override val allowBypass: Flow<Boolean> =
+            combine(backing, noise) { value, _ -> value }
+                .onStart { collections += 1 }
 
         override suspend fun setAllowBypass(enabled: Boolean) {
             if (failWrites) error("the preferences store is full")
+            writes += enabled
+            backing.value = enabled
+        }
+    }
+
+    /** A store that holds the first write until the second one is requested. */
+    private class GatedStore(initial: Boolean = false) : BypassSettingsStore {
+        val backing = MutableStateFlow(initial)
+        val writes = mutableListOf<Boolean>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        private var gateUsed = false
+
+        override val allowBypass: Flow<Boolean> = backing
+
+        override suspend fun setAllowBypass(enabled: Boolean) {
+            if (!gateUsed) {
+                gateUsed = true
+                releaseFirst.await()
+            }
             writes += enabled
             backing.value = enabled
         }
@@ -114,6 +137,47 @@ class AllowBypassTest {
         }
 
     @Test
+    fun `a slow write cannot overwrite the last toggle`() =
+        runTest(mainRule.testDispatcher) {
+            val store = GatedStore()
+            val repository = repository(store, backgroundScope)
+            repository.start()
+            runCurrent()
+
+            repository.setEnabled(true)
+            repository.setEnabled(false)
+            assertFalse(repository.state.value.enabled)
+
+            runCurrent()
+            store.releaseFirst.complete(Unit)
+            runCurrent()
+
+            assertEquals(listOf(true, false), store.writes)
+            assertFalse(store.backing.value)
+            assertFalse(repository.state.value.enabled)
+        }
+
+    @Test
+    fun `an unrelated preferences emission does not clear a save error`() =
+        runTest(mainRule.testDispatcher) {
+            val store = FakeStore(initial = true)
+            val repository = repository(store, backgroundScope)
+            repository.start()
+            runCurrent()
+
+            store.failWrites = true
+            repository.setEnabled(false)
+            runCurrent()
+            assertEquals(BypassError.SAVE, repository.state.value.error)
+
+            store.noise.value += 1
+            runCurrent()
+
+            assertEquals(BypassError.SAVE, repository.state.value.error)
+            assertTrue(repository.state.value.enabled)
+        }
+
+    @Test
     fun `snapshot records the pending value until markApplied`() =
         runTest(mainRule.testDispatcher) {
             val store = FakeStore(initial = true)
@@ -178,6 +242,23 @@ class AllowBypassTest {
             repository.setEnabled(false)
             runCurrent()
             assertFalse(repository.state.value.enabled)
+            assertNull(repository.state.value.error)
+        }
+
+    @Test
+    fun `a write after a failed load recovers the stored value`() =
+        runTest(mainRule.testDispatcher) {
+            val store = BrokenStore()
+            val repository = repository(store, backgroundScope)
+            repository.start()
+            runCurrent()
+            assertEquals(BypassError.LOAD, repository.state.value.error)
+
+            repository.setEnabled(true)
+            runCurrent()
+
+            assertTrue(repository.state.value.enabled)
+            assertTrue(store.backing.value)
             assertNull(repository.state.value.error)
         }
 
