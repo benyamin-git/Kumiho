@@ -118,8 +118,9 @@ them locally for any change under `android/`, `mobile/` or
   creates the GitHub release. The signing material is removed by a step trap
   and an `always()` step. Prerelease tags are not published.
 - The Android CI job and release steps are implemented and were exercised by
-  the `v0.5.0` release on 2026-10-22 and the `v0.5.1` release on 2026-10-23;
-  both workflows published the desktop and Android assets. See
+  the `v0.5.0` release on 2026-10-22, the `v0.5.1` release on 2026-10-23 and
+  the `v0.5.2` release on 2026-10-23; all three workflows published the
+  desktop and Android assets. See
   [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
