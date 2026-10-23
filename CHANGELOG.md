@@ -25,7 +25,7 @@ the daemon, CLI, TUI, Windows GUI and Android.
   re-authenticate accounts; the `accounts_update` IPC command exposes labels to
   clients.
 - **Account rotation** (`account_rotation`, opt-in, off by default): before
-  connect, an active account at or below `rotation_threshold` (default 10%,
+  connect, an active account below `rotation_threshold` (default 10%,
   range 1–50) is replaced by the best eligible account, preferring higher
   remaining quota and then the least recently used one. Expired or
   sign-in-required accounts are skipped with a notice; connect fails only when

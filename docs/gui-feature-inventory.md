@@ -389,7 +389,7 @@ the way).
 
 1. Title row: heading `Account`.
 2. Action row: tonal `Refresh`, filled `Add account`, and the session-wide
-   tonal `Sign out` (hidden until a signed-in snapshot loads).
+   tonal `Sign out` (shown once a local session or a stored account exists).
 3. **Accounts** section (hidden/empty until the snapshot loads): heading
    `Accounts`, hint `Switch accounts here; Kumiho keeps up to five.`, and one
    row per account. A row shows label/email, method, active marker, quota
@@ -413,11 +413,12 @@ the way).
 8. **Account rotation card**: heading `Account rotation`, on/off switch,
    body `Before connecting, switch to another account when the active one
    has less quota left than the threshold.`, and `Switch below (%)` (1–50,
-   default 10). Saved immediately; disabled while rotation is off.
+   default 10). Saved immediately; disabled while the snapshot is loading or
+   another account action is in flight.
 9. **Card** (hidden until a successful load confirms a signed-in session),
    rows in order (label column 140):
    - `Email` — account email.
-   - `UID` — account id.
+   - `UID` — Firefox Account UID from Guardian.
    - `Subscription` — `Yes` (good), `No`, or `Unknown` (warn tone when the
      online entitlement lookup failed).
    - `Quota` — `X remaining of Y`, or `X remaining`, or `Y per period`.
@@ -1043,7 +1044,7 @@ covering a missing/stopped service.
   auto-opens each unique URL once and polls every second; password add reuses
   the onboarding form inline.
 - Rotation runs only before connect. The switch saves immediately; the
-  threshold field validates 1–50 and stays disabled while rotation is off.
+  threshold field validates 1–50 and is disabled while busy or loading.
   Expired/exhausted accounts are skipped with the daemon's notice.
 - Sign-out clears every account's tokens + disconnects only after
   confirmation; per-account remove leaves the other sessions in place.

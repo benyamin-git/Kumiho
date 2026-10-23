@@ -107,7 +107,7 @@ before release:
   active marker, re-auth state and quota; it can add, use, rename, remove and
   re-authenticate without signing out the other accounts.
 - **Quota rotation** — `account_rotation` is opt-in and runs only before
-  connect. At or below `rotation_threshold` (default 10%) the engine picks the
+  connect. Below `rotation_threshold` (default 10%) the engine picks the
   best eligible account, skips exhausted or expired accounts with a notice, and
   fails clearly only when none can connect.
 - **Quota polling** — while connected, `quota_poll_minutes` (default 15)

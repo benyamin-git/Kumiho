@@ -57,7 +57,7 @@ On the Account screen (`a`):
   signs the selected account in again through the browser.
 - `t` turns **account rotation** on or off, and `+`/`-` sets the percentage.
   When rotation is on, connecting switches away from the active account if it
-  has that percentage of data or less left. It only switches before
+  has less than that percentage of data left. It only switches before
   connecting, never during a connection.
 - `x` signs out of **all** accounts and disconnects. Removing one account
   (`d`) leaves the others signed in.

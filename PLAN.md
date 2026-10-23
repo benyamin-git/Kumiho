@@ -363,7 +363,7 @@ kumiho version
 | `redact_targets` | `true` | redact hostnames in logs |
 | `quota_poll_minutes` | `15` | quota refresh interval while connected; failures back off to a 30-minute cap |
 | `account_rotation` | `false` | opt-in before-connect rotation; never mid-session |
-| `rotation_threshold` | `10` | switch eligible accounts at or below this percent left, 1–50 |
+| `rotation_threshold` | `10` | switch eligible accounts below this percent left, 1–50 |
 | `tls_split` | `off` | `off\|first-byte\|sni`; next connect |
 | `http_proxy` | `false` | local HTTP proxy; next connect |
 | `http_proxy_port` | `8080` | 1–65535 |

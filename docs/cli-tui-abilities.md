@@ -150,7 +150,9 @@ Global CLI mechanics (apply to every subcommand):
 - `accounts use <id|email>` switches the active account. The daemon refuses
   while the tunnel is up (`disconnect first; switching accounts needs the
   tunnel off`).
-- `accounts remove <id|email> [--yes]` deletes one account after a y/N prompt.
+- `accounts remove <id|email> [--yes]` deletes one account. Removing the active
+  account while others remain asks for y/N confirmation (skip with `--yes`);
+  removing the last account signs out without prompting.
   Removing the active account selects the most recently used remaining one;
   removing the last account clears the session.
 - `accounts rename <id|email> <label>` replaces the label. The label is
@@ -670,7 +672,7 @@ Gap flags (daemon-side abilities beyond the IPC surface):
   sets `browser.reauth_required`, keeps the account listed, and requires
   `accounts add --account <id|email>` (or the row action) to replace it.
 - Rotation is opt-in (`account_rotation`, default off) and before connect
-  only: at or below `rotation_threshold` (default 10, clamp 1–50) the engine
+  only: below `rotation_threshold` (default 10, clamp 1–50) the engine
   picks the best eligible account, preferring higher remaining quota and then
   the least recently used account. Expired, rejected and sign-in-required
   accounts are skipped with a notice; if every account is exhausted or
