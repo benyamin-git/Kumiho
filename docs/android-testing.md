@@ -5,7 +5,7 @@ Gradle commands, APK verification, signing, release automation and the
 physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
-> tree: **438 JVM tests / 133 connected tests / lint 0 errors + 9 warnings**.
+> tree: **457 JVM tests / 139 connected tests / lint 0 errors + 8 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
 > Galaxy S25 FE; the sign-off is recorded below. The release automation is
 > implemented: `android-verify-apk.sh`, `android-release.sh`, the five Makefile
@@ -125,7 +125,7 @@ cache is warm. The unit/lint/assemble gate directly:
 
 Current expected result on the current tree:
 
-- **454 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **457 JVM tests, 0 failures, 0 errors, 0 skipped**;
 - **lint 0 errors, 8 warnings** — the pre-existing `OldTargetApi`,
   `UnusedAttribute`, `ObsoleteSdkInt` and three `UnusedResources`, plus two
   dependency-update notices;
