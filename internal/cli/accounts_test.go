@@ -77,6 +77,7 @@ func TestFormatQuota(t *testing.T) {
 		{name: "nil", q: nil, want: "quota unknown"},
 		{name: "missing limit", q: &api.Quota{Remaining: int64Ptr(10)}, want: "quota unknown"},
 		{name: "exhausted", q: &api.Quota{Limit: limit, Remaining: int64Ptr(0)}, want: "quota exhausted"},
+		{name: "exhausted without limit", q: &api.Quota{Remaining: int64Ptr(0)}, want: "quota exhausted"},
 		{name: "over limit", q: &api.Quota{Limit: limit, Remaining: int64Ptr(120)}, want: "quota 100%"},
 		{name: "normal", q: &api.Quota{Limit: limit, Remaining: int64Ptr(42)}, want: "quota 42%"},
 	}

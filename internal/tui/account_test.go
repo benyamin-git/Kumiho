@@ -131,6 +131,7 @@ func TestAccountQuota(t *testing.T) {
 	}{
 		{name: "nil", q: nil, want: "quota unknown"},
 		{name: "exhausted", q: &api.Quota{Limit: limit, Remaining: accountTestI64(0)}, want: "quota exhausted"},
+		{name: "exhausted without limit", q: &api.Quota{Remaining: accountTestI64(0)}, want: "quota exhausted"},
 		{name: "over limit", q: &api.Quota{Limit: limit, Remaining: accountTestI64(120)}, want: "100% left"},
 		{name: "normal", q: &api.Quota{Limit: limit, Remaining: accountTestI64(80)}, want: "80% left"},
 	}
