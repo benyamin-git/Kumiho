@@ -27,6 +27,24 @@ func compressWatchdog(t *testing.T) {
 	})
 }
 
+// stopWatchdogTunnel stops the connection and waits for its watchdog to
+// finish, so TempDir cleanup cannot race a final failure-state write.
+func stopWatchdogTunnel(t *testing.T, ctrl *Controller) {
+	t.Helper()
+	ctrl.stopTunnel("test cleanup")
+	ctrl.mu.Lock()
+	done := ctrl.watchdogDone
+	ctrl.mu.Unlock()
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("watchdog did not stop")
+	}
+}
+
 func waitFor(t *testing.T, timeout time.Duration, cond func() bool, msg string) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -72,7 +90,7 @@ func TestWatchdogRedialsDeadSession(t *testing.T) {
 		return second, nil
 	}
 	loginProxyOnly(t, ctrl)
-	defer ctrl.stopTunnel("test cleanup")
+	defer stopWatchdogTunnel(t, ctrl)
 
 	_ = first.Close() // the edge connection dies
 
@@ -107,7 +125,7 @@ func TestWatchdogRotatesEdgeAfterTwoFailures(t *testing.T) {
 		return nil, errors.New("edge unreachable")
 	}
 	loginProxyOnly(t, ctrl)
-	defer ctrl.stopTunnel("test cleanup")
+	defer stopWatchdogTunnel(t, ctrl)
 
 	_ = live.Close()
 
@@ -165,6 +183,13 @@ func TestWatchdogFatalStopsTunnel(t *testing.T) {
 	}, "watchdog did not stop on a fatal pass error")
 	if sess := ctrl.currentSession(); sess != nil {
 		t.Fatal("session not torn down on fatal stop")
+	}
+	if done := ctrl.watchdogDone; done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("watchdog did not stop after fatal error")
+		}
 	}
 }
 

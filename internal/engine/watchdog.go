@@ -27,7 +27,12 @@ var (
 // watchdog parks in WAITING_NETWORK (provider link events wake it), so an
 // outage does not burn redial attempts and edge rotations.
 func (c *Controller) startWatchdog(stop <-chan struct{}) {
+	done := make(chan struct{})
+	c.mu.Lock()
+	c.watchdogDone = done
+	c.mu.Unlock()
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(c.watchdogInterval)
 		defer ticker.Stop()
 

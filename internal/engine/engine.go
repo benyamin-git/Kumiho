@@ -152,6 +152,7 @@ type Controller struct {
 	ratesUp      float64
 	ratesDown    float64
 	metricsStop  chan struct{}
+	watchdogDone chan struct{}
 	proxyOnly    bool
 	cand         serverlist.Candidate
 	authRejected bool
