@@ -3,6 +3,7 @@ package mobile
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/doctor"
+	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
@@ -77,6 +79,36 @@ func requireErrorCode(t *testing.T, raw string, code string) {
 	if env.Error.Code != code {
 		t.Fatalf("code = %q, want %q (%s)", env.Error.Code, code, env.Error.Message)
 	}
+}
+
+func requireErrorMessage(t *testing.T, raw, want string) {
+	t.Helper()
+	var env struct {
+		Error *api.RemoteError `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		t.Fatalf("decode error envelope: %v\n%s", err, raw)
+	}
+	if env.Error == nil {
+		t.Fatalf("expected an error envelope, got %s", raw)
+	}
+	if env.Error.Message != want {
+		t.Fatalf("message = %q, want %q", env.Error.Message, want)
+	}
+}
+
+// browserAuthorizationState extracts the OAuth state from a login_start URL.
+func browserAuthorizationState(t *testing.T, raw string) string {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse browser URL %q: %v", raw, err)
+	}
+	state := u.Query().Get("state")
+	if state == "" {
+		t.Fatalf("browser URL has no state: %s", raw)
+	}
+	return state
 }
 
 func TestStatusCommandAndInitialStatus(t *testing.T) {
@@ -542,10 +574,35 @@ func TestMobileAccountCommands(t *testing.T) {
 		t.Fatalf("accounts_add_start state = %+v", add)
 	}
 
+	// A complete redirect URL is routed to the engine. This one has no code,
+	// so the engine rejects it before any network call and keeps the flow
+	// alive for another paste.
+	state := browserAuthorizationState(t, add.URL)
+	redirect := fxa.OAuthRedirectURI + "?state=" + url.QueryEscape(state)
+	out = mustCommand(t, "login_complete", map[string]any{
+		"login_id": add.LoginID, "redirect_url": redirect,
+	})
+	requireErrorCode(t, out, api.CodeBadRequest)
+	if !strings.Contains(out, "authorization code") {
+		t.Fatalf("login_complete error = %s, want a missing-code message", out)
+	}
 	out = mustCommand(t, "accounts_add_status", map[string]any{"login_id": add.LoginID})
 	if env := decodeEnvelope(t, out); env.Type != "login_state" {
 		t.Fatalf("accounts_add_status type = %q, want login_state", env.Type)
 	}
+	var afterBadPaste api.LoginState
+	decodeTestPayload(t, out, &afterBadPaste)
+	if afterBadPaste.Step != "browser" {
+		t.Fatalf("flow after a rejected redirect = %+v", afterBadPaste)
+	}
+
+	// The legacy code field is rejected with the stable full-URL message.
+	out = mustCommand(t, "login_complete", map[string]any{
+		"login_id": add.LoginID, "code": "legacy-code",
+	})
+	requireErrorCode(t, out, api.CodeBadRequest)
+	requireErrorMessage(t, out, "paste the complete redirect URL from the browser")
+
 	out = mustCommand(t, "accounts_add_cancel", map[string]any{"login_id": add.LoginID})
 	if env := decodeEnvelope(t, out); env.Type != "result" {
 		t.Fatalf("accounts_add_cancel type = %q, want result", env.Type)
@@ -564,6 +621,10 @@ func TestMobileAccountCommands(t *testing.T) {
 	if env := decodeEnvelope(t, out); env.Type != "login_state" {
 		t.Fatalf("login_status type = %q, want login_state", env.Type)
 	}
+	out = mustCommand(t, "login_complete", map[string]any{
+		"login_id": login.LoginID, "code": "legacy-code",
+	})
+	requireErrorCode(t, out, api.CodeBadRequest)
 	out = mustCommand(t, "login_cancel", map[string]any{"login_id": login.LoginID})
 	if env := decodeEnvelope(t, out); env.Type != "result" {
 		t.Fatalf("login_cancel type = %q, want result", env.Type)

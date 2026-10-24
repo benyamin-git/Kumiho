@@ -27,7 +27,6 @@ import (
 	"github.com/benyamin-git/kumiho/internal/socks"
 	"github.com/benyamin-git/kumiho/internal/tlsplit"
 	"github.com/benyamin-git/kumiho/internal/upstream"
-	"github.com/benyamin-git/kumiho/internal/webauth"
 )
 
 // State is the daemon connection state machine (PLAN.md §4.1). Only the
@@ -125,13 +124,11 @@ type Controller struct {
 	activeID       string
 	rotationNotice string
 	legacyNotice   string
-	// Browser sign-in is daemon-owned: the loopback callback, PKCE session and
-	// status polling all live here, never in a client.
-	browser         *browserLogin
-	browserBaseURL  string
-	browserTimeout  time.Duration
-	browserPlatform string
-	newBrowserFlow  func() *webauth.Flow
+	// Browser sign-in is daemon-owned: PKCE material, the exchanged tokens and
+	// status polling all live here, never in a client. The flow has no
+	// listener; clients hand back the full URN redirect URL.
+	browser        *browserLogin
+	browserTimeout time.Duration
 	// authGen fences network work that started under one account session
 	// from publishing into the next. It is bumped on every sign-in and
 	// sign-out, under mu.
@@ -198,9 +195,7 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		// keeps a stalled Guardian from holding up the whole connect.
 		rotationQuotaTimeout: 5 * time.Second,
 		exitCheckURL:         "https://www.cloudflare.com/cdn-cgi/trace",
-		browserBaseURL:       "https://vpn.mozilla.org",
-		browserTimeout:       5 * time.Minute,
-		browserPlatform:      plat.Name(),
+		browserTimeout:       10 * time.Minute,
 		dialUpstream: func(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
 			return upstream.Dial(ctx, opts)
 		},
@@ -213,16 +208,6 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		routeProbe:       plat.HasDefaultRoute,
 	}
 	c.guardian.UserAgent = ua
-	c.newBrowserFlow = func() *webauth.Flow {
-		return webauth.New(webauth.Config{
-			BaseURL:   c.browserBaseURL,
-			Platform:  c.browserPlatform,
-			UserAgent: c.userAgent,
-			HTTP:      c.httpClient,
-			Solver:    c.solver,
-			Timeout:   c.browserTimeout,
-		})
-	}
 	if ls, ok := c.nc.(netcfgLogfSetter); ok {
 		ls.SetLogf(ringLogf(ring))
 	}
@@ -741,6 +726,9 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 		email = target.Email
 	}
 	if c.browser != nil {
+		// A flow past its deadline must not block a fresh sign-in of either
+		// method even if no status poll has run since it expired.
+		c.expireBrowserLocked(c.browser)
 		if c.browser.active {
 			if method == MethodBrowser {
 				state := c.browser.state
@@ -783,15 +771,8 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 		}
 	}
 	if method == MethodBrowser {
-		flow := c.newBrowserFlow()
-		if flow == nil {
-			c.mu.Unlock()
-			return api.LoginState{Step: "error", Method: MethodBrowser, Error: "browser sign-in is not configured"}
-		}
-		ctx, cancel := context.WithCancel(context.Background())
-		session, err := flow.Start(ctx)
+		pkce, err := fxa.NewPKCE(c.fxa.Rand)
 		if err != nil {
-			cancel()
 			c.mu.Unlock()
 			return api.LoginState{
 				Step:   "error",
@@ -800,21 +781,40 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 				Error:  friendlyBrowserError(err),
 			}
 		}
+		loginID, err := newAccountID()
+		if err != nil {
+			c.mu.Unlock()
+			return api.LoginState{
+				Step:   "error",
+				Method: MethodBrowser,
+				Email:  email,
+				Error:  friendlyBrowserError(err),
+			}
+		}
+		// Re-authentication pins the stored account email and asks FxA to
+		// force that identity; adding an account only prefills a supplied
+		// email and lets the user change it.
+		forceAuth := false
+		if accountID != "" && target != nil {
+			if stored := strings.TrimSpace(target.Email); stored != "" {
+				email = stored
+				forceAuth = true
+			}
+		}
+		authorizationURL := c.fxa.AuthorizationURL(email, forceAuth, pkce.State, pkce.Challenge)
 		b := &browserLogin{
-			id:       session.ID,
-			session:  session,
-			state:    api.LoginState{Step: "browser", Method: MethodBrowser, URL: session.URL, LoginID: session.ID},
-			targetID: accountID,
-			active:   true,
-			cancel:   cancel,
-			done:     make(chan struct{}),
-			ctx:      ctx,
+			id:         loginID,
+			state:      api.LoginState{Step: "browser", Method: MethodBrowser, URL: authorizationURL, LoginID: loginID},
+			targetID:   accountID,
+			active:     true,
+			verifier:   pkce.Verifier,
+			oauthState: pkce.State,
+			created:    time.Now(),
+			gen:        c.authGen,
 		}
 		c.browser = b
-		gen := c.authGen
 		state := b.state
 		c.mu.Unlock()
-		go c.runBrowserLogin(b, gen)
 		return state
 	}
 	// Clearing the old password before replacing the pending state means an

@@ -107,6 +107,15 @@ type LoginStartPayload struct {
 	AccountID string `json:"account_id,omitempty"`
 }
 
+// LoginCompletePayload finishes a browser sign-in from the full URN redirect
+// URL. Code is the superseded raw-code field; the FxA flow rejects it and
+// requires RedirectURL.
+type LoginCompletePayload struct {
+	LoginID     string `json:"login_id,omitempty"`
+	RedirectURL string `json:"redirect_url,omitempty"`
+	Code        string `json:"code"`
+}
+
 // LoginStatusPayload polls a browser sign-in.
 type LoginStatusPayload struct {
 	LoginID string `json:"login_id"`

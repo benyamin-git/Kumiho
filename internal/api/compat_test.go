@@ -135,6 +135,19 @@ func TestAccountPayloadRoundTrips(t *testing.T) {
 			wantKeys: []string{"login_id"},
 		},
 		{
+			name: "login complete",
+			payload: LoginCompletePayload{
+				LoginID:     "login-1",
+				RedirectURL: "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=abc&state=def",
+			},
+			wantKeys: []string{"login_id", "redirect_url", "code"},
+		},
+		{
+			name:     "login complete legacy code",
+			payload:  LoginCompletePayload{LoginID: "login-1", Code: "legacy-code"},
+			wantKeys: []string{"login_id", "code"},
+		},
+		{
 			name:     "accounts remove",
 			payload:  AccountsRemovePayload{ID: "id-1"},
 			wantKeys: []string{"id"},

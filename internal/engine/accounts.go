@@ -89,14 +89,6 @@ func cloneTokens(t *fxa.Tokens) *fxa.Tokens {
 	return &c
 }
 
-func cloneBrowser(t *BrowserToken) *BrowserToken {
-	if t == nil {
-		return nil
-	}
-	c := *t
-	return &c
-}
-
 // legacyBrowserRemovalNotice is the one-time notice shown after accounts left
 // behind by the superseded opaque browser flow are removed.
 const legacyBrowserRemovalNotice = "Old browser sign-in removed. Add your Firefox account again."
@@ -252,12 +244,6 @@ func (f *accountsFile) upsert(a *Account) (*Account, error) {
 		}
 		if a.FxA != nil {
 			existing.FxA = cloneTokens(a.FxA)
-		}
-		// Transitional: the superseded opaque browser flow still writes a
-		// BrowserToken. Task 3 removes that flow and this legacy copy; new
-		// callers never set Browser.
-		if a.Method == MethodBrowser && a.Browser != nil {
-			existing.Browser = cloneBrowser(a.Browser)
 		}
 		if a.LastUsedAt.IsZero() {
 			existing.LastUsedAt = time.Now()

@@ -207,6 +207,24 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		f.pushStatus()
 		return encodeResponse("login_state", state)
 
+	case "login_complete":
+		var p api.LoginCompletePayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		if p.RedirectURL == "" && p.Code != "" {
+			return f.fail(badRequest("paste the complete redirect URL from the browser"))
+		}
+		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		defer cancel()
+		_ = actx
+		if err := f.ctrl.LoginComplete(p.LoginID, p.RedirectURL); err != nil {
+			f.pushStatus()
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
 	case "accounts_add_status", "login_status":
 		var p api.LoginStatusPayload
 		if err := decodePayload(req, &p); err != nil {

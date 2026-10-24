@@ -269,6 +269,24 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.LoginStart(p.Method, p.Email, p.AccountID))
 		h.broadcastStatus()
 
+	case ipc.TypeLoginComplete:
+		var p api.LoginCompletePayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		if p.RedirectURL == "" && p.Code != "" {
+			replyErr(api.CodeBadRequest, "paste the complete redirect URL from the browser")
+			return
+		}
+		if err := h.ctrl.LoginComplete(p.LoginID, p.RedirectURL); err != nil {
+			replyCtrlErr(err)
+			h.broadcastStatus()
+			return
+		}
+		replyOK()
+		h.broadcastStatus()
+
 	case ipc.TypeLoginStatus, ipc.TypeAccountsAddStatus:
 		var p api.LoginStatusPayload
 		if err := env.DecodePayload(&p); err != nil {
