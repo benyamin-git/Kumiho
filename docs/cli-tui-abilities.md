@@ -473,9 +473,9 @@ Keys:
 ## Account screen
 Shows (after load; `loading accounts...` before):
 - the account list, one row per stored account: selection marker, `*` for the
-  active account, email (plus label when it differs), method, `N% left` or
-  `quota unknown`, and `needs sign-in` for a browser account requiring
-  re-authentication. Empty: `No accounts on this device.`
+  active account, email (plus label when it differs), method, `N% left`,
+  `quota exhausted` or `quota unknown`, and `needs sign-in` for a browser
+  account requiring re-authentication. Empty: `No accounts on this device.`
 - the live Guardian entitlement below the list: `email:`, `uid:` (if
   present), `subscribed: yes/no`, or `subscribed: unknown (<error>)` when the
   online lookup failed (local fields remain valid), `quota:` (`<remaining>

@@ -5,7 +5,7 @@ Gradle commands, APK verification, signing, release automation and the
 physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
-> tree: **457 JVM tests / 139 connected tests / lint 0 errors + 8 warnings**.
+> tree: **479 JVM tests / 145 connected tests / lint 0 errors + 15 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
 > Galaxy S25 FE; the sign-off is recorded below. The release automation is
 > implemented: `android-verify-apk.sh`, `android-release.sh`, the five Makefile
@@ -126,10 +126,10 @@ cache is warm. The unit/lint/assemble gate directly:
 
 Current expected result on the current tree:
 
-- **457 JVM tests, 0 failures, 0 errors, 0 skipped**;
-- **lint 0 errors, 8 warnings** — the pre-existing `OldTargetApi`,
-  `UnusedAttribute`, `ObsoleteSdkInt` and three `UnusedResources`, plus two
-  dependency-update notices;
+- **479 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **lint 0 errors, 15 warnings** — the pre-existing `OldTargetApi`,
+  `UnusedAttribute`, `ObsoleteSdkInt` and five `UnusedResources`, two `Typos`
+  and two `ModifierParameter`, plus `UseKtx` and two dependency-update notices;
 - `app/build/outputs/apk/debug/app-debug.apk`.
 
 The debug build is one APK containing the AAR's arm libraries and installs as
@@ -173,7 +173,7 @@ Then run:
     cd android
     ./gradlew --offline -PkumihoEmulator=true :app:connectedDebugAndroidTest
 
-Current expected result: **139 tests, 0 failures, 0 errors, 0 skipped**. The
+Current expected result: **145 tests, 0 failures, 0 errors, 0 skipped**. The
 suite includes the AAR probe, setup, dashboard, locations, settings, split
 tunneling, account, logs, diagnostics, notification/tile reducers and the
 screenshot capture tests. A connected run uninstalls the app and its external

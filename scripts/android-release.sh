@@ -3,7 +3,7 @@
 # Build and verify the signed Kumiho Android release APKs.
 #
 # Requires:
-#   - KUMIHO_VERSION=0.5.0 (the v prefix is accepted)
+#   - KUMIHO_VERSION=0.6.0 (the v prefix is accepted)
 #   - android/keystore.properties (copy android/keystore.properties.example)
 #   - the Android toolchain from scripts/android-setup.sh
 #
@@ -18,7 +18,7 @@ set -euo pipefail
 
 usage() {
 	cat <<'EOF'
-usage: KUMIHO_VERSION=0.5.0 scripts/android-release.sh
+usage: KUMIHO_VERSION=0.6.0 scripts/android-release.sh
 
 Builds the arm/arm64 AAR and signed per-ABI + universal release APKs, verifies
 each APK, and leaves them in dist/. Requires android/keystore.properties.
@@ -43,7 +43,7 @@ esac
 
 version="${KUMIHO_VERSION:-}"
 if [ -z "$version" ]; then
-	echo "android-release: KUMIHO_VERSION is required (for example KUMIHO_VERSION=0.5.0)" >&2
+	echo "android-release: KUMIHO_VERSION is required (for example KUMIHO_VERSION=0.6.0)" >&2
 	usage >&2
 	exit 2
 fi
