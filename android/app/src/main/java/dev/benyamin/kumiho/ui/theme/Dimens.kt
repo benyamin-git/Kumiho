@@ -45,7 +45,9 @@ val KumihoShapes = Shapes(
     small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(12.dp),
     large = RoundedCornerShape(16.dp),
-    extraLarge = RoundedCornerShape(percent = 50),
+    // Material3 dialogs use extraLarge through AlertDialogDefaults. Keep it at
+    // the house dialog radius; PillShape is the explicit full-radius shape.
+    extraLarge = RoundedCornerShape(16.dp),
 )
 
 /** An explicit pill radius, for chips and progress bars. */
