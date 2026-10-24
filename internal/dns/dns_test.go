@@ -172,6 +172,27 @@ func TestStartStopRace(t *testing.T) {
 	}
 }
 
+func TestStopClosesListenerBeforeServeStarts(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		s := &Server{
+			Addr:  "127.0.0.1:0",
+			cache: newCache(10),
+			Resolve: func(_ context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+				return aResponse(t, req.Question[0].Name, 60, 0), nil
+			},
+		}
+		if err := s.Start(); err != nil {
+			t.Fatal(err)
+		}
+		addr := s.tcpSrv.Listener.Addr().String()
+		s.Stop()
+		if c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond); err == nil {
+			_ = c.Close()
+			t.Fatalf("iteration %d: listener %s still accepts after Stop", i, addr)
+		}
+	}
+}
+
 func TestStartStopServesRealUDP(t *testing.T) {
 	s := &Server{
 		Addr:  "127.0.0.1:0",

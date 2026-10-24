@@ -442,14 +442,23 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stop shuts both listeners down.
+// Stop shuts both listeners down. Shutdown refuses to act before the serve
+// goroutine has marked the server started, so close the underlying sockets
+// explicitly: a connect that is torn down immediately after Start must never
+// leave the resolver port bound.
 func (s *Server) Stop() {
-	if s.udpSrv != nil {
-		_ = s.udpSrv.Shutdown()
+	if udp := s.udpSrv; udp != nil {
+		_ = udp.Shutdown()
+		if udp.PacketConn != nil {
+			_ = udp.PacketConn.Close()
+		}
 		s.udpSrv = nil
 	}
-	if s.tcpSrv != nil {
-		_ = s.tcpSrv.Shutdown()
+	if tcp := s.tcpSrv; tcp != nil {
+		_ = tcp.Shutdown()
+		if tcp.Listener != nil {
+			_ = tcp.Listener.Close()
+		}
 		s.tcpSrv = nil
 	}
 }
