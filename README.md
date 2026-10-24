@@ -1,14 +1,14 @@
 # Kumiho
 
-**Status:** v0.5.2 — working Linux and Windows 11 clients plus a native Android
+**Status:** v0.6.0 — working Linux and Windows 11 clients plus a native Android
 app: daemon + TUI/CLI/GUI over a Unix socket (Linux) or named pipe (Windows),
 Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
 kill switch, watchdog with edge rotation, runtime settings, log viewer, account
 screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
-install. The v0.6.0 work in this tree (unreleased) adds browser and password
-sign-in, up to five accounts with labels, rotation and quota polling, and the
-same account surface in the CLI, TUI, Windows GUI and Android app. v0.5.2 adds
+install. v0.6.0 adds browser and password sign-in, up to five accounts with
+labels, rotation and quota polling, and the same account surface in the CLI,
+TUI, Windows GUI and Android app. v0.5.2 adds
 an opt-in Android setting that keeps LAN connections alive across a VPN
 transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
@@ -95,7 +95,7 @@ before release:
   (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
-## What's new in v0.6.0 (unreleased)
+## What's new in v0.6.0
 
 - **Browser sign-in** — `kumiho login --browser` (or the browser choice in the
   TUI, Windows GUI and Android setup) opens Mozilla's page, where captcha,
@@ -274,7 +274,7 @@ Cross-compile from any OS with Go >= 1.27:
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
-    make android-release KUMIHO_VERSION=0.5.2 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
     make vet
@@ -368,7 +368,7 @@ changes the daemon, CLI or TUI.
 
 ## Android app
 
-Kumiho's Android app (v0.5.2) is a native sideloaded client, not a front end
+Kumiho's Android app (v0.6.0) is a native sideloaded client, not a front end
 for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
 notification and the Quick Settings tile. It targets Android 8.0 (API 26) and

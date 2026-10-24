@@ -22,7 +22,7 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 
 | Piece | Pin | Where |
 |---|---|---|
-| App | `0.5.2`, `versionCode` 502 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
+| App | `0.6.0`, `versionCode` 600 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
 | Package | `dev.benyamin.kumiho` (debug: `.debug`) | `android/app/build.gradle.kts` |
 | minSdk | 26 (Android 8.0) | `android/app/build.gradle.kts` |
 | targetSdk | 36 | `android/app/build.gradle.kts` |
@@ -114,7 +114,7 @@ first:
     make android-debug
     make android-test                 # JVM tests + lint + debug APK
     make android-emulator-test        # connected suite; emulator must be running
-    make android-release KUMIHO_VERSION=0.5.2 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
+    make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
     KUMIHO_EXPECT_CERT_SHA256=<fingerprint> make android-verify
 
 Pass `GRADLE_FLAGS=--offline` to any of the Gradle-backed targets once the
@@ -149,7 +149,7 @@ before treating any release APK as shippable.
 
 You can override the version for a one-off build:
 
-    ./gradlew -PkumihoVersion=v0.5.2 :app:assembleDebug
+    ./gradlew -PkumihoVersion=v0.6.0 :app:assembleDebug
 
 ### Instrumented tests on the emulator
 
@@ -203,7 +203,7 @@ x86/x86_64 native libraries, `zipalign -c -P 16 -v 4`, the arm64 `libgojni.so`
 `p_align >= 0x4000`, the signature via `apksigner`, and the universal size cap:
 
     source scripts/android-env.sh
-    scripts/android-verify-apk.sh dist/kumiho-v0.5.2-android-universal.apk
+    scripts/android-verify-apk.sh dist/kumiho-v0.6.0-android-universal.apk
 
     # Unsigned output from a compile-check assembleRelease:
     KUMIHO_ALLOW_UNSIGNED=1 scripts/android-verify-apk.sh \
@@ -226,7 +226,7 @@ The equivalent manual commands (use the build-tools directory because
     "$BT/zipalign" -c -P 16 -v 4 "$APK"
 
 Expect `aapt2` to report `package: name='dev.benyamin.kumiho.debug'`,
-`versionCode='502'`, `versionName='0.5.2-debug'`, `minSdkVersion:'26'` and
+`versionCode='600'`, `versionName='0.6.0-debug'`, `minSdkVersion:'26'` and
 `targetSdkVersion:'36'`; `zipalign` to say `Verification successful`; and the
 archive to contain only the expected ABI(s). For a signed APK the signature
 check is:
@@ -258,7 +258,7 @@ check is:
     CERT_SHA256=$(keytool -list -v \
       -keystore ~/kumiho-android-release.jks -alias kumiho \
       | awk '/SHA256:/ { print $2; exit }' | tr -d ':')
-    make android-release KUMIHO_VERSION=0.5.2 \
+    make android-release KUMIHO_VERSION=0.6.0 \
       KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256"
     KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256" make android-verify
 
@@ -297,7 +297,7 @@ Never commit the keystore or passwords. For a local signed build, create
 
 `storeFile` is resolved with `rootProject.file(...)`: an absolute path is used
 as-is; a relative path is relative to `android/`. Then run
-`make android-release KUMIHO_VERSION=0.5.2 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
+`make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
 as shown above. The fingerprint is public metadata, not a secret.
 
 ### GitHub Actions secrets and tagged release

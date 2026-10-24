@@ -6,8 +6,8 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.5.2**
-(`versionCode` 502). Read the honesty note below before relying on it.
+This guide describes the app as implemented for **v0.6.0**
+(`versionCode` 600). Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
