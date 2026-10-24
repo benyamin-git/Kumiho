@@ -7,24 +7,33 @@ import android.content.Intent
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 
-/** A test seam for opening the daemon's loopback sign-in URL. */
+/** A test seam for opening the engine's browser sign-in URL. */
 fun interface BrowserLauncher {
     /** Returns false when no activity can handle the URL. */
     fun open(context: Context, url: String): Boolean
 }
 
 /**
- * Opens the engine's one-shot loopback URL in a Custom Tab. Returns false when
- * the URL is not loopback HTTP(S) or no browser accepts it; the caller keeps
- * the flow cancellable and shows the password fallback instead.
+ * Opens the engine's browser sign-in URL in a Custom Tab. The engine returns
+ * Mozilla's HTTPS login page; its loopback callback is internal to the engine,
+ * so the URL opened here is deliberately not a loopback URL. Plain http is
+ * accepted only for loopback, which keeps dev/test harnesses safe.
+ *
+ * Returns false when the URL is not a remote HTTPS page (or loopback HTTP) or
+ * no browser accepts it; the caller keeps the flow cancellable and shows the
+ * password fallback instead.
  *
  * There is deliberately no custom URL scheme: the engine owns the loopback
- * server, and Android only needs a browser to reach it.
+ * server, and Android only needs a browser to reach the login page.
  */
 fun openBrowserSignIn(context: Context, url: String): Boolean {
     val uri = Uri.parse(url)
-    if (uri.scheme !in setOf("http", "https")) return false
-    if (uri.host !in setOf("127.0.0.1", "localhost")) return false
+    val allowed = when (uri.scheme) {
+        "https" -> !uri.host.isNullOrBlank()
+        "http" -> uri.host == "127.0.0.1" || uri.host.equals("localhost", ignoreCase = true)
+        else -> false
+    }
+    if (!allowed) return false
     return try {
         val customTabs = CustomTabsIntent.Builder().build()
         if (context !is Activity) {

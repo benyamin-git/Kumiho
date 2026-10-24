@@ -120,7 +120,7 @@ class SetupViewModelTest {
                 null,
                 null,
                 method = "browser",
-                url = "http://127.0.0.1:49152/callback",
+                url = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
                 loginId = "setup-1",
             )
         }
@@ -132,8 +132,14 @@ class SetupViewModelTest {
 
         assertEquals(listOf("browser" to null), engine.loginStartCalls)
         assertEquals("setup-1", viewModel.state.value.browser?.id)
-        assertEquals("http://127.0.0.1:49152/callback", viewModel.state.value.browser?.url)
-        assertEquals("http://127.0.0.1:49152/callback", viewModel.state.value.browserLaunchURL)
+        assertEquals(
+            "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+            viewModel.state.value.browser?.url,
+        )
+        assertEquals(
+            "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+            viewModel.state.value.browserLaunchURL,
+        )
 
         engine.loginStatusResult = {
             LoginState("done", "user@example.com", null, null, null)

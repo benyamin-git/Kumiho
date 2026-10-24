@@ -138,7 +138,10 @@ class AccountAccountsScreenTest {
                 loading = false,
                 account = account(),
                 accounts = accounts(),
-                browser = BrowserSignIn("flow-1", "http://127.0.0.1:49152/callback"),
+                browser = BrowserSignIn(
+                    "flow-1",
+                    "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+                ),
             ),
         )
 

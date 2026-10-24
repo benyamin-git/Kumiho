@@ -395,7 +395,7 @@ class AccountAccountsTest {
     }
 
     private companion object {
-        const val URL = "http://127.0.0.1:49152/callback"
+        const val URL = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152"
         val TOKEN_EXPIRY: Long = Instant.parse("2026-11-21T12:00:00Z").epochSecond
 
         fun account() = Account(
