@@ -11,10 +11,10 @@ This guide describes the app as implemented for **v0.6.0**
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
-> Galaxy S25 FE; the remaining checklist items were explicitly accepted by the
-> user as exceptions, so this is a **partial acceptance**, not a full pass. The
-> production-signed
-> [v0.5.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2)
+> Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
+> accepted by the user as exceptions, so this is a **partial acceptance**, not a
+> full pass. v0.6.0 physical acceptance is pending. The production-signed
+> [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
 > is published with the three Android APKs and `SHA256SUMS`; the signing key and
 > GitHub Actions secret values remain user-owned. Local builds are test builds,
 > not published releases.
@@ -698,8 +698,9 @@ daemon or your Firefox Account.
 - **Non-DNS UDP is blocked** inside the tunnel (QUIC/HTTP3 falls back to TCP;
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
 - **Physical acceptance is a partial pass with user-accepted exceptions.**
-  The signed `v0.5.2` release is published, but the untested checklist items
-  remain exceptions; see [android-testing.md](android-testing.md).
+  The signed `v0.6.0` release is published, but v0.6.0 physical acceptance is
+  pending and the untested checklist items remain exceptions; see
+  [android-testing.md](android-testing.md).
 
 ## Desktop parity
 

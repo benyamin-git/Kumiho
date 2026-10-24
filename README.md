@@ -14,8 +14,8 @@ transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
 screen on Android, the Windows GUI and the TUI. v0.5.0 adds the
 Android client (sideload-only; physical acceptance is a partial pass with
-user-accepted exceptions). The signed
-[v0.5.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2)
+user-accepted exceptions). v0.6.0 physical acceptance is pending; the
+signed [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
 is published; see [docs/android-testing.md](docs/android-testing.md).
 v0.4.0 adds backend
 parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
@@ -91,7 +91,7 @@ before release:
 - **Windows 11 amd64** — Windows service + Wintun, TUI client over a named pipe.
 - **Android 8.0+** — implemented as a sideloaded VpnService app with the
   engine embedded in-process; physical acceptance is a partial pass with
-  user-accepted exceptions, and the signed `v0.5.2` release is published
+  user-accepted exceptions, and the signed `v0.6.0` release is published
   (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
@@ -251,7 +251,7 @@ for common issues.
   Quick Settings tile covers fast access), and there is no auto-update.
   Always-on and lockdown are Android settings and some OEM battery managers
   delay or refuse Always-on starts. Physical acceptance is a partial pass with
-  user-accepted exceptions; the signed `v0.5.2` release is published. See
+  user-accepted exceptions; the signed `v0.6.0` release is published. See
   [docs/android.md](docs/android.md#limitations).
 - Using an unofficial client is a ToS gray area (see PLAN.md §13); automatic
   account rotation is an additional gray area, so it is opt-in and off by
@@ -388,9 +388,10 @@ too.
 
 > **Release status.** The app builds and its unit, lint, assemble and
 > emulator suites pass. Physical first-connect/DNS/browsing/exit-IP acceptance
-> passed on a Galaxy S25 FE; the remaining checklist items are user-accepted
-> exceptions (a partial acceptance, not a full pass). The production-signed
-> [v0.5.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2)
+> passed on a Galaxy S25 FE for v0.5.2; the remaining checklist items are
+> user-accepted exceptions (a partial acceptance, not a full pass), and v0.6.0
+> physical acceptance is pending. The production-signed
+> [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
 > carries three APKs and `SHA256SUMS`. Verify a download against the release
 > checksums; a local APK is not a published release.
 

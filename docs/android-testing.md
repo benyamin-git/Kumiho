@@ -7,14 +7,15 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 > **Status.** The app builds and both test suites are green on the current
 > tree: **479 JVM tests / 145 connected tests / lint 0 errors + 15 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
-> Galaxy S25 FE; the sign-off is recorded below. The release automation is
-> implemented: `android-verify-apk.sh`, `android-release.sh`, the five Makefile
-> targets, an Android CI job and Android signing steps in the release workflow.
-> The scripts were exercised end to end with a throwaway signing key. The
-> production-signed `v0.5.2`
-> [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2) was
-> published on 2026-10-23 with three Android APKs and `SHA256SUMS`; the
-> `v0.5.1` release was published on 2026-10-23 and the `v0.5.0` release on
+> Galaxy S25 FE for v0.5.2; v0.6.0 physical acceptance is pending and the
+> sign-off is recorded below. The release automation is implemented:
+> `android-verify-apk.sh`, `android-release.sh`, the five Makefile targets, an
+> Android CI job and Android signing steps in the release workflow. The scripts
+> were exercised end to end with a throwaway signing key. The production-signed
+> `v0.6.0`
+> [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0) was
+> published on 2026-10-24 with three Android APKs and `SHA256SUMS`; the `v0.5.2`
+> release was published on 2026-10-23, `v0.5.1` on 2026-10-23 and `v0.5.0` on
 > 2026-10-22. The production signing key and GitHub Actions secret values
 > remain user-owned.
 
@@ -319,8 +320,22 @@ attaches them to the GitHub release. A step trap removes the temporary
 keystore and properties, and an `always()` step is a backstop. The workflow
 runs on stable `vMAJOR.MINOR.PATCH` tags; prerelease tags such as `v0.5.0-rc.1`
 are intentionally skipped until a prerelease/versionCode policy exists. Tags
-`v0.5.0` (2026-10-22), `v0.5.1` (2026-10-23) and `v0.5.2` (2026-10-23) ran the
-workflow successfully and published the desktop and Android assets.
+`v0.5.0` (2026-10-22), `v0.5.1` (2026-10-23), `v0.5.2` (2026-10-23) and
+`v0.6.0` (2026-10-24) ran the workflow successfully and published the desktop
+and Android assets.
+
+### Published v0.6.0 release
+
+Tag `v0.6.0` points at commit `a0e0019`. The
+[release workflow](https://github.com/benyamin-git/kumiho/actions/runs/40066695067)
+passed and the [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
+contains Linux amd64/arm64 and Windows amd64 zips, the three signed Android
+APKs, and `SHA256SUMS`. The APKs were verified after download: package
+`dev.benyamin.kumiho`, version `0.6.0`/600, min/target SDK 26/36, exact arm
+ABIs, 16 KB alignment, arm64 `p_align=0x4000`, and the production certificate
+`4bfbd2690546a969d1416e0729c2d5b93d39211d2ceb67068b03705b5bff707e`; the
+universal APK is 26.80 MiB (arm64-v8a 14.55 MiB, armeabi-v7a 14.16 MiB).
+v0.6.0 physical acceptance is pending user testing.
 
 ### Published v0.5.2 release
 
