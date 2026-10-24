@@ -130,6 +130,7 @@ before the commit; after commit the tree is clean apart from ignored scratch.
 ```go
 const (
     DefaultAuthorizationEndpoint = "https://accounts.firefox.com/authorization"
+    DefaultTokenEndpoint         = "https://oauth.accounts.firefox.com/v1/token"
     OAuthRedirectURI             = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
     DefaultProfileEndpoint       = "https://profile.accounts.firefox.com/v1/profile"
     DefaultDestroyEndpoint       = "https://oauth.accounts.firefox.com/v1/destroy"
@@ -150,16 +151,17 @@ type Profile struct {
 
 func NewPKCE(r io.Reader) (PKCE, error)
 
-func (c *Client) AuthorizationURL(state, challenge, email string, forceAuth bool) string
-func (c *Client) ExchangeCode(ctx context.Context, code, verifier string) (*Tokens, error)
+func (c *Client) AuthorizationURL(email string, forceAuth bool, state, challenge string) string
+func (c *Client) ExchangeCode(ctx context.Context, code, verifier, redirectURI string) (*Tokens, error)
 func (c *Client) Profile(ctx context.Context, accessToken string) (*Profile, error)
 func (c *Client) Destroy(ctx context.Context, refreshToken string) error
 ```
 
-Add `AuthorizationEndpoint`, `ProfileEndpoint` and `DestroyEndpoint` to
-`Client`, defaulted by `NewClient`. Tests override them with `httptest.Server`
-URLs. `ExchangeCode` posts to the existing `BaseURL` + `/oauth/token` so the
-password flow's endpoint stays unchanged.
+Add `AuthorizationEndpoint`, `TokenEndpoint`, `ProfileEndpoint` and
+`DestroyEndpoint` to `Client`, defaulted by `NewClient`. Tests override them
+with `httptest.Server` URLs. `ExchangeCode` posts to the OAuth token endpoint
+(`DefaultTokenEndpoint`), matching the approved spec; the password flow's
+existing `fxa.Refresh`/`OAuthToken` behaviour stays unchanged.
 
 **Changes**
 
@@ -373,8 +375,10 @@ func (c *Controller) LoginComplete(id, redirectURL string) error
   and the `webauth` import. Set `browserTimeout` to `10 * time.Minute` in `New`.
 - `LoginStart(MethodBrowser, ...)`:
   - generate PKCE with `fxa.NewPKCE(c.fxa.Rand)`;
-  - build the URL with `c.fxa.AuthorizationURL(...)`, using `forceAuth` when
-    `accountID != ""` and the stored email is known; prefill `email` for add;
+  - build the URL with
+    `c.fxa.AuthorizationURL(email, forceAuth, pkce.State, pkce.Challenge)`,
+    using `forceAuth` when `accountID != ""` and the stored email is known;
+    prefill `email` for add;
   - store the flow, return `Step:"browser", URL, LoginID`;
   - no goroutine, no loopback listener.
 - `LoginStatus`: return the stored state; if the flow is older than
@@ -389,8 +393,10 @@ func (c *Controller) LoginComplete(id, redirectURL string) error
     `ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel`, query `code` and `state`;
     reject malformed/error redirects with a stable message;
   - verify `state` exactly; a mismatch is retryable and keeps the flow active;
-  - if `tokens == nil`, call `c.fxa.ExchangeCode`; on a permanent
-    `invalid_grant`/expired/used/wrong-client error, mark the flow terminal;
+  - if `tokens == nil`, call
+    `c.fxa.ExchangeCode(ctx, code, b.verifier, fxa.OAuthRedirectURI)`; on a
+    permanent `invalid_grant`/expired/used/wrong-client error, mark the flow
+    terminal;
     on network/5xx, keep it active and return the error;
   - call `c.fxa.Profile`; on network/5xx, keep the tokens and return a
     retryable `profile` error; a second `LoginComplete` with the same id retries
