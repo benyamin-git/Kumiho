@@ -1,6 +1,6 @@
 # Firefox Accounts browser OAuth — Design Spec
 
-**Status:** Draft
+**Status:** Approved
 **Date:** 2026-10-24
 **Supersedes:** the browser-sign-in token assumption in
 `2026-10-23-v0.6.0-roadmap-design.md` and the shipped v0.6.0 browser flow.
