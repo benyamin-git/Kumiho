@@ -29,9 +29,11 @@ const (
 // ErrAccountLimit reports that accounts.json already holds MaxAccounts.
 var ErrAccountLimit = errors.New("account limit reached")
 
-// BrowserToken is a Guardian access token obtained through browser sign-in.
-// Browser accounts have no refresh token; reauth_required is the durable
-// signal that the user must repeat the browser flow.
+// BrowserToken is the superseded opaque Guardian token from the old browser
+// sign-in. It is decode-only: browser accounts now carry ordinary FxA tokens
+// in Account.FxA, and new code never writes this field. The fields stay so
+// older accounts.json files still load; Start removes the accounts that only
+// have this token.
 type BrowserToken struct {
 	Token          string `json:"token"`
 	ExpiresAt      int64  `json:"expires_at"`
@@ -39,18 +41,20 @@ type BrowserToken struct {
 }
 
 // Account is one Firefox Account. Quota is in-memory only; the FxA uid is
-// deliberately not persisted.
+// deliberately not persisted. ReauthRequired is the durable top-level signal
+// for a browser account whose FxA refresh token was permanently rejected.
 type Account struct {
-	ID         string        `json:"id"`
-	Email      string        `json:"email"`
-	Label      string        `json:"label"`
-	Method     string        `json:"method"`
-	Browser    *BrowserToken `json:"browser,omitempty"`
-	FxA        *fxa.Tokens   `json:"fxa,omitempty"`
-	AddedAt    time.Time     `json:"added_at"`
-	LastUsedAt time.Time     `json:"last_used_at"`
-	LastError  string        `json:"last_error,omitempty"`
-	Quota      *api.Quota    `json:"-"`
+	ID             string        `json:"id"`
+	Email          string        `json:"email"`
+	Label          string        `json:"label"`
+	Method         string        `json:"method"`
+	Browser        *BrowserToken `json:"browser,omitempty"` // legacy decode-only
+	FxA            *fxa.Tokens   `json:"fxa,omitempty"`
+	ReauthRequired bool          `json:"reauth_required,omitempty"`
+	AddedAt        time.Time     `json:"added_at"`
+	LastUsedAt     time.Time     `json:"last_used_at"`
+	LastError      string        `json:"last_error,omitempty"`
+	Quota          *api.Quota    `json:"-"`
 }
 
 // accountsFile is the v2 accounts.json schema.
@@ -61,54 +65,20 @@ type accountsFile struct {
 	Accounts   []*Account `json:"accounts"`
 }
 
-// Tokens returns the copy of the token set selected by Method, falling back
-// to the other set when the selected one is absent or empty.
+// Tokens returns a copy of the account's FxA token set for every sign-in
+// method. The legacy opaque BrowserToken is decode-only and is never used as
+// a fallback.
 func (a *Account) Tokens() *fxa.Tokens {
 	if a == nil {
 		return nil
 	}
-	fxaTokens := cloneTokens(a.FxA)
-	browserTokens := browserAsTokens(a.Browser)
-	switch a.Method {
-	case MethodBrowser:
-		if browserTokens != nil {
-			return browserTokens
-		}
-		return fxaTokens
-	case MethodPassword:
-		if fxaTokens != nil {
-			return fxaTokens
-		}
-		return browserTokens
-	default:
-		if fxaTokens != nil {
-			return fxaTokens
-		}
-		return browserTokens
-	}
+	return cloneTokens(a.FxA)
 }
 
-// HasRefreshToken reports whether the selected token set can refresh.
+// HasRefreshToken reports whether the account's FxA token set can refresh.
 func (a *Account) HasRefreshToken() bool {
 	t := a.Tokens()
 	return t != nil && strings.TrimSpace(t.RefreshToken) != ""
-}
-
-// ReauthRequired reports whether the selected token is a browser token that
-// Guardian rejected. A password-method account never reports it even when a
-// stale browser token remains for fallback.
-func (a *Account) ReauthRequired() bool {
-	if a == nil {
-		return false
-	}
-	switch a.Method {
-	case MethodBrowser:
-		return a.Browser != nil && a.Browser.ReauthRequired
-	case MethodPassword:
-		return false
-	default:
-		return a.FxA == nil && a.Browser != nil && a.Browser.ReauthRequired
-	}
 }
 
 func cloneTokens(t *fxa.Tokens) *fxa.Tokens {
@@ -127,11 +97,39 @@ func cloneBrowser(t *BrowserToken) *BrowserToken {
 	return &c
 }
 
-func browserAsTokens(b *BrowserToken) *fxa.Tokens {
-	if b == nil || strings.TrimSpace(b.Token) == "" {
-		return nil
+// legacyBrowserRemovalNotice is the one-time notice shown after accounts left
+// behind by the superseded opaque browser flow are removed.
+const legacyBrowserRemovalNotice = "Old browser sign-in removed. Add your Firefox account again."
+
+// removeLegacyBrowserAccounts removes accounts that only hold an old opaque
+// browser token and clears the stale legacy field from password accounts.
+// Browser accounts that already have FxA tokens and password accounts are
+// kept. It returns the number of removed accounts.
+func removeLegacyBrowserAccounts(f *accountsFile) int {
+	if f == nil {
+		return 0
 	}
-	return &fxa.Tokens{AccessToken: b.Token, ExpiresAt: b.ExpiresAt}
+	removed := 0
+	kept := f.Accounts[:0]
+	for _, a := range f.Accounts {
+		if a == nil {
+			continue
+		}
+		if a.Method == MethodBrowser && a.FxA == nil && a.Browser != nil &&
+			strings.TrimSpace(a.Browser.Token) != "" {
+			removed++
+			continue
+		}
+		if a.Method == MethodPassword {
+			a.Browser = nil
+		}
+		kept = append(kept, a)
+	}
+	for i := len(kept); i < len(f.Accounts); i++ {
+		f.Accounts[i] = nil
+	}
+	f.Accounts = kept
+	return removed
 }
 
 // accountsPath returns accounts.json beside tokens.json.
@@ -252,22 +250,14 @@ func (f *accountsFile) upsert(a *Account) (*Account, error) {
 		if a.Method != "" {
 			existing.Method = a.Method
 		}
-		switch a.Method {
-		case MethodBrowser:
-			if a.Browser != nil {
-				existing.Browser = cloneBrowser(a.Browser)
-			}
-		case MethodPassword:
-			if a.FxA != nil {
-				existing.FxA = cloneTokens(a.FxA)
-			}
-		default:
-			if a.Browser != nil {
-				existing.Browser = cloneBrowser(a.Browser)
-			}
-			if a.FxA != nil {
-				existing.FxA = cloneTokens(a.FxA)
-			}
+		if a.FxA != nil {
+			existing.FxA = cloneTokens(a.FxA)
+		}
+		// Transitional: the superseded opaque browser flow still writes a
+		// BrowserToken. Task 3 removes that flow and this legacy copy; new
+		// callers never set Browser.
+		if a.Method == MethodBrowser && a.Browser != nil {
+			existing.Browser = cloneBrowser(a.Browser)
 		}
 		if a.LastUsedAt.IsZero() {
 			existing.LastUsedAt = time.Now()
@@ -381,7 +371,7 @@ func summarizeAccounts(f *accountsFile, cfg settings.Config) api.AccountsView {
 			Label:          a.Label,
 			Method:         a.Method,
 			Active:         a.ID == f.Active,
-			ReauthRequired: a.ReauthRequired(),
+			ReauthRequired: a.ReauthRequired,
 			LastUsedAt:     lastUsed,
 			Quota:          a.Quota,
 		})

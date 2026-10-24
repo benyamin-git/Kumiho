@@ -119,9 +119,12 @@ type Controller struct {
 	tokens *fxa.Tokens
 	// accounts is the v2 account store; activeID selects one account and
 	// rotationNotice is shown by the Account screen after a skipped rotation.
+	// legacyNotice is shown once after superseded opaque browser accounts are
+	// removed on load.
 	accounts       *accountsFile
 	activeID       string
 	rotationNotice string
+	legacyNotice   string
 	// Browser sign-in is daemon-owned: the loopback callback, PKCE session and
 	// status polling all live here, never in a client.
 	browser         *browserLogin
@@ -348,18 +351,25 @@ func (c *Controller) Start(_ context.Context) error {
 			return err
 		}
 	}
-	active := findAccountLocked(f, f.Active)
-	if active == nil && f != nil && len(f.Accounts) > 0 {
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.accounts = f
+	c.activeID = f.Active
+	if _, err := c.removeLegacyAccountsLocked(); err != nil {
+		c.accounts = nil
+		c.activeID = ""
+		return err
+	}
+	active := c.activeAccountLocked()
+	if active == nil && len(f.Accounts) > 0 {
 		active = mostRecentlyUsedAccount(f)
 		f.Active = active.ID
 		if err := saveAccounts(accountsPath(paths), f); err != nil {
 			return err
 		}
+		c.activeID = active.ID
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.accounts = f
 	c.since = time.Now()
 	if active == nil {
 		f.Active = ""
@@ -381,37 +391,57 @@ func (c *Controller) Start(_ context.Context) error {
 	return nil
 }
 
+// removeLegacyAccountsLocked prunes accounts left by the superseded opaque
+// browser flow, persists the pruned store plus the rollback token copy, and
+// selects the most recently used remaining account when the active one was
+// removed. Callers hold c.mu.
+func (c *Controller) removeLegacyAccountsLocked() (bool, error) {
+	if c.accounts == nil {
+		return false, nil
+	}
+	clearedFields := 0
+	for _, a := range c.accounts.Accounts {
+		if a != nil && a.Method == MethodPassword && a.Browser != nil {
+			clearedFields++
+		}
+	}
+	removed := removeLegacyBrowserAccounts(c.accounts)
+	if removed == 0 && clearedFields == 0 {
+		return false, nil
+	}
+	if removed > 0 && c.activeAccountLocked() == nil {
+		if mru := mostRecentlyUsedAccount(c.accounts); mru != nil {
+			c.activeID = mru.ID
+			c.accounts.Active = mru.ID
+		} else {
+			c.activeID = ""
+			c.accounts.Active = ""
+		}
+	}
+	// Persist the cleanup and refresh the tokens.json rollback copy so a
+	// removed opaque token cannot survive an upgrade.
+	if err := c.saveAccountsLocked(true); err != nil {
+		return true, err
+	}
+	if removed > 0 {
+		c.legacyNotice = legacyBrowserRemovalNotice
+		c.log.Logf(logging.Info, "auth", "removed %d legacy browser account(s)", removed)
+	}
+	return true, nil
+}
+
 // accountSessionUsable reports whether Start may present the active account
-// as a usable session. Browser tokens with no expiry are usable until Guardian
-// rejects them; password tokens need either a live access token or a refresh
-// token.
+// as a usable session. Every method needs a live FxA access token or a refresh
+// token, and a durable re-authentication flag always makes it unusable.
 func (c *Controller) accountSessionUsable(a *Account) bool {
-	if a == nil || a.ReauthRequired() {
+	if a == nil || a.ReauthRequired {
 		return false
 	}
 	tokens := a.Tokens()
 	if tokens == nil {
 		return false
 	}
-	if b := selectedBrowserToken(a); b != nil {
-		return browserTokenUsable(b)
-	}
 	return c.fxa.AccessTokenValid(tokens) || strings.TrimSpace(tokens.RefreshToken) != ""
-}
-
-func selectedBrowserToken(a *Account) *BrowserToken {
-	if a == nil || a.Method != MethodBrowser || a.Browser == nil ||
-		strings.TrimSpace(a.Browser.Token) == "" {
-		return nil
-	}
-	return a.Browser
-}
-
-func browserTokenUsable(b *BrowserToken) bool {
-	if b == nil || strings.TrimSpace(b.Token) == "" || b.ReauthRequired {
-		return false
-	}
-	return b.ExpiresAt <= 0 || b.ExpiresAt > time.Now().Unix()
 }
 
 func findAccountLocked(f *accountsFile, id string) *Account {
@@ -476,8 +506,8 @@ func (c *Controller) activeAccountLocked() *Account {
 }
 
 // setActiveLocked selects a, updates the session fields and bumps the auth
-// generation. It does not clear browser.reauth_required or persist; the
-// caller saves after mutating the file. Callers hold c.mu.
+// generation. It does not clear the durable re-authentication flag or persist;
+// the caller saves after mutating the file. Callers hold c.mu.
 func (c *Controller) setActiveLocked(a *Account) {
 	c.authGen++
 	now := time.Now()
@@ -529,6 +559,9 @@ func (c *Controller) ensureAccountsLocked() error {
 	c.accounts = f
 	if c.activeID == "" {
 		c.activeID = f.Active
+	}
+	if _, err := c.removeLegacyAccountsLocked(); err != nil {
+		return err
 	}
 	if c.activeAccountLocked() == nil && len(f.Accounts) > 0 {
 		if a := mostRecentlyUsedAccount(f); a != nil {
@@ -584,23 +617,20 @@ func (c *Controller) syncLegacyTokensLocked() {
 	}
 }
 
-// EnsureFreshToken renews the access token when it is stale, dropping only
-// the active account on a permanent rejection.
+// EnsureFreshToken renews the active account's stale access token. A browser
+// account with a permanently rejected refresh token is marked for re-auth and
+// kept; a password account keeps the existing drop-on-rejection behaviour.
 func (c *Controller) EnsureFreshToken(ctx context.Context) error {
 	c.mu.Lock()
 	active := c.activeAccountLocked()
 	tokens := c.tokens
-	browser := selectedBrowserToken(active)
+	reauth := active != nil && active.ReauthRequired
 	c.mu.Unlock()
 	if tokens == nil {
 		return errors.New("not signed in")
 	}
-	if browser != nil {
-		if browserTokenUsable(browser) {
-			return nil
-		}
-		c.markBrowserReauth(active.ID, "browser sign-in expired; sign in again")
-		return errors.New("browser sign-in expired; sign in again (kumiho login)")
+	if reauth {
+		return errors.New("the account needs sign-in again (kumiho login)")
 	}
 	if c.fxa.AccessTokenValid(tokens) {
 		return nil
@@ -608,30 +638,28 @@ func (c *Controller) EnsureFreshToken(ctx context.Context) error {
 	return c.refreshAccessToken(ctx)
 }
 
-// markBrowserReauth persists the durable re-authentication flag for a browser
-// account. It never touches tokens.json.
-func (c *Controller) markBrowserReauth(id, reason string) {
-	c.markReauth(id, reason)
-}
-
 // refreshAccessToken force-renews the access token (also used when Guardian
-// rejects it mid-session). Browser tokens are never refreshed; a rejected
-// browser token gets the durable re-auth flag instead.
+// rejects it mid-session). A MethodBrowser account whose refresh token is
+// permanently rejected gets the durable re-auth flag and keeps its row; a
+// password account is dropped exactly as before.
 func (c *Controller) refreshAccessToken(ctx context.Context) error {
 	c.mu.Lock()
 	active := c.activeAccountLocked()
 	tokens := c.tokens
 	gen := c.authGen
-	browser := selectedBrowserToken(active)
+	method, id := "", ""
+	if active != nil {
+		method, id = active.Method, active.ID
+	}
 	c.mu.Unlock()
 	if tokens == nil {
 		return errors.New("not signed in")
 	}
-	if browser != nil {
-		c.markBrowserReauth(active.ID, "browser token rejected; sign in again")
-		return errors.New("the browser sign-in cannot be refreshed; sign in again (kumiho login)")
-	}
 	if strings.TrimSpace(tokens.RefreshToken) == "" {
+		if method == MethodBrowser {
+			c.markReauthIf(gen, true, id, "browser sign-in cannot be renewed; sign in again")
+			return errors.New("the browser sign-in cannot be renewed; sign in again (kumiho login)")
+		}
 		c.dropActiveIf(gen, true, "stored session cannot be renewed")
 		return errors.New("stored session cannot be renewed; sign in again")
 	}
@@ -640,7 +668,11 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 	if err != nil {
 		var apiErr *fxa.APIError
 		if errors.As(err, &apiErr) && apiErr.PermanentRefreshRejection() {
-			c.dropActiveIf(gen, true, "refresh token rejected")
+			if method == MethodBrowser {
+				c.markReauthIf(gen, true, id, "browser refresh token rejected; sign in again")
+			} else {
+				c.dropActiveIf(gen, true, "refresh token rejected")
+			}
 		}
 		return err
 	}
@@ -1043,11 +1075,11 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: email, Error: "signed in, but saving the account failed: " + err.Error()}
 	}
-	// A successful password sign-in also clears a stale browser re-auth flag
-	// on the same email. Only login clears it; switching accounts does not.
-	if account.Browser != nil {
-		account.Browser.ReauthRequired = false
-	}
+	// A successful password sign-in also clears a stale durable re-auth flag
+	// and any leftover opaque browser token on the same email. Only login
+	// clears it; switching accounts does not.
+	account.ReauthRequired = false
+	account.Browser = nil
 	account.LastError = ""
 	c.accounts.LastMethod = MethodPassword
 	// Save the account and rollback token copy before publishing the new
@@ -1085,7 +1117,13 @@ func (c *Controller) Accounts() api.AccountsView {
 		loadErr = c.ensureAccountsLocked()
 	}
 	view := summarizeAccounts(c.accounts, c.store.EffectiveConfig())
-	view.Notice = c.rotationNotice
+	switch {
+	case c.rotationNotice != "":
+		view.Notice = c.rotationNotice
+	case c.legacyNotice != "":
+		view.Notice = c.legacyNotice
+		c.legacyNotice = ""
+	}
 	if loadErr != nil {
 		view.Error = loadErr.Error()
 	}
@@ -1249,10 +1287,58 @@ func (c *Controller) pendingStateLocked() *api.LoginState {
 	}
 }
 
-// Logout clears tokens and returns to UNAUTHENTICATED.
+// Logout best-effort revokes every stored FxA refresh token, then always
+// clears local state and returns to UNAUTHENTICATED. A failed or offline
+// revoke never blocks local sign-out.
 func (c *Controller) Logout() error {
+	c.revokeRefreshTokens()
 	c.clearSession("user logout")
 	return nil
+}
+
+// revokeRefreshTokens calls the FxA destroy endpoint for every distinct
+// refresh token in the account store (and the active token set) under one
+// five-second budget. Failures are logged and ignored; local sign-out follows
+// regardless.
+func (c *Controller) revokeRefreshTokens() {
+	c.mu.Lock()
+	var refreshTokens []string
+	seen := make(map[string]struct{})
+	add := func(t *fxa.Tokens) {
+		if t == nil {
+			return
+		}
+		token := strings.TrimSpace(t.RefreshToken)
+		if token == "" {
+			return
+		}
+		if _, ok := seen[token]; ok {
+			return
+		}
+		seen[token] = struct{}{}
+		refreshTokens = append(refreshTokens, token)
+	}
+	if c.accounts != nil {
+		for _, a := range c.accounts.Accounts {
+			if a != nil {
+				add(a.FxA)
+			}
+		}
+	}
+	add(c.tokens)
+	c.mu.Unlock()
+	if len(refreshTokens) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, token := range refreshTokens {
+		if err := c.fxa.Destroy(ctx, token); err != nil {
+			c.log.Logf(logging.Warn, "auth", "could not revoke a Firefox account refresh token: %v", err)
+		}
+	}
+	c.log.Logf(logging.Info, "auth", "attempted to revoke %d Firefox account refresh token(s)", len(refreshTokens))
 }
 
 func (c *Controller) clearSession(reason string) {
@@ -1283,6 +1369,7 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	c.accounts = nil
 	c.activeID = ""
 	c.rotationNotice = ""
+	c.legacyNotice = ""
 	c.state = StateUnauthenticated
 	c.since = time.Now()
 	// Signing out wipes the account and usage view: an unauthenticated
@@ -1568,15 +1655,13 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 	active := c.activeAccountLocked()
 	tokens := c.tokens
 	activeID := ""
-	browserSelected := false
 	info := api.AccountInfo{Email: c.email}
 	if active != nil {
 		activeID = active.ID
-		browserSelected = selectedBrowserToken(active) != nil
 		info.ID = active.ID
 		info.Label = active.Label
 		info.Method = active.Method
-		info.ReauthRequired = active.ReauthRequired()
+		info.ReauthRequired = active.ReauthRequired
 		info.Email = active.Email
 	}
 	c.mu.Unlock()
@@ -1588,18 +1673,8 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 
 	ent, err := c.guardian.Account(ctx, tokens.AccessToken)
 	if err != nil && guardian.IsUnauthorized(err) {
-		if browserSelected {
-			c.markBrowserReauth(activeID, "Guardian rejected the browser token; sign in again")
-			c.mu.Lock()
-			if a := findAccountLocked(c.accounts, activeID); a != nil {
-				info.ReauthRequired = a.ReauthRequired()
-				info.Label = a.Label
-				info.Method = a.Method
-			}
-			c.mu.Unlock()
-			info.Error = err.Error()
-			return info
-		}
+		// Every method now uses the same FxA refresh path. A permanent
+		// browser rejection sets the durable re-auth flag inside the refresh.
 		if rerr := c.refreshAccessToken(ctx); rerr == nil {
 			if t := c.currentTokens(); t != nil {
 				info.TokenExpires = t.ExpiresAt
@@ -1608,6 +1683,15 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 		}
 	}
 	if err != nil {
+		if activeID != "" {
+			c.mu.Lock()
+			if a := findAccountLocked(c.accounts, activeID); a != nil {
+				info.ReauthRequired = a.ReauthRequired
+				info.Label = a.Label
+				info.Method = a.Method
+			}
+			c.mu.Unlock()
+		}
 		info.Error = err.Error()
 		return info
 	}
@@ -1622,7 +1706,7 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 			if ent.MaxBytes != nil || ent.QuotaRemaining != nil {
 				a.Quota = &api.Quota{Limit: ent.MaxBytes, Remaining: ent.QuotaRemaining}
 			}
-			info.ReauthRequired = a.ReauthRequired()
+			info.ReauthRequired = a.ReauthRequired
 		}
 		c.mu.Unlock()
 	}

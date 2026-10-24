@@ -25,10 +25,8 @@ var errQuotaReauth = errors.New("quota poll: re-authentication required")
 type rotationSnapshot struct {
 	id       string
 	email    string
-	method   string
 	lastUsed time.Time
 	tokens   *fxa.Tokens
-	browser  *BrowserToken
 	reauth   bool
 }
 
@@ -105,10 +103,11 @@ func (c *Controller) selectAccount(ctx context.Context) error {
 	return c.rotateIfNeeded(ctx, gen)
 }
 
-// prepareAccount validates or refreshes the active account's selected token.
-// Browser tokens are never refreshed: an expired browser token is marked for
-// durable re-authentication. An unusable account is reported rather than
-// failing the whole connect when rotation can use another account.
+// prepareAccount validates or refreshes the active account's FxA token set. A
+// durable re-auth flag or a missing FxA token set makes the account unusable;
+// a stale access token is refreshed through the one generic path. An unusable
+// account is reported rather than failing the whole connect when rotation can
+// use another account.
 func (c *Controller) prepareAccount(ctx context.Context, gen uint64) error {
 	c.mu.Lock()
 	active := c.activeAccountLocked()
@@ -116,23 +115,12 @@ func (c *Controller) prepareAccount(ctx context.Context, gen uint64) error {
 		c.mu.Unlock()
 		return errors.New("sign in first")
 	}
-	id, email, method := active.ID, active.Email, active.Method
+	id, email := active.ID, active.Email
 	tokens := active.Tokens()
-	browser := cloneBrowser(selectedBrowserToken(active))
+	reauth := active.ReauthRequired
 	c.mu.Unlock()
 
-	if method == MethodBrowser {
-		if browser == nil || strings.TrimSpace(browser.Token) == "" {
-			c.markReauth(id, "browser account has no token; sign in again")
-			return fmt.Errorf("%s needs sign-in again", email)
-		}
-		if browserTokenUsable(browser) {
-			return nil
-		}
-		c.markReauth(id, "browser sign-in expired; sign in again")
-		return fmt.Errorf("%s: browser sign-in expired; sign in again", email)
-	}
-	if tokens == nil {
+	if reauth || tokens == nil {
 		return fmt.Errorf("%s needs sign-in again", email)
 	}
 	if c.fxa.AccessTokenValid(tokens) {
@@ -147,8 +135,9 @@ func (c *Controller) prepareAccount(ctx context.Context, gen uint64) error {
 	return nil
 }
 
-// refreshAccountToken refreshes one password account without dropping it on a
-// permanent rejection. Rotation treats a failed refresh as a skipped account.
+// refreshAccountToken refreshes one account without dropping it on a
+// permanent rejection. A MethodBrowser rejection sets the durable re-auth flag
+// first; rotation treats any failed refresh as a skipped account.
 func (c *Controller) refreshAccountToken(ctx context.Context, id string, gen uint64) error {
 	c.mu.Lock()
 	a := findAccountLocked(c.accounts, id)
@@ -157,6 +146,7 @@ func (c *Controller) refreshAccountToken(ctx context.Context, id string, gen uin
 		return errors.New("account has no refreshable session")
 	}
 	refreshToken := strings.TrimSpace(a.FxA.RefreshToken)
+	method := a.Method
 	if refreshToken == "" {
 		c.mu.Unlock()
 		return errors.New("account has no refresh token")
@@ -165,6 +155,11 @@ func (c *Controller) refreshAccountToken(ctx context.Context, id string, gen uin
 
 	refreshed, err := c.fxa.Refresh(ctx, refreshToken)
 	if err != nil {
+		var apiErr *fxa.APIError
+		if errors.As(err, &apiErr) && apiErr.PermanentRefreshRejection() &&
+			method == MethodBrowser {
+			c.markReauthIf(gen, true, id, "browser refresh token rejected; sign in again")
+		}
 		return err
 	}
 
@@ -221,11 +216,9 @@ func (c *Controller) rotateIfNeeded(ctx context.Context, gen uint64) error {
 		snapshots = append(snapshots, rotationSnapshot{
 			id:       a.ID,
 			email:    a.Email,
-			method:   a.Method,
 			lastUsed: a.LastUsedAt,
 			tokens:   a.Tokens(),
-			browser:  cloneBrowser(selectedBrowserToken(a)),
-			reauth:   a.ReauthRequired(),
+			reauth:   a.ReauthRequired,
 		})
 	}
 	c.mu.Unlock()
@@ -298,51 +291,33 @@ func (c *Controller) rotationCandidate(ctx context.Context, gen uint64, snap rot
 		return rotationResult{candidate: candidate, notices: notices}, nil
 	}
 
-	accessToken := ""
-	refreshable := false
-	switch snap.method {
-	case MethodBrowser:
-		if snap.reauth || snap.browser == nil || strings.TrimSpace(snap.browser.Token) == "" {
+	if snap.reauth {
+		return skip("sign in again")
+	}
+	tokens := snap.tokens
+	if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
+		return skip("sign in again")
+	}
+	if !c.fxa.AccessTokenValid(tokens) {
+		if strings.TrimSpace(tokens.RefreshToken) == "" {
 			return skip("sign in again")
 		}
-		if !browserTokenUsable(snap.browser) {
-			c.markReauth(snap.id, "browser sign-in expired; sign in again")
+		if err := c.refreshAccountToken(ctx, snap.id, gen); err != nil {
+			if fenceErr := c.selectionFence(gen); fenceErr != nil {
+				return rotationResult{}, fenceErr
+			}
+			c.log.Logf(logging.Warn, "auth", "account %s token refresh failed: %v", snap.email, err)
 			return skip("sign in again")
 		}
-		accessToken = snap.browser.Token
-	default:
-		if snap.reauth {
-			return skip("sign in again")
-		}
-		tokens := snap.tokens
+		tokens = c.accountTokens(snap.id)
 		if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
 			return skip("sign in again")
 		}
-		if !c.fxa.AccessTokenValid(tokens) {
-			if strings.TrimSpace(tokens.RefreshToken) == "" {
-				return skip("sign in again")
-			}
-			if err := c.refreshAccountToken(ctx, snap.id, gen); err != nil {
-				if fenceErr := c.selectionFence(gen); fenceErr != nil {
-					return rotationResult{}, fenceErr
-				}
-				c.log.Logf(logging.Warn, "auth", "account %s token refresh failed: %v", snap.email, err)
-				return skip("sign in again")
-			}
-			tokens = c.accountTokens(snap.id)
-			if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-				return skip("sign in again")
-			}
-		}
-		accessToken = tokens.AccessToken
-		refreshable = strings.TrimSpace(tokens.RefreshToken) != ""
 	}
+	accessToken := tokens.AccessToken
+	refreshable := strings.TrimSpace(tokens.RefreshToken) != ""
 
 	quota, err := c.rotationQuota(ctx, accessToken)
-	if err != nil && guardian.IsUnauthorized(err) && snap.method == MethodBrowser {
-		c.markReauth(snap.id, "browser token rejected; sign in again")
-		return skip("sign in again")
-	}
 	if err != nil && guardian.IsUnauthorized(err) && refreshable {
 		if refreshErr := c.refreshAccountToken(ctx, snap.id, gen); refreshErr != nil {
 			if fenceErr := c.selectionFence(gen); fenceErr != nil {
@@ -595,7 +570,8 @@ func apiQuotaFromGuardian(q *guardian.Quota) *api.Quota {
 }
 
 // startQuotaPoll refreshes the active account's quota while connected. Errors
-// back off and never disconnect; a browser 401 stops this poller.
+// back off and never disconnect; a permanent browser re-auth stops this
+// poller.
 func (c *Controller) startQuotaPoll(stop <-chan struct{}) {
 	cfg := c.store.EffectiveConfig()
 	minutes := cfg.QuotaPollMinutes
@@ -631,7 +607,7 @@ func (c *Controller) startQuotaPoll(stop <-chan struct{}) {
 				continue
 			}
 			if errors.Is(err, errQuotaReauth) {
-				c.log.Logf(logging.Info, "tunnel", "quota polling stopped: browser sign-in needs re-authentication")
+				c.log.Logf(logging.Info, "tunnel", "quota polling stopped: the account needs re-authentication")
 				return
 			}
 			failures++
@@ -667,11 +643,9 @@ func (c *Controller) pollQuotaOnce(ctx context.Context) error {
 	tokens := c.tokens
 	activeID := c.activeID
 	gen := c.authGen
-	method := ""
 	refreshable := false
 	if active != nil {
 		activeID = active.ID
-		method = active.Method
 		refreshable = active.HasRefreshToken()
 	}
 	c.mu.Unlock()
@@ -680,24 +654,24 @@ func (c *Controller) pollQuotaOnce(ctx context.Context) error {
 	}
 
 	quota, err := c.guardian.Quota(ctx, tokens.AccessToken)
-	if err != nil && guardian.IsUnauthorized(err) {
-		if method == MethodBrowser {
-			c.markReauth(activeID, "browser token rejected; sign in again")
-			return errQuotaReauth
-		}
-		if refreshable {
-			if refreshErr := c.refreshAccountToken(ctx, activeID, gen); refreshErr != nil {
-				c.log.Logf(logging.Warn, "tunnel", "quota poll refresh failed: %v", refreshErr)
-				return refreshErr
+	if err != nil && guardian.IsUnauthorized(err) && refreshable {
+		if refreshErr := c.refreshAccountToken(ctx, activeID, gen); refreshErr != nil {
+			c.log.Logf(logging.Warn, "tunnel", "quota poll refresh failed: %v", refreshErr)
+			if c.accountReauthRequired(activeID) {
+				return errQuotaReauth
 			}
-			tokens = c.accountTokens(activeID)
-			if tokens == nil {
-				return errors.New("quota poll: account disappeared")
-			}
-			quota, err = c.guardian.Quota(ctx, tokens.AccessToken)
+			return refreshErr
 		}
+		tokens = c.accountTokens(activeID)
+		if tokens == nil {
+			return errors.New("quota poll: account disappeared")
+		}
+		quota, err = c.guardian.Quota(ctx, tokens.AccessToken)
 	}
 	if err != nil {
+		if guardian.IsUnauthorized(err) && c.accountReauthRequired(activeID) {
+			return errQuotaReauth
+		}
 		return err
 	}
 
@@ -717,27 +691,34 @@ func (c *Controller) pollQuotaOnce(ctx context.Context) error {
 	return nil
 }
 
-// markReauth persists browser.reauth_required for a browser account without
-// touching the tunnel or tokens.json.
+// markReauth persists the durable top-level re-auth flag for a browser
+// account without touching the tunnel or tokens.json.
 func (c *Controller) markReauth(id, message string) {
+	c.markReauthIf(0, false, id, message)
+}
+
+// markReauthIf is markReauth optionally fenced to one auth generation so a
+// refresh that started before a newer sign-in cannot mark the new session.
+func (c *Controller) markReauthIf(gen uint64, requireMatch bool, id, message string) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return
 	}
 	c.mu.Lock()
+	if requireMatch && c.authGen != gen {
+		c.mu.Unlock()
+		return
+	}
 	a := findAccountLocked(c.accounts, id)
 	if a == nil || a.Method != MethodBrowser {
 		c.mu.Unlock()
 		return
 	}
-	if a.Browser == nil {
-		a.Browser = &BrowserToken{}
-	}
-	if a.Browser.ReauthRequired && a.LastError == message {
+	if a.ReauthRequired && a.LastError == message {
 		c.mu.Unlock()
 		return
 	}
-	a.Browser.ReauthRequired = true
+	a.ReauthRequired = true
 	a.LastError = message
 	email := a.Email
 	err := c.saveAccountsLocked(false)
@@ -747,4 +728,14 @@ func (c *Controller) markReauth(id, message string) {
 	}
 	c.log.Logf(logging.Warn, "auth", "%s needs re-authentication: %s", email, message)
 	c.notify()
+}
+
+// accountReauthRequired reports whether the stored account carries the
+// durable re-auth flag. Callers use it to translate a failed refresh into the
+// quota poller's stop signal.
+func (c *Controller) accountReauthRequired(id string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	a := findAccountLocked(c.accounts, id)
+	return a != nil && a.ReauthRequired
 }

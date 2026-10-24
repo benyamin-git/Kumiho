@@ -123,13 +123,14 @@ func rotationPasswordAccount(id, email, access string, lastUsed time.Time) *Acco
 func rotationBrowserAccount(id, email, access string, expires int64, reauth bool, lastUsed time.Time) *Account {
 	now := time.Now()
 	return &Account{
-		ID:         id,
-		Email:      email,
-		Label:      email,
-		Method:     MethodBrowser,
-		Browser:    &BrowserToken{Token: access, ExpiresAt: expires, ReauthRequired: reauth},
-		AddedAt:    now.Add(-24 * time.Hour),
-		LastUsedAt: lastUsed,
+		ID:             id,
+		Email:          email,
+		Label:          email,
+		Method:         MethodBrowser,
+		FxA:            &fxa.Tokens{AccessToken: access, RefreshToken: "refresh-" + id, ExpiresAt: expires},
+		ReauthRequired: reauth,
+		AddedAt:        now.Add(-24 * time.Hour),
+		LastUsedAt:     lastUsed,
 	}
 }
 
@@ -149,6 +150,11 @@ func enableRotation(t *testing.T, ctrl *Controller, threshold int) {
 func newRotationController(t *testing.T, accounts []*Account, activeID string, replies map[string]quotaReply, threshold int) (*Controller, settings.Paths, *quotaTracker) {
 	t.Helper()
 	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/oauth/token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"errno":110,"message":"invalid refresh token"}`)
+			return
+		}
 		http.NotFound(w, r)
 	})
 	enableRotation(t, ctrl, threshold)
@@ -398,8 +404,11 @@ func TestRotationSkipsReauthAndExpiredBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	expired := findAccountLocked(loaded, "b")
-	if expired == nil || expired.Browser == nil || !expired.Browser.ReauthRequired {
+	if expired == nil || !expired.ReauthRequired {
 		t.Fatalf("expired browser account = %+v", expired)
+	}
+	if expired.Browser != nil {
+		t.Fatalf("rotation wrote a legacy browser token: %+v", expired.Browser)
 	}
 }
 
@@ -522,8 +531,16 @@ func TestQuotaPollUpdatesSnapshot(t *testing.T) {
 
 func TestQuotaPoll401MarksReauthAndStops(t *testing.T) {
 	now := time.Now()
+	reauthHandler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/oauth/token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"errno":110,"message":"invalid refresh token"}`)
+			return
+		}
+		http.NotFound(w, r)
+	}
 	a := rotationBrowserAccount("browser", "browser@example.com", "browser-token", now.Add(time.Hour).Unix(), false, now)
-	ctrl, paths, _ := newQuotaPollController(t, a, quotaReply{status: http.StatusUnauthorized})
+	ctrl, paths, _ := newQuotaPollControllerWithHandler(t, a, quotaReply{status: http.StatusUnauthorized}, reauthHandler)
 	err := ctrl.pollQuotaOnce(context.Background())
 	if !errors.Is(err, errQuotaReauth) {
 		t.Fatalf("poll error = %v, want errQuotaReauth", err)
@@ -536,12 +553,15 @@ func TestQuotaPoll401MarksReauthAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	account := findAccountLocked(loaded, "browser")
-	if account == nil || account.Browser == nil || !account.Browser.ReauthRequired {
+	if account == nil || !account.ReauthRequired {
 		t.Fatalf("browser reauth flag = %+v", account)
+	}
+	if account.Browser != nil {
+		t.Fatalf("quota poll wrote a legacy browser token: %+v", account.Browser)
 	}
 
 	fresh := rotationBrowserAccount("browser", "fresh@example.com", "fresh-token", now.Add(time.Hour).Unix(), false, now)
-	poller, _, pollerTracker := newQuotaPollController(t, fresh, quotaReply{status: http.StatusUnauthorized})
+	poller, _, pollerTracker := newQuotaPollControllerWithHandler(t, fresh, quotaReply{status: http.StatusUnauthorized}, reauthHandler)
 	oldUnit := quotaPollUnit
 	quotaPollUnit = time.Millisecond
 	defer func() { quotaPollUnit = oldUnit }()

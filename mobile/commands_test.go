@@ -511,7 +511,7 @@ func TestMobileAccountCommands(t *testing.T) {
       "email": "user@example.com",
       "label": "Home",
       "method": "browser",
-      "browser": {"token": "browser-token", "expires_at": 9999999999},
+      "fxa": {"access_token": "access-token", "refresh_token": "refresh-token", "expires_at": 9999999999},
       "added_at": "2026-10-23T12:00:00Z",
       "last_used_at": "2026-10-23T12:00:00Z"
     }

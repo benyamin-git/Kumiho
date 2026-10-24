@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/fxa"
-	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
@@ -42,14 +40,15 @@ func TestAccountsRoundTrip(t *testing.T) {
 		LastMethod: MethodBrowser,
 		Accounts: []*Account{
 			{
-				ID:         "browser-id",
-				Email:      "browser@example.com",
-				Label:      "Browser",
-				Method:     MethodBrowser,
-				Browser:    &BrowserToken{Token: "browser-token", ExpiresAt: 123, ReauthRequired: true},
-				AddedAt:    added,
-				LastUsedAt: used,
-				Quota:      &api.Quota{},
+				ID:             "browser-id",
+				Email:          "browser@example.com",
+				Label:          "Browser",
+				Method:         MethodBrowser,
+				FxA:            &fxa.Tokens{AccessToken: "browser-access", RefreshToken: "browser-refresh", ExpiresAt: 123},
+				ReauthRequired: true,
+				AddedAt:        added,
+				LastUsedAt:     used,
+				Quota:          &api.Quota{},
 			},
 			{
 				ID:         "password-id",
@@ -92,9 +91,12 @@ func TestAccountsRoundTrip(t *testing.T) {
 	if got.Accounts[0].Label != "Browser" || !got.Accounts[0].AddedAt.Equal(added) || !got.Accounts[0].LastUsedAt.Equal(used) {
 		t.Fatalf("browser account = %+v", got.Accounts[0])
 	}
-	if got.Accounts[0].Browser == nil || got.Accounts[0].Browser.Token != "browser-token" ||
-		got.Accounts[0].Browser.ExpiresAt != 123 || !got.Accounts[0].Browser.ReauthRequired {
-		t.Fatalf("browser token = %+v", got.Accounts[0].Browser)
+	if got.Accounts[0].Browser != nil {
+		t.Fatalf("legacy browser token round-tripped: %+v", got.Accounts[0].Browser)
+	}
+	if got.Accounts[0].FxA == nil || got.Accounts[0].FxA.AccessToken != "browser-access" ||
+		got.Accounts[0].FxA.RefreshToken != "browser-refresh" || !got.Accounts[0].ReauthRequired {
+		t.Fatalf("browser account = %+v", got.Accounts[0])
 	}
 	if got.Accounts[0].Quota != nil {
 		t.Fatal("quota must not be persisted")
@@ -282,46 +284,118 @@ func TestDuplicateEmailAtLimitUpdatesExisting(t *testing.T) {
 	}
 }
 
-func TestAccountTokensPrefersMethod(t *testing.T) {
+func TestAccountUsesFxAForBrowserMethod(t *testing.T) {
 	browser := &Account{
 		Method:  MethodBrowser,
-		Browser: &BrowserToken{Token: "browser-token"},
-		FxA:     &fxa.Tokens{AccessToken: "fxa-token"},
+		Browser: &BrowserToken{Token: "legacy-opaque-token"},
+		FxA:     &fxa.Tokens{AccessToken: "fxa-access", RefreshToken: "fxa-refresh"},
 	}
-	if got := browser.Tokens(); got == nil || got.AccessToken != "browser-token" {
-		t.Fatalf("browser tokens = %+v", got)
+	got := browser.Tokens()
+	if got == nil || got.AccessToken != "fxa-access" || got.RefreshToken != "fxa-refresh" {
+		t.Fatalf("browser tokens = %+v, want the FxA set", got)
 	}
 	password := &Account{
 		Method:  MethodPassword,
-		Browser: &BrowserToken{Token: "browser-token"},
-		FxA:     &fxa.Tokens{AccessToken: "fxa-token"},
+		Browser: &BrowserToken{Token: "legacy-opaque-token"},
+		FxA:     &fxa.Tokens{AccessToken: "fxa-access"},
 	}
-	if got := password.Tokens(); got == nil || got.AccessToken != "fxa-token" {
+	if got := password.Tokens(); got == nil || got.AccessToken != "fxa-access" {
 		t.Fatalf("password tokens = %+v", got)
 	}
-	browserFallback := &Account{
-		Method: MethodBrowser,
-		FxA:    &fxa.Tokens{AccessToken: "fxa-token"},
+	legacyOnly := &Account{
+		Method:  MethodBrowser,
+		Browser: &BrowserToken{Token: "legacy-opaque-token"},
 	}
-	if got := browserFallback.Tokens(); got == nil || got.AccessToken != "fxa-token" {
-		t.Fatalf("fallback tokens = %+v", got)
+	if got := legacyOnly.Tokens(); got != nil {
+		t.Fatalf("legacy browser token must not be used as FxA tokens: %+v", got)
+	}
+	if got := (&Account{}).Tokens(); got != nil {
+		t.Fatalf("empty account tokens = %+v", got)
+	}
+	var nilAccount *Account
+	if got := nilAccount.Tokens(); got != nil {
+		t.Fatalf("nil account tokens = %+v", got)
 	}
 }
 
-func TestReauthOnlyForSelectedBrowserMethod(t *testing.T) {
-	cases := []struct {
-		name string
-		a    *Account
-		want bool
-	}{
-		{name: "password method", a: &Account{Method: MethodPassword, Browser: &BrowserToken{ReauthRequired: true}, FxA: &fxa.Tokens{AccessToken: "x"}}, want: false},
-		{name: "browser method", a: &Account{Method: MethodBrowser, Browser: &BrowserToken{ReauthRequired: true}, FxA: &fxa.Tokens{AccessToken: "x"}}, want: true},
-		{name: "fallback browser", a: &Account{Browser: &BrowserToken{ReauthRequired: true}}, want: true},
+func TestReauthRequiredUsesTopLevelFlag(t *testing.T) {
+	f := &accountsFile{Accounts: []*Account{
+		{
+			ID:             "browser",
+			Email:          "browser@example.com",
+			Method:         MethodBrowser,
+			ReauthRequired: true,
+			FxA:            &fxa.Tokens{AccessToken: "access"},
+		},
+		{
+			ID:      "password",
+			Email:   "password@example.com",
+			Method:  MethodPassword,
+			Browser: &BrowserToken{ReauthRequired: true},
+			FxA:     &fxa.Tokens{AccessToken: "access"},
+		},
+	}}
+	view := summarizeAccounts(f, settings.Config{})
+	byEmail := map[string]api.AccountSummary{}
+	for _, summary := range view.Accounts {
+		byEmail[summary.Email] = summary
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.a.ReauthRequired(); got != tc.want {
-				t.Fatalf("ReauthRequired = %v, want %v", got, tc.want)
+	if !byEmail["browser@example.com"].ReauthRequired {
+		t.Fatal("top-level browser reauth flag was not summarized")
+	}
+	if byEmail["password@example.com"].ReauthRequired {
+		t.Fatal("legacy BrowserToken reauth flag must be ignored")
+	}
+}
+
+func TestLegacyBrowserTokenStillDecodes(t *testing.T) {
+	paths := accountTestPaths(t)
+	body := `{"version":2,"active":"legacy","accounts":[{"id":"legacy","email":"old@example.com","method":"browser","browser":{"token":"opaque","expires_at":123,"reauth_required":true}}]}`
+	if err := os.WriteFile(accountsPath(paths), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, exists, err := loadAccounts(accountsPath(paths))
+	if err != nil || !exists {
+		t.Fatalf("load: exists=%v err=%v", exists, err)
+	}
+	if len(f.Accounts) != 1 || f.Accounts[0].Browser == nil {
+		t.Fatalf("legacy browser account = %+v", f.Accounts)
+	}
+	if b := f.Accounts[0].Browser; b.Token != "opaque" || b.ExpiresAt != 123 || !b.ReauthRequired {
+		t.Fatalf("legacy browser token = %+v", b)
+	}
+	if f.Accounts[0].Tokens() != nil {
+		t.Fatal("legacy token must not become FxA tokens")
+	}
+}
+
+func TestUpsertCopiesFxAForBrowserMethod(t *testing.T) {
+	for _, method := range []string{MethodBrowser, MethodPassword} {
+		t.Run(method, func(t *testing.T) {
+			f := &accountsFile{Version: 2, Accounts: []*Account{{
+				ID:      "existing",
+				Email:   "user@example.com",
+				Label:   "Work",
+				Method:  method,
+				FxA:     &fxa.Tokens{AccessToken: "old-access", RefreshToken: "old-refresh"},
+				Browser: &BrowserToken{Token: "legacy-opaque"},
+			}}}
+			got, err := f.upsert(&Account{
+				Email:  "USER@example.com",
+				Method: method,
+				FxA:    &fxa.Tokens{AccessToken: "new-access", RefreshToken: "new-refresh"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.ID != "existing" || got.Label != "Work" {
+				t.Fatalf("updated account = %+v", got)
+			}
+			if got.FxA == nil || got.FxA.AccessToken != "new-access" || got.FxA.RefreshToken != "new-refresh" {
+				t.Fatalf("FxA tokens = %+v, want the candidate set", got.FxA)
+			}
+			if got.Browser == nil || got.Browser.Token != "legacy-opaque" {
+				t.Fatalf("candidate without a legacy token must not clear it: %+v", got.Browser)
 			}
 		})
 	}
@@ -848,7 +922,7 @@ func TestAccountLabelValidation(t *testing.T) {
 	}
 }
 
-func seedBrowserAccount(t *testing.T, ctrl *Controller, paths settings.Paths, token string, expires int64) string {
+func seedFXABrowserAccount(t *testing.T, ctrl *Controller, paths settings.Paths, access, refresh string, expires int64) string {
 	t.Helper()
 	now := time.Now()
 	const id = "browser-id"
@@ -861,7 +935,7 @@ func seedBrowserAccount(t *testing.T, ctrl *Controller, paths settings.Paths, to
 			Email:      "browser@example.com",
 			Label:      "Browser",
 			Method:     MethodBrowser,
-			Browser:    &BrowserToken{Token: token, ExpiresAt: expires},
+			FxA:        &fxa.Tokens{AccessToken: access, RefreshToken: refresh, ExpiresAt: expires},
 			AddedAt:    now,
 			LastUsedAt: now,
 		}},
@@ -875,80 +949,292 @@ func seedBrowserAccount(t *testing.T, ctrl *Controller, paths settings.Paths, to
 	return id
 }
 
-func TestBrowserTokenWithoutExpiryIsUsableUntil401(t *testing.T) {
-	var oauthCalls atomic.Int32
-	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/oauth/token" {
+func TestBrowserRefreshUsesFxaRefresh(t *testing.T) {
+	t.Run("rotates the refresh token", func(t *testing.T) {
+		var oauthCalls atomic.Int32
+		ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/oauth/token" {
+				http.NotFound(w, r)
+				return
+			}
 			oauthCalls.Add(1)
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode refresh body: %v", err)
+				return
+			}
+			if body["grant_type"] != "refresh_token" || body["refresh_token"] != "old-refresh" {
+				t.Errorf("refresh body = %v", body)
+			}
+			fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`)
+		})
+		id := seedFXABrowserAccount(t, ctrl, paths, "old-access", "old-refresh", time.Now().Add(-time.Hour).Unix())
+
+		if err := ctrl.EnsureFreshToken(context.Background()); err != nil {
+			t.Fatal(err)
 		}
+		if oauthCalls.Load() != 1 {
+			t.Fatalf("refresh calls = %d, want 1", oauthCalls.Load())
+		}
+		ctrl.mu.Lock()
+		a := findAccountLocked(ctrl.accounts, id)
+		ctrl.mu.Unlock()
+		if a == nil || a.FxA == nil || a.FxA.AccessToken != "new-access" || a.FxA.RefreshToken != "new-refresh" {
+			t.Fatalf("refreshed account = %+v", a)
+		}
+		if a.Browser != nil {
+			t.Fatalf("refresh wrote a legacy browser token: %+v", a.Browser)
+		}
+		tokens, err := loadTokens(paths.Tokens)
+		if err != nil || tokens == nil || tokens.AccessToken != "new-access" || tokens.RefreshToken != "new-refresh" {
+			t.Fatalf("tokens.json = %+v, err = %v", tokens, err)
+		}
+		loaded, _, err := loadAccounts(accountsPath(paths))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := findAccountLocked(loaded, id); got == nil || got.FxA == nil ||
+			got.FxA.AccessToken != "new-access" || got.FxA.RefreshToken != "new-refresh" {
+			t.Fatalf("persisted account = %+v", got)
+		}
+	})
+
+	t.Run("permanent rejection keeps the account and marks reauth", func(t *testing.T) {
+		ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/oauth/token" {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"errno":110,"message":"invalid refresh token"}`)
+		})
+		id := seedFXABrowserAccount(t, ctrl, paths, "old-access", "dead-refresh", time.Now().Add(-time.Hour).Unix())
+
+		if err := ctrl.EnsureFreshToken(context.Background()); err == nil {
+			t.Fatal("expected the permanent refresh rejection")
+		}
+		ctrl.mu.Lock()
+		a := findAccountLocked(ctrl.accounts, id)
+		ctrl.mu.Unlock()
+		if a == nil || !a.ReauthRequired || a.LastError == "" {
+			t.Fatalf("browser account after rejection = %+v", a)
+		}
+		if a.FxA == nil || a.FxA.RefreshToken != "dead-refresh" {
+			t.Fatalf("rejection changed the stored tokens: %+v", a.FxA)
+		}
+		loaded, _, err := loadAccounts(accountsPath(paths))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := findAccountLocked(loaded, id); got == nil || !got.ReauthRequired {
+			t.Fatalf("persisted browser account = %+v", got)
+		}
+		view := ctrl.Accounts()
+		if len(view.Accounts) != 1 || !view.Accounts[0].ReauthRequired {
+			t.Fatalf("accounts view after rejection = %+v", view)
+		}
+	})
+}
+
+func TestLegacyBrowserAccountsRemovedOnStart(t *testing.T) {
+	const notice = "Old browser sign-in removed. Add your Firefox account again."
+	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-	id := seedBrowserAccount(t, ctrl, paths, "browser-token", 0)
-	ctx := context.Background()
+	now := time.Now()
+	f := &accountsFile{
+		Version:    2,
+		Active:     "legacy-browser",
+		LastMethod: MethodBrowser,
+		Accounts: []*Account{
+			{
+				ID:         "legacy-browser",
+				Email:      "old@example.com",
+				Label:      "Old",
+				Method:     MethodBrowser,
+				Browser:    &BrowserToken{Token: "opaque-token", ExpiresAt: now.Add(time.Hour).Unix()},
+				AddedAt:    now.Add(-2 * time.Hour),
+				LastUsedAt: now,
+			},
+			{
+				ID:         "password-id",
+				Email:      "user@example.com",
+				Label:      "User",
+				Method:     MethodPassword,
+				Browser:    &BrowserToken{Token: "stale-browser-field"},
+				FxA:        &fxa.Tokens{AccessToken: "access-password", RefreshToken: "refresh-password", ExpiresAt: now.Add(time.Hour).Unix()},
+				AddedAt:    now.Add(-time.Hour),
+				LastUsedAt: now.Add(-time.Hour),
+			},
+		},
+	}
+	if err := saveAccounts(accountsPath(paths), f); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveTokens(paths.Tokens, &fxa.Tokens{AccessToken: "opaque-token"}); err != nil {
+		t.Fatal(err)
+	}
 
-	if err := ctrl.EnsureFreshToken(ctx); err != nil {
-		t.Fatalf("browser token without expiry should be usable: %v", err)
+	if err := ctrl.Start(context.Background()); err != nil {
+		t.Fatal(err)
 	}
-	if oauthCalls.Load() != 0 {
-		t.Fatalf("oauth calls before 401 = %d", oauthCalls.Load())
+	st := ctrl.Snapshot()
+	if st.State != string(StateIdle) || !st.Authenticated || st.ActiveAccount != "password-id" ||
+		st.Email != "user@example.com" {
+		t.Fatalf("snapshot after legacy removal = %+v", st)
+	}
+	view := ctrl.Accounts()
+	if view.Notice != notice {
+		t.Fatalf("legacy notice = %q, want %q", view.Notice, notice)
+	}
+	if len(view.Accounts) != 1 || view.Accounts[0].ID != "password-id" || !view.Accounts[0].Active {
+		t.Fatalf("accounts after legacy removal = %+v", view)
+	}
+	if second := ctrl.Accounts(); second.Notice != "" {
+		t.Fatalf("legacy notice repeated = %q", second.Notice)
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `{"message":"invalid token"}`)
-	}))
-	defer srv.Close()
-	ctrl.guardian = &guardian.Client{BaseURL: srv.URL, HTTP: srv.Client()}
-	info := ctrl.Account(ctx)
-	if info.ID != id || info.Label != "Browser" || info.Method != MethodBrowser || !info.ReauthRequired {
-		t.Fatalf("browser account info = %+v", info)
-	}
-	if info.Error == "" || !strings.Contains(info.Error, "401") {
-		t.Fatalf("browser 401 error = %q", info.Error)
-	}
-	if oauthCalls.Load() != 0 {
-		t.Fatalf("browser 401 used /v1/oauth/token: calls = %d", oauthCalls.Load())
-	}
 	loaded, _, err := loadAccounts(accountsPath(paths))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Accounts[0].Browser == nil || !loaded.Accounts[0].Browser.ReauthRequired {
-		t.Fatalf("persisted browser token = %+v", loaded.Accounts[0].Browser)
+	if len(loaded.Accounts) != 1 || loaded.Active != "password-id" {
+		t.Fatalf("persisted accounts = %+v", loaded)
 	}
-	view := ctrl.Accounts()
-	if len(view.Accounts) != 1 || !view.Accounts[0].ReauthRequired {
-		t.Fatalf("accounts view after 401 = %+v", view)
+	if findAccountLocked(loaded, "legacy-browser") != nil {
+		t.Fatal("legacy browser account was not removed from accounts.json")
+	}
+	password := findAccountLocked(loaded, "password-id")
+	if password == nil || password.Browser != nil {
+		t.Fatalf("password account after legacy cleanup = %+v", password)
+	}
+	if password.FxA == nil || password.FxA.AccessToken != "access-password" {
+		t.Fatalf("password FxA tokens = %+v", password.FxA)
+	}
+	tokens, err := loadTokens(paths.Tokens)
+	if err != nil || tokens == nil || tokens.AccessToken != "access-password" {
+		t.Fatalf("tokens.json after legacy removal = %+v, err = %v", tokens, err)
 	}
 }
 
-func TestBrowserRefreshTokenNeverUsed(t *testing.T) {
-	var oauthCalls atomic.Int32
-	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/oauth/token" {
-			oauthCalls.Add(1)
+func TestLegacyBrowserRemovalWhenActive(t *testing.T) {
+	t.Run("selects the next most recently used account", func(t *testing.T) {
+		ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		})
+		now := time.Now()
+		next := &Account{
+			ID: "next-id", Email: "next@example.com", Label: "Next", Method: MethodPassword,
+			FxA:        &fxa.Tokens{AccessToken: "next-access", RefreshToken: "next-refresh", ExpiresAt: now.Add(time.Hour).Unix()},
+			AddedAt:    now.Add(-2 * time.Hour),
+			LastUsedAt: now.Add(-time.Minute),
 		}
+		older := &Account{
+			ID: "older-id", Email: "older@example.com", Label: "Older", Method: MethodPassword,
+			FxA:        &fxa.Tokens{AccessToken: "older-access", RefreshToken: "older-refresh", ExpiresAt: now.Add(time.Hour).Unix()},
+			AddedAt:    now.Add(-3 * time.Hour),
+			LastUsedAt: now.Add(-2 * time.Hour),
+		}
+		legacy := &Account{
+			ID: "legacy-id", Email: "legacy@example.com", Label: "Legacy", Method: MethodBrowser,
+			Browser:    &BrowserToken{Token: "opaque-token"},
+			AddedAt:    now.Add(-4 * time.Hour),
+			LastUsedAt: now,
+		}
+		f := &accountsFile{Version: 2, Active: legacy.ID, LastMethod: MethodBrowser, Accounts: []*Account{legacy, next, older}}
+		if err := saveAccounts(accountsPath(paths), f); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctrl.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if st := ctrl.Snapshot(); st.ActiveAccount != next.ID || st.Email != next.Email {
+			t.Fatalf("snapshot after active legacy removal = %+v", st)
+		}
+		if view := ctrl.Accounts(); len(view.Accounts) != 2 || view.Active != next.ID {
+			t.Fatalf("accounts after active legacy removal = %+v", view)
+		}
+	})
+
+	t.Run("all removed signs out", func(t *testing.T) {
+		ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		})
+		now := time.Now()
+		f := &accountsFile{Version: 2, Active: "legacy-id", LastMethod: MethodBrowser, Accounts: []*Account{{
+			ID: "legacy-id", Email: "legacy@example.com", Label: "Legacy", Method: MethodBrowser,
+			Browser:    &BrowserToken{Token: "opaque-token"},
+			AddedAt:    now,
+			LastUsedAt: now,
+		}}}
+		if err := saveAccounts(accountsPath(paths), f); err != nil {
+			t.Fatal(err)
+		}
+		if err := saveTokens(paths.Tokens, &fxa.Tokens{AccessToken: "opaque-token"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctrl.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		st := ctrl.Snapshot()
+		if st.State != string(StateUnauthenticated) || st.Authenticated || st.ActiveAccount != "" ||
+			st.Email != "" || len(st.Accounts) != 0 {
+			t.Fatalf("snapshot after removing every account = %+v", st)
+		}
+		if view := ctrl.Accounts(); len(view.Accounts) != 0 || view.Active != "" ||
+			view.Notice != "Old browser sign-in removed. Add your Firefox account again." {
+			t.Fatalf("accounts after removing every account = %+v", view)
+		}
+		for _, path := range []string{accountsPath(paths), paths.Tokens} {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("%s should be gone, stat err = %v", path, err)
+			}
+		}
+	})
+}
+
+func TestLegacyCleanupKeepsFXABrowserAndClearsPasswordField(t *testing.T) {
+	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-	seedBrowserAccount(t, ctrl, paths, "expired-browser-token", time.Now().Add(-time.Hour).Unix())
-
-	err := ctrl.EnsureFreshToken(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "sign in again") {
-		t.Fatalf("expired browser token error = %v", err)
+	now := time.Now()
+	f := &accountsFile{Version: 2, Active: "browser-id", LastMethod: MethodBrowser, Accounts: []*Account{
+		{
+			ID: "browser-id", Email: "browser@example.com", Label: "Browser", Method: MethodBrowser,
+			Browser:    &BrowserToken{Token: "old-opaque"},
+			FxA:        &fxa.Tokens{AccessToken: "browser-access", RefreshToken: "browser-refresh", ExpiresAt: now.Add(time.Hour).Unix()},
+			AddedAt:    now.Add(-time.Hour),
+			LastUsedAt: now,
+		},
+		{
+			ID: "password-id", Email: "password@example.com", Label: "Password", Method: MethodPassword,
+			Browser:    &BrowserToken{Token: "stale-field"},
+			FxA:        &fxa.Tokens{AccessToken: "password-access", RefreshToken: "password-refresh", ExpiresAt: now.Add(time.Hour).Unix()},
+			AddedAt:    now.Add(-2 * time.Hour),
+			LastUsedAt: now.Add(-time.Hour),
+		},
+	}}
+	if err := saveAccounts(accountsPath(paths), f); err != nil {
+		t.Fatal(err)
 	}
-	if oauthCalls.Load() != 0 {
-		t.Fatalf("expired browser token called /v1/oauth/token %d times", oauthCalls.Load())
+	if err := ctrl.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	view := ctrl.Accounts()
+	if len(view.Accounts) != 2 || view.Active != "browser-id" || view.Notice != "" {
+		t.Fatalf("accounts after cleanup = %+v", view)
 	}
 	loaded, _, err := loadAccounts(accountsPath(paths))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Accounts[0].Browser == nil || !loaded.Accounts[0].Browser.ReauthRequired ||
-		loaded.Accounts[0].Browser.Token != "expired-browser-token" {
-		t.Fatalf("persisted browser token = %+v", loaded.Accounts[0].Browser)
+	browser := findAccountLocked(loaded, "browser-id")
+	if browser == nil || browser.FxA == nil || browser.FxA.AccessToken != "browser-access" {
+		t.Fatalf("FxA browser account was not kept: %+v", browser)
 	}
-	if view := ctrl.Accounts(); len(view.Accounts) != 1 || !view.Accounts[0].ReauthRequired {
-		t.Fatalf("accounts view = %+v", view)
+	password := findAccountLocked(loaded, "password-id")
+	if password == nil || password.Browser != nil || password.FxA == nil {
+		t.Fatalf("password account after cleanup = %+v", password)
 	}
 }
 

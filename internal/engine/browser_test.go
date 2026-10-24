@@ -215,12 +215,16 @@ func TestBrowserLoginCompletesAndAddsAccount(t *testing.T) {
 	if a.FxA != nil {
 		t.Fatalf("browser account stored FxA tokens: %+v", a.FxA)
 	}
+	if a.ReauthRequired {
+		t.Fatalf("browser account has a top-level reauth flag: %+v", a)
+	}
 	if len(ctrl.Accounts().Accounts) != 1 || !ctrl.Accounts().Accounts[0].Active {
 		t.Fatalf("accounts view = %+v", ctrl.Accounts())
 	}
-	tokens, err := loadTokens(ctrl.store.Paths().Tokens)
-	if err != nil || tokens == nil || tokens.AccessToken != token || tokens.RefreshToken != "" {
-		t.Fatalf("tokens.json = %+v, err = %v", tokens, err)
+	// The superseded opaque flow has no FxA token set, so it must not leak its
+	// browser token into the rollback copy. Task 3 replaces this flow.
+	if tokens, err := loadTokens(ctrl.store.Paths().Tokens); err != nil || tokens != nil {
+		t.Fatalf("tokens.json = %+v, err = %v; legacy browser token must not be written", tokens, err)
 	}
 	loaded, _, err := loadAccounts(accountsPath(ctrl.store.Paths()))
 	if err != nil || len(loaded.Accounts) != 1 {
@@ -269,14 +273,15 @@ func TestBrowserLoginReauthExistingAccount(t *testing.T) {
 		LastMethod: MethodPassword,
 		Accounts: []*Account{
 			{
-				ID:         "browser-id",
-				Email:      "browser@example.com",
-				Label:      "Browser label",
-				Method:     MethodBrowser,
-				Browser:    &BrowserToken{Token: "old-browser-token", ExpiresAt: exp, ReauthRequired: true},
-				FxA:        oldFxA,
-				AddedAt:    now.Add(-2 * time.Hour),
-				LastUsedAt: now.Add(-time.Hour),
+				ID:             "browser-id",
+				Email:          "browser@example.com",
+				Label:          "Browser label",
+				Method:         MethodBrowser,
+				Browser:        &BrowserToken{Token: "old-browser-token", ExpiresAt: exp, ReauthRequired: true},
+				FxA:            oldFxA,
+				ReauthRequired: true,
+				AddedAt:        now.Add(-2 * time.Hour),
+				LastUsedAt:     now.Add(-time.Hour),
 			},
 			{
 				ID:         "password-id",
@@ -308,6 +313,9 @@ func TestBrowserLoginReauthExistingAccount(t *testing.T) {
 	a := browserAccountByID(t, ctrl, "browser-id")
 	if a.Browser == nil || a.Browser.ReauthRequired || a.Browser.Token == "old-browser-token" {
 		t.Fatalf("browser token after reauth = %+v", a.Browser)
+	}
+	if a.ReauthRequired {
+		t.Fatal("browser reauth did not clear the top-level reauth flag")
 	}
 	if a.FxA == nil || a.FxA.AccessToken != "access-old" || a.FxA.RefreshToken != "refresh-old" {
 		t.Fatalf("browser reauth changed FxA tokens: %+v", a.FxA)

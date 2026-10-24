@@ -56,6 +56,9 @@ func newTestControllerWithProvider(t *testing.T, handler http.HandlerFunc, plat 
 	t.Cleanup(server.Close)
 	client := fxa.NewClient()
 	client.BaseURL = server.URL + "/v1"
+	// Keep logout's best-effort token revocation hermetic: never fall through
+	// to the production destroy endpoint from a test.
+	client.DestroyEndpoint = server.URL + "/v1/oauth/destroy"
 	ring := logging.NewRing(logging.Options{Capacity: 100})
 	return New(store, ring, client, plat), paths
 }

@@ -240,13 +240,14 @@ func (c *Controller) finishBrowserSuccess(b *browserLogin, gen uint64, result *w
 		c.notify()
 		return
 	}
-	// Browser tokens have no refresh token. Preserve any FxA fallback tokens
-	// already on the account, and clear the durable re-auth flag only after a
-	// successful sign-in.
+	// Transitional old flow: preserve any FxA fallback tokens already on the
+	// account, and clear both the legacy and the durable re-auth flag only
+	// after a successful sign-in. Task 3 replaces this flow with FxA tokens.
 	if account.Browser == nil {
 		account.Browser = &BrowserToken{}
 	}
 	account.Browser.ReauthRequired = false
+	account.ReauthRequired = false
 	account.LastError = ""
 	c.accounts.LastMethod = MethodBrowser
 

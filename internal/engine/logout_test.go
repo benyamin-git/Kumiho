@@ -2,11 +2,13 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/guardian"
+	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/upstream"
 )
 
@@ -92,6 +95,79 @@ func TestLogoutWipesAccountAndUsageState(t *testing.T) {
 	if totalsUp != 0 || totalsDown != 0 || ratesUp != 0 || ratesDown != 0 {
 		t.Errorf("usage fields after logout = %d/%d, %v/%v, want zero",
 			totalsUp, totalsDown, ratesUp, ratesDown)
+	}
+}
+
+func TestLogoutRevokesBestEffort(t *testing.T) {
+	t.Run("revokes every stored refresh token then clears local state", func(t *testing.T) {
+		var mu sync.Mutex
+		var received []string
+		destroy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/destroy" {
+				http.NotFound(w, r)
+				return
+			}
+			var body struct {
+				RefreshToken string `json:"refresh_token"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode destroy body: %v", err)
+				return
+			}
+			mu.Lock()
+			received = append(received, body.RefreshToken)
+			mu.Unlock()
+			fmt.Fprint(w, `{}`)
+		}))
+		t.Cleanup(destroy.Close)
+
+		ctrl, paths := newTestController(t, multiLoginHandler(t))
+		loginAs(t, ctrl, "one@example.com")
+		loginAs(t, ctrl, "two@example.com")
+		ctrl.fxa.DestroyEndpoint = destroy.URL + "/destroy"
+
+		if err := ctrl.Logout(); err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		sort.Strings(received)
+		got := append([]string(nil), received...)
+		mu.Unlock()
+		want := []string{"refresh-1", "refresh-2"}
+		if len(got) != len(want) {
+			t.Fatalf("destroyed refresh tokens = %v, want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("destroyed refresh tokens = %v, want %v", got, want)
+			}
+		}
+		assertLogoutClearedLocally(t, ctrl, paths)
+	})
+
+	t.Run("offline revoke still clears local state", func(t *testing.T) {
+		ctrl, paths := newTestController(t, multiLoginHandler(t))
+		loginAs(t, ctrl, "offline@example.com")
+		ctrl.fxa.DestroyEndpoint = "http://127.0.0.1:1/destroy"
+
+		if err := ctrl.Logout(); err != nil {
+			t.Fatalf("offline revoke blocked sign-out: %v", err)
+		}
+		assertLogoutClearedLocally(t, ctrl, paths)
+	})
+}
+
+func assertLogoutClearedLocally(t *testing.T, ctrl *Controller, paths settings.Paths) {
+	t.Helper()
+	st := ctrl.Snapshot()
+	if st.State != string(StateUnauthenticated) || st.Authenticated || st.Email != "" ||
+		st.ActiveAccount != "" || len(st.Accounts) != 0 || st.Login != nil {
+		t.Fatalf("snapshot after logout = %+v", st)
+	}
+	for _, path := range []string{accountsPath(paths), paths.Tokens} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s should be gone, stat err = %v", path, err)
+		}
 	}
 }
 
