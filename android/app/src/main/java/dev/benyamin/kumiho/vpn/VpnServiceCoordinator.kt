@@ -159,11 +159,17 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         this.binder = binder
         mutableEngine.value = client
         mutableState.update { it.copy(binding = true, error = null) }
-        synchronized(bindLock) {
+        val waiter = synchronized(bindLock) {
             // A fresh, already-completed handle for this binding; callers that
             // waited through a previous failure see a healthy client again.
+            val previous = pendingEngine
             pendingEngine = CompletableDeferred<EngineClient>().also { it.complete(client) }
+            previous
         }
+        // A caller may have captured the previous deferred before this
+        // connection arrived (for example a deep link that cold-started the
+        // activity). Complete it too, or that caller waits forever.
+        waiter.complete(client)
         stateJob?.cancel()
         stateJob = scope.launch {
             binder.state.collect { snapshot ->
