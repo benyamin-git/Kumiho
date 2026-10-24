@@ -24,15 +24,25 @@ type Client struct {
 	Rand      io.Reader        // injectable nonce source for tests
 	Solver    ChallengeSolver  // optional anti-bot solver (internal/fastly)
 	UserAgent string           // platform UA; empty uses the package default
+
+	// Browser OAuth endpoints; empty values fall back to the package defaults.
+	AuthorizationEndpoint string
+	TokenEndpoint         string
+	ProfileEndpoint       string
+	DestroyEndpoint       string
 }
 
 // NewClient returns a Client with production defaults.
 func NewClient() *Client {
 	return &Client{
-		BaseURL: DefaultBaseURL,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
-		Now:     time.Now,
-		Rand:    rand.Reader,
+		BaseURL:               DefaultBaseURL,
+		HTTP:                  &http.Client{Timeout: 30 * time.Second},
+		Now:                   time.Now,
+		Rand:                  rand.Reader,
+		AuthorizationEndpoint: DefaultAuthorizationEndpoint,
+		TokenEndpoint:         DefaultTokenEndpoint,
+		ProfileEndpoint:       DefaultProfileEndpoint,
+		DestroyEndpoint:       DefaultDestroyEndpoint,
 	}
 }
 
@@ -205,9 +215,24 @@ func (c *Client) tokensFromResponse(raw []byte, fallbackRefresh string) (*Tokens
 	}, nil
 }
 
-// doJSON sends a request, signs it with Hawk when a session token is given,
-// and retries HTTP 406 through the challenge solver when one is configured.
+// doJSON sends a request to a BaseURL-relative path, signs it with Hawk when a
+// session token is given, and retries HTTP 406 through the challenge solver.
 func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, payload any) ([]byte, error) {
+	endpoint := strings.TrimRight(c.baseURL(), "/") + path
+	return c.doRequest(ctx, method, endpoint, sessionToken, "", payload)
+}
+
+// doEndpointJSON sends a request to a full endpoint, optionally authenticated
+// with a bearer token. Browser OAuth endpoints are absolute URLs and do not
+// go through BaseURL.
+func (c *Client) doEndpointJSON(ctx context.Context, method, endpoint, bearerToken string, payload any) ([]byte, error) {
+	return c.doRequest(ctx, method, endpoint, "", bearerToken, payload)
+}
+
+// doRequest sends a request to endpoint, signs it with Hawk when a session
+// token is given or with a bearer token when one is given, and retries HTTP
+// 406 through the challenge solver when one is configured.
+func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, bearerToken string, payload any) ([]byte, error) {
 	var body []byte
 	if payload != nil {
 		var err error
@@ -217,7 +242,6 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 		}
 	}
 
-	endpoint := strings.TrimRight(c.baseURL(), "/") + path
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
@@ -260,6 +284,8 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 				return nil, err
 			}
 			req.Header.Set("Authorization", header)
+		} else if bearerToken != "" {
+			req.Header.Set("Authorization", "Bearer "+bearerToken)
 		}
 		return req, nil
 	}

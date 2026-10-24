@@ -20,6 +20,18 @@ const (
 	// UserAgent identifies as the official Mozilla VPN client (Linux).
 	UserAgent = "MozillaVPN/2.35.0 (sys:linux; iap:true)"
 
+	// DefaultAuthorizationEndpoint is the FxA browser consent page.
+	DefaultAuthorizationEndpoint = "https://accounts.firefox.com/authorization"
+	// DefaultTokenEndpoint exchanges an authorization code for tokens. It is
+	// distinct from the auth-server BaseURL used by the password flow.
+	DefaultTokenEndpoint = "https://oauth.accounts.firefox.com/v1/token"
+	// OAuthRedirectURI is the client's registered out-of-band redirect.
+	OAuthRedirectURI = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
+	// DefaultProfileEndpoint returns the signed-in account's profile.
+	DefaultProfileEndpoint = "https://profile.accounts.firefox.com/v1/profile"
+	// DefaultDestroyEndpoint revokes a refresh token.
+	DefaultDestroyEndpoint = "https://oauth.accounts.firefox.com/v1/destroy"
+
 	verificationMethodEmail2FA = "email-2fa"
 	errnoInvalidParameter      = 107
 	defaultAccessTokenTTL      = 24 * 60 * 60
