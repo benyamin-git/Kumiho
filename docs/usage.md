@@ -13,7 +13,7 @@ app process. Its guide is [android.md](android.md).
     kumiho                      # TUI (default)
     kumiho daemon               # run the daemon in the foreground
     kumiho login                # browser or password Firefox Accounts sign-in
-    kumiho login --browser      # print/open the URL and poll until done
+    kumiho login --browser      # print/open the URL, then paste the redirect URL
     kumiho login --password     # email → password → 2FA/TOTP code
     kumiho accounts             # list accounts and the active one
     kumiho accounts add [--browser|--password] [--account <id|email>] [--no-open]
@@ -80,7 +80,7 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   account (with confirmation). The login screen offers `b` browser and `p`
   password when no login is in progress.
 
-## Sign-in and accounts (v0.6.0)
+## Sign-in and accounts
 
 `kumiho login` with a terminal asks for a method the first time: **browser**
 (recommended) or **password**. It remembers the last successful method, but the
@@ -88,15 +88,25 @@ browser remains the default until a password sign-in succeeds. Without a
 terminal, `kumiho login` uses the password flow for script compatibility; pass
 `--browser` explicitly to use the browser.
 
-**Browser sign-in** starts a daemon-owned PKCE flow and prints (and, unless
-`--no-open` is given, opens) a `https://vpn.mozilla.org/...` URL on a
-one-shot `127.0.0.1` callback. Complete captcha, password, TOTP or unblock
-challenges in the browser; Kumiho polls every two seconds and finishes when
-Mozilla redirects to the loopback callback. The callback carries no bearer
-token, the flow accepts one callback, and it expires after five minutes. The
-CLI cancels the daemon-side flow on timeout. `--no-open` is useful over SSH or
-in a headless shell: copy the URL to a browser on the same machine (the
-callback is loopback-only) and keep the command running.
+**Browser sign-in** starts a daemon-owned Firefox Accounts OAuth flow with
+PKCE, `state` and the VPN scope. It prints (and, unless `--no-open` is given,
+opens) a `https://accounts.firefox.com/authorization?...` URL, then prompts
+`Redirect URL:` on stdin. Complete captcha, password, TOTP or unblock
+challenges in the browser. Mozilla redirects to a
+`urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?...` address, so the
+browser shows its “can't open this address” page — that is expected. Copy the
+complete URL from the browser's address bar and paste it at the prompt.
+Kumiho exchanges the code, fetches the Firefox Accounts profile for the
+UID/email and stores ordinary FxA access and refresh tokens; later refreshes
+work like a password login, and a permanently rejected refresh token marks the
+account for sign-in again.
+
+There is no loopback listener, so the browser may run on any machine;
+`--no-open` is useful over SSH or in a headless shell. The flow expires after
+ten minutes and the CLI cancels the daemon-side flow on timeout. The redirect
+URL, authorization code, PKCE verifier and tokens are never logged. The TUI
+and Windows GUI use the same flow with a **Redirect URL** field and
+**Continue**; the Android app completes it in its in-app WebView.
 
 **Password sign-in** sends the password only in the request that uses it; it
 is never stored. Email-link 2FA and TOTP/unblock codes are supported. A real
@@ -107,14 +117,22 @@ Firefox Accounts presents one.
 quota and re-authentication state. `accounts add` uses the same browser or
 password flow (without `--browser`/`--password`, a terminal asks; a script
 uses the password flow). `--account <id|email>` re-authenticates an existing
-account and, for browser, replaces its stored Guardian token. `accounts use`
+account and, for browser, replaces its stored FxA tokens. Re-authentication
+uses the stored email; signing in to a different account during that flow is
+refused and the new tokens are discarded. `accounts use`
 switches the active account and refuses while the tunnel is up. `accounts
 remove` removes one account; when it was the active one the engine selects the
 most recently used remaining account. `accounts rename` replaces the label.
 There is no `accounts update` CLI verb, but clients use the `accounts_update`
 IPC command for the same label change; an empty label from a client resets it
 to the email. Up to five accounts can be stored; labels are preserved when the
-same email is signed in again.
+same email is signed in again. Adding a new account with an email that matches
+an existing one replaces its tokens and keeps the label.
+
+On the first engine start after upgrading from v0.6.0, accounts created by the
+old opaque browser sign-in are removed with the notice **“Old browser sign-in
+removed. Add your Firefox account again.”** Password accounts and settings are
+untouched; add the Firefox account again with the browser or password flow.
 
 **Rotation** is off by default. `kumiho accounts rotation on` enables it and
 `kumiho accounts threshold <1-50>` sets the percentage (default 10).
@@ -125,8 +143,9 @@ accounts only at connect, never mid-session:
 - otherwise the engine picks the highest known remaining quota, using the
   least recently used account to break ties;
 - unknown quotas are tried after known eligible accounts;
-- expired browser accounts, rejected tokens and accounts needing sign-in are
-  skipped with a notice, and password tokens are refreshed once;
+- browser accounts whose refresh token was permanently rejected, rejected
+  tokens and accounts needing sign-in are skipped with a notice, and password
+  tokens are refreshed once;
 - if every account is at zero quota or needs sign-in, connect fails with the
   account names instead of opening a tunnel.
 
@@ -136,14 +155,22 @@ the `notice` field. Rotation never changes accounts under live streams.
 **Quota polling** runs while connected at `quota_poll_minutes` (default 15,
 range 1–1440). A success updates the active account's quota in the status and
 Account snapshot. Failures back off exponentially from the configured interval
-to a 30-minute cap; they never disconnect the tunnel. A browser token rejected
-by Guardian gets the durable `browser.reauth_required` flag and stops that
-poller; re-authenticate the account to clear it. A 429 is shown as zero
-remaining and does not drop the connection.
+to a 30-minute cap; they never disconnect the tunnel. A browser account whose
+refresh token is permanently rejected gets the durable `reauth_required` flag
+and stops that poller; re-authenticate the account to clear it. A 429 is shown
+as zero remaining and does not drop the connection.
 
-`kumiho logout` clears every account (browser and password), removes the
-token files and disconnects. Removing one account leaves the others signed in
-and does not sign out your Firefox Account itself.
+`kumiho logout` asks Firefox Accounts to revoke every stored refresh token
+(best effort, five seconds), clears every account (browser and password),
+removes the token files and disconnects. An offline or failed revoke never
+blocks the local sign-out. Removing one account leaves the others signed in and
+does not revoke their tokens. Sign-out does not delete your Firefox Account;
+you can sign in again at any time.
+
+Browser sign-in uses the project's existing Firefox OAuth client and Mozilla's
+account page; this and automatic account rotation are a ToS gray area for an
+unofficial client. See [PLAN.md §13](../PLAN.md#13-risks-and-mitigations) and
+the [README](../README.md) before using multiple accounts.
 
 ## v0.4.0 settings
 
@@ -225,7 +252,7 @@ works through the local resolver, including TCP.
 | Path | Contents |
 |---|---|
 | `/etc/kumiho/config.toml` | admin defaults (all keys optional) |
-| `/var/lib/kumiho/accounts.json` | v2 account store: active account, last method, up to five labeled browser/password accounts (mode 0600) |
+| `/var/lib/kumiho/accounts.json` | v2 account store: active account, last method, up to five labeled browser/password accounts with FxA tokens (mode 0600) |
 | `/var/lib/kumiho/tokens.json` | rollback copy of the active account's tokens (mode 0600); migrated from legacy installs and removed on logout |
 | `/var/lib/kumiho/state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides |
 | `/var/lib/kumiho/serverlist.json` | cached server list; only used when a fetch fails |

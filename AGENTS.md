@@ -139,16 +139,24 @@ them locally for any change under `android/`, `mobile/` or
   also serves the DNS-only `UDP ASSOCIATE` relay, and `http_proxy=on` starts
   the local HTTP proxy alongside the tunnel; both start and stop with the
   tunnel and stay out of the `internal/platform` seam.
-- **v0.6.0 sign-in/accounts**: `internal/webauth` owns the browser PKCE flow —
-  a one-shot callback on a random `127.0.0.1` port, a five-minute deadline and
-  the Mozilla VPN login/verify exchange. The engine consumes it in
-  `internal/engine/browser.go`; clients only open the returned URL and poll
-  `login_status`/`accounts_add_status`. `internal/engine/accounts.go` owns
-  `accounts.json` v2 (five-account cap, labels, active id, `last_method`,
-  browser/FxA tokens) and migration from legacy `tokens.json`, which remains a
-  synchronized rollback copy until logout. `internal/engine/rotation.go` owns
-  opt-in before-connect quota rotation and the connected quota poller; it
-  never rotates mid-session.
+- **v0.6.1 sign-in/accounts**: `internal/fxa` owns direct Firefox Accounts
+  OAuth (authorization URL, PKCE S256, code exchange, profile lookup and
+  best-effort refresh-token destroy) alongside the existing password client
+  and refresh. The engine consumes it in `internal/engine/browser.go`: an
+  in-memory flow with a ten-minute deadline, no listener, and start/status/
+  complete/cancel commands; `login_complete` accepts the complete `urn:`
+  redirect URL.
+  Clients only open the returned URL and poll `login_status`/
+  `accounts_add_status`; desktop clients paste the redirect URL, while Android
+  intercepts it in the in-app WebView. `internal/webauth` is gone.
+  `internal/engine/accounts.go` owns `accounts.json` v2 (five-account cap,
+  labels, active id, `last_method`, FxA tokens, durable `reauth_required`) and
+  migration from legacy `tokens.json`, which remains a synchronized rollback
+  copy until logout; start removes accounts that only carry the superseded
+  opaque `Browser` token. `internal/engine/rotation.go` owns opt-in
+  before-connect quota rotation and the connected quota poller; it never
+  rotates mid-session. `logout` best-effort destroys every stored FxA refresh
+  token, then always clears local state.
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
@@ -164,7 +172,9 @@ them locally for any change under `android/`, `mobile/` or
   `accounts_list`/`accounts_add_start`/`accounts_add_status`/
   `accounts_add_cancel`, `accounts_remove`, `accounts_use`,
   `accounts_update`, `accounts_set_rotation` and `accounts_info`; existing
-  envelopes and fields are unchanged. `ipc.DefaultTransport()` selects the
+  envelopes and fields are unchanged. v0.6.1 additively adds `redirect_url` to
+  `LoginCompletePayload`; `code` stays in the struct for protocol shape, but
+  the browser flow rejects it. `ipc.DefaultTransport()` selects the
   platform transport (`default_unix.go` / `default_windows.go`): Unix socket
   vs a `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is
   administrators-only (Linux root parity).
@@ -191,9 +201,13 @@ them locally for any change under `android/`, `mobile/` or
   coordinator, notifications and the QS tile; `engine/` is the pure-JVM client
   over the facade; `ui/` is the shell and screens; `data/` holds DataStore
   preferences and split tunneling; `crash/` the local crash log;
-  `diagnostics/` the Android facts. Browser sign-in uses AndroidX Custom Tabs
-  from `ui/account/AccountBrowser.kt` and the same daemon-owned loopback
-  callback; `res/xml/network_security_config.xml` permits cleartext only for
+  `diagnostics/` the Android facts. Browser sign-in is a full-screen in-app
+  WebView over `accounts.firefox.com` that intercepts the `urn:` redirect and
+  submits the complete URL through `login_complete`; `ui/account/AccountBrowser.kt`
+  is only the validated system-browser fallback when the WebView cannot be
+  created, and the waiting card offers paste and password alternatives. WebView
+  cookies persist across attempts and are cleared on sign-out.
+  `res/xml/network_security_config.xml` permits cleartext only for
   `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android
   provider adopts the detached
   fd, drops IPv6, leaves interface route/DNS work to Kotlin and answers the

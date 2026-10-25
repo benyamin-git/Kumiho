@@ -7,29 +7,18 @@ import android.content.Intent
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 
-/** A test seam for opening the engine's browser sign-in URL. */
-fun interface BrowserLauncher {
-    /** Returns false when no activity can handle the URL. */
-    fun open(context: Context, url: String): Boolean
-}
-
 /**
  * Opens the engine's browser sign-in URL in a Custom Tab. This is the fallback
  * used only when the in-app [MozillaAccountBrowserScreen] cannot be created:
  * the WebView path intercepts Mozilla's URN redirect itself, while this path
  * leaves the complete redirect URL to be pasted on the sign-in screen.
  *
- * The engine returns Mozilla's HTTPS login page; its loopback callback is
- * internal to the engine, so the URL opened here is deliberately not a loopback
- * URL. Plain http is accepted only for loopback, which keeps dev/test harnesses
- * safe.
+ * The engine returns Mozilla's HTTPS Firefox Accounts page; plain http is
+ * accepted only for loopback, which keeps dev/test harnesses safe.
  *
  * Returns false when the URL is not a remote HTTPS page (or loopback HTTP) or
  * no browser accepts it; the caller keeps the flow cancellable and shows the
- * password fallback instead.
- *
- * There is deliberately no custom URL scheme: the engine owns the loopback
- * server, and Android only needs a browser to reach the login page.
+ * paste and password fallbacks instead.
  */
 fun openBrowserSignIn(context: Context, url: String): Boolean {
     val uri = Uri.parse(url)

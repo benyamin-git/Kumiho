@@ -77,9 +77,9 @@ const SIGNOUT_REVOKE =
 const SIGNOUT_REVOKE_ALL =
   "Kumiho will also try to revoke its Mozilla sign-ins; local sign-out completes offline.";
 
-// The browser URL opened once across remounts. A loopback URL is one-shot,
-// so re-opening the same flow after a screen switch would be a navigation
-// error; a new flow carries a new port/state.
+// The browser URL opened once across remounts. Re-opening the same flow after
+// a screen switch would open a second tab, so remember it; a new flow carries
+// a new URL.
 let openedBrowserURL = "";
 
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
@@ -220,7 +220,7 @@ function build(host) {
   empty.hidden = true;
   accounts.append(accountsHead, list, empty);
 
-  // The browser waiting card (one sign-in flow at a time): the loopback URL,
+  // The browser waiting card (one sign-in flow at a time): the engine URL,
   // the redirect URL pasted from the browser, Open again and Cancel.
   const waiting = el("section", "card acct__waiting");
   waiting.hidden = true;

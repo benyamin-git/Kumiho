@@ -8,7 +8,10 @@ kill switch, watchdog with edge rotation, runtime settings, log viewer, account
 screen, and a systemd (`install.sh`) or Windows service (`install.ps1`)
 install. v0.6.0 adds browser and password sign-in, up to five accounts with
 labels, rotation and quota polling, and the same account surface in the CLI,
-TUI, Windows GUI and Android app. v0.5.2 adds
+TUI, Windows GUI and Android app. v0.6.1 (unreleased) replaces the browser
+sign-in exchange with direct Firefox Accounts OAuth: Android finishes it in an
+in-app WebView, desktop clients paste the browser's redirect URL, and old
+opaque browser accounts are removed. v0.5.2 adds
 an opt-in Android setting that keeps LAN connections alive across a VPN
 transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
@@ -95,12 +98,37 @@ before release:
   (see [docs/android-testing.md](docs/android-testing.md)).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
+## What's new in v0.6.1 (unreleased)
+
+- **Direct Firefox Accounts OAuth** — browser sign-in now uses the project's
+  existing Firefox client with PKCE S256, `state` and the
+  `profile https://identity.mozilla.com/apps/vpn` scope. The exchange returns
+  ordinary FxA access and refresh tokens, the profile lookup supplies the
+  UID/email, and refresh works like a password login. The browser page still
+  handles captcha, password, TOTP and unblock codes interactively.
+- **Android in-app WebView** — **Continue in browser** opens a full-screen
+  **Mozilla account** page inside the app; the `urn:` redirect is intercepted
+  and the sign-in finishes without leaving the app. The waiting card keeps
+  **Open again**, **Paste redirect URL instead** (**Redirect URL** →
+  **Continue**), **Use password** and **Cancel**. If the WebView cannot be
+  created, the URL opens in a Custom Tab with the paste field available.
+- **Desktop redirect-URL paste** — Linux CLI/TUI and the Windows GUI open
+  Mozilla's page and ask for the complete redirect URL. Mozilla's “can't open
+  this address” page is expected; copy the address-bar URL and paste it. There
+  is no loopback listener, so the browser can run on another machine.
+- **Upgrade cleanup** — accounts created by the old opaque browser flow are
+  removed on first start with the notice **“Old browser sign-in removed. Add
+  your Firefox account again.”** Password accounts are untouched.
+- **Sign-out revocation** — sign-out best-effort revokes each stored FxA
+  refresh token and always completes the local sign-out, even offline. Android
+  also clears the in-app WebView's Firefox Accounts cookies.
+
 ## What's new in v0.6.0
 
 - **Browser sign-in** — `kumiho login --browser` (or the browser choice in the
-  TUI, Windows GUI and Android setup) opens Mozilla's page, where captcha,
-  TOTP and unblock codes are completed interactively, then returns through a
-  one-shot loopback callback. `--no-open` prints the URL for a headless shell.
+  TUI, Windows GUI and Android setup) introduced interactive captcha, TOTP and
+  unblock handling. Its v0.6.0 token exchange is replaced in v0.6.1 (above);
+  `--no-open` still prints the URL for a headless shell.
 - **Password fallback** — email, password, email-link 2FA and TOTP/unblock
   codes still work, including on a headless terminal. No password is stored.
 - **Up to five accounts** — the Account screen lists label/email, method,
@@ -117,7 +145,9 @@ before release:
   migrated and kept as a synchronized rollback copy until logout. Both are
   mode 0600 and written atomically.
 
-The v0.6.0 browser/rotation behavior is a documented ToS gray area; see
+Browser sign-in (direct FxA OAuth using the project's Firefox OAuth client and
+Mozilla's account page) and automatic account rotation are a documented ToS
+gray area for this unofficial client; see
 [PLAN.md §13](PLAN.md#13-risks-and-mitigations) before using multiple accounts.
 
 ## What's new in v0.4.0
@@ -381,7 +411,9 @@ surfaces as the desktop clients: a dashboard with connect options and live
 status, locations with country flags, a search, one **Ping all** action that
 orders the list by measured speed, and Expand all/Collapse all, and all 21
 settings rows (19 engine settings plus the read-only Always-on/lockdown rows
-Android owns), with overrides and Reset. Split tunneling, the five-account
+Android owns), with overrides and Reset. Browser sign-in completes in a
+full-screen in-app **Mozilla account** WebView (with paste and password
+fallbacks). Split tunneling, the five-account
 list with browser re-authentication and rotation, logs with sharing, diagnostics
 and proxy-only mode (local SOCKS5/HTTP without a VPN interface) are all there
 too.

@@ -112,13 +112,16 @@ Global CLI mechanics (apply to every subcommand):
   with the last successful method preselected (browser on first run). Without
   a terminal it uses the password flow for script compatibility; pass
   `--browser` explicitly to use the browser. `--email` skips the email prompt.
-- **Browser:** `login_start` returns a Mozilla URL and `login_id`. Unless
-  `--no-open`, the CLI opens it with the platform opener. It prints `Open
-  this URL to sign in:` followed by the URL, then `Waiting for the browser
-  sign-in to finish...`, and polls `login_status` every 2 seconds. The daemon
-  owns a one-shot loopback callback and five-minute deadline; the CLI cancels
-  the flow if its deadline expires and prints `timed out waiting for the
-  browser sign-in`. Success prints `Signed in as <email>.`.
+- **Browser:** `login_start` returns a Firefox Accounts URL and `login_id`.
+  Unless `--no-open`, the CLI opens it with the platform opener. It prints
+  `Open this URL to sign in:` followed by the URL, then the instruction to
+  copy the complete redirect URL from the browser's address bar, and prompts
+  `Redirect URL:`. The browser's “can't open this address” page is expected:
+  Mozilla redirects to the registered `urn:` URL. The CLI submits the pasted
+  URL with `login_complete` and polls `login_status` for the terminal state.
+  The daemon owns a ten-minute flow with no listener; the CLI cancels the flow
+  if its deadline expires and prints `timed out waiting for the browser
+  sign-in`. Success prints `Signed in as <email>.`.
 - **Password:** interactive prompts via `golang.org/x/term`:
   - `Email: ` (plain read)
   - `Password: ` (hidden read)
@@ -642,49 +645,53 @@ Gap flags (daemon-side abilities beyond the IPC surface):
   messages (wrong password, link-not-confirmed, anti-bot challenge wording,
   timeouts). The CLI caps a password attempt loop at 12.
 - Browser steps: `login_start` returns `{method, login_id, url}` with step
-  `browser`; clients open the URL and poll `login_status(login_id)` until
-  `done`/`error`, or call `login_cancel`. The daemon runs a PKCE flow with a
-  one-shot callback on a random `127.0.0.1` port and a five-minute deadline.
-  The URL carries no state or bearer secret, the verifier stays daemon-side,
-  and a completed flow consumes its callback. Captcha, TOTP and unblock codes
-  are handled by Mozilla's page, never automated by Kumiho.
+  `browser`. Clients open the URL, ask for the complete redirect URL from the
+  browser's address bar, send it with `login_complete`, and poll
+  `login_status(login_id)` until `done`/`error`, or call `login_cancel`. The
+  daemon runs a direct Firefox Accounts OAuth flow with PKCE and `state`, no
+  listener and a ten-minute deadline. The redirect URL, code, verifier and
+  tokens are never logged. Captcha, password, TOTP and unblock codes are
+  handled by Mozilla's page, never automated by Kumiho.
 - Signing in while an account is active adds/switches on completion; there is
   no sign-out-first requirement. Only another in-flight login is refused. The
   active account cannot change while the tunnel is up (`accounts_use` returns
   `disconnect first; switching accounts needs the tunnel off`).
 - `accounts.json` v2 is authoritative and lives beside the token path (mode
   0600, atomic replace). It stores `version`, `active`, `last_method` and up
-  to five accounts with `id`, `email`, `label`, `method`,
-  `browser{token, expires_at, reauth_required}` or
-  `fxa{access_token, refresh_token, expires_at, scope}`, plus
-  `added_at`/`last_used_at` and an optional `last_error`. The FxA uid is not
-  persisted.
+  to five accounts with `id`, `email`, `label`, `method`, ordinary
+  `fxa{access_token, refresh_token, expires_at, scope}` tokens, a durable
+  top-level `reauth_required`, `added_at`/`last_used_at` and an optional
+  `last_error`. The FxA uid is not persisted. The legacy
+  `browser{token, expires_at, reauth_required}` field is decode-only: engine
+  start removes accounts that only have it, and the notice is **“Old browser
+  sign-in removed. Add your Firefox account again.”**
 - `tokens.json` is the legacy layout and is migrated to `accounts.json` on
   first load. It remains a synchronized rollback copy of the active account's
   `{access_token, refresh_token, expires_at, scope}` tokens (mode 0600) and is
   rewritten on login, active switch, refresh and account removal. Old clients
   can read it until logout. A malformed/missing `accounts.json` is reported
   without overwriting `tokens.json`, so the previous release can recover.
-- Password tokens are treated invalid 60 s before expiry and refreshed
+- FxA tokens are treated invalid 60 s before expiry and refreshed
   automatically at daemon start, before connect, on Guardian 401/403, and on
-  Account lookups; a permanent refresh rejection marks only that account for
-  sign-in. Browser tokens have no refresh token: an expired or 401/403 token
-  sets `browser.reauth_required`, keeps the account listed, and requires
-  `accounts add --account <id|email>` (or the row action) to replace it.
+  Account lookups, for browser and password accounts alike; a permanent
+  refresh rejection sets `reauth_required` on that account only, keeps it
+  listed, and requires `accounts add --account <id|email>` (or the row action)
+  to replace it.
 - Rotation is opt-in (`account_rotation`, default off) and before connect
   only: below `rotation_threshold` (default 10, clamp 1–50) the engine
   picks the best eligible account, preferring higher remaining quota and then
-  the least recently used account. Expired, rejected and sign-in-required
-  accounts are skipped with a notice; if every account is exhausted or
-  unusable, connect fails without opening the tunnel. Rotation never switches
-  mid-session.
+  the least recently used account. Rejected and sign-in-required accounts are
+  skipped with a notice; if every account is exhausted or unusable, connect
+  fails without opening the tunnel. Rotation never switches mid-session.
 - Quota polling while connected uses `quota_poll_minutes` (default 15); a
   success updates Account/status, failures back off exponentially to a
   30-minute cap, and a 429 presents zero remaining without disconnecting. A
-  rejected browser token stops the poller and sets the reauth flag.
-- Logout (`logout`, TUI `x` with y/N confirmation, CLI `logout`) clears **all**
+  rejected refresh token stops that account's poller and sets `reauth_required`.
+- Logout (`logout`, TUI `x` with y/N confirmation, CLI `logout`) best-effort
+  revokes every stored FxA refresh token, clears **all**
   accounts, removes `accounts.json` and `tokens.json`, disconnects and writes
-  the empty email back to state. `accounts_remove` removes one row only:
+  the empty email back to state. An offline or failed revoke never blocks the
+  local sign-out. `accounts_remove` removes one row only:
   removing the active row selects the most recently used remaining account,
   and removing the last row clears the session like logout.
 - Windows pipe access is the real auth boundary (LocalSystem, Administrators,

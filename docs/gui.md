@@ -78,9 +78,13 @@ the screens. The rail and header are hidden while it runs. Its steps are:
 2. **Sign in** — sign in with the Firefox account that holds the VPN. The
    first page offers **Continue in browser** (the default) or **Use
    password**, and remembers the last successful method. Browser sign-in opens
-   Mozilla's page for captcha, password, TOTP or unblock codes, then returns
-   through a loopback callback; the step shows a waiting card with **Open
-   again** and **Cancel** and checks every second. Password sign-in keeps the
+   Mozilla's Firefox Accounts page for captcha, password, TOTP or unblock
+   codes. Mozilla finishes on a redirect address; the browser's “can't open
+   this address” page is expected — copy the complete URL from its address bar,
+   paste it into the waiting card's **Redirect URL** field and choose
+   **Continue**. The card also offers **Open again** and **Cancel** and checks
+   every second. There is no loopback listener, so the browser may run on
+   another machine. Password sign-in keeps the
    in-app email → password → 2FA/email-link pages. Kumiho stores the resulting
    tokens on this PC and never your password. If tokens already exist, the
    step offers to continue or to sign out first.
@@ -223,10 +227,14 @@ The list shows up to five accounts: label/email, method (`browser` or
 The row overflow menu offers **Use**, **Rename**, **Re-authenticate** (browser)
 and **Remove**. **Add account** opens a dialog with **Continue in browser**
 (the default) or **Use password**; the password form is the onboarding
-credential flow inline. A browser flow shows the waiting card, opens the URL
-once automatically, polls `accounts_add_status` every second and offers
-**Open again** and **Cancel**. Removing one account leaves the others signed
-in; removing the active one selects the most recently used remaining account.
+credential flow inline. A browser flow shows the waiting card (engine URL,
+**Redirect URL**, **Continue**, **Open again** and **Cancel**), opens the URL
+once automatically, polls `accounts_add_status` every second and finishes when
+the pasted redirect URL is accepted. Removing one account leaves the others
+signed in; removing the active one selects the most recently used remaining
+account. After an upgrade from v0.6.0, accounts from the old opaque browser
+flow are removed and the status line shows **“Old browser sign-in removed.
+Add your Firefox account again.”**
 
 The **Account rotation** card has an on/off switch and a **Switch below (%)**
 field (1–50, default 10), saved immediately. Rotation is off by default and
@@ -240,7 +248,10 @@ GiB`), `Bandwidth` (`Limited` or `Unlimited`) and `Token expiry`.
 
 The tonal **Sign out** button opens a confirmation dialog — *Sign out of
 Kumiho?* / *The stored sign-in tokens are cleared and the tunnel disconnects.*
-— before it clears **every** account and disconnects. Signing out does not
+/ *Kumiho will also try to revoke its Mozilla sign-in; local sign-out
+completes offline.* — before it clears **every** account and disconnects. The
+revocation is best effort: an offline or failed request never blocks the local
+sign-out. Signing out does not
 reopen the wizard: you stay on the Account screen, the cards disappear, and
 the status line reads `Not signed in`. The wizard only reappears for a daemon
 that still reports setup as incomplete.

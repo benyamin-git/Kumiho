@@ -46,8 +46,12 @@ with large packets; a new value takes effect on the next connect.
 
 `kumiho login` asks whether to sign in with your browser or with your
 password. Browser sign-in is the easy choice: a Mozilla page opens where you
-can enter the password, a code, or solve a captcha, and Kumiho finishes by
-itself when you come back. Nothing about your password is stored.
+can enter the password, a code, or solve a captcha. When you finish, the
+browser shows a page saying it can't open the address — that is normal. Copy
+the whole URL from the browser's address bar and paste it into Kumiho's
+**Redirect URL** prompt. Nothing about your password is stored, and the
+browser can run on another computer because only the pasted URL comes back to
+Kumiho.
 
 On the Account screen (`a`):
 
@@ -62,9 +66,11 @@ On the Account screen (`a`):
 - `x` signs out of **all** accounts and disconnects. Removing one account
   (`d`) leaves the others signed in.
 
-Your Firefox account is unchanged either way; signing out only clears
-Kumiho's stored sign-in. If you choose browser sign-in, the browser must run on
-the same computer because Mozilla returns to a local address.
+Your Firefox account is not deleted either way. Signing out asks Firefox
+Accounts to revoke Kumiho's stored sign-in (best effort) and clears Kumiho's
+own tokens; if you are offline, the local sign-out still completes. If you
+choose browser sign-in, the browser can run on any computer because there is
+no local callback; the redirect URL is the only thing you paste back.
 
 ## New settings in v0.4.0
 

@@ -105,8 +105,10 @@ class EngineAccountGateway(private val engine: EngineClient) : AccountGateway {
  * The Account state machine: the signed-in card, the stored account list, the
  * browser/password sign-in panes, rotation and the account actions.
  *
- * It is a plain JVM state machine over [AccountGateway]; secrets live only in
- * the composable for one submit and never enter [state]. Account-list and
+ * It is a plain JVM state machine over [AccountGateway]; passwords and
+ * verification codes live only in the composable for one submit and never
+ * enter [state]. The browser redirect URL is retained only for retry prefill
+ * and is cleared on success or cancel. Account-list and
  * entitlement loads run independently, so a failed entitlement lookup never
  * hides the list and a failed list read never hides the active card.
  */

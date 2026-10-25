@@ -167,8 +167,9 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
             previous
         }
         // A caller may have captured the previous deferred before this
-        // connection arrived (for example a deep link that cold-started the
-        // activity). Complete it too, or that caller waits forever.
+        // connection arrived (for example a screen that called awaitEngine
+        // before the service finished binding). Complete it too, or that caller
+        // waits forever.
         waiter.complete(client)
         stateJob?.cancel()
         stateJob = scope.launch {
@@ -228,14 +229,5 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         } catch (_: RuntimeException) {
             // No tile in this process/session; the next change asks again.
         }
-    }
-
-    /**
-     * Completes a browser sign-in with the full redirect URL captured by the
-     * in-app browser. The superseded raw-code endpoint is gone; the engine
-     * expects the complete URN URL and validates its OAuth state.
-     */
-    suspend fun submitBrowserRedirect(redirectUrl: String, loginId: String? = null) {
-        awaitEngine().loginComplete(redirectUrl, loginId)
     }
 }

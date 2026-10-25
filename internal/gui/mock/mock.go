@@ -51,8 +51,8 @@ type Mock struct {
 	// successful LoginComplete and "cancelled" after LoginCancel. The fixture
 	// has no timers: only those two verbs advance the flow, so the harness can
 	// exercise the waiting card and its paste field. browserSeq makes each
-	// flow's ID and URL unique, like the daemon's one-shot loopback listener;
-	// the URL is opened only once per flow by the UI.
+	// flow's ID and URL unique, like the daemon's per-flow URL; the URL is
+	// opened only once per flow by the UI.
 	browserStep string
 	browserSeq  int
 	browserID   string
@@ -293,7 +293,7 @@ func (m *Mock) AccountsList(ctx context.Context) (api.AccountsView, error) {
 }
 
 // AccountsAddStart implements gui.Daemon. Browser sign-in reports a browser
-// step with a deterministic loopback-shaped URL; password sign-in asks for
+// step with a deterministic browser-shaped URL; password sign-in asks for
 // the email first, then the password, exactly like the real daemon's flow.
 func (m *Mock) AccountsAddStart(ctx context.Context, p api.LoginStartPayload) (api.LoginState, error) {
 	if err := m.begin(ctx); err != nil {

@@ -17,7 +17,9 @@ This guide describes the app as implemented for **v0.6.0**
 > [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
 > is published with the three Android APKs and `SHA256SUMS`; the signing key and
 > GitHub Actions secret values remain user-owned. Local builds are test builds,
-> not published releases.
+> not published releases. The direct Firefox Accounts OAuth browser flow
+> described below is the v0.6.1 (unreleased) replacement for the v0.6.0 flow;
+> the published v0.6.0 APK does not contain it.
 
 ## Requirements
 
@@ -98,13 +100,20 @@ disabled **Continue** so it is always visible.
    **Continue**. The tick is not persisted; quitting before finishing starts
    the wizard here again.
 2. **Sign in.** Choose **Continue in browser** (the default) or **Use
-   password**. Browser sign-in opens Mozilla's Firefox Accounts page in a
-   Custom Tab; complete captcha, password, TOTP or unblock there and return to
-   Kumiho, which polls the daemon-owned flow and finishes automatically. The
-   password choice stays native: email, password, then a verification code if
-   Firefox Accounts asks for one. For an email-link 2FA, the app waits and
-   re-checks every three seconds while the step is open; **Re-check** polls
-   immediately. Errors appear inline and the form stays usable.
+   password**. Browser sign-in opens a full-screen in-app **Mozilla account**
+   page; complete captcha, password, TOTP or unblock there. Mozilla then
+   redirects to a `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?...`
+   address, which the app intercepts before it leaves the WebView, closes the
+   page and finishes automatically. The waiting card behind it offers **Open
+   again**, **Paste redirect URL instead** (**Redirect URL** → **Continue**),
+   **Use password** and **Cancel**. If the WebView cannot be created, the same
+   URL opens in a Custom Tab and the paste field is already visible; the
+   complete URL from the browser's address bar is then the value to paste.
+   The flow expires after ten minutes. The password choice stays native:
+   email, password, then a verification code if Firefox Accounts asks for one.
+   For an email-link 2FA, the app waits and re-checks every three seconds while
+   the step is open; **Re-check** polls immediately. Errors appear inline and
+   the form stays usable.
 3. **Permissions.** **Allow VPN** opens Android's VPN consent dialog;
    **Allow notifications** requests `POST_NOTIFICATIONS` on Android 13+ and
    otherwise shows the current state. Both are optional here: denying either
@@ -466,11 +475,20 @@ the active one. Each row carries the label/email, method, active marker,
 quota percent and a re-authentication warning. Run actions from the row
 overflow menu: **Use**, **Re-authenticate** (browser), **Rename** and
 **Remove**. **Add** offers browser sign-in (the default) or the password
-pane. When the browser opens, the waiting card offers **Open again** and
-**Cancel**; completing the flow updates the list automatically. Removing one
+pane. When the browser opens, the waiting card offers **Open again**, an
+expandable **Paste redirect URL instead** section with a **Redirect URL**
+field and **Continue**, **Use password**, and **Cancel**; completing the flow
+updates the list automatically. The in-app WebView intercepts the redirect
+itself. If it cannot be created, the app opens the same URL in a Custom Tab
+and the paste field is already visible. Removing one
 account leaves the others signed in; removing the active one selects the most
 recently used remaining account, and removing the last account is a full sign
 out.
+
+On the first start after upgrading from v0.6.0, accounts created by the old
+opaque browser sign-in are removed and the Account screen shows **“Old browser
+sign-in removed. Add your Firefox account again.”** Password accounts and
+settings are untouched.
 
 The **Account rotation** card controls the same `account_rotation` and
 `rotation_threshold` settings mirrored in Settings → Connection. Rotation is
@@ -482,9 +500,13 @@ The entitlement card shows email, UID, subscription, quota remaining and
 limit, bandwidth (limited or unlimited) and token expiry. **Refresh** re-reads
 it with a 35-second timeout; on failure the last known fields stay visible
 with a notice. **Sign out** asks for confirmation, clears every account and
-the token files, disconnects the tunnel and leaves you on Account in the
-signed-out state, where the browser/password sign-in pane lets you sign back
-in. Sign-out never touches your Firefox Account itself.
+the token files, asks Firefox Accounts to revoke the stored refresh tokens
+(best effort, with a short timeout), disconnects the tunnel and leaves you on
+Account in the signed-out state, where the browser/password sign-in pane lets
+you sign back in. An offline or failed revocation never blocks the local
+sign-out, and the app also clears the in-app WebView's Firefox Accounts
+cookies. Sign-out does not delete your Firefox Account; you can sign in again
+at any time. Removing one account leaves the others signed in.
 
 ## Logs
 
@@ -535,13 +557,16 @@ the shortcuts are the only writes, and they open the system page for you.
   (`noBackupFilesDir/accounts.json`, plus `tokens.json` as the synchronized
   rollback copy), and Android backup and device transfer are disabled for the
   app (`allowBackup=false`, `fullBackupContent=false`, extraction rules
-  excluding every domain). Passwords and verification codes are held only for
-  the request that uses them and are not stored. The browser flow never gives
-  the app your Mozilla password.
+  excluding every domain). Browser accounts store ordinary Firefox Accounts
+  OAuth access and refresh tokens (the refresh token is best-effort revoked on
+  sign-out). Passwords and verification codes are held only for the request
+  that uses them and are not stored. The browser flow never gives the app your
+  Mozilla password; the in-app WebView keeps its own Firefox Accounts cookies
+  until sign-out clears them.
 - **Loopback cleartext** is allowed only for `127.0.0.1` and `localhost` via
-  `res/xml/network_security_config.xml`, because the daemon-owned browser
-  callback is a local HTTP URL. Global cleartext traffic stays off; no remote
-  HTTP endpoint is permitted.
+  `res/xml/network_security_config.xml`; browser sign-in itself uses HTTPS on
+  `accounts.firefox.com` and has no local callback. Global cleartext traffic
+  stays off; no remote HTTP endpoint is permitted.
 - **Settings, the server list and logs** are private app files. A log leaves
   the phone only when you choose **Share**.
 - **Crashes** are written to `filesDir/crash.log` (capped at 64 KiB, no tokens
@@ -658,10 +683,13 @@ tunneling and route exclusions.
 
 Firefox Accounts sometimes presents an interactive captcha. The native
 password flow solves the Fastly proof-of-work/PAT/clientmetrics challenges but
-cannot solve a captcha. Cancel it and choose **Continue in browser**; Mozilla's
-page in the Custom Tab can complete the captcha, and the app picks up the
-finished flow. If the browser cannot open, check that a browser is installed
-and that Kumiho is allowed to open links.
+cannot solve a captcha. Cancel it and choose **Continue in browser**; the
+full-screen **Mozilla account** page can complete the captcha and the app
+intercepts the redirect when it finishes. If the in-app page cannot be
+created, Kumiho opens the URL in a Custom Tab and reveals the **Redirect URL**
+field; the browser's “can't open this address” page is expected, and the
+complete address-bar URL is the value to paste. If no browser is available at
+all, use the password fallback.
 
 ### Uninstalling and removing state
 
@@ -711,7 +739,7 @@ sign-off has happened.
 | Desktop / CLI ability | Android equivalent |
 |---|---|
 | Setup wizard | Four-step setup: consent, sign-in, permissions, Always-on |
-| FxA browser sign-in (captcha/TOTP/unblock) and password fallback | Custom Tabs browser flow plus native Compose password/2FA over the same engine |
+| FxA browser sign-in (captcha/TOTP/unblock) and password fallback | Full-screen in-app **Mozilla account** WebView with redirect interception, plus paste and native Compose password/2FA over the same engine |
 | Multiple accounts, labels, rotation and quota | Account list/add/rename/remove/re-auth plus the rotation card and Settings mirror |
 | Logout | Account confirmation, `logout`, clears every account and stays on Account |
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |

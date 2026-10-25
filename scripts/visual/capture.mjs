@@ -114,8 +114,8 @@ const STATES = [
   { name: "signout-confirm", screen: "account", hint: "signout-confirm" },
   {
     // The v0.6.0 account list's Add account dialog, browser and password
-    // choices, and the browser waiting card. The mock flow stays pending for
-    // a few polls, so the waiting card is captureable.
+    // choices, and the browser waiting card. The mock flow stays pending until
+    // login_complete (or cancel), so the waiting card is captureable.
     name: "account-add",
     screen: "account",
     click: [".acct__add"],
@@ -273,8 +273,8 @@ const STATES = [
     waitAfter: ".onb__signed",
   },
   {
-    // The recommended browser flow's waiting card. The mock keeps it pending
-    // for two status polls, then completes; the capture is taken first.
+    // The recommended browser flow's waiting card. The mock waits for
+    // login_complete or cancel, so the capture is taken while pending.
     name: "login-browser",
     screen: "onboarding",
     hint: "login",

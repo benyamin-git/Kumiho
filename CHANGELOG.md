@@ -6,6 +6,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - unreleased
+
+Direct Firefox Accounts OAuth replaces the v0.6.0 browser sign-in. Browser
+accounts now carry ordinary FxA access and refresh tokens, refresh like a
+password login, and complete in an in-app Android WebView or through a pasted
+redirect URL on desktop. Old opaque browser accounts are removed.
+
+### Added
+
+- **Direct FxA OAuth** with PKCE S256, `state`, `access_type=offline`, the
+  existing Firefox client and the `profile https://identity.mozilla.com/apps/vpn`
+  scope. The profile endpoint supplies the UID/email, and browser tokens use
+  the same refresh path as password sign-in.
+- **Android full-screen WebView** titled **Mozilla account** that intercepts
+  the `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel` redirect. The
+  waiting card offers **Open again**, **Paste redirect URL instead**
+  (**Redirect URL** → **Continue**), **Use password** and **Cancel**; a WebView
+  failure falls back to a Custom Tab with the paste field visible.
+- **Desktop redirect-URL paste** in the CLI, TUI and Windows GUI. Mozilla's
+  “can't open this address” page is expected; the complete address-bar URL is
+  pasted back, so there is no loopback listener and the browser may run on
+  another machine.
+- **Best-effort sign-out revocation** of every stored FxA refresh token, with
+  local sign-out always completing, plus Android WebView cookie clearing.
+
+### Changed
+
+- Browser accounts use `MethodBrowser` with `Account.FxA` tokens and a durable
+  top-level `reauth_required` flag; a permanent refresh rejection keeps the
+  account listed for a fresh browser sign-in.
+- Re-authentication requires the stored email; a different account is rejected
+  and its new tokens are discarded. Adding a matching email replaces tokens and
+  preserves the label.
+- Browser flows expire after ten minutes. `LoginCompletePayload` gains
+  `redirect_url`; `code` remains for protocol shape but the browser flow
+  rejects it.
+- Sign-out confirmation discloses the Mozilla revocation attempt and that
+  local sign-out still completes offline.
+
+### Removed
+
+- The v0.6.0 Mozilla VPN browser login/verify exchange, opaque browser token,
+  `internal/webauth`, Android Custom Tabs as the primary browser path, the
+  `mozilla-vpn://login/success` manifest filter and deep-link parser, and the
+  browser-token activation recovery path.
+- Legacy opaque browser accounts are deleted on engine start with the notice
+  **“Old browser sign-in removed. Add your Firefox account again.”** Password
+  accounts and local settings are untouched.
+
+### Security
+
+- PKCE and `state` are mandatory; the full redirect URL is validated and never
+  logged or persisted, and tokens stay in the 0600 (Android no-backup) account
+  file. The Android WebView keeps only `accounts.firefox.com` in the main
+  frame, opens other HTTPS links externally and blocks non-HTTPS navigation.
+- Browser sign-in and account rotation remain a documented ToS gray area; see
+  PLAN.md §13.
+
 ## [0.6.0] - 2026-10-24
 
 Browser sign-in, up to five accounts, rotation and quota polling across the

@@ -138,9 +138,9 @@ const SIGNOUT_REVOKE =
 let currentStep = STEP_WELCOME;
 let consentTicked = false;
 
-// The browser URL opened once across remounts. A loopback URL is one-shot,
-// so re-opening the same flow after a screen switch would be a navigation
-// error; a new flow carries a new port/state.
+// The browser URL opened once across remounts. Re-opening the same flow after
+// a screen switch would open a second tab, so remember it; a new flow carries
+// a new URL.
 let openedBrowserURL = "";
 
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
@@ -287,7 +287,7 @@ function build(host) {
   const code = fieldBox("onb-code", "Verification code", "text", "");
   password.wrap.hidden = true;
   code.wrap.hidden = true;
-  // The browser waiting card: the loopback URL, the pasted redirect URL,
+  // The browser waiting card: the engine URL, the pasted redirect URL,
   // Open again and Cancel.
   const browser = el("div", "onb__browser");
   browser.hidden = true;
@@ -531,7 +531,7 @@ export default {
 
     /**
      * The login page the session/step state calls for: password/2FA while
-     * the daemon asks for them, the browser waiting card during a loopback
+     * the daemon asks for them, the browser waiting card during a browser
      * flow, the signed-in variant while a live session exists (any login
      * page — the refusal never dead-ends), the choice page otherwise. An
      * email-step error is the password form's failed start, so it stays on
@@ -1207,9 +1207,8 @@ export default {
         ui.browserError.hidden = !error;
         if (error) ui.browserRedirect.input.setAttribute("aria-invalid", "true");
         else ui.browserRedirect.input.removeAttribute("aria-invalid");
-        // Open the loopback URL once per flow (module-level so a screen
-        // switch does not navigate a one-shot URL twice). "Open again" is
-        // the explicit repeat.
+        // Open the browser URL once per flow (module-level so a screen switch
+        // does not open a second tab). "Open again" is the explicit repeat.
         if (currentStep === STEP_LOGIN && url && view.openedURL !== url && openedBrowserURL !== url) {
           openedBrowserURL = url;
           openURL(url);

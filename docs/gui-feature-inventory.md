@@ -396,9 +396,12 @@ the way).
    percent and `re-auth required` when applicable. The row overflow menu
    offers `Use`, `Rename`, `Re-authenticate` (browser) and `Remove`.
 4. **Browser waiting card** (one flow at a time): title `Waiting for browser
-   sign-in`, body `Finish signing in in your browser. Kumiho stores the
-   sign-in tokens, never your password.`, the URL, `Open again` and `Cancel`.
-   The URL is opened once automatically and polled every second.
+   sign-in`, body `Finish signing in in your browser, then paste the redirect
+   URL from its address bar. Kumiho stores the sign-in tokens, never your
+   password.`, the URL, **Open again**, a labelled **Redirect URL** field,
+   **Continue** and **Cancel**. The URL is opened once automatically and
+   polled every second; the card stays until the pasted URL completes the flow
+   or it is cancelled.
 5. **Add account dialog**: title `Add account`, body explaining browser is
    the default, buttons `Cancel`, `Use password` and filled **Continue in
    browser**. **Use password** reveals the onboarding-style email → password
@@ -446,8 +449,13 @@ title `Sign out`, heading `Sign out`, body text:
 > `Sign out of Kumiho?`
 >
 > `The stored sign-in tokens are cleared and the tunnel disconnects.`
+>
+> `Kumiho will also try to revoke its Mozilla sign-in; local sign-out completes offline.`
 
-Buttons `Cancel` (focused by default) and `Sign out`. **Esc and Enter both
+For more than one account the question reads `Sign out of every account?`, the
+detail reads `All stored sign-in tokens are cleared and the tunnel disconnects.`
+and the disclosure uses `its Mozilla sign-ins`. Buttons `Cancel` (focused by
+default) and `Sign out` (or `Sign out all`). **Esc and Enter both
 cancel** (Enter is treated as the default action = Cancel); Space activates
 the focused button. The popup is modal (the main window is blocked while it
 is open); it is centred over the window, clamped to the monitor, and rounded
@@ -692,9 +700,11 @@ browser is the primary/`Continue` action; the password form is the secondary
 path. `Back` returns to consent.
 
 - **Browser waiting card.** Title/body describe completing sign-in in the
-  browser, the loopback URL, **Open again** and **Cancel**. The GUI opens each
-  unique URL once through `open_external` and polls `login_status` every
-  second. Cancelling clears the waiter.
+  browser, then pasting the redirect URL from its address bar; the card shows
+  the engine URL, **Open again**, a **Redirect URL** field, **Continue** and
+  **Cancel**. The GUI opens each unique URL once through `open_external` and
+  polls `login_status` every second. Cancelling clears the waiter; the card
+  does not complete on its own.
 - **Password page.** Body: `Enter your Firefox account password.` Field
   label `Password`, masked input. `Back` returns to email. `Continue`
   submits.
