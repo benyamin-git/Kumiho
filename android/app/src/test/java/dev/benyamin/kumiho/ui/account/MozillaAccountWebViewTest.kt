@@ -193,6 +193,56 @@ class MozillaAccountWebViewTest {
         }
     }
 
+    // ---- one-shot redirect handler ---------------------------------------
+
+    @Test
+    fun `a valid redirect is submitted once with the complete url`() {
+        val submitted = mutableListOf<String>()
+        var invalid = 0
+        val handler = BrowserRedirectHandler(
+            onRedirect = { submitted += it },
+            onInvalid = { invalid++ },
+        )
+
+        handler.handle(REDIRECT)
+        handler.handle(REDIRECT_WITH_VALUES)
+
+        assertEquals(listOf(REDIRECT), submitted)
+        assertEquals(0, invalid)
+        assertEquals("the full URL must reach the engine", REDIRECT, submitted.single())
+    }
+
+    @Test
+    fun `a malformed redirect enters the error state once and blocks a later valid redirect`() {
+        val submitted = mutableListOf<String>()
+        var invalid = 0
+        val handler = BrowserRedirectHandler(
+            onRedirect = { submitted += it },
+            onInvalid = { invalid++ },
+        )
+
+        handler.handle("$URN?code=only-a-code")
+        handler.handle(REDIRECT)
+
+        assertTrue(submitted.isEmpty())
+        assertEquals(1, invalid)
+    }
+
+    @Test
+    fun `an error redirect is not submitted`() {
+        val submitted = mutableListOf<String>()
+        var invalid = 0
+        val handler = BrowserRedirectHandler(
+            onRedirect = { submitted += it },
+            onInvalid = { invalid++ },
+        )
+
+        handler.handle("$URN?error=access_denied&state=the-state")
+
+        assertTrue(submitted.isEmpty())
+        assertEquals(1, invalid)
+    }
+
     private companion object {
         const val URN = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
         const val REDIRECT = "$URN?code=the-code&state=the-state"

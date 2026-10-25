@@ -33,8 +33,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -154,11 +154,29 @@ internal fun classifyBrowserNavigation(raw: String): BrowserNavigation = when {
 }
 
 /**
+ * The one-shot gate for the redirect handed to the engine. The first URL,
+ * valid or malformed, claims the login; every later callback is ignored. A
+ * valid redirect is passed through unchanged, while a malformed one enters the
+ * screen's error state. The engine still validates the OAuth state.
+ */
+internal class BrowserRedirectHandler(
+    private val onRedirect: (String) -> Unit,
+    private val onInvalid: () -> Unit,
+) {
+    private val handled = AtomicBoolean(false)
+
+    fun handle(raw: String) {
+        if (!handled.compareAndSet(false, true)) return
+        if (parseBrowserRedirect(raw) == null) onInvalid() else onRedirect(raw)
+    }
+}
+
+/**
  * A full-screen Mozilla account browser. It is a client component: the host
  * owns navigation, insets and the engine submission, and calls it with the
- * current login URL. Closing leaves the flow intact; submitting the redirect
- * is one-shot even if both the navigation override and the page-finished
- * fallback observe the same URN.
+ * current login URL. Closing leaves the flow intact; every redirect callback
+ * feeds one one-shot handler, so the engine can never receive two redirects for
+ * a login.
  */
 @Composable
 fun MozillaAccountBrowserScreen(
@@ -169,66 +187,91 @@ fun MozillaAccountBrowserScreen(
     onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    MozillaAccountBrowserScreenForTest(
+        loginId = loginId,
+        url = url,
+        onRedirect = onRedirect,
+        onClose = onClose,
+        onUnavailable = onUnavailable,
+        modifier = modifier,
+        webViewFactory = ::createMozillaWebView,
+        externalLinkOpener = ::openExternalHttps,
+        loadInitialPage = { webView, pageUrl -> webView.loadUrl(pageUrl) },
+    )
+}
+
+/**
+ * The screen with seams for the WebView factory, the external-link opener and
+ * the initial page loader. Production passes the hardened factory, the real
+ * `ACTION_VIEW` opener and `loadUrl`; tests inject a recording view, a no-op
+ * opener and a fake accounts.firefox.com page. Not for callers outside this
+ * module.
+ */
+@Composable
+internal fun MozillaAccountBrowserScreenForTest(
+    loginId: String,
+    url: String,
+    onRedirect: (String) -> Unit,
+    onClose: () -> Unit,
+    onUnavailable: () -> Unit,
+    modifier: Modifier = Modifier,
+    webViewFactory: (Context) -> WebView,
+    externalLinkOpener: (Context, Uri) -> Boolean,
+    loadInitialPage: (WebView, String) -> Unit,
+) {
     val context = LocalContext.current
     val onRedirectState = rememberUpdatedState(onRedirect)
     val onUnavailableState = rememberUpdatedState(onUnavailable)
-    // A new login id starts a new one-shot guard and WebView; retries inside
-    // the same flow can never submit the redirect twice.
-    val redirectHandled = remember(loginId) { AtomicBoolean(false) }
+    val externalLinkState = rememberUpdatedState(externalLinkOpener)
+    val loadPageState = rememberUpdatedState(loadInitialPage)
+
+    // A new login id starts a new one-shot handler, error state and WebView;
+    // retries inside the same flow can never submit the redirect twice.
     val failed = remember(loginId) { mutableStateOf(!isMozillaAuthorizationUrl(url)) }
     val firstPageLoaded = remember(loginId) { mutableStateOf(false) }
-
-    val handleRedirect: (String) -> Unit = remember(loginId) {
-        { raw ->
-            if (redirectHandled.compareAndSet(false, true)) {
-                if (parseBrowserRedirect(raw) == null) {
-                    failed.value = true
-                } else {
-                    onRedirectState.value(raw)
-                }
-            }
-        }
+    val redirectHandler = remember(loginId) {
+        BrowserRedirectHandler(
+            onRedirect = { raw -> onRedirectState.value(raw) },
+            onInvalid = { failed.value = true },
+        )
     }
 
     val webViewResult = remember(loginId, context) {
-        runCatching {
-            createMozillaWebView(context).apply {
-                webViewClient = MozillaWebViewClient(
-                    onRedirect = handleRedirect,
-                    onFirstPageFinished = { firstPageLoaded.value = true },
-                    onLoadError = { failed.value = true },
-                    onExternalLink = { uri -> openExternalHttps(context, uri) },
-                )
-            }
+        var created: WebView? = null
+        try {
+            val view = webViewFactory(context)
+            created = view
+            view.webViewClient = MozillaWebViewClient(
+                onRedirect = redirectHandler::handle,
+                onFirstPageFinished = { firstPageLoaded.value = true },
+                onLoadError = { failed.value = true },
+                onExternalLink = { uri -> externalLinkState.value(context, uri) },
+            )
+            Result.success(view)
+        } catch (throwable: Throwable) {
+            // A client setup failure must not leak the view it was applied to.
+            created?.destroy()
+            Result.failure(throwable)
         }
     }
     val webView = webViewResult.getOrNull()
 
-    LaunchedEffect(webViewResult.isFailure) {
+    LaunchedEffect(loginId, webViewResult.isFailure) {
         if (webViewResult.isFailure) onUnavailableState.value()
     }
 
-    LaunchedEffect(webView, url) {
+    LaunchedEffect(loginId, webView, url) {
         if (webView == null) {
             failed.value = true
             return@LaunchedEffect
         }
-        failed.value = false
         firstPageLoaded.value = false
         if (!isMozillaAuthorizationUrl(url)) {
             failed.value = true
             return@LaunchedEffect
         }
-        webView.loadUrl(url)
-    }
-
-    DisposableEffect(webView) {
-        onDispose {
-            webView?.let {
-                it.stopLoading()
-                it.destroy()
-            }
-        }
+        failed.value = false
+        loadPageState.value(webView, url)
     }
 
     BackHandler(onBack = onClose)
@@ -258,59 +301,78 @@ fun MozillaAccountBrowserScreen(
         )
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (webView != null && !failed.value) {
-                AndroidView(
-                    factory = { webView },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag(MozillaAccountWebViewTags.WEBVIEW),
-                )
-                if (!firstPageLoaded.value) {
-                    Box(
+            if (webView != null) {
+                val hosted = webView
+                // The host group follows both the login and the view instance.
+                // A new login (or a replaced view) mounts its own WebView instead
+                // of leaving it created offscreen; releasing the group is the
+                // only place a WebView is destroyed. Error overlays below keep
+                // the current view mounted, so it is never re-parented or
+                // destroyed while another login is on screen.
+                key(loginId, hosted) {
+                    AndroidView(
+                        factory = { hosted },
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        KumihoLoadingState(
-                            label = stringResource(R.string.account_webview_loading),
-                            modifier = Modifier.testTag(MozillaAccountWebViewTags.LOADING),
-                        )
-                    }
+                            .testTag(MozillaAccountWebViewTags.WEBVIEW),
+                        onRelease = { released ->
+                            released.stopLoading()
+                            released.destroy()
+                        },
+                        update = { it.isEnabled = !failed.value },
+                    )
                 }
-            } else {
+            }
+
+            if (webView == null || failed.value) {
                 MozillaAccountWebViewError(
                     onClose = onClose,
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag(MozillaAccountWebViewTags.ERROR),
                 )
+            } else if (!firstPageLoaded.value) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    KumihoLoadingState(
+                        label = stringResource(R.string.account_webview_loading),
+                        modifier = Modifier.testTag(MozillaAccountWebViewTags.LOADING),
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Creates the WebView with the hardening the flow needs: JavaScript and DOM
- * storage for FxA, no file/content access, no mixed content, no popups and no
- * saved form data. JavaScript is required by Mozilla's page; the origin policy
- * above and the absent JavaScript bridge are the mitigation. There is
- * deliberately no `addJavascriptInterface`; the only value the app reads is the
- * intercepted URN.
+ * Applies the WebView hardening the flow needs: JavaScript and DOM storage for
+ * FxA, no file/content access, no mixed content, no popups and no saved form
+ * data. JavaScript is required by Mozilla's page; the origin policy above and
+ * the absent JavaScript bridge are the mitigation. There is deliberately no
+ * `addJavascriptInterface`; the only value the app reads is the intercepted
+ * URN.
  */
 @SuppressLint("SetJavaScriptEnabled")
-internal fun createMozillaWebView(context: Context): WebView = WebView(context).apply {
-    settings.javaScriptEnabled = true
-    settings.domStorageEnabled = true
-    settings.allowFileAccess = false
-    settings.allowContentAccess = false
-    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-    settings.setSupportMultipleWindows(false)
-    settings.javaScriptCanOpenWindowsAutomatically = false
+internal fun configureMozillaWebView(webView: WebView) {
+    webView.settings.javaScriptEnabled = true
+    webView.settings.domStorageEnabled = true
+    webView.settings.allowFileAccess = false
+    webView.settings.allowContentAccess = false
+    webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+    webView.settings.setSupportMultipleWindows(false)
+    webView.settings.javaScriptCanOpenWindowsAutomatically = false
     @Suppress("DEPRECATION")
-    settings.saveFormData = false
-    setDownloadListener { _, _, _, _, _ -> }
+    webView.settings.saveFormData = false
+    webView.setDownloadListener { _, _, _, _, _ -> }
 }
+
+/** Creates the hardened WebView used by the production screen. */
+internal fun createMozillaWebView(context: Context): WebView =
+    WebView(context).also(::configureMozillaWebView)
 
 private class MozillaWebViewClient(
     private val onRedirect: (String) -> Unit,
@@ -381,7 +443,10 @@ private fun MozillaAccountWebViewError(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
