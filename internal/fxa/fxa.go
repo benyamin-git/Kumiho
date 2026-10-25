@@ -23,7 +23,10 @@ const (
 	// DefaultAuthorizationEndpoint is the FxA browser consent page.
 	DefaultAuthorizationEndpoint = "https://accounts.firefox.com/authorization"
 	// DefaultTokenEndpoint exchanges an authorization code for tokens. It is
-	// distinct from the auth-server BaseURL used by the password flow.
+	// distinct from the auth-server BaseURL used by the password flow and by
+	// Refresh. D39 assumes the resulting refresh token is accepted there; that
+	// is unproven until Gate G1 signs in, forces a refresh and verifies it.
+	// Do not change the refresh endpoint without that evidence.
 	DefaultTokenEndpoint = "https://oauth.accounts.firefox.com/v1/token"
 	// OAuthRedirectURI is the client's registered out-of-band redirect.
 	OAuthRedirectURI = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"

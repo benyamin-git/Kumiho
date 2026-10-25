@@ -546,6 +546,7 @@ func TestBrowserLoginExchangeClassification(t *testing.T) {
 	}{
 		{"malformed success response", `{"access_token":`},
 		{"success response without a token", `{"refresh_token":"refresh-1"}`},
+		{"success response without a refresh token", `{"access_token":"access-1"}`},
 	} {
 		t.Run(tc.name+" is terminal", func(t *testing.T) {
 			ctrl, srv := newBrowserTestController(t)
@@ -1056,6 +1057,22 @@ func TestBrowserLoginCancel(t *testing.T) {
 	}
 	if err := ctrl.LoginCancel(next.LoginID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBrowserLoginCancelWithoutID(t *testing.T) {
+	ctrl, _ := newBrowserTestController(t)
+	ls := startBrowserLogin(t, ctrl, "", "")
+
+	if err := ctrl.LoginCancel(""); err != nil {
+		t.Fatal(err)
+	}
+	st := browserStatus(t, ctrl, ls.LoginID)
+	if st.Step != "cancelled" || st.LoginID != ls.LoginID {
+		t.Fatalf("empty-id cancel state = %+v", st)
+	}
+	if browserFlowActive(ctrl) {
+		t.Fatal("an empty-id cancel left the browser flow active")
 	}
 }
 

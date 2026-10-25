@@ -162,7 +162,9 @@ func (c *Client) OAuthToken(ctx context.Context, sessionToken string) (*Tokens, 
 }
 
 // Refresh renews the access token (POST /oauth/token,
-// grant_type=refresh_token, no Hawk).
+// grant_type=refresh_token, no Hawk). Browser accounts use this existing path;
+// Gate G1 must prove the OAuth exchange's refresh token is accepted here before
+// any endpoint unification is considered.
 func (c *Client) Refresh(ctx context.Context, refreshToken string) (*Tokens, error) {
 	body := map[string]string{
 		"client_id":     ClientID,

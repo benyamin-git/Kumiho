@@ -1022,6 +1022,29 @@ func TestBrowserRefreshUsesFxaRefresh(t *testing.T) {
 		if a.FxA == nil || a.FxA.RefreshToken != "dead-refresh" {
 			t.Fatalf("rejection changed the stored tokens: %+v", a.FxA)
 		}
+		// The active session is cleared while the account row (and its
+		// durable flag) stays visible for a fresh browser sign-in.
+		st := ctrl.Snapshot()
+		if st.State != string(StateUnauthenticated) || st.Authenticated || st.Email != "" {
+			t.Fatalf("snapshot after rejection = %+v", st)
+		}
+		if st.ActiveAccount != id || len(st.Accounts) != 1 {
+			t.Fatalf("snapshot kept the account row active = %+v", st)
+		}
+		ctrl.mu.Lock()
+		activeSessionTokens := ctrl.tokens
+		ctrl.mu.Unlock()
+		if activeSessionTokens != nil {
+			t.Fatalf("rejection kept the active token set: %+v", activeSessionTokens)
+		}
+		info := ctrl.Account(context.Background())
+		if info.ID != id || info.Email != "browser@example.com" || !info.ReauthRequired ||
+			info.Error != "not signed in" {
+			t.Fatalf("account after rejection = %+v", info)
+		}
+		if err := ctrl.EnsureFreshToken(context.Background()); err == nil {
+			t.Fatal("a re-authentication-required session refreshed again")
+		}
 		loaded, _, err := loadAccounts(accountsPath(paths))
 		if err != nil {
 			t.Fatal(err)
@@ -1114,6 +1137,52 @@ func TestLegacyBrowserAccountsRemovedOnStart(t *testing.T) {
 	tokens, err := loadTokens(paths.Tokens)
 	if err != nil || tokens == nil || tokens.AccessToken != "access-password" {
 		t.Fatalf("tokens.json after legacy removal = %+v, err = %v", tokens, err)
+	}
+}
+
+func TestLegacyBrowserRemovalHandlesAnEmptyToken(t *testing.T) {
+	const notice = "Old browser sign-in removed. Add your Firefox account again."
+	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	now := time.Now()
+	f := &accountsFile{
+		Version:    2,
+		Active:     "empty-legacy",
+		LastMethod: MethodBrowser,
+		Accounts: []*Account{
+			{
+				ID: "empty-legacy", Email: "empty@example.com", Label: "Empty",
+				Method: MethodBrowser, Browser: &BrowserToken{},
+				AddedAt: now.Add(-time.Hour), LastUsedAt: now,
+			},
+			{
+				ID: "password-id", Email: "user@example.com", Label: "User",
+				Method:  MethodPassword,
+				FxA:     &fxa.Tokens{AccessToken: "access-password", RefreshToken: "refresh-password", ExpiresAt: now.Add(time.Hour).Unix()},
+				AddedAt: now.Add(-2 * time.Hour), LastUsedAt: now.Add(-time.Minute),
+			},
+		},
+	}
+	if err := saveAccounts(accountsPath(paths), f); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	view := ctrl.Accounts()
+	if len(view.Accounts) != 1 || view.Accounts[0].ID != "password-id" {
+		t.Fatalf("accounts after removing an empty legacy browser row = %+v", view)
+	}
+	if view.Notice != notice {
+		t.Fatalf("legacy notice = %q, want %q", view.Notice, notice)
+	}
+	loaded, _, err := loadAccounts(accountsPath(paths))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findAccountLocked(loaded, "empty-legacy") != nil {
+		t.Fatal("an empty legacy browser token survived the upgrade cleanup")
 	}
 }
 

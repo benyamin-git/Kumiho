@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const (
@@ -102,7 +103,17 @@ func (c *Client) ExchangeCode(ctx context.Context, code, verifier, redirectURI s
 	if err != nil {
 		return nil, err
 	}
-	return c.tokensFromResponse(raw, "")
+	tokens, err := c.tokensFromResponse(raw, "")
+	if err != nil {
+		return nil, err
+	}
+	// The browser flow stores Account.FxA and only refreshes it through the
+	// ordinary refresh path; an access-only response would silently become
+	// dead at expiry, so reject it as a terminal unusable response.
+	if strings.TrimSpace(tokens.RefreshToken) == "" {
+		return nil, &ResponseError{Err: errors.New("oauth response is missing refresh_token")}
+	}
+	return tokens, nil
 }
 
 // Profile fetches the signed-in account's identity with a bearer token.

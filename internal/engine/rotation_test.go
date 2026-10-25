@@ -545,8 +545,8 @@ func TestQuotaPoll401MarksReauthAndStops(t *testing.T) {
 	if !errors.Is(err, errQuotaReauth) {
 		t.Fatalf("poll error = %v, want errQuotaReauth", err)
 	}
-	if st := ctrl.Snapshot(); st.State != string(StateConnected) {
-		t.Fatalf("state after quota 401 = %q", st.State)
+	if st := ctrl.Snapshot(); st.State != string(StateUnauthenticated) || st.Authenticated {
+		t.Fatalf("state after quota 401 = %q authenticated=%v, want the cleared session", st.State, st.Authenticated)
 	}
 	loaded, _, err := loadAccounts(accountsPath(paths))
 	if err != nil {

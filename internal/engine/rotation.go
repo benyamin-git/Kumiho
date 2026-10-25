@@ -720,11 +720,35 @@ func (c *Controller) markReauthIf(gen uint64, requireMatch bool, id, message str
 	}
 	a.ReauthRequired = true
 	a.LastError = message
+	// The spec clears only this account's active session: the row (and its
+	// durable flag) stays for a fresh browser sign-in, but a dead refresh
+	// token must not leave an apparently live session behind.
+	activeSession := c.activeAccountLocked() == a
+	tunnel := false
+	if activeSession {
+		// A connect that is still selecting accounts owns the state machine:
+		// clearing its state to UNAUTHENTICATED here would turn the
+		// permanent-refresh report into a generic "connect was cancelled".
+		// The connect path fails on the refresh error and settles the state.
+		connecting := c.state == StateConnecting
+		tunnel = !connecting && c.tunnelActiveLocked()
+		c.tokens = nil
+		c.email = ""
+		c.pass = nil
+		c.quota = nil
+		if !connecting {
+			c.state = StateUnauthenticated
+		}
+		c.since = time.Now()
+	}
 	email := a.Email
 	err := c.saveAccountsLocked(false)
 	c.mu.Unlock()
 	if err != nil {
 		c.log.Logf(logging.Warn, "auth", "could not persist re-authentication flag for %s: %v", email, err)
+	}
+	if tunnel {
+		c.stopTunnel("account needs re-authentication")
 	}
 	c.log.Logf(logging.Warn, "auth", "%s needs re-authentication: %s", email, message)
 	c.notify()

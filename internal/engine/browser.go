@@ -452,6 +452,17 @@ func (c *Controller) LoginCancel(id string) error {
 	id = strings.TrimSpace(id)
 	c.mu.Lock()
 	if id == "" {
+		// An empty id is the clients' generic cancel: it clears the password
+		// pending state and the one active browser flow, if any.
+		if b := c.browser; b != nil && b.active {
+			b.active = false
+			b.tokens = nil
+			b.profile = nil
+			b.profileErr = nil
+			b.verifier = ""
+			b.oauthState = ""
+			b.state = api.LoginState{Step: "cancelled", Method: MethodBrowser, LoginID: b.id}
+		}
 		if c.pending != nil {
 			c.pending.authPW = ""
 			c.pending = nil

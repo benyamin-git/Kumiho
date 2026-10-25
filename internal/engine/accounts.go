@@ -107,8 +107,7 @@ func removeLegacyBrowserAccounts(f *accountsFile) int {
 		if a == nil {
 			continue
 		}
-		if a.Method == MethodBrowser && a.FxA == nil && a.Browser != nil &&
-			strings.TrimSpace(a.Browser.Token) != "" {
+		if a.Method == MethodBrowser && a.FxA == nil && a.Browser != nil {
 			removed++
 			continue
 		}
