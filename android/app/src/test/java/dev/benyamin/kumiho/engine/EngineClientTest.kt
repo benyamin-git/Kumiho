@@ -6,9 +6,11 @@ import dev.benyamin.kumiho.test.MainDispatcherRule
 import java.io.File
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -514,6 +516,39 @@ class EngineClientTest {
             assertFalse(payload.has("login_id"))
             assertFalse(payload.has("code"))
         }
+
+    @Test
+    fun `login complete uses its own longer budget than account commands`() = runBlocking {
+        assertTrue(
+            "a browser completion must allow a slow token exchange and profile lookup",
+            ENGINE_LOGIN_COMPLETE_TIMEOUT_MS >= 60_000L,
+        )
+        val transport = FakeTransport()
+        transport.respond = { request ->
+            Thread.sleep(80)
+            if (JSONObject(request).getString("type") == "login_status") {
+                """{"type":"login_state","payload":{"step":"browser"}}"""
+            } else {
+                """{"type":"result","payload":{"ok":true}}"""
+            }
+        }
+        val client = EngineClient(
+            transport = transport,
+            dispatcher = Dispatchers.IO,
+            accountTimeoutMs = 20,
+            loginCompleteTimeoutMs = 1_000,
+        )
+        try {
+            val failure = expect<EngineException> { client.loginStatus("login-1") }
+            if (!failure.message.orEmpty().contains("20 milliseconds")) {
+                throw AssertionError("account timeout message = ${failure.message}")
+            }
+            client.loginComplete(REDIRECT_URL, "login-1")
+            assertEquals(2, transport.requests.size)
+        } finally {
+            client.close()
+        }
+    }
 
     @Test
     fun `settings, account, locations, status and doctor responses parse`() =

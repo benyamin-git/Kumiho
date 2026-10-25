@@ -32,6 +32,13 @@ import org.json.JSONObject
 private val engineLogger: Logger = Logger.getLogger("dev.benyamin.kumiho.engine")
 
 /**
+ * The browser completion does a token exchange and a profile lookup, each
+ * with a 30 s HTTP deadline in the engine, so it gets its own longer budget
+ * instead of the short local command timeout.
+ */
+internal const val ENGINE_LOGIN_COMPLETE_TIMEOUT_MS = 90_000L
+
+/**
  * The single Kotlin-side owner of the engine conversation.
  *
  * [EngineClient] turns JSON envelopes into typed requests and typed responses,
@@ -52,6 +59,8 @@ class EngineClient(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val warn: (String) -> Unit = { engineLogger.warning(it) },
+    private val accountTimeoutMs: Long = ACCOUNT_TIMEOUT_MS,
+    private val loginCompleteTimeoutMs: Long = ENGINE_LOGIN_COMPLETE_TIMEOUT_MS,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val startLock = Mutex()
@@ -299,7 +308,7 @@ class EngineClient(
      * existing [loginStatus]/[accountsAddStatus] poll reports.
      */
     suspend fun loginComplete(redirectUrl: String, id: String? = null) {
-        timed("complete browser sign-in") {
+        timed("complete browser sign-in", loginCompleteTimeoutMs) {
             val payload = JSONObject().put("redirect_url", redirectUrl)
             if (!id.isNullOrBlank()) payload.put("login_id", id)
             command("login_complete", payload)
@@ -431,15 +440,26 @@ class EngineClient(
     private fun levelPayload(level: String?): JSONObject? =
         if (level.isNullOrBlank()) null else JSONObject().put("level", level)
 
-    private suspend fun <T> timed(what: String, block: suspend () -> T): T =
+    private suspend fun <T> timed(
+        what: String,
+        timeoutMs: Long = accountTimeoutMs,
+        block: suspend () -> T,
+    ): T =
         try {
-            withTimeout(ACCOUNT_TIMEOUT_MS) { block() }
+            withTimeout(timeoutMs) { block() }
         } catch (timeout: TimeoutCancellationException) {
             throw EngineException(
                 EngineErrorCodes.ENGINE,
-                "could not $what: the engine did not answer within 10 seconds",
+                "could not $what: the engine did not answer within ${timeoutLabel(timeoutMs)}",
                 timeout,
             )
+        }
+
+    private fun timeoutLabel(timeoutMs: Long): String =
+        if (timeoutMs > 0 && timeoutMs % 1_000L == 0L) {
+            "${timeoutMs / 1_000L} seconds"
+        } else {
+            "$timeoutMs milliseconds"
         }
 
     private fun ensureOpen() {

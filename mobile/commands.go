@@ -30,11 +30,15 @@ const (
 	accountTimeout        = 35 * time.Second
 	accountsTimeout       = 10 * time.Second
 	accountCommandTimeout = 10 * time.Second
-	loginPasswordTimeout  = 60 * time.Second
-	login2FATimeout       = 60 * time.Second
-	resetStateTimeout     = 10 * time.Second
-	doctorTimeout         = 30 * time.Second
-	revokeTimeout         = 10 * time.Second
+	// loginCompleteTimeout covers a token exchange plus a profile lookup, each
+	// with its own 30 s engine HTTP deadline. It must not reuse the local 10 s
+	// account-command budget.
+	loginCompleteTimeout = 90 * time.Second
+	loginPasswordTimeout = 60 * time.Second
+	login2FATimeout      = 60 * time.Second
+	resetStateTimeout    = 10 * time.Second
+	doctorTimeout        = 30 * time.Second
+	revokeTimeout        = 10 * time.Second
 
 	// pingTimeout is the per-host TCP probe deadline.
 	pingTimeout = 10 * time.Second
@@ -215,7 +219,7 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		if p.RedirectURL == "" && p.Code != "" {
 			return f.fail(badRequest("paste the complete redirect URL from the browser"))
 		}
-		actx, cancel := context.WithTimeout(ctx, accountCommandTimeout)
+		actx, cancel := context.WithTimeout(ctx, loginCompleteTimeout)
 		defer cancel()
 		_ = actx
 		if err := f.ctrl.LoginComplete(p.LoginID, p.RedirectURL); err != nil {

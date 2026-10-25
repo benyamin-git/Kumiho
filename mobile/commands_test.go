@@ -528,6 +528,15 @@ func TestConcurrentCommandsAndClose(t *testing.T) {
 	wg.Wait()
 }
 
+func TestLoginCompleteHasItsOwnLongBudget(t *testing.T) {
+	if loginCompleteTimeout < 60*time.Second {
+		t.Fatalf("loginCompleteTimeout = %v, want at least 60 s", loginCompleteTimeout)
+	}
+	if loginCompleteTimeout <= accountCommandTimeout {
+		t.Fatalf("loginCompleteTimeout = %v, must exceed the %v local command budget", loginCompleteTimeout, accountCommandTimeout)
+	}
+}
+
 func TestMobileAccountCommands(t *testing.T) {
 	p := testPaths(t)
 	if err := os.MkdirAll(filepath.Dir(p.Tokens), 0o700); err != nil {
