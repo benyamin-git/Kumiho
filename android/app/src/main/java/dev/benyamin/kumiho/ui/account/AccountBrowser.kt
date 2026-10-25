@@ -17,7 +17,7 @@ fun interface BrowserLauncher {
  * Opens the engine's browser sign-in URL in a Custom Tab. This is the fallback
  * used only when the in-app [MozillaAccountBrowserScreen] cannot be created:
  * the WebView path intercepts Mozilla's URN redirect itself, while this path
- * leaves the complete redirect URL to be pasted in Account.
+ * leaves the complete redirect URL to be pasted on the sign-in screen.
  *
  * The engine returns Mozilla's HTTPS login page; its loopback callback is
  * internal to the engine, so the URL opened here is deliberately not a loopback

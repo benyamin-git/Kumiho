@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import dev.benyamin.kumiho.ui.account.BrowserSignIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -34,6 +35,7 @@ class SetupViewModel(
     private val permissions: SetupPermissions,
     private val persistSetupComplete: suspend () -> Unit,
     private val connectNow: () -> Unit,
+    private val openExternalBrowser: (String) -> Boolean = { false },
     private val pollIntervalMillis: Long = DEFAULT_POLL_INTERVAL_MS,
     private val browserPollIntervalMillis: Long = DEFAULT_BROWSER_POLL_INTERVAL_MS,
 ) : ViewModel() {
@@ -182,6 +184,13 @@ class SetupViewModel(
             it.copy(
                 browser = BrowserSignIn("", null),
                 browserLaunchURL = null,
+                browserWebViewOpen = false,
+                browserPasteOpen = false,
+                browserPasteValue = "",
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = false,
                 signIn = it.signIn.copy(busy = true, error = null, message = null),
             )
         }
@@ -197,6 +206,13 @@ class SetupViewModel(
                             it.copy(
                                 browser = BrowserSignIn(login.loginId, url, login.error),
                                 browserLaunchURL = url ?: it.browserLaunchURL,
+                                browserWebViewOpen = url != null && login.error == null,
+                                browserPasteOpen = false,
+                                browserPasteValue = "",
+                                browserPasteError = null,
+                                browserPasteMessage = null,
+                                browserSubmitting = false,
+                                browserFallback = false,
                                 signIn = it.signIn.copy(busy = false, error = null),
                             )
                         }
@@ -230,13 +246,152 @@ class SetupViewModel(
         }
     }
 
-    /** Shows the password fallback banner while keeping the flow cancellable. */
-    fun browserUnavailable() {
+    /** Opens the in-app browser for the active first-run flow. */
+    fun openBrowser() {
+        val current = mutableState.value
+        if (current.step != SetupStep.SIGN_IN || current.browser == null) return
+        val url = (current.browserLaunchURL ?: current.browser.url)?.takeIf { it.isNotBlank() }
+            ?: return
         mutableState.update {
             it.copy(
-                browserLaunchURL = null,
-                signIn = it.signIn.copy(busy = false, message = SetupMessage.NO_BROWSER),
+                browserLaunchURL = url,
+                browserWebViewOpen = true,
+                browserFallback = false,
+                browserPasteMessage = null,
             )
+        }
+    }
+
+    /** Closes the browser but keeps the engine-owned flow active. */
+    fun closeBrowserWebView() {
+        if (!mutableState.value.browserWebViewOpen) return
+        mutableState.update { it.copy(browserWebViewOpen = false) }
+    }
+
+    /**
+     * The WebView could not be created: close it, open the same URL in the
+     * system browser and reveal the paste field for the redirect that path
+     * cannot intercept. The flow stays cancellable.
+     */
+    fun browserUnavailable() {
+        val current = mutableState.value
+        val browser = current.browser ?: return
+        val url = current.browserLaunchURL ?: browser.url
+        val opened = url != null && openExternalBrowser(url)
+        mutableState.update {
+            it.copy(
+                browserWebViewOpen = false,
+                browserPasteOpen = true,
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = true,
+                signIn = it.signIn.copy(
+                    busy = false,
+                    message = if (opened) null else SetupMessage.NO_BROWSER,
+                ),
+            )
+        }
+    }
+
+    /** Expands or collapses the paste fallback in the waiting card. */
+    fun toggleBrowserPaste() {
+        mutableState.update {
+            it.copy(
+                browserPasteOpen = !it.browserPasteOpen,
+                browserPasteMessage = null,
+            )
+        }
+    }
+
+    /** Edits the redirect URL; a keystroke clears the previous inline error. */
+    fun setBrowserPasteValue(value: String) {
+        mutableState.update {
+            it.copy(
+                browserPasteValue = value,
+                browserPasteError = null,
+                browserPasteMessage = null,
+            )
+        }
+    }
+
+    /** Submits the pasted redirect URL after local validation. */
+    fun submitBrowserPaste() {
+        val url = mutableState.value.browserPasteValue.trim()
+        if (url.isEmpty()) {
+            mutableState.update {
+                it.copy(
+                    browserPasteOpen = true,
+                    browserPasteError = null,
+                    browserPasteMessage = BrowserPasteMessage.REQUIRED,
+                )
+            }
+            return
+        }
+        submitBrowserRedirect(url)
+    }
+
+    /**
+     * Completes the flow with the full redirect URL. A nil reply closes the
+     * WebView and lets the existing status poll settle the wizard; a retryable
+     * error keeps the flow and prefills the paste field because the one-shot
+     * WebView will not emit the same redirect twice.
+     */
+    fun submitBrowserRedirect(redirectUrl: String) {
+        val url = redirectUrl.trim()
+        if (url.isEmpty()) {
+            mutableState.update {
+                it.copy(
+                    browserPasteOpen = true,
+                    browserPasteError = null,
+                    browserPasteMessage = BrowserPasteMessage.REQUIRED,
+                )
+            }
+            return
+        }
+        val current = mutableState.value
+        val browser = current.browser ?: return
+        if (current.browserSubmitting || browser.id.isBlank()) return
+        val id = browser.id
+        mutableState.update {
+            it.copy(
+                browserSubmitting = true,
+                browserPasteError = null,
+                browserPasteMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                engine.loginComplete(url, id)
+                if (mutableState.value.browser?.id != id) return@launch
+                mutableState.update {
+                    it.copy(
+                        browser = it.browser?.copy(error = null),
+                        browserWebViewOpen = false,
+                        browserPasteOpen = false,
+                        browserPasteValue = "",
+                        browserPasteError = null,
+                        browserPasteMessage = null,
+                        browserSubmitting = false,
+                        browserFallback = false,
+                    )
+                }
+                restartBrowserPolling(immediate = true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (mutableState.value.browser?.id != id) return@launch
+                mutableState.update {
+                    it.copy(
+                        browserWebViewOpen = false,
+                        browserPasteOpen = true,
+                        browserPasteValue = url,
+                        browserPasteError = messageOf(error),
+                        browserPasteMessage = null,
+                        browserSubmitting = false,
+                    )
+                }
+            }
         }
     }
 
@@ -359,6 +514,8 @@ class SetupViewModel(
                     browser = it.browser?.copy(
                         error = login.error ?: "browser sign-in failed",
                     ),
+                    browserWebViewOpen = false,
+                    browserSubmitting = false,
                 )
             }
             else -> mutableState.update {
@@ -366,13 +523,27 @@ class SetupViewModel(
                     browser = it.browser?.copy(
                         error = login.error ?: "unexpected sign-in step ${login.step}",
                     ),
+                    browserWebViewOpen = false,
+                    browserSubmitting = false,
                 )
             }
         }
     }
 
     private fun clearBrowserState() {
-        mutableState.update { it.copy(browser = null, browserLaunchURL = null) }
+        mutableState.update {
+            it.copy(
+                browser = null,
+                browserLaunchURL = null,
+                browserWebViewOpen = false,
+                browserPasteOpen = false,
+                browserPasteValue = "",
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = false,
+            )
+        }
     }
 
     /** Sends the email to the engine; the engine decides the next step. */
@@ -550,6 +721,13 @@ class SetupViewModel(
             it.copy(
                 browser = null,
                 browserLaunchURL = null,
+                browserWebViewOpen = false,
+                browserPasteOpen = false,
+                browserPasteValue = "",
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = false,
                 signIn = it.signIn.copy(
                     phase = SignInPhase.AUTHENTICATED,
                     accountEmail = email ?: it.signIn.accountEmail

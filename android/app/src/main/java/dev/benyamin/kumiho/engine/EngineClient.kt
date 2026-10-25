@@ -292,6 +292,20 @@ class EngineClient(
         }
     }
 
+    /**
+     * Completes a browser sign-in with the full URN redirect URL the WebView
+     * intercepted. The superseded raw-code field is never sent. A returned
+     * error is retryable; nil means the flow reached a terminal state that the
+     * existing [loginStatus]/[accountsAddStatus] poll reports.
+     */
+    suspend fun loginComplete(redirectUrl: String, id: String? = null) {
+        timed("complete browser sign-in") {
+            val payload = JSONObject().put("redirect_url", redirectUrl)
+            if (!id.isNullOrBlank()) payload.put("login_id", id)
+            command("login_complete", payload)
+        }
+    }
+
     /** The retained log ring, optionally filtered to a minimum level. */
     suspend fun logsSnapshot(level: String? = null): List<LogEntry> =
         EngineJson.logEntries(command("logs_snapshot", levelPayload(level)))

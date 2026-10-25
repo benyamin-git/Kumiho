@@ -2,10 +2,12 @@ package dev.benyamin.kumiho.ui.account
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.benyamin.kumiho.engine.Account
 import dev.benyamin.kumiho.engine.AccountSummary
@@ -68,6 +70,12 @@ class AccountAccountsScreenTest {
                         onRotation = { calls += "rotation-$it" },
                         onThreshold = { calls += "threshold-$it" },
                         onOpenBrowser = { calls += "open-browser" },
+                        onCloseBrowser = { calls += "close-browser" },
+                        onBrowserRedirect = { calls += "redirect-$it" },
+                        onToggleBrowserPaste = { calls += "toggle-paste" },
+                        onBrowserPasteChange = { calls += "paste-$it" },
+                        onBrowserPasteSubmit = { calls += "paste-submit" },
+                        onUseBrowserPassword = { calls += "use-password" },
                         onCancelBrowser = { calls += "cancel-browser" },
                         onBrowserUnavailable = { calls += "browser-unavailable" },
                         onCancelAdd = { calls += "cancel-add" },
@@ -109,10 +117,86 @@ class AccountAccountsScreenTest {
             ),
         )
 
+        rule.onNodeWithTag(AccountTags.ADD_DIALOG).assertIsDisplayed()
         rule.onNodeWithTag(AccountTags.ADD_BROWSER).assertIsDisplayed().performClick()
         rule.waitForIdle()
         assertTrue(calls.contains("add-browser"))
         rule.onNodeWithTag(AccountTags.ADD_PASSWORD).assertIsDisplayed()
+        rule.onNodeWithTag(AccountTags.ADD_CANCEL).assertIsDisplayed()
+    }
+
+    @Test
+    fun browserWaitingCardExpandsThePasteFallbackAndUsesPassword() {
+        show(
+            AccountUiState(
+                loading = false,
+                account = account(),
+                accounts = accounts(),
+                browser = BrowserSignIn(
+                    "flow-1",
+                    "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+                ),
+            ),
+        )
+
+        rule.onNodeWithTag(AccountTags.BROWSER_WAITING).assertIsDisplayed()
+        rule.onNodeWithTag(AccountTags.BROWSER_URL).assertIsDisplayed()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_FIELD).assertDoesNotExist()
+        rule.onNodeWithTag(AccountTags.BROWSER_OPEN).performClick()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_TOGGLE).performClick()
+        rule.onNodeWithTag(AccountTags.BROWSER_USE_PASSWORD).performClick()
+        rule.waitForIdle()
+        assertTrue(calls.contains("open-browser"))
+        assertTrue(calls.contains("toggle-paste"))
+        assertTrue(calls.contains("use-password"))
+    }
+
+    @Test
+    fun browserWaitingCardPasteFieldSubmitsTheRedirect() {
+        show(
+            AccountUiState(
+                loading = false,
+                account = account(),
+                accounts = accounts(),
+                browser = BrowserSignIn(
+                    "flow-1",
+                    "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+                ),
+                browserPasteOpen = true,
+                browserPasteValue = REDIRECT,
+                browserPasteError = "state mismatch",
+            ),
+        )
+
+        rule.onNodeWithText("Redirect URL").assertIsDisplayed()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_FIELD).assertIsDisplayed()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_ERROR).assertIsDisplayed()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_SUBMIT).performClick()
+        rule.waitForIdle()
+        assertTrue(calls.contains("paste-submit"))
+    }
+
+    @Test
+    fun browserWaitingCardDisablesItsControlsWhileSubmitting() {
+        show(
+            AccountUiState(
+                loading = false,
+                account = account(),
+                accounts = accounts(),
+                browser = BrowserSignIn(
+                    "flow-1",
+                    "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+                ),
+                browserPasteOpen = true,
+                browserSubmitting = true,
+            ),
+        )
+
+        rule.onNodeWithTag(AccountTags.BROWSER_OPEN).assertIsNotEnabled()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_FIELD).assertIsNotEnabled()
+        rule.onNodeWithTag(AccountTags.BROWSER_PASTE_SUBMIT).assertIsNotEnabled()
+        rule.onNodeWithTag(AccountTags.BROWSER_USE_PASSWORD).assertIsNotEnabled()
+        rule.onNodeWithTag(AccountTags.BROWSER_CANCEL).assertIsNotEnabled()
     }
 
     @Test
@@ -203,4 +287,9 @@ class AccountAccountsScreenTest {
         notice = null,
         error = null,
     )
+
+    private companion object {
+        const val REDIRECT =
+            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+    }
 }

@@ -21,12 +21,17 @@ enum class AccountMessage {
     NO_BROWSER,
 }
 
-/** One in-flight browser sign-in; the URL is opened once by the screen. */
+/** One in-flight browser sign-in; the URL is loaded in the in-app browser. */
 data class BrowserSignIn(
     val id: String,
     val url: String?,
     val error: String? = null,
 )
+
+/** The local validation copy for the redirect-URL fallback field. */
+enum class BrowserPasteMessage {
+    REQUIRED,
+}
 
 /**
  * The account screen state. The signed-in card is driven by the engine's local
@@ -50,7 +55,21 @@ data class AccountUiState(
     val addDialog: Boolean = false,
     val browser: BrowserSignIn? = null,
     val rotationSaving: Boolean = false,
+    /** The engine URL the in-app browser loads. */
     val browserLaunchURL: String? = null,
+    /** The full-screen in-app browser window is open. */
+    val browserWebViewOpen: Boolean = false,
+    /** The paste-the-redirect fallback is expanded in the waiting card. */
+    val browserPasteOpen: Boolean = false,
+    val browserPasteValue: String = "",
+    /** A retryable submission error from the engine, shown inline. */
+    val browserPasteError: String? = null,
+    /** Locally generated paste validation copy. */
+    val browserPasteMessage: BrowserPasteMessage? = null,
+    /** A redirect submission is in flight; the card controls are disabled. */
+    val browserSubmitting: Boolean = false,
+    /** The WebView was unavailable, so the system browser is the fallback. */
+    val browserFallback: Boolean = false,
     /** The shared sign-in pane is adding an account, not bootstrapping one. */
     val addingAccount: Boolean = false,
 ) {

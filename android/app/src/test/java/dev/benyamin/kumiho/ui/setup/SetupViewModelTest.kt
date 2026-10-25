@@ -4,6 +4,7 @@ import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.test.MainDispatcherRule
+import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -36,11 +37,14 @@ class SetupViewModelTest {
     private val permissions = FakePermissions()
     private val effects = mutableListOf<String>()
 
-    private fun viewModel(): SetupViewModel = SetupViewModel(
+    private fun viewModel(
+        openExternalBrowser: (String) -> Boolean = { false },
+    ): SetupViewModel = SetupViewModel(
         engine = engine,
         permissions = permissions,
         persistSetupComplete = { effects += "persist" },
         connectNow = { effects += "connect" },
+        openExternalBrowser = openExternalBrowser,
     )
 
     private fun failingPersistViewModel(): SetupViewModel = SetupViewModel(
@@ -132,6 +136,7 @@ class SetupViewModelTest {
 
         assertEquals(listOf("browser" to null), engine.loginStartCalls)
         assertEquals("setup-1", viewModel.state.value.browser?.id)
+        assertTrue("the in-app browser opens on start", viewModel.state.value.browserWebViewOpen)
         assertEquals(
             "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
             viewModel.state.value.browser?.url,
@@ -151,6 +156,132 @@ class SetupViewModelTest {
         assertEquals(SignInPhase.AUTHENTICATED, viewModel.state.value.signIn.phase)
         assertTrue(viewModel.state.value.canContinue)
     }
+
+    @Test
+    fun `closing the setup webview keeps the flow and reopening restores it`() =
+        runTest(mainRule.testDispatcher) {
+            engine.loginStartResult = { _, _ -> browserState() }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.closeBrowserWebView()
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertTrue(viewModel.state.value.browser != null)
+
+            viewModel.openBrowser()
+            assertTrue(viewModel.state.value.browserWebViewOpen)
+        }
+
+    @Test
+    fun `setup redirect submit sends the full URL and id and waits for done`() =
+        runTest(mainRule.testDispatcher) {
+            engine.loginStartResult = { _, _ -> browserState() }
+            engine.loginStatusResult = {
+                LoginState("done", "user@example.com", null, null, null)
+            }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.submitBrowserRedirect(FULL_REDIRECT)
+            runCurrent()
+
+            assertEquals(listOf(FULL_REDIRECT to "setup-1"), engine.loginCompleteCalls)
+            assertEquals(
+                "the step does not advance until the engine reports done",
+                SetupStep.SIGN_IN,
+                viewModel.state.value.step,
+            )
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+
+            assertTrue(viewModel.state.value.signedIn)
+            assertNull(viewModel.state.value.browser)
+        }
+
+    @Test
+    fun `a retryable setup redirect error prefills the paste field`() =
+        runTest(mainRule.testDispatcher) {
+            engine.loginStartResult = { _, _ -> browserState() }
+            engine.loginCompleteResult = { _, _ -> throw IllegalStateException("bad redirect") }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.submitBrowserRedirect(FULL_REDIRECT)
+            runCurrent()
+
+            assertTrue(viewModel.state.value.browserPasteOpen)
+            assertEquals(FULL_REDIRECT, viewModel.state.value.browserPasteValue)
+            assertEquals("bad redirect", viewModel.state.value.browserPasteError)
+            assertTrue(viewModel.state.value.browser != null)
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+        }
+
+    @Test
+    fun `a blank setup paste is rejected locally`() = runTest(mainRule.testDispatcher) {
+        engine.loginStartResult = { _, _ -> browserState() }
+        val viewModel = viewModel()
+        reachSignIn(viewModel)
+        viewModel.startBrowser()
+        runCurrent()
+        viewModel.toggleBrowserPaste()
+        viewModel.setBrowserPasteValue(" ")
+
+        viewModel.submitBrowserPaste()
+        runCurrent()
+
+        assertTrue(engine.loginCompleteCalls.isEmpty())
+        assertEquals(BrowserPasteMessage.REQUIRED, viewModel.state.value.browserPasteMessage)
+    }
+
+    @Test
+    fun `an unavailable setup webview opens the system fallback and paste`() =
+        runTest(mainRule.testDispatcher) {
+            engine.loginStartResult = { _, _ -> browserState() }
+            val opened = mutableListOf<String>()
+            val viewModel = viewModel(openExternalBrowser = { url ->
+                opened += url
+                true
+            })
+            reachSignIn(viewModel)
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.browserUnavailable()
+            runCurrent()
+
+            assertEquals(listOf(BROWSER_URL), opened)
+            assertTrue(viewModel.state.value.browserPasteOpen)
+            assertTrue(viewModel.state.value.browserFallback)
+            assertTrue(viewModel.state.value.browser != null)
+            assertNull(viewModel.state.value.signIn.message)
+        }
+
+    @Test
+    fun `cancelling setup browser sign-in clears the webview and paste state`() =
+        runTest(mainRule.testDispatcher) {
+            engine.loginStartResult = { _, _ -> browserState() }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.startBrowser()
+            runCurrent()
+            viewModel.toggleBrowserPaste()
+            viewModel.setBrowserPasteValue(FULL_REDIRECT)
+
+            viewModel.cancelBrowser()
+            runCurrent()
+
+            assertNull(viewModel.state.value.browser)
+            assertNull(viewModel.state.value.browserLaunchURL)
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertFalse(viewModel.state.value.browserPasteOpen)
+            assertEquals("", viewModel.state.value.browserPasteValue)
+            assertEquals(listOf("setup-1"), engine.loginCancelCalls)
+        }
 
     @Test
     fun `password fallback still works after browser sign-in is available`() =
@@ -554,6 +685,24 @@ class SetupViewModelTest {
         advanceTimeBy(millis)
         runCurrent()
     }
+
+    private fun browserState(): LoginState = LoginState(
+        step = "browser",
+        email = null,
+        verificationMethod = null,
+        verificationReason = null,
+        error = null,
+        method = "browser",
+        url = BROWSER_URL,
+        loginId = "setup-1",
+    )
+
+    private companion object {
+        const val BROWSER_URL =
+            "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152"
+        const val FULL_REDIRECT =
+            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+    }
 }
 
 /** A scripted engine: every call is recorded, every reply is settable. */
@@ -563,6 +712,7 @@ private class FakeEngine : SetupEngine {
     val codeCalls = mutableListOf<String>()
     val loginStartCalls = mutableListOf<Pair<String, String?>>()
     val loginStatusCalls = mutableListOf<String>()
+    val loginCompleteCalls = mutableListOf<Pair<String, String?>>()
     val loginCancelCalls = mutableListOf<String>()
 
     var status: EngineStatus = status()
@@ -580,6 +730,7 @@ private class FakeEngine : SetupEngine {
     var accountsFailure: Exception? = null
     var loginStartResult: suspend (String, String?) -> LoginState = { _, _ -> error("no browser start configured") }
     var loginStatusResult: suspend (String) -> LoginState = { error("sign-in flow not found") }
+    var loginCompleteResult: suspend (String, String?) -> Unit = { _, _ -> }
 
     override suspend fun loginEmail(email: String): LoginState {
         emailCalls += email
@@ -617,6 +768,11 @@ private class FakeEngine : SetupEngine {
     override suspend fun loginStatus(id: String): LoginState {
         loginStatusCalls += id
         return loginStatusResult(id)
+    }
+
+    override suspend fun loginComplete(redirectUrl: String, id: String?) {
+        loginCompleteCalls += redirectUrl to id
+        loginCompleteResult(redirectUrl, id)
     }
 
     override suspend fun loginCancel(id: String) {

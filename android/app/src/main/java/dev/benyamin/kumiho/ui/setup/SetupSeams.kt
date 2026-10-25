@@ -29,6 +29,9 @@ interface SetupEngine {
     /** Polls the active browser flow; an empty id adopts the engine flow. */
     suspend fun loginStatus(id: String): LoginState
 
+    /** Completes the browser flow with the full redirect URL from the WebView. */
+    suspend fun loginComplete(redirectUrl: String, id: String? = null)
+
     suspend fun loginCancel(id: String)
 
     /** The account list, used only to prefill the last sign-in method. */
@@ -49,6 +52,9 @@ class EngineSetupEngine(private val client: EngineClient) : SetupEngine {
         client.loginStart(method, email)
 
     override suspend fun loginStatus(id: String): LoginState = client.loginStatus(id)
+
+    override suspend fun loginComplete(redirectUrl: String, id: String?) =
+        client.loginComplete(redirectUrl, id)
 
     override suspend fun loginCancel(id: String) = client.loginCancel(id)
 

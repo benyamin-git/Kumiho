@@ -81,9 +81,7 @@
     <string name="sign_in_browser_note">Recommended. Mozilla signs you in on its own site; Kumiho receives only the finished sign-in.</string>
     <string name="sign_in_intro">Or sign in with your Firefox Account password. The password goes straight to Firefox Accounts.</string>
     <string name="sign_in_browser_waiting_title">Finish signing in</string>
-    <string name="sign_in_browser_waiting_text">Complete the sign-in in your browser. This screen updates automatically.</string>
-    <string name="sign_in_browser_open">Open browser again</string>
-    <string name="sign_in_browser_cancel">Cancel browser sign-in</string>
+    <string name="sign_in_browser_waiting_text">Finish signing in using the browser window. This screen updates automatically; if it finishes elsewhere, paste the redirect URL below.</string>
     <string name="sign_in_no_browser">No browser is available. Use the password option instead.</string>
     <string name="sign_in_email_label">Firefox Account email</string>
     <string name="sign_in_email_submit">Continue with email</string>
@@ -616,9 +614,9 @@
     <string name="account_refreshing">Refreshing…</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_signing_out">Signing out…</string>
-    <string name="account_sign_out_note">Signing out clears the tokens and disconnects the tunnel. The app stays on this screen.</string>
+    <string name="account_sign_out_note">Signing out clears the tokens, asks Firefox Accounts to revoke this device\'s session, and disconnects the tunnel. The app stays on this screen.</string>
     <string name="account_sign_out_title">Sign out of Firefox Accounts?</string>
-    <string name="account_sign_out_text">Your tokens are cleared and the tunnel disconnects. You can sign in again at any time.</string>
+    <string name="account_sign_out_text">Your tokens are cleared and the tunnel disconnects. Kumiho also asks Firefox Accounts to revoke this device\'s browser session; if that request fails, sign-out still completes locally. You can sign in again at any time.</string>
     <string name="account_sign_out_confirm">Sign out</string>
     <string name="account_sign_out_cancel">Cancel</string>
     <string name="account_accounts_title">Accounts</string>
@@ -641,10 +639,8 @@
     <string name="account_reauth">Re-authenticate</string>
     <string name="account_rename">Rename</string>
     <string name="account_remove">Remove</string>
-    <string name="account_browser_title">Complete sign-in in your browser</string>
-    <string name="account_browser_hint">This screen updates automatically.</string>
-    <string name="account_browser_open">Open browser again</string>
-    <string name="account_browser_cancel">Cancel</string>
+    <string name="account_browser_title">Finish signing in</string>
+    <string name="account_browser_hint">This screen updates automatically. If sign-in finishes elsewhere, paste the redirect URL below.</string>
     <string name="account_rotation_title">Account rotation</string>
     <string name="account_rotation_hint">Switch accounts before connecting when the active one is low on quota. Applies on the next connect.</string>
     <string name="account_threshold_title">Rotation threshold</string>
@@ -664,11 +660,22 @@
     <string name="account_remove_confirm">Remove</string>
     <string name="account_remove_cancel">Cancel</string>
     <string name="account_sign_out_all">Sign out all</string>
-    <string name="account_sign_out_all_text">All accounts are removed and their tokens cleared. The tunnel disconnects.</string>
+    <string name="account_sign_out_all_text">All accounts are removed and their tokens cleared. Kumiho also asks Firefox Accounts to revoke their browser sessions; a failed revocation never blocks the local sign-out. The tunnel disconnects.</string>
     <string name="account_accounts_failed">The account list did not load.</string>
     <string name="account_action_failed">The account action failed.</string>
     <string name="account_rotation_failed">The rotation setting did not save.</string>
-    <string name="account_no_browser">No browser is available. Use the password option instead.</string>
+    <string name="account_no_browser">No browser is available. Use password, or paste the redirect URL if you can finish signing in elsewhere.</string>
+
+    <!-- Shared browser sign-in waiting card. -->
+    <string name="browser_waiting_open">Open again</string>
+    <string name="browser_waiting_paste_show">Paste redirect URL instead</string>
+    <string name="browser_waiting_paste_hide">Hide redirect URL field</string>
+    <string name="browser_waiting_paste_label">Redirect URL</string>
+    <string name="browser_waiting_paste_continue">Continue</string>
+    <string name="browser_waiting_paste_required">Paste the complete redirect URL from the browser.</string>
+    <string name="browser_waiting_use_password">Use password</string>
+    <string name="browser_waiting_cancel">Cancel</string>
+    <string name="browser_waiting_fallback">The in-app browser is unavailable. Finish signing in with your browser, then paste the redirect URL here.</string>
 
     <!-- Mozilla account WebView (v0.6.0). -->
     <string name="account_webview_title">Mozilla account</string>
@@ -676,7 +683,7 @@
     <string name="account_webview_loading">Loading Mozilla sign-in…</string>
     <string name="account_webview_error_title">Sign-in page did not load</string>
     <string name="account_webview_error_text">The Mozilla account page could not be loaded.</string>
-    <string name="account_webview_paste_hint">Close this screen and paste the redirect URL in Account if sign-in does not finish.</string>
+    <string name="account_webview_paste_hint">Close this screen and paste the redirect URL on the sign-in screen if sign-in does not finish.</string>
 
     <string name="more_title">More</string>
 </resources>

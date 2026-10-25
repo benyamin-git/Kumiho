@@ -50,6 +50,8 @@ interface AccountGateway {
 
     suspend fun accountsAddCancel(id: String)
 
+    suspend fun loginComplete(redirectUrl: String, id: String? = null)
+
     suspend fun useAccount(id: String)
 
     suspend fun removeAccount(id: String)
@@ -85,6 +87,9 @@ class EngineAccountGateway(private val engine: EngineClient) : AccountGateway {
 
     override suspend fun accountsAddCancel(id: String) = engine.accountsAddCancel(id)
 
+    override suspend fun loginComplete(redirectUrl: String, id: String?) =
+        engine.loginComplete(redirectUrl, id)
+
     override suspend fun useAccount(id: String) = engine.accountsUse(id)
 
     override suspend fun removeAccount(id: String) = engine.accountsRemove(id)
@@ -107,6 +112,8 @@ class EngineAccountGateway(private val engine: EngineClient) : AccountGateway {
  */
 class AccountViewModel(
     private val gateway: AccountGateway,
+    private val onSignedOut: () -> Unit = {},
+    private val openExternalBrowser: (String) -> Boolean = { false },
     private val pollIntervalMillis: Long = DEFAULT_POLL_INTERVAL_MS,
     private val browserPollIntervalMillis: Long = DEFAULT_BROWSER_POLL_INTERVAL_MS,
     private val thresholdDebounceMillis: Long = DEFAULT_THRESHOLD_DEBOUNCE_MS,
@@ -453,6 +460,14 @@ class AccountViewModel(
                 addDialog = false,
                 addingAccount = false,
                 browser = BrowserSignIn("", null),
+                browserLaunchURL = null,
+                browserWebViewOpen = false,
+                browserPasteOpen = false,
+                browserPasteValue = "",
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = false,
                 message = null,
                 error = null,
             )
@@ -469,6 +484,13 @@ class AccountViewModel(
                             it.copy(
                                 browser = browser,
                                 browserLaunchURL = login.url ?: it.browserLaunchURL,
+                                browserWebViewOpen = login.url != null && login.error == null,
+                                browserPasteOpen = false,
+                                browserPasteValue = "",
+                                browserPasteError = null,
+                                browserPasteMessage = null,
+                                browserSubmitting = false,
+                                browserFallback = false,
                             )
                         }
                         if (browser.error == null) restartBrowserPolling(immediate = false)
@@ -505,13 +527,155 @@ class AccountViewModel(
         startBrowser(email = account.email, accountId = account.id)
     }
 
-    /** The screen opened a fresh browser flow, so it is safe to remove now. */
-    fun browserUnavailable() {
+    /**
+     * Opens the in-app browser for the active flow. The route renders the
+     * full-screen dialog only while this flag and a URL are both present.
+     */
+    fun openBrowser() {
+        val current = mutableState.value
+        if (current.browser == null) return
+        val url = (current.browserLaunchURL ?: current.browser.url)?.takeIf { it.isNotBlank() }
+            ?: return
         mutableState.update {
             it.copy(
-                browserLaunchURL = null,
-                message = AccountMessage.NO_BROWSER,
+                browserLaunchURL = url,
+                browserWebViewOpen = true,
+                browserFallback = false,
+                browserPasteMessage = null,
             )
+        }
+    }
+
+    /** Closes the browser window but leaves the engine-owned flow active. */
+    fun closeBrowserWebView() {
+        if (!mutableState.value.browserWebViewOpen) return
+        mutableState.update { it.copy(browserWebViewOpen = false) }
+    }
+
+    /**
+     * The in-app browser could not be created. Close it, hand the same URL to
+     * the system browser, and reveal the paste field because that path cannot
+     * intercept the redirect.
+     */
+    fun browserUnavailable() {
+        val current = mutableState.value
+        val browser = current.browser ?: return
+        val url = current.browserLaunchURL ?: browser.url
+        val opened = url != null && openExternalBrowser(url)
+        mutableState.update {
+            it.copy(
+                browserWebViewOpen = false,
+                browserPasteOpen = true,
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = true,
+                message = if (opened) null else AccountMessage.NO_BROWSER,
+            )
+        }
+    }
+
+    /** Expands or collapses the paste fallback in the waiting card. */
+    fun toggleBrowserPaste() {
+        mutableState.update {
+            it.copy(
+                browserPasteOpen = !it.browserPasteOpen,
+                browserPasteMessage = null,
+            )
+        }
+    }
+
+    /** Edits the redirect URL; a keystroke clears the previous inline error. */
+    fun setBrowserPasteValue(value: String) {
+        mutableState.update {
+            it.copy(
+                browserPasteValue = value,
+                browserPasteError = null,
+                browserPasteMessage = null,
+            )
+        }
+    }
+
+    /** Submits the pasted redirect URL after local validation. */
+    fun submitBrowserPaste() {
+        val url = mutableState.value.browserPasteValue.trim()
+        if (url.isEmpty()) {
+            mutableState.update {
+                it.copy(
+                    browserPasteOpen = true,
+                    browserPasteError = null,
+                    browserPasteMessage = BrowserPasteMessage.REQUIRED,
+                )
+            }
+            return
+        }
+        submitBrowserRedirect(url)
+    }
+
+    /**
+     * Completes the browser flow with the full redirect URL. A nil reply is a
+     * terminal state: the WebView closes and the existing status poll settles
+     * the account. A retryable error closes the WebView too, but keeps the flow
+     * and prefills the paste field with the URL, because the one-shot WebView
+     * will not emit the same redirect twice.
+     */
+    fun submitBrowserRedirect(redirectUrl: String) {
+        val url = redirectUrl.trim()
+        if (url.isEmpty()) {
+            mutableState.update {
+                it.copy(
+                    browserPasteOpen = true,
+                    browserPasteError = null,
+                    browserPasteMessage = BrowserPasteMessage.REQUIRED,
+                )
+            }
+            return
+        }
+        val current = mutableState.value
+        val browser = current.browser ?: return
+        if (current.browserSubmitting || browser.id.isBlank()) return
+        val id = browser.id
+        mutableState.update {
+            it.copy(
+                browserSubmitting = true,
+                browserPasteError = null,
+                browserPasteMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                gateway.loginComplete(url, id)
+                if (mutableState.value.browser?.id != id) return@launch
+                mutableState.update {
+                    it.copy(
+                        browser = it.browser?.copy(error = null),
+                        browserWebViewOpen = false,
+                        browserPasteOpen = false,
+                        browserPasteValue = "",
+                        browserPasteError = null,
+                        browserPasteMessage = null,
+                        browserSubmitting = false,
+                        browserFallback = false,
+                    )
+                }
+                // Read the terminal state once through the existing poll
+                // instead of inventing a second status path.
+                restartBrowserPolling(immediate = true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (mutableState.value.browser?.id != id) return@launch
+                mutableState.update {
+                    it.copy(
+                        browserWebViewOpen = false,
+                        browserPasteOpen = true,
+                        browserPasteValue = url,
+                        browserPasteError = messageOf(error),
+                        browserPasteMessage = null,
+                        browserSubmitting = false,
+                    )
+                }
+            }
         }
     }
 
@@ -536,7 +700,7 @@ class AccountViewModel(
     /** Opens the shared pane for an additional password sign-in. */
     fun startPassword() {
         val current = mutableState.value
-        if (current.browser != null) return
+        if (current.browser != null) cancelBrowser()
         stopEmailPolling()
         mutableState.update {
             it.copy(
@@ -667,6 +831,8 @@ class AccountViewModel(
                     browser = it.browser?.copy(
                         error = login.error ?: "browser sign-in failed",
                     ),
+                    browserWebViewOpen = false,
+                    browserSubmitting = false,
                     message = AccountMessage.ACTION_FAILED,
                     error = login.error,
                 )
@@ -676,6 +842,8 @@ class AccountViewModel(
                     browser = it.browser?.copy(
                         error = login.error ?: "unexpected sign-in step ${login.step}",
                     ),
+                    browserWebViewOpen = false,
+                    browserSubmitting = false,
                     message = AccountMessage.ACTION_FAILED,
                     error = login.error,
                 )
@@ -685,7 +853,19 @@ class AccountViewModel(
 
     private fun clearBrowser() {
         stopBrowserPolling()
-        mutableState.update { it.copy(browser = null, browserLaunchURL = null) }
+        mutableState.update {
+            it.copy(
+                browser = null,
+                browserLaunchURL = null,
+                browserWebViewOpen = false,
+                browserPasteOpen = false,
+                browserPasteValue = "",
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = false,
+            )
+        }
     }
 
     // ---- account actions -------------------------------------------------
@@ -901,6 +1081,13 @@ class AccountViewModel(
                         addingAccount = false,
                         signIn = SignInPaneState(phase = SignInPhase.EMAIL),
                     )
+                }
+                // The engine session is gone locally; clearing Mozilla's
+                // WebView cookies must never block or fail that sign-out.
+                try {
+                    onSignedOut()
+                } catch (_: RuntimeException) {
+                    // No usable WebView or cookie jar on this device.
                 }
                 loadAll()
             } catch (cancelled: CancellationException) {

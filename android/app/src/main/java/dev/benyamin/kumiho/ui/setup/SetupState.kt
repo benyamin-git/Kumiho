@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.setup
 
+import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import dev.benyamin.kumiho.ui.account.BrowserSignIn
 
 /**
@@ -100,8 +101,21 @@ data class SetupState(
     val error: String? = null,
     /** The engine-owned browser flow, while one is in flight. */
     val browser: BrowserSignIn? = null,
-    /** A newly returned URL the screen should open once. */
+    /** The engine URL loaded by the in-app browser. */
     val browserLaunchURL: String? = null,
+    /** The full-screen in-app browser window is open. */
+    val browserWebViewOpen: Boolean = false,
+    /** The paste-the-redirect fallback is expanded in the waiting card. */
+    val browserPasteOpen: Boolean = false,
+    val browserPasteValue: String = "",
+    /** A retryable submission error from the engine, shown inline. */
+    val browserPasteError: String? = null,
+    /** Locally generated paste validation copy. */
+    val browserPasteMessage: BrowserPasteMessage? = null,
+    /** A redirect submission is in flight; the card controls are disabled. */
+    val browserSubmitting: Boolean = false,
+    /** The WebView was unavailable, so the system browser is the fallback. */
+    val browserFallback: Boolean = false,
 ) {
     /** The account is signed in, so the sign-in step is satisfied. */
     val signedIn: Boolean get() = signIn.phase == SignInPhase.AUTHENTICATED

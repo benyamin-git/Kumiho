@@ -429,6 +429,7 @@ class EngineClientTest {
             client.accountsSetRotation(enabled = true, threshold = 20)
             client.loginStart(method = "password", email = "one@example.com")
             client.loginStatus("login-1")
+            client.loginComplete(REDIRECT_URL, "login-1")
             client.loginCancel("login-1")
 
             assertEquals(
@@ -443,6 +444,7 @@ class EngineClientTest {
                     "accounts_set_rotation",
                     "login_start",
                     "login_status",
+                    "login_complete",
                     "login_cancel",
                 ),
                 transport.requests.map { it.getString("type") },
@@ -484,11 +486,33 @@ class EngineClientTest {
                 byType.getValue("login_status").single().getJSONObject("payload")
                     .getString("login_id"),
             )
+            val complete = byType.getValue("login_complete").single().getJSONObject("payload")
+            assertEquals(REDIRECT_URL, complete.getString("redirect_url"))
+            assertEquals("login-1", complete.getString("login_id"))
+            assertFalse(
+                "the superseded code field must never be sent",
+                complete.has("code"),
+            )
             assertEquals(
                 "login-1",
                 byType.getValue("login_cancel").single().getJSONObject("payload")
                     .getString("login_id"),
             )
+        }
+
+    @Test
+    fun `login complete omits a missing id and never sends a code`() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val dispatcher = mainDispatcherRule.testDispatcher
+            val transport = FakeTransport()
+            val client = client(transport, dispatcher)
+
+            client.loginComplete(REDIRECT_URL)
+
+            val payload = transport.requests.single().getJSONObject("payload")
+            assertEquals(REDIRECT_URL, payload.getString("redirect_url"))
+            assertFalse(payload.has("login_id"))
+            assertFalse(payload.has("code"))
         }
 
     @Test
@@ -579,4 +603,9 @@ class EngineClientTest {
             val failure = expect<EngineException> { client.refreshStatus() }
             assertEquals(EngineErrorCodes.CLOSED, failure.code)
         }
+
+    private companion object {
+        const val REDIRECT_URL =
+            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+    }
 }

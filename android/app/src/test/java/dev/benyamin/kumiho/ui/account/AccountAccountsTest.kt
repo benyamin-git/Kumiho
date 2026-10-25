@@ -30,8 +30,13 @@ class AccountAccountsTest {
 
     private val gateway = FakeGateway()
 
-    private fun viewModel(): AccountViewModel = AccountViewModel(
+    private fun viewModel(
+        openExternalBrowser: (String) -> Boolean = { false },
+        onSignedOut: () -> Unit = {},
+    ): AccountViewModel = AccountViewModel(
         gateway = gateway,
+        onSignedOut = onSignedOut,
+        openExternalBrowser = openExternalBrowser,
         pollIntervalMillis = 3_000,
         browserPollIntervalMillis = 1_000,
         thresholdDebounceMillis = 600,
@@ -73,6 +78,7 @@ class AccountAccountsTest {
             assertEquals("flow-1", viewModel.state.value.browser?.id)
             assertEquals(URL, viewModel.state.value.browser?.url)
             assertEquals(URL, viewModel.state.value.browserLaunchURL)
+            assertTrue("the in-app browser opens on start", viewModel.state.value.browserWebViewOpen)
             assertFalse(viewModel.state.value.addDialog)
 
             gateway.statusResult = { LoginState("done", "user@example.com", null, null, null) }
@@ -281,6 +287,238 @@ class AccountAccountsTest {
         }
 
     @Test
+    fun `closing and reopening the webview keeps the browser flow`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.closeBrowserWebView()
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertNotNull("closing the browser must not cancel the flow", viewModel.state.value.browser)
+            assertEquals(URL, viewModel.state.value.browserLaunchURL)
+
+            viewModel.openBrowser()
+            assertTrue(viewModel.state.value.browserWebViewOpen)
+        }
+
+    @Test
+    fun `a redirect submit sends the full URL and id and settles on done`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+            val before = gateway.accountsCalls
+
+            gateway.statusResult = { LoginState("done", "user@example.com", null, null, null) }
+            viewModel.submitBrowserRedirect(FULL_REDIRECT)
+            runCurrent()
+
+            assertEquals(listOf(FULL_REDIRECT to "flow-1"), gateway.loginCompleteCalls)
+            assertNull(viewModel.state.value.browser)
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertFalse(viewModel.state.value.browserPasteOpen)
+            assertEquals("", viewModel.state.value.browserPasteValue)
+            assertTrue("completion refreshes the list", gateway.accountsCalls > before)
+        }
+
+    @Test
+    fun `a retryable redirect error closes the webview and prefills the paste field`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            gateway.loginCompleteResult = { _, _ ->
+                throw IllegalStateException("the OAuth state does not match")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.submitBrowserRedirect(FULL_REDIRECT)
+            runCurrent()
+
+            assertNotNull("a retryable error keeps the flow", viewModel.state.value.browser)
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertTrue(viewModel.state.value.browserPasteOpen)
+            assertEquals(FULL_REDIRECT, viewModel.state.value.browserPasteValue)
+            assertEquals(
+                "the OAuth state does not match",
+                viewModel.state.value.browserPasteError,
+            )
+
+            // The WebView will not emit the same redirect again; Continue retries
+            // the stored URL once, and a nil completion settles through polling.
+            gateway.loginCompleteResult = { _, _ -> }
+            gateway.statusResult = { LoginState("done", "user@example.com", null, null, null) }
+            viewModel.submitBrowserPaste()
+            runCurrent()
+
+            assertEquals(2, gateway.loginCompleteCalls.size)
+            assertEquals(FULL_REDIRECT to "flow-1", gateway.loginCompleteCalls.last())
+            assertNull(viewModel.state.value.browser)
+        }
+
+    @Test
+    fun `a blank paste is rejected without an engine call`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+            viewModel.toggleBrowserPaste()
+            viewModel.setBrowserPasteValue("   ")
+
+            viewModel.submitBrowserPaste()
+            runCurrent()
+
+            assertTrue(gateway.loginCompleteCalls.isEmpty())
+            assertEquals(BrowserPasteMessage.REQUIRED, viewModel.state.value.browserPasteMessage)
+            assertTrue(viewModel.state.value.browserPasteOpen)
+        }
+
+    @Test
+    fun `an unavailable webview opens the system fallback and reveals the paste field`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val opened = mutableListOf<String>()
+            val viewModel = viewModel(openExternalBrowser = { url ->
+                opened += url
+                true
+            })
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.browserUnavailable()
+            runCurrent()
+
+            assertEquals(listOf(URL), opened)
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertTrue(viewModel.state.value.browserPasteOpen)
+            assertTrue(viewModel.state.value.browserFallback)
+            assertNotNull("the flow stays cancellable", viewModel.state.value.browser)
+            assertNull("a working system browser is not an error", viewModel.state.value.message)
+        }
+
+    @Test
+    fun `an unavailable system browser still reveals the paste field and reports it`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val viewModel = viewModel(openExternalBrowser = { false })
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.browserUnavailable()
+            runCurrent()
+
+            assertEquals(AccountMessage.NO_BROWSER, viewModel.state.value.message)
+            assertTrue(viewModel.state.value.browserPasteOpen)
+            assertNotNull(viewModel.state.value.browser)
+        }
+
+    @Test
+    fun `cancel clears the browser, webview and paste state`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+            viewModel.toggleBrowserPaste()
+            viewModel.setBrowserPasteValue(FULL_REDIRECT)
+
+            viewModel.cancelBrowser()
+            runCurrent()
+
+            assertEquals(listOf("flow-1"), gateway.addCancelCalls)
+            assertNull(viewModel.state.value.browser)
+            assertNull(viewModel.state.value.browserLaunchURL)
+            assertFalse(viewModel.state.value.browserWebViewOpen)
+            assertFalse(viewModel.state.value.browserPasteOpen)
+            assertEquals("", viewModel.state.value.browserPasteValue)
+            assertNull(viewModel.state.value.browserPasteError)
+        }
+
+    @Test
+    fun `use password cancels the browser flow and opens the password pane`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+
+            viewModel.startPassword()
+            runCurrent()
+
+            assertNull(viewModel.state.value.browser)
+            assertEquals(listOf("flow-1"), gateway.addCancelCalls)
+            assertTrue(viewModel.state.value.addingAccount)
+            assertEquals(SignInPhase.EMAIL, viewModel.state.value.signIn.phase)
+        }
+
+    @Test
+    fun `sign out clears the browser cookies only after logout succeeds`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            var cleared = 0
+            val viewModel = viewModel(onSignedOut = { cleared++ })
+            runCurrent()
+
+            gateway.logoutFailure = IllegalStateException("the engine is busy")
+            viewModel.requestSignOut()
+            viewModel.confirmSignOut()
+            runCurrent()
+            assertEquals("a failed logout must keep the browser session", 0, cleared)
+            assertEquals(AccountMessage.SIGN_OUT_FAILED, viewModel.state.value.message)
+
+            gateway.logoutFailure = null
+            viewModel.requestSignOut()
+            viewModel.confirmSignOut()
+            runCurrent()
+            assertEquals("a successful logout clears the browser session", 1, cleared)
+        }
+
+    @Test
     fun `rotation threshold waits for the last value in a burst`() =
         runTest(mainRule.testDispatcher) {
             gateway.accountResult = { account() }
@@ -323,11 +561,14 @@ class AccountAccountsTest {
             LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
         }
         var statusResult: suspend (String) -> LoginState = { error("sign-in flow not found") }
+        var loginCompleteResult: suspend (String, String?) -> Unit = { _, _ -> }
+        var logoutFailure: Exception? = null
 
         var accountCalls = 0
         var accountsCalls = 0
         val addStartCalls = mutableListOf<Triple<String, String?, String?>>()
         val addCancelCalls = mutableListOf<String>()
+        val loginCompleteCalls = mutableListOf<Pair<String, String?>>()
         val useCalls = mutableListOf<String>()
         val removeCalls = mutableListOf<String>()
         val renameCalls = mutableListOf<Pair<String, String>>()
@@ -357,6 +598,11 @@ class AccountAccountsTest {
 
         override suspend fun accountsAddCancel(id: String) {
             addCancelCalls += id
+        }
+
+        override suspend fun loginComplete(redirectUrl: String, id: String?) {
+            loginCompleteCalls += redirectUrl to id
+            loginCompleteResult(redirectUrl, id)
         }
 
         override suspend fun useAccount(id: String) {
@@ -391,11 +637,15 @@ class AccountAccountsTest {
             loginCancelCalls += id
         }
 
-        override suspend fun logout() = Unit
+        override suspend fun logout() {
+            logoutFailure?.let { throw it }
+        }
     }
 
     private companion object {
         const val URL = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152"
+        const val FULL_REDIRECT =
+            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
         val TOKEN_EXPIRY: Long = Instant.parse("2026-11-21T12:00:00Z").epochSecond
 
         fun account() = Account(

@@ -229,4 +229,13 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
             // No tile in this process/session; the next change asks again.
         }
     }
+
+    /**
+     * Completes a browser sign-in with the full redirect URL captured by the
+     * in-app browser. The superseded raw-code endpoint is gone; the engine
+     * expects the complete URN URL and validates its OAuth state.
+     */
+    suspend fun submitBrowserRedirect(redirectUrl: String, loginId: String? = null) {
+        awaitEngine().loginComplete(redirectUrl, loginId)
+    }
 }

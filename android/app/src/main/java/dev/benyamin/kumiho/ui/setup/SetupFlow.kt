@@ -36,12 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.permissions.PermissionController
+import dev.benyamin.kumiho.ui.account.MozillaAccountBrowserDialog
 import dev.benyamin.kumiho.ui.account.openBrowserSignIn
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.theme.Dimens
@@ -81,6 +78,7 @@ fun SetupRoute(
     val serviceState by container.vpnServiceCoordinator.state.collectAsStateWithLifecycle()
     val engine by container.vpnServiceCoordinator.engine.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val client = engine
 
     if (client == null) {
@@ -98,6 +96,7 @@ fun SetupRoute(
             permissions = permissions,
             persistSetupComplete = { container.appPrefs.setSetupComplete(true) },
             connectNow = { container.vpnServiceCoordinator.connect(ConnectRequest()) },
+            openExternalBrowser = { url -> openBrowserSignIn(appContext, url) },
         )
     }
     SetupFlow(viewModel = setupViewModel, modifier = modifier)
@@ -164,14 +163,6 @@ fun SetupFlow(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var openedURL by rememberSaveable { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(state.step, state.browserLaunchURL) {
-        val url = state.browserLaunchURL ?: return@LaunchedEffect
-        if (state.step != SetupStep.SIGN_IN || openedURL == url) return@LaunchedEffect
-        openedURL = url
-        if (!openBrowserSignIn(context, url)) viewModel.browserUnavailable()
-    }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val vpnLauncher = rememberLauncherForActivityResult(
@@ -274,13 +265,18 @@ fun SetupFlow(
                         SetupStep.SIGN_IN -> SignInStep(
                             state = state.signIn,
                             browser = state.browser,
+                            browserPasteOpen = state.browserPasteOpen,
+                            browserPasteValue = state.browserPasteValue,
+                            browserPasteError = state.browserPasteError,
+                            browserPasteMessage = state.browserPasteMessage,
+                            browserSubmitting = state.browserSubmitting,
+                            browserFallback = state.browserFallback,
                             onBrowser = viewModel::startBrowser,
-                            onOpenBrowser = {
-                                val url = viewModel.state.value.browser?.url
-                                if (url == null || !openBrowserSignIn(context, url)) {
-                                    viewModel.browserUnavailable()
-                                }
-                            },
+                            onOpenBrowser = viewModel::openBrowser,
+                            onToggleBrowserPaste = viewModel::toggleBrowserPaste,
+                            onBrowserPasteChange = viewModel::setBrowserPasteValue,
+                            onBrowserPasteSubmit = viewModel::submitBrowserPaste,
+                            onUsePassword = viewModel::cancelBrowser,
                             onCancelBrowser = viewModel::cancelBrowser,
                             onSubmitEmail = viewModel::submitEmail,
                             onSubmitPassword = viewModel::submitPassword,
@@ -327,6 +323,22 @@ fun SetupFlow(
                 )
             }
         }
+    }
+
+    val browser = state.browser
+    val browserURL = state.browserLaunchURL ?: browser?.url
+    if (state.step == SetupStep.SIGN_IN &&
+        state.browserWebViewOpen &&
+        browser != null &&
+        browserURL != null
+    ) {
+        MozillaAccountBrowserDialog(
+            loginId = browser.id,
+            url = browserURL,
+            onRedirect = viewModel::submitBrowserRedirect,
+            onClose = viewModel::closeBrowserWebView,
+            onUnavailable = viewModel::browserUnavailable,
+        )
     }
 }
 

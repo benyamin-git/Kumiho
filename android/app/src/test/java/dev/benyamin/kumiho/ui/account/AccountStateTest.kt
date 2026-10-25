@@ -365,6 +365,8 @@ class AccountStateTest {
 
         override suspend fun accountsAddCancel(id: String) = Unit
 
+        override suspend fun loginComplete(redirectUrl: String, id: String?) = Unit
+
         override suspend fun useAccount(id: String) = Unit
 
         override suspend fun removeAccount(id: String) = Unit

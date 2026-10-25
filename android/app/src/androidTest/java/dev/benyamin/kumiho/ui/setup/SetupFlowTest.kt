@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.setup
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -13,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.ui.account.BrowserSignIn
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
@@ -115,6 +117,53 @@ class SetupFlowTest {
         rule.onNodeWithTag(SetupTags.FINISH).performClick()
         rule.waitUntil(TIMEOUT) { persisted == 1 }
         assertEquals("a denied permission must not connect", 0, connected)
+    }
+
+    @Test
+    fun browserWaitingCardPasteAndPasswordFallbackAreVisible() {
+        var toggles = 0
+        var submits = 0
+        var password = 0
+        rule.setContent {
+            KumihoTheme(colors = palette(ThemeId.LIGHT)) {
+                SignInStep(
+                    state = SignInPaneState(),
+                    browser = BrowserSignIn(
+                        id = "setup-1",
+                        url = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
+                    ),
+                    browserPasteOpen = true,
+                    browserPasteValue = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=c&state=s",
+                    browserPasteError = null,
+                    browserPasteMessage = null,
+                    browserSubmitting = false,
+                    browserFallback = false,
+                    onBrowser = {},
+                    onOpenBrowser = {},
+                    onToggleBrowserPaste = { toggles++ },
+                    onBrowserPasteChange = {},
+                    onBrowserPasteSubmit = { submits++ },
+                    onUsePassword = { password++ },
+                    onCancelBrowser = {},
+                    onSubmitEmail = {},
+                    onSubmitPassword = {},
+                    onSubmitCode = {},
+                    onRecheck = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER_WAITING).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER_PASTE_FIELD).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER_PASTE_TOGGLE).performClick()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER_PASTE_SUBMIT).performClick()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER_USE_PASSWORD).performClick()
+        rule.waitForIdle()
+
+        assertEquals(1, toggles)
+        assertEquals(1, submits)
+        assertEquals(1, password)
     }
 
     @Test
@@ -253,6 +302,8 @@ internal class FakeSetupEngine : SetupEngine {
 
     override suspend fun loginStatus(id: String): LoginState =
         error("no browser flow")
+
+    override suspend fun loginComplete(redirectUrl: String, id: String?) = Unit
 
     override suspend fun loginCancel(id: String) = Unit
 

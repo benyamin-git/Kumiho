@@ -276,31 +276,17 @@ internal fun MozillaAccountBrowserScreenForTest(
 
     BackHandler(onBack = onClose)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .testTag(MozillaAccountWebViewTags.SCREEN),
     ) {
-        KumihoTopBar(
-            title = stringResource(R.string.account_webview_title),
-            actions = {
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .size(Dimens.TouchTarget)
-                        .testTag(MozillaAccountWebViewTags.CLOSE),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.account_webview_close),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            },
-        )
-
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = Dimens.TopBarHeight),
+        ) {
             if (webView != null) {
                 val hosted = webView
                 // The host group follows both the login and the view instance.
@@ -345,6 +331,31 @@ internal fun MozillaAccountBrowserScreenForTest(
                 }
             }
         }
+
+        // The bar is composed after the WebView on purpose: an AndroidView is
+        // drawn in the window's view hierarchy, so content composed before it
+        // can be painted over by the WebView surface. The bar and its close
+        // action must stay above the embedded page.
+        KumihoTopBar(
+            title = stringResource(R.string.account_webview_title),
+            actions = {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .size(Dimens.TouchTarget)
+                        .testTag(MozillaAccountWebViewTags.CLOSE),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.account_webview_close),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(),
+        )
     }
 }
 

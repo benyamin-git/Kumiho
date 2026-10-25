@@ -133,7 +133,7 @@ class MozillaAccountWebViewInstrumentedTest {
         rule.onNodeWithText("Sign-in page did not load").assertIsDisplayed()
         rule.onNodeWithText("The Mozilla account page could not be loaded.").assertIsDisplayed()
         rule.onNodeWithText(
-            "Close this screen and paste the redirect URL in Account if sign-in does not finish.",
+            "Close this screen and paste the redirect URL on the sign-in screen if sign-in does not finish.",
         ).assertIsDisplayed()
         rule.onNodeWithTag(MozillaAccountWebViewTags.ERROR).assertIsDisplayed()
         rule.onNodeWithTag(MozillaAccountWebViewTags.LOADING).assertDoesNotExist()
@@ -149,6 +149,35 @@ class MozillaAccountWebViewInstrumentedTest {
         rule.onNodeWithTag(MozillaAccountWebViewTags.ERROR_CLOSE).performClick()
         rule.waitForIdle()
         assertEquals(2, closeCalls)
+    }
+
+    @Test
+    fun theFullScreenDialogHostsTheBrowserOutsideTheShell() {
+        var closed = 0
+        rule.setContent {
+            KumihoTheme(
+                colors = PaletteMapping.fromJson(
+                    Mobile.palette(ThemeId.LIGHT.id, KumihoAccent.BLUE.id),
+                    ThemeId.LIGHT,
+                    KumihoAccent.BLUE,
+                ),
+            ) {
+                MozillaAccountBrowserDialog(
+                    loginId = "login-1",
+                    url = "https://evil.example/signin",
+                    onRedirect = {},
+                    onClose = { closed++ },
+                    onUnavailable = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithTag(MozillaAccountWebViewTags.SCREEN).assertIsDisplayed()
+        rule.onNodeWithTag(MozillaAccountWebViewTags.ERROR).assertIsDisplayed()
+        rule.onNodeWithTag(MozillaAccountWebViewTags.CLOSE).performClick()
+        rule.waitForIdle()
+        assertEquals(1, closed)
     }
 
     @Test

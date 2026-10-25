@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.account
 
+import android.webkit.WebView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,7 +22,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -35,7 +36,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,9 +96,15 @@ object AccountTags {
     const val THRESHOLD = "account_threshold"
     const val THRESHOLD_DOWN = "account_threshold_down"
     const val THRESHOLD_UP = "account_threshold_up"
-    const val BROWSER_WAITING = "account_browser_waiting"
-    const val BROWSER_OPEN = "account_browser_open"
-    const val BROWSER_CANCEL = "account_browser_cancel"
+    const val BROWSER_WAITING = BrowserWaitingTags.CARD
+    const val BROWSER_URL = BrowserWaitingTags.URL
+    const val BROWSER_OPEN = BrowserWaitingTags.OPEN
+    const val BROWSER_PASTE_TOGGLE = BrowserWaitingTags.PASTE_TOGGLE
+    const val BROWSER_PASTE_FIELD = BrowserWaitingTags.PASTE_FIELD
+    const val BROWSER_PASTE_ERROR = BrowserWaitingTags.PASTE_ERROR
+    const val BROWSER_PASTE_SUBMIT = BrowserWaitingTags.PASTE_SUBMIT
+    const val BROWSER_USE_PASSWORD = BrowserWaitingTags.USE_PASSWORD
+    const val BROWSER_CANCEL = BrowserWaitingTags.CANCEL
     const val RENAME_DIALOG = "account_rename_dialog"
     const val RENAME_INPUT = "account_rename_input"
     const val RENAME_CONFIRM = "account_rename_confirm"
@@ -143,24 +149,31 @@ fun AccountRoute(
     }
 
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val gateway = remember(client) { EngineAccountGateway(client) }
     val key = remember(client) { "account-${System.identityHashCode(client)}" }
     val viewModel: AccountViewModel = viewModel(key = key) {
-        AccountViewModel(gateway)
+        AccountViewModel(
+            gateway = gateway,
+            onSignedOut = {
+                // A device without a usable WebView package has no cookie jar
+                // to clear; never let that block the local sign-out.
+                if (WebView.getCurrentWebViewPackage() != null) {
+                    try {
+                        clearMozillaCookies(appContext)
+                    } catch (_: RuntimeException) {
+                        // The WebView provider died between the probe and use.
+                    }
+                }
+            },
+            openExternalBrowser = { url -> openBrowserSignIn(appContext, url) },
+        )
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var openedURL by rememberSaveable { mutableStateOf<String?>(null) }
 
     LifecycleResumeEffect(viewModel) {
         viewModel.setScreenResumed(true)
         onPauseOrDispose { viewModel.setScreenResumed(false) }
-    }
-
-    LaunchedEffect(state.browserLaunchURL) {
-        val url = state.browserLaunchURL ?: return@LaunchedEffect
-        if (openedURL == url) return@LaunchedEffect
-        openedURL = url
-        if (!openBrowserSignIn(context, url)) viewModel.browserUnavailable()
     }
 
     AccountScreen(
@@ -190,12 +203,13 @@ fun AccountRoute(
             onDismissRename = viewModel::dismissRename,
             onRotation = viewModel::setRotation,
             onThreshold = viewModel::setThreshold,
-            onOpenBrowser = {
-                val url = viewModel.state.value.browser?.url
-                if (url == null || !openBrowserSignIn(context, url)) {
-                    viewModel.browserUnavailable()
-                }
-            },
+            onOpenBrowser = viewModel::openBrowser,
+            onCloseBrowser = viewModel::closeBrowserWebView,
+            onBrowserRedirect = viewModel::submitBrowserRedirect,
+            onToggleBrowserPaste = viewModel::toggleBrowserPaste,
+            onBrowserPasteChange = viewModel::setBrowserPasteValue,
+            onBrowserPasteSubmit = viewModel::submitBrowserPaste,
+            onUseBrowserPassword = viewModel::startPassword,
             onCancelBrowser = viewModel::cancelBrowser,
             onBrowserUnavailable = viewModel::browserUnavailable,
             onCancelAdd = viewModel::cancelAddAccount,
@@ -215,7 +229,7 @@ fun AccountScreen(
         ?: state.accounts?.error?.let { stringResource(R.string.account_accounts_failed) }
     val detail = state.error ?: state.accounts?.error ?: state.accounts?.notice
 
-    Column(modifier = modifier.fillMaxSize().testTag(AccountTags.SCREEN)) {
+    Column(modifier = modifier.fillMaxSize().imePadding().testTag(AccountTags.SCREEN)) {
         if (notice != null || detail != null) {
             AccountBanner(
                 title = notice.orEmpty(),
@@ -274,6 +288,18 @@ fun AccountScreen(
             onDismiss = actions.onDismissRename,
         )
     }
+
+    val browser = state.browser
+    val browserURL = state.browserLaunchURL ?: browser?.url
+    if (state.browserWebViewOpen && browser != null && browserURL != null) {
+        MozillaAccountBrowserDialog(
+            loginId = browser.id,
+            url = browserURL,
+            onRedirect = actions.onBrowserRedirect,
+            onClose = actions.onCloseBrowser,
+            onUnavailable = actions.onBrowserUnavailable,
+        )
+    }
 }
 
 @Composable
@@ -286,7 +312,24 @@ private fun AccountsBody(state: AccountUiState, actions: AccountActions) {
     ) {
         state.browser?.let { browser ->
             item(key = "browser") {
-                BrowserWaitingCard(browser = browser, actions = actions)
+                BrowserWaitingCard(
+                    browser = browser,
+                    title = stringResource(R.string.account_browser_title),
+                    hint = stringResource(R.string.account_browser_hint),
+                    fallbackHint = stringResource(R.string.browser_waiting_fallback),
+                    pasteOpen = state.browserPasteOpen,
+                    pasteValue = state.browserPasteValue,
+                    pasteError = state.browserPasteError,
+                    pasteMessage = state.browserPasteMessage,
+                    submitting = state.browserSubmitting,
+                    fallback = state.browserFallback,
+                    onOpen = actions.onOpenBrowser,
+                    onTogglePaste = actions.onToggleBrowserPaste,
+                    onPasteChange = actions.onBrowserPasteChange,
+                    onPasteSubmit = actions.onBrowserPasteSubmit,
+                    onUsePassword = actions.onUseBrowserPassword,
+                    onCancel = actions.onCancelBrowser,
+                )
             }
         }
 
@@ -406,12 +449,14 @@ private fun AccountsBody(state: AccountUiState, actions: AccountActions) {
             }
         }
 
-        item(key = "note") {
-            Text(
-                text = stringResource(R.string.account_sign_out_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (state.signedIn || state.hasAccounts) {
+            item(key = "note") {
+                Text(
+                    text = stringResource(R.string.account_sign_out_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -594,65 +639,6 @@ private fun AccountListRow(
                         actions.onRemoveRequest(account)
                     },
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BrowserWaitingCard(browser: BrowserSignIn, actions: AccountActions) {
-    KumihoCard(modifier = Modifier.fillMaxWidth().testTag(AccountTags.BROWSER_WAITING)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
-        ) {
-            if (browser.error == null) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = LocalKumihoColors.current.warning,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.account_browser_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = browser.error ?: stringResource(R.string.account_browser_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (browser.error == null) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        LocalKumihoColors.current.warning
-                    },
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
-        ) {
-            Button(
-                onClick = actions.onOpenBrowser,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = Dimens.ControlHeight)
-                    .testTag(AccountTags.BROWSER_OPEN),
-            ) {
-                Text(stringResource(R.string.account_browser_open))
-            }
-            TextButton(
-                onClick = actions.onCancelBrowser,
-                modifier = Modifier
-                    .heightIn(min = Dimens.ControlHeight)
-                    .testTag(AccountTags.BROWSER_CANCEL),
-            ) {
-                Text(stringResource(R.string.account_browser_cancel))
             }
         }
     }
@@ -1166,6 +1152,12 @@ data class AccountActions(
     val onRotation: (Boolean) -> Unit = {},
     val onThreshold: (Int) -> Unit = {},
     val onOpenBrowser: () -> Unit = {},
+    val onCloseBrowser: () -> Unit = {},
+    val onBrowserRedirect: (String) -> Unit = {},
+    val onToggleBrowserPaste: () -> Unit = {},
+    val onBrowserPasteChange: (String) -> Unit = {},
+    val onBrowserPasteSubmit: () -> Unit = {},
+    val onUseBrowserPassword: () -> Unit = {},
     val onCancelBrowser: () -> Unit = {},
     val onBrowserUnavailable: () -> Unit = {},
     val onCancelAdd: () -> Unit = {},

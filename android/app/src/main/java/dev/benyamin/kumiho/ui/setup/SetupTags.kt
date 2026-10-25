@@ -28,9 +28,17 @@ object SetupTags {
     const val SIGN_IN_ERROR = "setup_sign_in_error"
     const val SIGN_IN_WAITING = "setup_sign_in_waiting"
     const val SIGN_IN_BROWSER = "setup_sign_in_browser"
-    const val SIGN_IN_BROWSER_WAITING = "setup_sign_in_browser_waiting"
-    const val SIGN_IN_BROWSER_OPEN = "setup_sign_in_browser_open"
-    const val SIGN_IN_BROWSER_CANCEL = "setup_sign_in_browser_cancel"
+    const val SIGN_IN_BROWSER_WAITING = dev.benyamin.kumiho.ui.account.BrowserWaitingTags.CARD
+    const val SIGN_IN_BROWSER_OPEN = dev.benyamin.kumiho.ui.account.BrowserWaitingTags.OPEN
+    const val SIGN_IN_BROWSER_PASTE_TOGGLE =
+        dev.benyamin.kumiho.ui.account.BrowserWaitingTags.PASTE_TOGGLE
+    const val SIGN_IN_BROWSER_PASTE_FIELD =
+        dev.benyamin.kumiho.ui.account.BrowserWaitingTags.PASTE_FIELD
+    const val SIGN_IN_BROWSER_PASTE_SUBMIT =
+        dev.benyamin.kumiho.ui.account.BrowserWaitingTags.PASTE_SUBMIT
+    const val SIGN_IN_BROWSER_USE_PASSWORD =
+        dev.benyamin.kumiho.ui.account.BrowserWaitingTags.USE_PASSWORD
+    const val SIGN_IN_BROWSER_CANCEL = dev.benyamin.kumiho.ui.account.BrowserWaitingTags.CANCEL
     const val SIGN_IN_ACCOUNT = "setup_sign_in_account"
 
     const val PERMISSIONS_STEP = "setup_step_permissions"
