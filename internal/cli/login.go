@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -13,6 +14,17 @@ import (
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"golang.org/x/term"
+)
+
+const (
+	browserStartTimeout    = 10 * time.Second
+	browserCompleteTimeout = 60 * time.Second
+	browserStatusTimeout   = 10 * time.Second
+	browserCancelTimeout   = 5 * time.Second
+	browserSignInTimeout   = 10 * time.Minute
+	browserPollInterval    = 2 * time.Second
+
+	browserRedirectInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here."
 )
 
 func runLogin(args []string, stdout, stderr io.Writer) int {
@@ -135,7 +147,7 @@ terminal the password flow is used for script compatibility.
 		startType, statusType, cancelType = ipc.TypeAccountsAddStart, ipc.TypeAccountsAddStatus, ipc.TypeAccountsAddCancel
 	}
 	if method == "browser" {
-		return runBrowserSignIn(client, startType, statusType, cancelType, *email, accountID, *noOpen, adding, command, stdout, stderr)
+		return runBrowserSignIn(client, startType, statusType, cancelType, *email, accountID, *noOpen, adding, command, os.Stdin, stdout, stderr)
 	}
 	return runPasswordSignIn(ctx, client, startType, *email, accountID, adding, command, stdout, stderr)
 }
@@ -222,8 +234,8 @@ func runPasswordSignIn(ctx context.Context, client *ipc.Client, startType, email
 	return 1
 }
 
-func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, email, accountID string, noOpen, adding bool, command string, stdout, stderr io.Writer) int {
-	startCtx, cancelStart := context.WithTimeout(context.Background(), 10*time.Second)
+func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, email, accountID string, noOpen, adding bool, command string, in io.Reader, stdout, stderr io.Writer) int {
+	startCtx, cancelStart := context.WithTimeout(context.Background(), browserStartTimeout)
 	ls := loginStartCall(startCtx, client, startType, api.LoginStartPayload{
 		Method: "browser", Email: email, AccountID: accountID,
 	}, stderr, command)
@@ -231,21 +243,25 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 	if ls == nil {
 		return 1
 	}
-	if ls.Step == "error" || (ls.Step != "browser" && ls.Step != "done") {
-		if ls.Error != "" {
-			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
-		} else {
-			fmt.Fprintf(stderr, "kumiho %s: unexpected login step %q\n", command, ls.Step)
-		}
-		return 1
-	}
-	if ls.Step == "done" {
+	switch ls.Step {
+	case "done":
 		if ls.Error != "" {
 			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
 			return 1
 		}
 		printSignInDone(stdout, adding, ls.Email)
 		return 0
+	case "cancelled":
+		fmt.Fprintln(stderr, "Sign-in cancelled.")
+		return 1
+	case "browser":
+	default:
+		if ls.Error != "" {
+			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
+		} else {
+			fmt.Fprintf(stderr, "kumiho %s: unexpected login step %q\n", command, ls.Step)
+		}
+		return 1
 	}
 	if ls.URL == "" {
 		fmt.Fprintf(stderr, "kumiho %s: daemon returned no browser URL\n", command)
@@ -258,40 +274,87 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 	if !noOpen {
 		_ = openBrowserURL(ls.URL)
 	}
-	fmt.Fprintln(stdout, "Waiting for the browser sign-in to finish...")
+	fmt.Fprintln(stdout, browserRedirectInstruction)
 
-	deadline := time.Now().Add(5 * time.Minute)
+	// The daemon owns a ten-minute flow; the CLI stops at the same deadline.
+	deadline := time.Now().Add(browserSignInTimeout)
+	reader := bufio.NewReader(in)
 	for {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			cancelCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_, _ = client.Call(cancelCtx, cancelType, api.LoginCancelPayload{LoginID: ls.LoginID})
-			cancel()
+		if !time.Now().Before(deadline) {
+			cancelBrowserLogin(client, cancelType, ls.LoginID)
 			fmt.Fprintf(stderr, "kumiho %s: timed out waiting for the browser sign-in\n", command)
 			return 1
 		}
-		wait := 2 * time.Second
-		if remaining < wait {
-			wait = remaining
+		line, err := promptBrowserRedirect(reader, stdout)
+		if err != nil {
+			cancelBrowserLogin(client, cancelType, ls.LoginID)
+			if errors.Is(err, io.EOF) {
+				fmt.Fprintf(stderr, "kumiho %s: no redirect URL was pasted\n", command)
+			} else {
+				fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
+			}
+			return 1
 		}
-		time.Sleep(wait)
+		if line == "" {
+			fmt.Fprintf(stderr, "kumiho %s: paste the complete redirect URL from the browser\n", command)
+			continue
+		}
+		if !time.Now().Before(deadline) {
+			cancelBrowserLogin(client, cancelType, ls.LoginID)
+			fmt.Fprintf(stderr, "kumiho %s: timed out waiting for the browser sign-in\n", command)
+			return 1
+		}
 
-		statusCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		env, err := client.Call(statusCtx, statusType, api.LoginStatusPayload{LoginID: ls.LoginID})
+		// A nil reply means the daemon reached a terminal state (done or
+		// error); a returned error is retryable and the flow stays active.
+		completeCtx, cancelComplete := context.WithTimeout(context.Background(), boundedTimeout(deadline, browserCompleteTimeout))
+		_, err = client.Call(completeCtx, ipc.TypeLoginComplete, api.LoginCompletePayload{
+			LoginID: ls.LoginID, RedirectURL: line,
+		})
+		cancelComplete()
+		if err != nil {
+			fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
+			continue
+		}
+		return pollBrowserSignIn(client, statusType, cancelType, ls.LoginID, command, deadline, adding, stdout, stderr)
+	}
+}
+
+// promptBrowserRedirect prints the input prompt and returns one trimmed line.
+// EOF with no input is reported as io.EOF; a partial final line is accepted.
+func promptBrowserRedirect(reader *bufio.Reader, out io.Writer) (string, error) {
+	fmt.Fprint(out, "Redirect URL: ")
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" && errors.Is(err, io.EOF) {
+		return "", io.EOF
+	}
+	return line, nil
+}
+
+// pollBrowserSignIn waits for the daemon to publish the terminal state after
+// a successful login_complete. It polls immediately because LoginComplete
+// publishes done/error before it returns.
+func pollBrowserSignIn(client *ipc.Client, statusType, cancelType, loginID, command string, deadline time.Time, adding bool, stdout, stderr io.Writer) int {
+	for {
+		statusCtx, cancel := context.WithTimeout(context.Background(), browserStatusTimeout)
+		env, err := client.Call(statusCtx, statusType, api.LoginStatusPayload{LoginID: loginID})
 		cancel()
 		if err != nil {
 			fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
 			return 1
 		}
-		var next api.LoginState
-		if err := env.DecodePayload(&next); err != nil {
+		var ls api.LoginState
+		if err := env.DecodePayload(&ls); err != nil {
 			fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
 			return 1
 		}
-		ls = &next
 		switch ls.Step {
 		case "browser":
-			continue
+			// The daemon has not published a terminal state yet.
 		case "done":
 			if ls.Error != "" {
 				fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
@@ -317,7 +380,35 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 			fmt.Fprintf(stderr, "kumiho %s: unexpected login step %q\n", command, ls.Step)
 			return 1
 		}
+
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			cancelBrowserLogin(client, cancelType, loginID)
+			fmt.Fprintf(stderr, "kumiho %s: timed out waiting for the browser sign-in\n", command)
+			return 1
+		}
+		wait := browserPollInterval
+		if remaining < wait {
+			wait = remaining
+		}
+		time.Sleep(wait)
 	}
+}
+
+func cancelBrowserLogin(client *ipc.Client, cancelType, loginID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), browserCancelTimeout)
+	defer cancel()
+	_, _ = client.Call(ctx, cancelType, api.LoginCancelPayload{LoginID: loginID})
+}
+
+// boundedTimeout keeps one call inside the sign-in deadline but no longer
+// than max.
+func boundedTimeout(deadline time.Time, max time.Duration) time.Duration {
+	remaining := time.Until(deadline)
+	if remaining < max {
+		return remaining
+	}
+	return max
 }
 
 func newLoginTerminal() *term.Terminal {
