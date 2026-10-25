@@ -426,9 +426,11 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	// "?" opens the help overlay everywhere except while free-text input is
-	// active (login fields, settings edits, log search, location filter).
+	// active (login fields, browser redirect input, settings edits, log search,
+	// location filter).
 	if k.String() == "?" &&
-		m.screen != screenLogin && !m.st.editing && !m.lg.searching && !m.loc.filtering {
+		m.screen != screenLogin && !(m.screen == screenAccount && m.ac.polling) &&
+		!m.st.editing && !m.lg.searching && !m.loc.filtering {
 		m.help = true
 		return m, nil
 	}

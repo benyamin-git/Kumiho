@@ -489,6 +489,55 @@ func TestAccountBrowserCancelledPollClearsFlow(t *testing.T) {
 	}
 }
 
+func TestAccountBrowserWaitingQuestionMarkStaysInInput(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
+		if req.typ == ipc.TypeLoginComplete {
+			return ipc.TypeResult, api.Result{OK: true}
+		}
+		return "", nil
+	})
+	m := &Model{
+		client: d.client,
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true,
+			polling: true, browserURL: "https://example.test/signin", browserID: "login-1",
+		},
+	}
+
+	for _, r := range redirect {
+		m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		if m.help {
+			t.Fatalf("help opened after typing %q:\n%s", r, m.View())
+		}
+	}
+	if m.ac.browserInput != redirect {
+		t.Fatalf("browserInput = %q, want %q", m.ac.browserInput, redirect)
+	}
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should submit the typed redirect URL")
+	}
+	msg := cmd()
+	if complete, ok := msg.(browserCompleteMsg); !ok || complete.err != nil {
+		t.Fatalf("complete message = %#v, want success", msg)
+	}
+
+	requests := d.requests()
+	if len(requests) != 1 || requests[0].typ != ipc.TypeLoginComplete {
+		t.Fatalf("requests = %v, want login_complete", d.types())
+	}
+	var payload api.LoginCompletePayload
+	if err := envPayload(requests[0].payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.LoginID != "login-1" || payload.RedirectURL != redirect || payload.Code != "" {
+		t.Fatalf("login_complete payload = %+v, want exact redirect URL and login-1", payload)
+	}
+}
+
 func TestAccountBrowserDoneFinishes(t *testing.T) {
 	m := &Model{
 		screen: screenAccount,
