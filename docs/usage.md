@@ -105,8 +105,10 @@ There is no loopback listener, so the browser may run on any machine;
 `--no-open` is useful over SSH or in a headless shell. The flow expires after
 ten minutes and the CLI cancels the daemon-side flow on timeout. The redirect
 URL, authorization code, PKCE verifier and tokens are never logged. The TUI
-and Windows GUI use the same flow with a **Redirect URL** field and
-**Continue**; the Android app completes it in its in-app WebView.
+prints the URL (it has no browser opener) and takes the complete **Redirect
+URL** in a field submitted with **Enter**; the Windows GUI uses a **Redirect
+URL** field with **Continue**. The Android app completes it in its in-app
+WebView.
 
 **Password sign-in** sends the password only in the request that uses it; it
 is never stored. Email-link 2FA and TOTP/unblock codes are supported. A real

@@ -482,8 +482,10 @@ updates the list automatically. The in-app WebView intercepts the redirect
 itself. If it cannot be created, the app opens the same URL in a Custom Tab
 and the paste field is already visible. Removing one
 account leaves the others signed in; removing the active one selects the most
-recently used remaining account, and removing the last account is a full sign
-out.
+recently used remaining account. Removing the last account clears the local
+session and disconnects without calling **Sign out**: it does not ask Firefox
+Accounts to revoke the tokens and does not clear the WebView cookies. Use
+**Sign out** when you want that revocation.
 
 On the first start after upgrading from v0.6.0, accounts created by the old
 opaque browser sign-in are removed and the Account screen shows **“Old browser

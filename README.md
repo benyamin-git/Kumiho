@@ -112,8 +112,9 @@ before release:
   **Open again**, **Paste redirect URL instead** (**Redirect URL** →
   **Continue**), **Use password** and **Cancel**. If the WebView cannot be
   created, the URL opens in a Custom Tab with the paste field available.
-- **Desktop redirect-URL paste** — Linux CLI/TUI and the Windows GUI open
-  Mozilla's page and ask for the complete redirect URL. Mozilla's “can't open
+- **Desktop redirect-URL paste** — the Linux CLI and Windows GUI open
+  Mozilla's page; the TUI prints the URL for any browser. All desktop clients
+  ask for the complete redirect URL. Mozilla's “can't open
   this address” page is expected; copy the address-bar URL and paste it. There
   is no loopback listener, so the browser can run on another machine.
 - **Upgrade cleanup** — accounts created by the old opaque browser flow are
@@ -403,7 +404,9 @@ for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
 notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
 newer on `arm64-v8a` or `armeabi-v7a`, and is distributed as an APK — there is
-no Play or F-Droid build.
+no Play or F-Droid build. The direct Firefox Accounts OAuth WebView described
+below is the v0.6.1 (unreleased) replacement and is not in the published
+v0.6.0 APK.
 
 The app has a four-step setup (consent, browser or password Firefox Accounts
 sign-in, VPN and notification permissions, Always-on guidance), then the same

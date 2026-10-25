@@ -155,9 +155,10 @@ Global CLI mechanics (apply to every subcommand):
   tunnel off`).
 - `accounts remove <id|email> [--yes]` deletes one account. Removing the active
   account while others remain asks for y/N confirmation (skip with `--yes`);
-  removing the last account signs out without prompting.
-  Removing the active account selects the most recently used remaining one;
-  removing the last account clears the session.
+  removing the last account clears the local session without prompting.
+  Removing the active account selects the most recently used remaining one.
+  `accounts remove` never performs `logout`'s best-effort refresh-token
+  revocation.
 - `accounts rename <id|email> <label>` replaces the label. The label is
   trimmed, control characters are rejected, an empty CLI label is rejected,
   and the 64-character limit is enforced. Clients use the `accounts_update`
@@ -332,9 +333,12 @@ the password flow. Steps in the password flow are `email` → `password` → `2f
   2FA prompt with method-specific instructions (email-link text or
   "Enter the code from the email you received."), `contacting Mozilla
   Accounts...` while busy, red error line, footer `enter continue • esc cancel`.
-- Browser waiting card: shows the URL, `press Esc to cancel` and a dim
-  reminder that the page continues automatically. Any `esc` cancels the
-  flow (`login_cancel`); the URL is opened once with the platform opener.
+- Browser waiting card: shows `Open this URL in any browser:`, the URL, the
+  `Paste the complete redirect URL from the browser:` prompt, an editable
+  `Redirect URL:` line and the browser's expected “can't open this address”
+  note; `enter` submits the pasted URL and `esc` cancels the flow
+  (`login_cancel`). The TUI has no browser opener and does not wait for a
+  browser callback.
 - Keys: printable runes append to the active field (email / password / code);
   `backspace` edits; `enter` submits (validation: empty email →
   `email is required`; empty password → `password is required`; empty 2FA code
@@ -493,7 +497,8 @@ Keys (idle):
 - `u` — make the selected account active (`accounts_use`). Refused while the
   tunnel is up.
 - `d` — remove the selected account after y/N. Removing the active account
-  selects the most recently used remaining one; removing the last signs out.
+  selects the most recently used remaining one; removing the last clears the
+  local session and disconnects without logout's token revocation.
 - `a` — add an account through browser sign-in; `p` — add through the
   password screen. Both open the browser/password flow with `adding` set.
 - `R` — re-authenticate the selected account through the browser.
@@ -509,8 +514,11 @@ Keys (idle):
 - `esc` — back. Footer: `↑/↓ select • u use • d remove • a add browser • p add
   password • R sign in again • n rename` / `t rotation • +/- threshold • r
   refresh • x sign out • esc back • ? help • q quit`.
-- Browser waiting card: shows `Open this URL in any browser:` and the URL;
-  `esc` cancels through `accounts_add_cancel`.
+- Browser waiting card: shows `Open this URL in any browser:` and the URL,
+  the `Paste the complete redirect URL from the browser:` prompt, an editable
+  `Redirect URL:` line and the “can't open this address” note. `enter` submits
+  the pasted URL; `esc` cancels through `accounts_add_cancel`. The TUI has no
+  browser opener.
 
 ## Help overlay (`?`)
 Full-screen replacement listing:
@@ -673,10 +681,12 @@ Gap flags (daemon-side abilities beyond the IPC surface):
   without overwriting `tokens.json`, so the previous release can recover.
 - FxA tokens are treated invalid 60 s before expiry and refreshed
   automatically at daemon start, before connect, on Guardian 401/403, and on
-  Account lookups, for browser and password accounts alike; a permanent
-  refresh rejection sets `reauth_required` on that account only, keeps it
-  listed, and requires `accounts add --account <id|email>` (or the row action)
-  to replace it.
+  Account lookups for both methods. A permanent refresh rejection marks only a
+  **browser** account: it sets the durable top-level `reauth_required`, keeps
+  the account listed, and requires `accounts add --account <id|email>` (or the
+  row action) to sign in again. Password accounts never set that flag: an
+  active rejection removes that account (or clears the session when it was the
+  last), and a quota-poll rejection is retried with backoff.
 - Rotation is opt-in (`account_rotation`, default off) and before connect
   only: below `rotation_threshold` (default 10, clamp 1–50) the engine
   picks the best eligible account, preferring higher remaining quota and then
@@ -686,14 +696,17 @@ Gap flags (daemon-side abilities beyond the IPC surface):
 - Quota polling while connected uses `quota_poll_minutes` (default 15); a
   success updates Account/status, failures back off exponentially to a
   30-minute cap, and a 429 presents zero remaining without disconnecting. A
-  rejected refresh token stops that account's poller and sets `reauth_required`.
+  rejected **browser** refresh token stops that account's poller and sets
+  `reauth_required`; a rejected password refresh token is an ordinary poll
+  failure that backs off and retries without the flag.
 - Logout (`logout`, TUI `x` with y/N confirmation, CLI `logout`) best-effort
   revokes every stored FxA refresh token, clears **all**
   accounts, removes `accounts.json` and `tokens.json`, disconnects and writes
   the empty email back to state. An offline or failed revoke never blocks the
   local sign-out. `accounts_remove` removes one row only:
   removing the active row selects the most recently used remaining account,
-  and removing the last row clears the session like logout.
+  and removing the last row clears the local session and disconnects without
+  the refresh-token revocation that `logout` performs.
 - Windows pipe access is the real auth boundary (LocalSystem, Administrators,
   local `kumiho` group, installer allowlist in `pipe-users`); Linux socket is
   0660 root/`kumiho` group. `shutdown` additionally requires admin/root.

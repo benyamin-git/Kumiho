@@ -945,7 +945,8 @@ and a **Refresh** action.
   card with **Redirect URL** and **Continue**; **Use password** reveals the
   inline email/password/2FA form. Toggling
   rotation saves immediately; `Switch below (%)` accepts 1–50 and is disabled
-  while rotation is off. Removing the only account signs out; removing one of
+  while rotation is off. Removing the only account clears the local session
+  and disconnects (without the sign-out revocation); removing one of
   several leaves the others signed in.
 
 - [ ] Sign out.

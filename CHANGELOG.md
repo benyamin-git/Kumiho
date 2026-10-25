@@ -22,8 +22,9 @@ redirect URL on desktop. Old opaque browser accounts are removed.
 - **Android full-screen WebView** titled **Mozilla account** that intercepts
   the `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel` redirect. The
   waiting card offers **Open again**, **Paste redirect URL instead**
-  (**Redirect URL** → **Continue**), **Use password** and **Cancel**; a WebView
-  failure falls back to a Custom Tab with the paste field visible.
+  (**Redirect URL** → **Continue**), **Use password** and **Cancel**. If the
+  WebView cannot be created, the URL opens in a Custom Tab with the paste
+  field visible; a page-load failure shows the in-app error overlay.
 - **Desktop redirect-URL paste** in the CLI, TUI and Windows GUI. Mozilla's
   “can't open this address” page is expected; the complete address-bar URL is
   pasted back, so there is no loopback listener and the browser may run on
