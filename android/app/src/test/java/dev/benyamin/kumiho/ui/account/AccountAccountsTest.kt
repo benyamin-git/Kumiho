@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -90,6 +91,72 @@ class AccountAccountsTest {
             assertTrue(gateway.accountsCalls > before)
             assertEquals(SignInPhase.AUTHENTICATED, viewModel.state.value.signIn.phase)
         }
+
+    @Test
+    fun `browser done with an error is a failure and survives the reload`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = {
+                account().copy(email = null, uid = null, tokenExpires = 0, error = "not signed in")
+            }
+            gateway.accountsResult = { accounts() }
+            gateway.addStartResult = { _, _, _ ->
+                LoginState("browser", null, null, null, null, method = "browser", url = URL, loginId = "flow-1")
+            }
+            gateway.statusResult = {
+                LoginState("done", "new@example.com", null, null, LIMIT, method = "browser", loginId = "flow-1")
+            }
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.startBrowser()
+            runCurrent()
+
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            val state = viewModel.state.value
+            assertNull(state.browser)
+            assertEquals(AccountMessage.ACTION_FAILED, state.message)
+            assertEquals(LIMIT, state.error)
+            assertFalse("done + error must not look authenticated", state.signedIn)
+            assertNotEquals(SignInPhase.AUTHENTICATED, state.signIn.phase)
+            assertEquals(LIMIT, state.signIn.error)
+            assertTrue("completion still refreshes the list", gateway.accountsCalls > 1)
+        }
+
+    @Test
+    fun `password done with an error is not an authenticated session`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = {
+                account().copy(email = null, uid = null, tokenExpires = 0, error = "not signed in")
+            }
+            gateway.accountsResult = { accounts() }
+            gateway.passwordResult =
+                LoginState("done", "user@example.com", null, null, LIMIT, method = "password")
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("hunter2")
+            runCurrent()
+
+            val state = viewModel.state.value
+            assertNotEquals(SignInPhase.AUTHENTICATED, state.signIn.phase)
+            assertEquals(LIMIT, state.signIn.error)
+        }
+
+    @Test
+    fun `dismiss clears the engine account notice`() = runTest(mainRule.testDispatcher) {
+        gateway.accountResult = { account() }
+        gateway.accountsResult = { accounts().copy(notice = LEGACY_NOTICE) }
+        val viewModel = viewModel()
+        runCurrent()
+
+        assertEquals(LEGACY_NOTICE, viewModel.state.value.accounts?.notice)
+        viewModel.dismissMessage()
+        runCurrent()
+        assertNull(viewModel.state.value.accounts?.notice)
+    }
 
     @Test
     fun `browser cancel clears waiting state`() = runTest(mainRule.testDispatcher) {
@@ -562,6 +629,7 @@ class AccountAccountsTest {
         }
         var statusResult: suspend (String) -> LoginState = { error("sign-in flow not found") }
         var loginCompleteResult: suspend (String, String?) -> Unit = { _, _ -> }
+        var passwordResult: LoginState = LoginState("done", "user@example.com", null, null, null)
         var logoutFailure: Exception? = null
 
         var accountCalls = 0
@@ -627,8 +695,7 @@ class AccountAccountsTest {
         override suspend fun loginEmail(email: String): LoginState =
             LoginState("password", email, null, null, null)
 
-        override suspend fun loginPassword(password: String): LoginState =
-            LoginState("done", "user@example.com", null, null, null)
+        override suspend fun loginPassword(password: String): LoginState = passwordResult
 
         override suspend fun login2fa(code: String): LoginState =
             LoginState("done", "user@example.com", null, null, null)
@@ -646,6 +713,8 @@ class AccountAccountsTest {
         const val URL = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152"
         const val FULL_REDIRECT =
             "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+        const val LIMIT = "account limit reached (5); remove one first"
+        const val LEGACY_NOTICE = "Old browser sign-in removed. Add your Firefox account again."
         val TOKEN_EXPIRY: Long = Instant.parse("2026-11-21T12:00:00Z").epochSecond
 
         fun account() = Account(

@@ -347,6 +347,87 @@ class SetupViewModelTest {
     }
 
     @Test
+    fun `the legacy browser removal notice is surfaced on setup`() =
+        runTest(mainRule.testDispatcher) {
+            engine.accountsResult = {
+                Accounts(
+                    accounts = emptyList(),
+                    active = null,
+                    rotation = false,
+                    threshold = 10,
+                    lastMethod = null,
+                    notice = "Old browser sign-in removed. Add your Firefox account again.",
+                    error = null,
+                )
+            }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            runCurrent()
+
+            assertEquals(
+                "Old browser sign-in removed. Add your Firefox account again.",
+                viewModel.state.value.notice,
+            )
+        }
+
+    @Test
+    fun `setup browser done with an error does not mark the wizard authenticated`() =
+        runTest(mainRule.testDispatcher) {
+            engine.loginStartResult = { _, _ -> browserState() }
+            engine.loginStatusResult = {
+                LoginState(
+                    "done",
+                    "user@example.com",
+                    null,
+                    null,
+                    "account limit reached (5); remove one first",
+                    method = "browser",
+                )
+            }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.startBrowser()
+            runCurrent()
+            viewModel.submitBrowserRedirect(FULL_REDIRECT)
+            runCurrent()
+
+            assertEquals(SetupStep.SIGN_IN, viewModel.state.value.step)
+            assertFalse("done + error must not satisfy sign-in", viewModel.state.value.signedIn)
+            assertEquals(
+                "account limit reached (5); remove one first",
+                viewModel.state.value.signIn.error,
+            )
+        }
+
+    @Test
+    fun `setup password done with an error does not mark the wizard authenticated`() =
+        runTest(mainRule.testDispatcher) {
+            engine.onPassword = {
+                LoginState(
+                    "done",
+                    "user@example.com",
+                    null,
+                    null,
+                    "account limit reached (5); remove one first",
+                    method = "password",
+                )
+            }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("pw")
+            runCurrent()
+
+            assertEquals(SetupStep.SIGN_IN, viewModel.state.value.step)
+            assertFalse("done + error must not satisfy sign-in", viewModel.state.value.signedIn)
+            assertEquals(
+                "account limit reached (5); remove one first",
+                viewModel.state.value.signIn.error,
+            )
+        }
+
+    @Test
     fun `a captcha error is shown inline and does not advance`() =
         runTest(mainRule.testDispatcher) {
             val captcha = "captcha \"captcha\" (captcha cannot be solved automatically)"

@@ -148,6 +148,12 @@ class SetupViewModel(
         viewModelScope.launch {
             try {
                 val accounts = withTimeout(ACCOUNTS_TIMEOUT_MS) { engine.accountsList() }
+                val notice = accounts.notice?.takeIf { it.isNotBlank() }
+                if (notice != null) {
+                    // Surface the engine's one-time upgrade notice instead of
+                    // consuming it silently while looking for the prefill.
+                    mutableState.update { it.copy(notice = notice) }
+                }
                 if (accounts.lastMethod != "password") return@launch
                 val candidate = accounts.accounts.firstOrNull { it.active }
                     ?: accounts.accounts.firstOrNull()
@@ -219,9 +225,23 @@ class SetupViewModel(
                         if (login.error == null) restartBrowserPolling(immediate = false)
                     }
                     login.step == STEP_DONE -> {
-                        clearBrowserState()
-                        markAuthenticated(login.email)
-                        refreshAccountEmail()
+                        val failure = login.error
+                        if (!failure.isNullOrBlank()) {
+                            clearBrowserState()
+                            mutableState.update {
+                                it.copy(
+                                    signIn = it.signIn.copy(
+                                        busy = false,
+                                        error = failure,
+                                        message = null,
+                                    ),
+                                )
+                            }
+                        } else {
+                            clearBrowserState()
+                            markAuthenticated(login.email)
+                            refreshAccountEmail()
+                        }
                     }
                     else -> {
                         clearBrowserState()
@@ -501,12 +521,26 @@ class SetupViewModel(
                 }
             }
             STEP_DONE -> {
+                val failure = login.error
+                if (!failure.isNullOrBlank()) {
+                    // done + error is terminal (account limit or a failed
+                    // save): never mark the wizard authenticated, and keep the
+                    // error on the sign-in pane.
+                    clearBrowserState()
+                    mutableState.update {
+                        it.copy(
+                            signIn = it.signIn.copy(
+                                busy = false,
+                                error = failure,
+                                message = null,
+                            ),
+                        )
+                    }
+                    return
+                }
                 clearBrowserState()
                 markAuthenticated(login.email)
                 refreshAccountEmail()
-                if (!login.error.isNullOrBlank()) {
-                    mutableState.update { it.copy(signIn = it.signIn.copy(error = login.error)) }
-                }
             }
             STEP_CANCELLED -> clearBrowserState()
             STEP_ERROR -> mutableState.update {
@@ -695,10 +729,20 @@ class SetupViewModel(
                 }
             }
             STEP_DONE -> {
-                markAuthenticated(login.email)
-                if (!login.error.isNullOrBlank()) {
-                    mutableState.update { it.copy(signIn = it.signIn.copy(error = login.error)) }
+                val failure = login.error
+                if (!failure.isNullOrBlank()) {
+                    mutableState.update {
+                        it.copy(
+                            signIn = it.signIn.copy(
+                                busy = false,
+                                error = failure,
+                                message = null,
+                            ),
+                        )
+                    }
+                    return
                 }
+                markAuthenticated(login.email)
                 refreshAccountEmail()
             }
             else -> {

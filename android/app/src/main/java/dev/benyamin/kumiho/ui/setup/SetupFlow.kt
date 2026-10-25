@@ -264,6 +264,7 @@ fun SetupFlow(
                         SetupStep.CONSENT -> ConsentStep()
                         SetupStep.SIGN_IN -> SignInStep(
                             state = state.signIn,
+                            notice = state.notice,
                             browser = state.browser,
                             browserPasteOpen = state.browserPasteOpen,
                             browserPasteValue = state.browserPasteValue,

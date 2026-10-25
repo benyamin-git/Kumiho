@@ -150,23 +150,35 @@ class AccountViewModel(
     }
 
     fun dismissMessage() {
-        mutableState.update { it.copy(message = null, error = null) }
+        mutableState.update {
+            it.copy(
+                message = null,
+                error = null,
+                accounts = it.accounts?.copy(notice = null),
+            )
+        }
     }
 
     /**
      * Fetches the entitlement and the account list concurrently. Either one may
      * fail without discarding the other's last good value.
+     *
+     * [keepFailure] carries a terminal sign-in failure's message across the
+     * reload that follows it; without it the reload's "start clean" update
+     * would erase the error the user still needs to see.
      */
-    private fun loadAll(refresh: Boolean = false) {
+    private fun loadAll(refresh: Boolean = false, keepFailure: Boolean = false) {
         if (loadJob?.isActive == true) return
         val hasAccount = mutableState.value.account != null
         val hasAccounts = mutableState.value.accounts != null
+        val keptError = if (keepFailure) mutableState.value.error else null
+        val keptMessage = if (keepFailure) mutableState.value.message else null
         mutableState.update {
             it.copy(
                 loading = !hasAccount && !hasAccounts,
                 refreshing = refresh && (hasAccount || hasAccounts),
-                error = null,
-                message = null,
+                error = keptError,
+                message = keptMessage,
             )
         }
         loadJob = viewModelScope.launch {
@@ -216,8 +228,8 @@ class AccountViewModel(
                 it.copy(
                     loading = false,
                     refreshing = false,
-                    message = message ?: it.message,
-                    error = detail ?: it.error,
+                    message = message ?: keptMessage ?: it.message,
+                    error = detail ?: keptError ?: it.error,
                 )
             }
         }
@@ -387,6 +399,25 @@ class AccountViewModel(
                 }
             }
             STEP_DONE -> {
+                val failure = login.error
+                if (!failure.isNullOrBlank()) {
+                    // done + error is the engine's terminal failure shape
+                    // (account limit or a failed save): it must not look
+                    // authenticated, and the error survives the reload.
+                    mutableState.update {
+                        it.copy(
+                            addingAccount = false,
+                            signIn = it.signIn.copy(
+                                busy = false,
+                                error = failure,
+                                message = null,
+                            ),
+                        )
+                    }
+                    stopEmailPolling()
+                    loadAll(refresh = true, keepFailure = true)
+                    return
+                }
                 mutableState.update {
                     it.copy(
                         addingAccount = false,
@@ -395,7 +426,7 @@ class AccountViewModel(
                             accountEmail = login.email ?: it.signIn.accountEmail
                             ?: it.signIn.email.takeIf { value -> value.isNotBlank() },
                             busy = false,
-                            error = login.error,
+                            error = null,
                             message = null,
                         ),
                     )
@@ -824,6 +855,22 @@ class AccountViewModel(
                 }
             }
             STEP_DONE -> {
+                val failure = login.error
+                if (!failure.isNullOrBlank()) {
+                    // A terminal browser failure is not an authenticated
+                    // account: close the wait, show the error, and keep it
+                    // through the reload so the next snapshot cannot hide it.
+                    clearBrowser()
+                    mutableState.update {
+                        it.copy(
+                            message = AccountMessage.ACTION_FAILED,
+                            error = failure,
+                            signIn = it.signIn.copy(busy = false, error = failure),
+                        )
+                    }
+                    loadAll(refresh = true, keepFailure = true)
+                    return
+                }
                 clearBrowser()
                 loadAll(refresh = true)
             }

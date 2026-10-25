@@ -40,6 +40,7 @@ object SetupTags {
         dev.benyamin.kumiho.ui.account.BrowserWaitingTags.USE_PASSWORD
     const val SIGN_IN_BROWSER_CANCEL = dev.benyamin.kumiho.ui.account.BrowserWaitingTags.CANCEL
     const val SIGN_IN_ACCOUNT = "setup_sign_in_account"
+    const val SIGN_IN_NOTICE = "setup_sign_in_notice"
 
     const val PERMISSIONS_STEP = "setup_step_permissions"
     const val PERMISSIONS_VPN_ACTION = "setup_permissions_vpn_action"

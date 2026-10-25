@@ -99,6 +99,12 @@ data class SetupState(
     val finishing: Boolean = false,
     /** A failure that keeps the user on the current step. */
     val error: String? = null,
+    /**
+     * The engine's one-time account notice (the legacy browser removal). It is
+     * informational, not an error, and stays until the engine stops sending it
+     * or the sign-in step is left.
+     */
+    val notice: String? = null,
     /** The engine-owned browser flow, while one is in flight. */
     val browser: BrowserSignIn? = null,
     /** The engine URL loaded by the in-app browser. */

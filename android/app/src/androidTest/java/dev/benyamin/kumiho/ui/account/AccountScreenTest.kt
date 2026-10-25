@@ -5,9 +5,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.ui.setup.SetupTags
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
@@ -87,6 +91,31 @@ class AccountScreenTest {
 
         assertTrue(calls.contains("refresh"))
         assertTrue(calls.contains("sign-out"))
+    }
+
+    @Test
+    fun theLegacyRemovalNoticeUsesAnInformationalBanner() {
+        val notice = "Old browser sign-in removed. Add your Firefox account again."
+        show(
+            AccountUiState(
+                loading = false,
+                account = null,
+                accounts = Accounts(
+                    accounts = emptyList(),
+                    active = null,
+                    rotation = false,
+                    threshold = 10,
+                    lastMethod = null,
+                    notice = notice,
+                    error = null,
+                ),
+            ),
+        )
+
+        rule.onNodeWithTag(AccountTags.NOTICE).assertIsDisplayed()
+        rule.onNodeWithText(notice).assertIsDisplayed()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.account_notice_information))
+            .assertIsDisplayed()
     }
 
     @Test

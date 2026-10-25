@@ -129,6 +129,7 @@ class SetupFlowTest {
             KumihoTheme(colors = palette(ThemeId.LIGHT)) {
                 SignInStep(
                     state = SignInPaneState(),
+                    notice = null,
                     browser = BrowserSignIn(
                         id = "setup-1",
                         url = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",

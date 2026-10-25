@@ -23,6 +23,7 @@ import dev.benyamin.kumiho.ui.theme.Dimens
 @Composable
 fun SignInStep(
     state: SignInPaneState,
+    notice: String?,
     browser: BrowserSignIn?,
     browserPasteOpen: Boolean,
     browserPasteValue: String,
@@ -54,6 +55,14 @@ fun SignInStep(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        if (!notice.isNullOrBlank()) {
+            Text(
+                text = notice,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag(SetupTags.SIGN_IN_NOTICE),
+            )
+        }
         if (browser != null) {
             BrowserWaitingCard(
                 browser = browser,

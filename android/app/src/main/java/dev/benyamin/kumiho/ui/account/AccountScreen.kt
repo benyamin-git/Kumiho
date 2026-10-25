@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -79,6 +80,7 @@ object AccountTags {
     const val DIALOG_CONFIRM = "account_sign_out_confirm"
     const val DIALOG_CANCEL = "account_sign_out_cancel"
     const val SIGNED_OUT_TITLE = "account_signed_out_title"
+    const val NOTICE = "account_notice"
 
     const val ACCOUNTS = "account_accounts"
     const val ADD_ACCOUNT = "account_add"
@@ -228,12 +230,15 @@ fun AccountScreen(
     val notice = accountNoticeText(state.message)
         ?: state.accounts?.error?.let { stringResource(R.string.account_accounts_failed) }
     val detail = state.error ?: state.accounts?.error ?: state.accounts?.notice
+    val informational = notice == null && state.error == null && state.accounts?.error == null &&
+        !state.accounts?.notice.isNullOrBlank()
 
     Column(modifier = modifier.fillMaxSize().imePadding().testTag(AccountTags.SCREEN)) {
         if (notice != null || detail != null) {
             AccountBanner(
                 title = notice.orEmpty(),
                 detail = detail,
+                informational = informational,
                 onRetry = if (state.message == AccountMessage.TIMEOUT ||
                     state.message == AccountMessage.LOAD_FAILED ||
                     state.message == AccountMessage.REFRESH_FAILED ||
@@ -1013,10 +1018,12 @@ private fun SignOutDialog(
 private fun AccountBanner(
     title: String,
     detail: String?,
+    informational: Boolean,
     onRetry: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val warning = LocalKumihoColors.current.warning
+    val accent = if (informational) MaterialTheme.colorScheme.primary else warning
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1024,10 +1031,11 @@ private fun AccountBanner(
                 start = Dimens.ScreenPadding,
                 end = Dimens.ScreenPadding,
                 top = Dimens.Space3,
-            ),
+            )
+            .testTag(AccountTags.NOTICE),
         shape = MaterialTheme.shapes.medium,
-        color = warning.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, warning.copy(alpha = 0.5f)),
+        color = accent.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
     ) {
         Row(
             modifier = Modifier.padding(Dimens.Space3),
@@ -1035,9 +1043,13 @@ private fun AccountBanner(
             horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
         ) {
             Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = warning,
+                imageVector = if (informational) Icons.Filled.Info else Icons.Filled.Warning,
+                contentDescription = if (informational) {
+                    stringResource(R.string.account_notice_information)
+                } else {
+                    null
+                },
+                tint = accent,
                 modifier = Modifier.size(20.dp),
             )
             Column(modifier = Modifier.weight(1f)) {
@@ -1045,7 +1057,7 @@ private fun AccountBanner(
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleSmall,
-                        color = warning,
+                        color = accent,
                     )
                 }
                 if (!detail.isNullOrBlank()) {

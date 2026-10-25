@@ -612,6 +612,7 @@
     <string name="account_token_unknown">Not reported</string>
     <string name="account_refresh">Refresh</string>
     <string name="account_refreshing">Refreshing…</string>
+    <string name="account_notice_information">Information</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_signing_out">Signing out…</string>
     <string name="account_sign_out_note">Signing out clears the tokens, asks Firefox Accounts to revoke this device\'s session, and disconnects the tunnel. The app stays on this screen.</string>
