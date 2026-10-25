@@ -12,6 +12,11 @@ import (
 	"github.com/benyamin-git/kumiho/internal/ipc"
 )
 
+const (
+	browserRedirectPrompt   = "Paste the complete redirect URL from the browser:"
+	browserRedirectRequired = "paste the complete redirect URL from the browser"
+)
+
 // accountState is the Account screen state (PLAN.md §6).
 type accountState struct {
 	loaded bool
@@ -23,9 +28,12 @@ type accountState struct {
 	confirmLogout bool
 	selected      int
 
-	browserURL string
-	browserID  string
-	polling    bool
+	browserURL        string
+	browserID         string
+	browserInput      string
+	browserSubmitting bool
+	browserError      string
+	polling           bool
 
 	confirmRemove *api.AccountSummary
 	rename        bool
@@ -63,6 +71,11 @@ type browserPollMsg struct {
 }
 
 type browserCancelMsg struct{ err error }
+
+type browserCompleteMsg struct {
+	id  string
+	err error
+}
 
 type logoutDoneMsg struct{ err error }
 
@@ -210,6 +223,71 @@ func cancelBrowserLogin(c *ipc.Client, id string, adding bool) tea.Cmd {
 	}
 }
 
+// completeBrowserLogin submits the full redirect URL pasted from the browser.
+// The daemon keeps the flow active on retryable errors and publishes the
+// terminal done/error state, which the existing status poll observes.
+func completeBrowserLogin(c *ipc.Client, id, url string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		_, err := c.Call(ctx, ipc.TypeLoginComplete, api.LoginCompletePayload{
+			LoginID: id, RedirectURL: url,
+		})
+		return browserCompleteMsg{id: id, err: err}
+	}
+}
+
+// clearBrowserFlow resets the waiting card and its redirect input.
+func (ac *accountState) clearBrowserFlow() {
+	ac.polling = false
+	ac.browserURL = ""
+	ac.browserID = ""
+	ac.browserInput = ""
+	ac.browserSubmitting = false
+	ac.browserError = ""
+}
+
+// browserPromptKey edits the redirect URL field. Esc and ctrl+c are handled by
+// the screen before this runs so neither can leak into the input.
+func (m *Model) browserPromptKey(k tea.KeyMsg) tea.Cmd {
+	ac := &m.ac
+	if ac.browserSubmitting {
+		return nil
+	}
+	switch k.String() {
+	case "backspace":
+		ac.browserInput = trimLastRune(ac.browserInput)
+		return nil
+	case "enter":
+		url := strings.TrimSpace(ac.browserInput)
+		if url == "" {
+			ac.browserError = browserRedirectRequired
+			return nil
+		}
+		ac.browserSubmitting = true
+		ac.browserError = ""
+		return completeBrowserLogin(m.client, ac.browserID, url)
+	}
+	if len(k.Runes) > 0 {
+		ac.browserInput = appendBrowserRunes(ac.browserInput, k.Runes)
+	}
+	return nil
+}
+
+// appendBrowserRunes appends printable pasted or typed runes, dropping control
+// characters so a multi-line paste cannot inject newlines into the URL.
+func appendBrowserRunes(dst string, runes []rune) string {
+	var b strings.Builder
+	b.WriteString(dst)
+	for _, r := range runes {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func doLogout(c *ipc.Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -225,13 +303,13 @@ func (m *Model) handleAccountKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch k.String() {
 		case "esc":
 			id, adding := ac.browserID, ac.adding
-			ac.polling, ac.browserURL, ac.browserID = false, "", ""
+			ac.clearBrowserFlow()
 			return m, cancelBrowserLogin(m.client, id, adding)
 		case "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 		}
-		return m, nil
+		return m, m.browserPromptKey(k)
 	}
 
 	if ac.confirmLogout {
@@ -384,7 +462,7 @@ func (m *Model) renderAccount(b *strings.Builder) {
 	if ac.polling {
 		m.renderBrowserWaiting(b)
 		fmt.Fprintln(b)
-		fmt.Fprintln(b, dimStyle.Render("press Esc to cancel"))
+		fmt.Fprintln(b, dimStyle.Render("press Enter to submit • press Esc to cancel"))
 		return
 	}
 
@@ -528,8 +606,23 @@ func removeConfirmCopy(target api.AccountSummary, total int) string {
 }
 
 func (m *Model) renderBrowserWaiting(b *strings.Builder) {
+	ac := &m.ac
 	fmt.Fprintln(b, "Open this URL in any browser:")
-	fmt.Fprintln(b, m.ac.browserURL)
+	fmt.Fprintln(b, ac.browserURL)
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, dimStyle.Render("The browser's \"can't open this address\" page is expected; copy the complete URL from its address bar."))
+	fmt.Fprintln(b)
+	fmt.Fprintln(b, browserRedirectPrompt)
+	if ac.browserSubmitting {
+		fmt.Fprintf(b, "Redirect URL: %s\n", ac.browserInput)
+		fmt.Fprintln(b, dimStyle.Render("completing sign-in..."))
+	} else {
+		fmt.Fprintf(b, "Redirect URL: %s_\n", ac.browserInput)
+	}
+	if ac.browserError != "" {
+		fmt.Fprintln(b)
+		fmt.Fprintln(b, errStyle.Render(ac.browserError))
+	}
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, dimStyle.Render("waiting for the sign-in to finish..."))
 }

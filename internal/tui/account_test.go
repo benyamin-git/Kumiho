@@ -247,9 +247,22 @@ func TestAccountBrowserWaitingShowsURL(t *testing.T) {
 		},
 	}
 	view := m.View()
-	if !strings.Contains(view, "https://example.test/signin") || !strings.Contains(view, "press Esc to cancel") {
-		t.Fatalf("browser waiting card missing URL or cancel hint:\n%s", view)
+	for _, want := range []string{
+		"https://example.test/signin",
+		"Paste the complete redirect URL from the browser:",
+		"Redirect URL:",
+		"can't open this address",
+		"press Enter to submit",
+		"press Esc to cancel",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("browser waiting card missing %q:\n%s", want, view)
+		}
 	}
+
+	m.ac.browserInput = "urn:ietf:wg:oauth:2.0:oob?code=secret"
+	m.ac.browserError = "some error"
+	m.ac.browserSubmitting = true
 	_, cmd := m.handleAccountKey(tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("esc should cancel the browser flow")
@@ -257,6 +270,250 @@ func TestAccountBrowserWaitingShowsURL(t *testing.T) {
 	_ = cmd()
 	if got := d.types(); len(got) != 1 || got[0] != ipc.TypeAccountsAddCancel {
 		t.Fatalf("requests = %v, want accounts_add_cancel", got)
+	}
+	if m.ac.polling || m.ac.browserID != "" || m.ac.browserURL != "" ||
+		m.ac.browserInput != "" || m.ac.browserError != "" || m.ac.browserSubmitting {
+		t.Fatalf("cancel should clear the browser flow: %+v", m.ac)
+	}
+}
+
+func TestAccountBrowserPasteSubmitsRedirectURL(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
+		if req.typ == ipc.TypeLoginComplete {
+			return ipc.TypeResult, api.Result{OK: true}
+		}
+		return "", nil
+	})
+	m := &Model{
+		client: d.client,
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true,
+			polling: true, browserURL: "https://example.test/signin", browserID: "login-1",
+		},
+	}
+
+	// A blank redirect must be rejected locally, without an IPC round trip.
+	if _, cmd := m.handleAccountKey(tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
+		t.Fatal("empty redirect URL should not be submitted")
+	}
+	if m.ac.browserError == "" {
+		t.Fatal("empty redirect URL should explain the required input")
+	}
+
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(redirect), Paste: true})
+	if m.ac.browserInput != redirect {
+		t.Fatalf("browserInput = %q, want %q", m.ac.browserInput, redirect)
+	}
+
+	_, cmd := m.handleAccountKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should submit the redirect URL")
+	}
+	if !m.ac.browserSubmitting {
+		t.Fatal("enter should mark the redirect URL as submitting")
+	}
+	if _, dup := m.handleAccountKey(tea.KeyMsg{Type: tea.KeyEnter}); dup != nil {
+		t.Fatal("enter while submitting should not send a second login_complete")
+	}
+
+	msg := cmd()
+	complete, ok := msg.(browserCompleteMsg)
+	if !ok {
+		t.Fatalf("complete command returned %#v, want browserCompleteMsg", msg)
+	}
+	if complete.err != nil {
+		t.Fatalf("login_complete failed: %v", complete.err)
+	}
+	_, _ = m.Update(msg)
+	if !m.ac.polling || m.ac.browserID != "login-1" {
+		t.Fatalf("success should keep polling: %+v", m.ac)
+	}
+	if m.ac.browserInput != "" || m.ac.browserError != "" || m.ac.browserSubmitting {
+		t.Fatalf("success should clear the input: %+v", m.ac)
+	}
+	if view := m.View(); strings.Contains(view, redirect) {
+		t.Fatalf("submitted redirect URL still rendered:\n%s", view)
+	} else if !strings.Contains(view, "waiting for the sign-in to finish") {
+		t.Fatalf("waiting card lost its status line:\n%s", view)
+	}
+
+	requests := d.requests()
+	if len(requests) != 1 || requests[0].typ != ipc.TypeLoginComplete {
+		t.Fatalf("requests = %v, want login_complete", d.types())
+	}
+	var payload api.LoginCompletePayload
+	if err := envPayload(requests[0].payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.LoginID != "login-1" || payload.RedirectURL != redirect || payload.Code != "" {
+		t.Fatalf("login_complete payload = %+v, want exact redirect URL and login-1", payload)
+	}
+}
+
+func TestAccountBrowserInputEditing(t *testing.T) {
+	m := &Model{
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true,
+			polling: true, browserID: "login-1",
+		},
+	}
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("https://example.test/x")})
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if m.quitting {
+		t.Fatal("q must be typed into the redirect field, not quit the TUI")
+	}
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y"), Paste: true})
+	if got, want := m.ac.browserInput, "https://example.test/y"; got != want {
+		t.Fatalf("browserInput = %q, want %q", got, want)
+	}
+}
+
+func TestAccountBrowserPasteErrorKeepsFlow(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const daemonErr = "bad_request: the redirect URL does not belong to this sign-in flow"
+	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
+		if req.typ == ipc.TypeLoginComplete {
+			return ipc.TypeError, api.RemoteError{
+				Code: api.CodeBadRequest, Message: "the redirect URL does not belong to this sign-in flow",
+			}
+		}
+		return "", nil
+	})
+	m := &Model{
+		client: d.client,
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true,
+			polling: true, browserURL: "https://example.test/signin", browserID: "login-1",
+		},
+	}
+
+	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(redirect), Paste: true})
+	_, cmd := m.handleAccountKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should submit the redirect URL")
+	}
+	msg := cmd()
+	complete, ok := msg.(browserCompleteMsg)
+	if !ok || complete.err == nil {
+		t.Fatalf("complete message = %#v, want a retryable error", msg)
+	}
+	_, _ = m.Update(msg)
+
+	if !m.ac.polling || m.ac.browserID != "login-1" {
+		t.Fatalf("retryable error should keep the browser flow: %+v", m.ac)
+	}
+	if m.ac.browserSubmitting {
+		t.Fatal("retryable error should unlock the input")
+	}
+	if m.ac.browserInput != redirect {
+		t.Fatalf("retryable error should keep the user's input, got %q", m.ac.browserInput)
+	}
+	if !strings.Contains(m.ac.browserError, "does not belong") {
+		t.Fatalf("browserError = %q, want the daemon message", m.ac.browserError)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, daemonErr) {
+		t.Fatalf("waiting card missing the retryable error:\n%s", view)
+	}
+	if got := strings.Count(view, redirect); got != 1 {
+		t.Fatalf("redirect URL rendered %d times, want only the user's input:\n%s", got, view)
+	}
+}
+
+func TestAccountBrowserTerminalErrorClearsFlow(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const terminal = "the browser authorization code was rejected or already used; start again"
+	m := &Model{
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true, polling: true,
+			browserURL: "https://example.test/signin", browserID: "login-1",
+			browserInput: redirect, browserError: "old error", browserSubmitting: true,
+		},
+	}
+
+	_, cmd := m.Update(browserPollMsg{
+		adding: true,
+		state:  api.LoginState{Step: "error", Error: terminal},
+	})
+	if cmd != nil {
+		t.Fatalf("terminal error should not schedule another poll: %v", cmd)
+	}
+	if m.ac.polling || m.ac.browserID != "" || m.ac.browserURL != "" ||
+		m.ac.browserInput != "" || m.ac.browserError != "" || m.ac.browserSubmitting || m.ac.adding {
+		t.Fatalf("terminal error should clear the browser flow: %+v", m.ac)
+	}
+	view := m.View()
+	if !strings.Contains(view, terminal) {
+		t.Fatalf("account view missing the terminal error:\n%s", view)
+	}
+	if strings.Contains(view, redirect) {
+		t.Fatalf("terminal error leaked the redirect URL:\n%s", view)
+	}
+
+	// A late login_complete reply must not resurrect the cleared flow.
+	_, _ = m.Update(browserCompleteMsg{id: "login-1"})
+	if m.ac.polling || m.ac.browserID != "" {
+		t.Fatalf("stale login_complete revived the flow: %+v", m.ac)
+	}
+}
+
+func TestAccountBrowserCancelledPollClearsFlow(t *testing.T) {
+	m := &Model{
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true, polling: true,
+			browserURL: "https://example.test/signin", browserID: "login-1",
+			browserInput: "urn:ietf:wg:oauth:2.0:oob?code=secret",
+		},
+	}
+	_, cmd := m.Update(browserPollMsg{
+		adding: true,
+		state:  api.LoginState{Step: "cancelled"},
+	})
+	if cmd != nil {
+		t.Fatalf("cancelled should not schedule another poll: %v", cmd)
+	}
+	if m.ac.polling || m.ac.browserID != "" || m.ac.browserInput != "" || m.ac.adding {
+		t.Fatalf("cancelled should clear the browser flow: %+v", m.ac)
+	}
+	if !strings.Contains(m.View(), "sign-in cancelled") {
+		t.Fatalf("account view missing the cancel notice:\n%s", m.View())
+	}
+}
+
+func TestAccountBrowserDoneFinishes(t *testing.T) {
+	m := &Model{
+		screen: screenAccount,
+		ac: accountState{
+			loaded: true, view: accountTestView(), adding: true, polling: true,
+			browserURL: "https://example.test/signin", browserID: "login-1",
+			browserInput: "urn:ietf:wg:oauth:2.0:oob?code=secret",
+		},
+	}
+	_, cmd := m.Update(browserPollMsg{
+		adding: true,
+		state:  api.LoginState{Step: "done", Email: "user@example.com"},
+	})
+	if cmd == nil {
+		t.Fatal("done should refresh the account list and status")
+	}
+	if m.ac.polling || m.ac.browserID != "" || m.ac.browserInput != "" || m.ac.adding {
+		t.Fatalf("done should clear the browser flow: %+v", m.ac)
+	}
+	view := m.View()
+	if !strings.Contains(view, "account added: user@example.com") {
+		t.Fatalf("account view missing the success notice:\n%s", view)
+	}
+	if strings.Contains(view, "urn:ietf:wg:oauth:2.0:oob") {
+		t.Fatalf("success view leaked the redirect URL:\n%s", view)
 	}
 }
 
@@ -346,6 +603,82 @@ func TestLoginScreenOffersBrowserAndPassword(t *testing.T) {
 	}
 	if payload.Method != "browser" {
 		t.Fatalf("method = %q, want browser", payload.Method)
+	}
+}
+
+func TestLoginScreenBrowserPasteFlow(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-2&code=code-2"
+	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
+		if req.typ == ipc.TypeLoginComplete {
+			return ipc.TypeResult, api.Result{OK: true}
+		}
+		return "", nil
+	})
+	m := &Model{
+		client: d.client,
+		screen: screenLogin,
+		step:   "method",
+		ac: accountState{
+			polling: true, browserURL: "https://example.test/login", browserID: "login-2",
+		},
+	}
+
+	view := m.View()
+	for _, want := range []string{
+		"Paste the complete redirect URL from the browser:",
+		"Redirect URL:",
+		"can't open this address",
+		"press Enter to submit",
+		"press Esc to cancel",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("login waiting card missing %q:\n%s", want, view)
+		}
+	}
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(redirect), Paste: true})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should submit the login redirect URL")
+	}
+	msg := cmd()
+	complete, ok := msg.(browserCompleteMsg)
+	if !ok || complete.err != nil {
+		t.Fatalf("complete message = %#v, want success", msg)
+	}
+	_, _ = m.Update(msg)
+	if !m.ac.polling || m.ac.browserID != "login-2" {
+		t.Fatalf("success should keep polling: %+v", m.ac)
+	}
+	if m.ac.browserInput != "" {
+		t.Fatalf("success should clear the input: %+v", m.ac)
+	}
+
+	_, cmd = m.Update(browserPollMsg{
+		state: api.LoginState{Step: "done", Email: "user@example.com"},
+	})
+	if cmd == nil {
+		t.Fatal("done should refresh status and accounts")
+	}
+	if m.screen != screenDashboard || m.ac.polling || m.ac.browserID != "" {
+		t.Fatalf("done should finish the login: screen=%v state=%+v", m.screen, m.ac)
+	}
+	view = m.View()
+	if !strings.Contains(view, "signed in as user@example.com") {
+		t.Fatalf("dashboard missing the sign-in notice:\n%s", view)
+	}
+	if strings.Contains(view, redirect) {
+		t.Fatalf("dashboard leaked the redirect URL:\n%s", view)
+	}
+}
+
+func TestLoginScreenHelpMentionsBrowserPaste(t *testing.T) {
+	m := &Model{help: true}
+	view := m.View()
+	for _, want := range []string{"browser", "paste the redirect URL", "enter submit", "esc cancel"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("help overlay missing %q:\n%s", want, view)
+		}
 	}
 }
 

@@ -315,15 +315,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if state.Step == "browser" {
 			m.ac.browserURL = state.URL
 			m.ac.browserID = state.LoginID
+			m.ac.browserInput, m.ac.browserError, m.ac.browserSubmitting = "", "", false
 			m.ac.polling = true
 			m.ac.err = ""
 			m.loginErr = ""
 			if state.Error != "" {
-				if msg.adding {
-					m.ac.err = state.Error
-				} else {
-					m.loginErr = state.Error
-				}
+				m.ac.browserError = state.Error
 			}
 			if msg.adding {
 				return m, pollBrowserLogin(m.client, state.LoginID)
@@ -361,19 +358,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ac.browserID = state.LoginID
 			}
 			if state.Error != "" {
-				if msg.adding {
-					m.ac.err = state.Error
-				} else {
-					m.loginErr = state.Error
-				}
+				m.ac.browserError = state.Error
 			}
 			if msg.adding {
 				return m, pollBrowserLogin(m.client, state.LoginID)
 			}
 			return m, pollLoginBrowser(m.client, state.LoginID)
 		}
-		m.ac.polling = false
-		m.ac.browserURL, m.ac.browserID = "", ""
+		m.ac.clearBrowserFlow()
 		switch state.Step {
 		case "done":
 			if state.Error != "" {
@@ -391,6 +383,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m.browserCancelled(msg.adding)
 		}
+	case browserCompleteMsg:
+		if !m.ac.polling || (msg.id != "" && msg.id != m.ac.browserID) {
+			return m, nil
+		}
+		m.ac.browserSubmitting = false
+		if msg.err != nil {
+			m.ac.browserError = msg.err.Error()
+			return m, nil
+		}
+		m.ac.browserInput, m.ac.browserError = "", ""
+		return m, nil
 	case browserCancelMsg:
 		if msg.err != nil {
 			m.ac.err = "cancel sign-in: " + msg.err.Error()
@@ -446,7 +449,7 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			switch k.String() {
 			case "esc":
 				id, adding := m.ac.browserID, m.ac.adding
-				m.ac.polling, m.ac.browserURL, m.ac.browserID = false, "", ""
+				m.ac.clearBrowserFlow()
 				if adding {
 					m.screen = screenAccount
 				} else {
@@ -457,7 +460,7 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			}
-			return m, nil
+			return m, m.browserPromptKey(k)
 		}
 		if m.step == "method" || m.step == "" {
 			switch k.String() {
@@ -663,8 +666,7 @@ func (m *Model) handleLoginState(msg loginStateMsg) (tea.Model, tea.Cmd) {
 // dashboard.
 func (m *Model) finishSignIn(adding bool, email string) (tea.Model, tea.Cmd) {
 	m.busy = false
-	m.ac.polling = false
-	m.ac.browserURL, m.ac.browserID = "", ""
+	m.ac.clearBrowserFlow()
 	m.ac.adding = false
 	m.password, m.code = "", ""
 	if adding {
@@ -682,8 +684,7 @@ func (m *Model) finishSignIn(adding bool, email string) (tea.Model, tea.Cmd) {
 
 func (m *Model) browserFailed(adding bool, message string) (tea.Model, tea.Cmd) {
 	m.busy = false
-	m.ac.polling = false
-	m.ac.browserURL, m.ac.browserID = "", ""
+	m.ac.clearBrowserFlow()
 	if adding {
 		m.screen = screenAccount
 		m.ac.err = message
@@ -700,8 +701,7 @@ func (m *Model) browserFailed(adding bool, message string) (tea.Model, tea.Cmd) 
 
 func (m *Model) browserCancelled(adding bool) (tea.Model, tea.Cmd) {
 	m.busy = false
-	m.ac.polling = false
-	m.ac.browserURL, m.ac.browserID = "", ""
+	m.ac.clearBrowserFlow()
 	m.ac.adding = false
 	if adding || m.screen == screenAccount {
 		m.screen = screenAccount
@@ -883,7 +883,7 @@ func (m *Model) renderLogin(b *strings.Builder) {
 	if m.ac.polling {
 		m.renderBrowserWaiting(b)
 		fmt.Fprintln(b)
-		fmt.Fprintln(b, dimStyle.Render("press Esc to cancel"))
+		fmt.Fprintln(b, dimStyle.Render("press Enter to submit • press Esc to cancel"))
 		return
 	}
 
