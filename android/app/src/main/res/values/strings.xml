@@ -669,5 +669,14 @@
     <string name="account_action_failed">The account action failed.</string>
     <string name="account_rotation_failed">The rotation setting did not save.</string>
     <string name="account_no_browser">No browser is available. Use the password option instead.</string>
+
+    <!-- Mozilla account WebView (v0.6.0). -->
+    <string name="account_webview_title">Mozilla account</string>
+    <string name="account_webview_close">Close</string>
+    <string name="account_webview_loading">Loading Mozilla sign-in…</string>
+    <string name="account_webview_error_title">Sign-in page did not load</string>
+    <string name="account_webview_error_text">The Mozilla account page could not be loaded.</string>
+    <string name="account_webview_paste_hint">Close this screen and paste the redirect URL in Account if sign-in does not finish.</string>
+
     <string name="more_title">More</string>
 </resources>

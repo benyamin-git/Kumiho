@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The debug build installs beside a released Kumiho. A distinct label
+         makes it unmistakable which app was launched during device tests. -->
+    <string name="app_name">Kumiho Debug</string>
+</resources>
