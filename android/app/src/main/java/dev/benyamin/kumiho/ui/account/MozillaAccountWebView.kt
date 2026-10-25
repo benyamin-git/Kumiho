@@ -10,6 +10,7 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -118,9 +119,11 @@ fun parseBrowserRedirect(raw: String): BrowserRedirect? {
 }
 
 /**
- * Clears the WebView cookie jar with the local session. Mozilla account cookies
- * otherwise persist across sign-in attempts by design; sign-out calls this so
- * the browser session does not outlive the tokens.
+ * Clears the WebView session with the local sign-out: the cookie jar and the
+ * WebView's DOM storage. Mozilla account cookies and session state otherwise
+ * persist across sign-in attempts by design; sign-out calls this so the
+ * browser session does not outlive the tokens. Every step is best-effort and
+ * never throws through to the local sign-out.
  */
 @Suppress("UNUSED_PARAMETER")
 fun clearMozillaCookies(context: Context) {
@@ -128,6 +131,9 @@ fun clearMozillaCookies(context: Context) {
         removeAllCookies(null)
         flush()
     }
+    // FxA also keeps session state in DOM storage (the WebView has it enabled
+    // for the login page), so cookies alone do not clear the browser session.
+    WebStorage.getInstance().deleteAllData()
 }
 
 /** What the WebView should do with a navigation. */

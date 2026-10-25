@@ -6,6 +6,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -19,6 +21,9 @@ import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -181,7 +186,7 @@ class MozillaAccountWebViewInstrumentedTest {
     }
 
     @Test
-    fun clearMozillaCookiesRemovesThePersistedJar() {
+    fun clearMozillaCookiesRemovesThePersistedJarAndDomStorage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val cookies = CookieManager.getInstance()
         cookies.setAcceptCookie(true)
@@ -191,8 +196,16 @@ class MozillaAccountWebViewInstrumentedTest {
             "the cookie is persisted before sign-out",
             cookies.getCookie(COOKIE_URL)?.contains("kumiho_webview_test=1") == true,
         )
+        writeDomStorage(context, "localStorage.setItem('kumiho_dom_test', '1')")
+        assertEquals(
+            "the DOM-storage item is persisted before sign-out",
+            "1",
+            readDomStorage(context, "localStorage.getItem('kumiho_dom_test')"),
+        )
 
-        clearMozillaCookies(context)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            clearMozillaCookies(context)
+        }
 
         val deadline = System.currentTimeMillis() + 5_000
         while (cookies.getCookie(COOKIE_URL)?.contains("kumiho_webview_test=1") == true &&
@@ -204,6 +217,65 @@ class MozillaAccountWebViewInstrumentedTest {
             "sign-out clears the WebView cookie jar",
             cookies.getCookie(COOKIE_URL)?.contains("kumiho_webview_test=1") == true,
         )
+        assertNull(
+            "sign-out clears the WebView DOM storage",
+            readDomStorage(context, "localStorage.getItem('kumiho_dom_test')"),
+        )
+    }
+
+    /** Loads a page on the FxA origin and runs one DOM-storage write. */
+    private fun writeDomStorage(context: Context, script: String) {
+        assertEquals("null", evaluateDomScript(context, "$script; null"))
+    }
+
+    /** Loads a page on the FxA origin and returns one DOM-storage read. */
+    private fun readDomStorage(context: Context, script: String): String? {
+        val raw = evaluateDomScript(context, script)
+        if (raw == "null") return null
+        return raw.trim('"')
+    }
+
+    private fun evaluateDomScript(context: Context, script: String): String {
+        val latch = CountDownLatch(1)
+        val result = AtomicReference<String>("null")
+        val failure = AtomicReference<Throwable?>()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var webView: WebView? = null
+        instrumentation.runOnMainSync {
+            try {
+                val view = WebView(context)
+                webView = view
+                view.settings.javaScriptEnabled = true
+                view.settings.domStorageEnabled = true
+                view.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String) {
+                        view.evaluateJavascript(script) { value ->
+                            result.set(value)
+                            latch.countDown()
+                        }
+                    }
+                }
+                view.loadDataWithBaseURL(
+                    COOKIE_URL,
+                    "<html><body>kumiho dom storage test</body></html>",
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            } catch (error: Throwable) {
+                failure.set(error)
+                latch.countDown()
+            }
+        }
+        try {
+            if (!latch.await(10, TimeUnit.SECONDS)) {
+                throw AssertionError("the DOM-storage page did not finish loading")
+            }
+            failure.get()?.let { throw it }
+            return result.get()
+        } finally {
+            webView?.let { view -> instrumentation.runOnMainSync { view.destroy() } }
+        }
     }
 
     private companion object {
