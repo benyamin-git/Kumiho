@@ -11,12 +11,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.theme.ThemeId
+
+/** Stable test tags for the shared full-screen browser dialog host. */
+object MozillaAccountBrowserDialogTags {
+    const val HOST = "account_webview_dialog_host"
+}
 
 /**
  * Hosts the Mozilla account browser outside the app shell chrome.
@@ -45,7 +51,9 @@ fun MozillaAccountBrowserDialog(
     ) {
         ApplyDialogSystemBars()
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(MozillaAccountBrowserDialogTags.HOST),
             color = MaterialTheme.colorScheme.background,
         ) {
             Box(

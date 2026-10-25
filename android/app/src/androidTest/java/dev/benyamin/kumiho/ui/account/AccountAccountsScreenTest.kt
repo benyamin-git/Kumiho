@@ -1,6 +1,9 @@
 package dev.benyamin.kumiho.ui.account
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -18,6 +21,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import java.time.Instant
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -123,6 +127,121 @@ class AccountAccountsScreenTest {
         assertTrue(calls.contains("add-browser"))
         rule.onNodeWithTag(AccountTags.ADD_PASSWORD).assertIsDisplayed()
         rule.onNodeWithTag(AccountTags.ADD_CANCEL).assertIsDisplayed()
+    }
+
+    @Test
+    fun addDialogFitsInsideTheWindowWithoutClipping() {
+        show(
+            AccountUiState(
+                loading = false,
+                account = account(),
+                accounts = accounts(),
+                addDialog = true,
+            ),
+        )
+
+        val metrics = rule.activity.resources.displayMetrics
+        val width = metrics.widthPixels.toFloat()
+        val height = metrics.heightPixels.toFloat()
+        val dialog = bounds(AccountTags.ADD_DIALOG)
+        assertTrue("the dialog starts inside the window", dialog.left >= 0f && dialog.top >= 0f)
+        assertTrue(
+            "the dialog ends inside the window",
+            dialog.right <= width + BOUNDS_EPSILON && dialog.bottom <= height + BOUNDS_EPSILON,
+        )
+        assertTrue("the dialog has a real height", dialog.height > 0f && dialog.width > 0f)
+
+        for (tag in listOf(AccountTags.ADD_BROWSER, AccountTags.ADD_PASSWORD, AccountTags.ADD_CANCEL)) {
+            val child = bounds(tag)
+            assertTrue("$tag starts left of the dialog", child.left >= dialog.left - BOUNDS_EPSILON)
+            assertTrue("$tag starts above the dialog", child.top >= dialog.top - BOUNDS_EPSILON)
+            assertTrue("$tag ends right of the dialog", child.right <= dialog.right + BOUNDS_EPSILON)
+            assertTrue("$tag ends below the dialog", child.bottom <= dialog.bottom + BOUNDS_EPSILON)
+            assertTrue(
+                "$tag is inside the window",
+                child.left >= -BOUNDS_EPSILON &&
+                    child.top >= -BOUNDS_EPSILON &&
+                    child.right <= width + BOUNDS_EPSILON &&
+                    child.bottom <= height + BOUNDS_EPSILON,
+            )
+        }
+    }
+
+    @Test
+    fun accountScreenComposesTheFullScreenBrowserAndCloseKeepsTheFlow() {
+        var state by mutableStateOf(
+            AccountUiState(
+                loading = false,
+                account = account(),
+                accounts = accounts(),
+                browser = BrowserSignIn("flow-1", INVALID_BROWSER_URL),
+                browserLaunchURL = INVALID_BROWSER_URL,
+                browserWebViewOpen = true,
+            ),
+        )
+        rule.setContent {
+            KumihoTheme(
+                colors = PaletteMapping.fromJson(
+                    dev.benyamin.kumiho.go.mobile.Mobile.palette(
+                        ThemeId.LIGHT.id,
+                        KumihoAccent.BLUE.id,
+                    ),
+                    ThemeId.LIGHT,
+                    KumihoAccent.BLUE,
+                ),
+            ) {
+                AccountScreen(
+                    state = state,
+                    actions = AccountActions(
+                        onRefresh = {},
+                        onRetry = {},
+                        onDismissMessage = {},
+                        onSubmitEmail = {},
+                        onSubmitPassword = {},
+                        onSubmitCode = {},
+                        onRecheck = {},
+                        onSignOut = {},
+                        onDismissSignOut = {},
+                        onConfirmSignOut = {},
+                        onCloseBrowser = {
+                            calls += "close-browser"
+                            state = state.copy(browserWebViewOpen = false)
+                        },
+                        onBrowserUnavailable = { calls += "browser-unavailable" },
+                    ),
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithTag(MozillaAccountWebViewTags.SCREEN).assertIsDisplayed()
+        rule.onNodeWithTag(MozillaAccountWebViewTags.CLOSE).assertIsDisplayed()
+
+        // The host is a real full-window surface, not the default inset dialog.
+        val metrics = rule.activity.resources.displayMetrics
+        val host = bounds(MozillaAccountBrowserDialogTags.HOST)
+        assertEquals(
+            "the dialog host spans the window width",
+            metrics.widthPixels.toFloat(),
+            host.width,
+            BOUNDS_EPSILON,
+        )
+        assertEquals(
+            "the dialog host spans the window height",
+            metrics.heightPixels.toFloat(),
+            host.height,
+            BOUNDS_EPSILON,
+        )
+
+        rule.onNodeWithTag(MozillaAccountWebViewTags.CLOSE).performClick()
+        rule.waitForIdle()
+
+        assertTrue(calls.contains("close-browser"))
+        assertTrue(
+            "closing the browser must keep the engine-owned flow",
+            state.browser != null,
+        )
+        rule.onNodeWithTag(MozillaAccountWebViewTags.SCREEN).assertDoesNotExist()
     }
 
     @Test
@@ -288,8 +407,13 @@ class AccountAccountsScreenTest {
         error = null,
     )
 
+    private fun bounds(tag: String) =
+        rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
+
     private companion object {
         const val REDIRECT =
             "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+        const val INVALID_BROWSER_URL = "https://evil.example/signin"
+        const val BOUNDS_EPSILON = 1f
     }
 }

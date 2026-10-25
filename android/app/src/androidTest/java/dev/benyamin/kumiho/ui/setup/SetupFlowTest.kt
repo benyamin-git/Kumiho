@@ -15,6 +15,7 @@ import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.ui.account.BrowserSignIn
+import dev.benyamin.kumiho.ui.account.MozillaAccountWebViewTags
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
@@ -167,6 +168,40 @@ class SetupFlowTest {
     }
 
     @Test
+    fun firstRunBrowserWebViewComposesFromTheFlowAndCloses() {
+        engine.loginStartResult = { _, _ ->
+            LoginState(
+                step = "browser",
+                email = null,
+                verificationMethod = null,
+                verificationReason = null,
+                error = null,
+                method = "browser",
+                url = "https://evil.example/signin",
+                loginId = "setup-webview-1",
+            )
+        }
+        val viewModel = show()
+        walkToSignIn(viewModel)
+
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.browserWebViewOpen }
+        rule.waitForIdle()
+
+        rule.onNodeWithTag(MozillaAccountWebViewTags.SCREEN).assertIsDisplayed()
+        rule.onNodeWithTag(MozillaAccountWebViewTags.CLOSE).assertIsDisplayed()
+        rule.onNodeWithTag(MozillaAccountWebViewTags.CLOSE).performClick()
+        rule.waitUntil(TIMEOUT) { !viewModel.state.value.browserWebViewOpen }
+
+        assertEquals(
+            "closing the browser must keep the engine-owned flow",
+            "setup-webview-1",
+            viewModel.state.value.browser?.id,
+        )
+        rule.onNodeWithTag(MozillaAccountWebViewTags.SCREEN).assertDoesNotExist()
+    }
+
+    @Test
     fun theEmailLinkWaitsAndRecheckAsksAgain() {
         engine.onPassword = {
             LoginState("2fa", EMAIL, "email", null, null)
@@ -279,6 +314,9 @@ internal class FakeSetupEngine : SetupEngine {
     var onEmail: (String) -> LoginState = { LoginState("password", it, null, null, null) }
     var onPassword: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
     var onCode: (String) -> LoginState = { pending() }
+    var loginStartResult: suspend (String, String?) -> LoginState = { _, _ ->
+        error("browser sign-in is not used in this test")
+    }
 
     override suspend fun loginEmail(email: String): LoginState {
         emailCalls += email
@@ -298,7 +336,7 @@ internal class FakeSetupEngine : SetupEngine {
     override suspend fun refreshStatus(): EngineStatus = signedOutStatus()
 
     override suspend fun loginStart(method: String, email: String?): LoginState =
-        error("browser sign-in is not used in this test")
+        loginStartResult(method, email)
 
     override suspend fun loginStatus(id: String): LoginState =
         error("no browser flow")
