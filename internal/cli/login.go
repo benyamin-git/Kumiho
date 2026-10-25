@@ -306,15 +306,21 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 		}
 
 		// A nil reply means the daemon reached a terminal state (done or
-		// error); a returned error is retryable and the flow stays active.
+		// error); a returned error is reconciled with login_status because
+		// the flow may already be finished or gone (lost reply, cancel,
+		// restart, or a client-side timeout while the daemon completed).
 		completeCtx, cancelComplete := context.WithTimeout(context.Background(), boundedTimeout(deadline, browserCompleteTimeout))
 		_, err = client.Call(completeCtx, ipc.TypeLoginComplete, api.LoginCompletePayload{
 			LoginID: ls.LoginID, RedirectURL: line,
 		})
 		cancelComplete()
 		if err != nil {
-			fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
-			continue
+			retry, code := reconcileBrowserCompleteError(client, statusType, ls.LoginID, command, adding, stdout, stderr)
+			if retry {
+				fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
+				continue
+			}
+			return code
 		}
 		return pollBrowserSignIn(client, statusType, cancelType, ls.LoginID, command, deadline, adding, stdout, stderr)
 	}
@@ -335,50 +341,34 @@ func promptBrowserRedirect(reader *bufio.Reader, out io.Writer) (string, error) 
 	return line, nil
 }
 
+// reconcileBrowserCompleteError checks login_status once after a failed
+// login_complete. A finished flow wins over the client-side error (a lost
+// reply, timeout, cancel or restart); retry reports whether the flow is still
+// active and the caller should prompt again.
+func reconcileBrowserCompleteError(client *ipc.Client, statusType, loginID, command string, adding bool, stdout, stderr io.Writer) (retry bool, code int) {
+	ls, ok := callBrowserStatus(client, statusType, loginID, command, stderr)
+	if !ok {
+		return false, 1
+	}
+	active, code := reportBrowserStatus(ls, command, adding, stdout, stderr)
+	if active {
+		return true, 0
+	}
+	return false, code
+}
+
 // pollBrowserSignIn waits for the daemon to publish the terminal state after
 // a successful login_complete. It polls immediately because LoginComplete
 // publishes done/error before it returns.
 func pollBrowserSignIn(client *ipc.Client, statusType, cancelType, loginID, command string, deadline time.Time, adding bool, stdout, stderr io.Writer) int {
 	for {
-		statusCtx, cancel := context.WithTimeout(context.Background(), browserStatusTimeout)
-		env, err := client.Call(statusCtx, statusType, api.LoginStatusPayload{LoginID: loginID})
-		cancel()
-		if err != nil {
-			fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
+		ls, ok := callBrowserStatus(client, statusType, loginID, command, stderr)
+		if !ok {
 			return 1
 		}
-		var ls api.LoginState
-		if err := env.DecodePayload(&ls); err != nil {
-			fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
-			return 1
-		}
-		switch ls.Step {
-		case "browser":
-			// The daemon has not published a terminal state yet.
-		case "done":
-			if ls.Error != "" {
-				fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
-				return 1
-			}
-			printSignInDone(stdout, adding, ls.Email)
-			return 0
-		case "cancelled":
-			fmt.Fprintln(stderr, "Sign-in cancelled.")
-			return 1
-		case "error":
-			if ls.Error != "" {
-				fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
-			} else {
-				fmt.Fprintf(stderr, "kumiho %s: browser sign-in failed\n", command)
-			}
-			return 1
-		default:
-			if ls.Error != "" {
-				fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
-				return 1
-			}
-			fmt.Fprintf(stderr, "kumiho %s: unexpected login step %q\n", command, ls.Step)
-			return 1
+		active, code := reportBrowserStatus(ls, command, adding, stdout, stderr)
+		if !active {
+			return code
 		}
 
 		remaining := time.Until(deadline)
@@ -392,6 +382,57 @@ func pollBrowserSignIn(client *ipc.Client, statusType, cancelType, loginID, comm
 			wait = remaining
 		}
 		time.Sleep(wait)
+	}
+}
+
+// callBrowserStatus fetches one login_status state. It reports false after
+// printing a transport or payload error.
+func callBrowserStatus(client *ipc.Client, statusType, loginID, command string, stderr io.Writer) (api.LoginState, bool) {
+	statusCtx, cancel := context.WithTimeout(context.Background(), browserStatusTimeout)
+	defer cancel()
+	env, err := client.Call(statusCtx, statusType, api.LoginStatusPayload{LoginID: loginID})
+	if err != nil {
+		fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
+		return api.LoginState{}, false
+	}
+	var ls api.LoginState
+	if err := env.DecodePayload(&ls); err != nil {
+		fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
+		return api.LoginState{}, false
+	}
+	return ls, true
+}
+
+// reportBrowserStatus prints the result of one status state. It reports true
+// while the flow is still active; otherwise the exit code is final.
+func reportBrowserStatus(ls api.LoginState, command string, adding bool, stdout, stderr io.Writer) (active bool, code int) {
+	switch ls.Step {
+	case "browser":
+		return true, 0
+	case "done":
+		if ls.Error != "" {
+			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
+			return false, 1
+		}
+		printSignInDone(stdout, adding, ls.Email)
+		return false, 0
+	case "cancelled":
+		fmt.Fprintln(stderr, "Sign-in cancelled.")
+		return false, 1
+	case "error":
+		if ls.Error != "" {
+			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
+		} else {
+			fmt.Fprintf(stderr, "kumiho %s: browser sign-in failed\n", command)
+		}
+		return false, 1
+	default:
+		if ls.Error != "" {
+			fmt.Fprintf(stderr, "kumiho %s: %s\n", command, ls.Error)
+			return false, 1
+		}
+		fmt.Fprintf(stderr, "kumiho %s: unexpected login step %q\n", command, ls.Step)
+		return false, 1
 	}
 }
 

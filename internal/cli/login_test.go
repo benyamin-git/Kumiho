@@ -82,6 +82,10 @@ func TestLoginCompleteRetryTrimAndPayload(t *testing.T) {
 			{Code: api.CodeBadRequest, Message: "the redirect URL does not belong to this sign-in; paste the URL from this sign-in"},
 			nil,
 		},
+		statuses: []api.LoginState{
+			{Step: "browser", Method: "browser", LoginID: "login-1"},
+			{Step: "done", Method: "browser", LoginID: "login-1", Email: "user@example.com"},
+		},
 	})
 
 	var out, errBuf bytes.Buffer
@@ -135,13 +139,16 @@ func TestLoginCompleteRetryTrimAndPayload(t *testing.T) {
 	}
 
 	statusIDs := fake.statusIDsSeen()
-	if len(statusIDs) != 1 || statusIDs[0] != "login-1" {
-		t.Fatalf("login_status ids = %v, want [login-1]", statusIDs)
+	if len(statusIDs) != 2 || statusIDs[0] != "login-1" || statusIDs[1] != "login-1" {
+		t.Fatalf("login_status ids = %v, want [login-1 login-1]", statusIDs)
 	}
 	if cancels := fake.cancelRecords(); len(cancels) != 0 {
 		t.Fatalf("login_cancel calls = %v, want none", cancels)
 	}
-	wantTypes := []string{ipc.TypeLoginStart, ipc.TypeLoginComplete, ipc.TypeLoginComplete, ipc.TypeLoginStatus}
+	wantTypes := []string{
+		ipc.TypeLoginStart, ipc.TypeLoginComplete, ipc.TypeLoginStatus,
+		ipc.TypeLoginComplete, ipc.TypeLoginStatus,
+	}
 	if got := fake.typesSeen(); len(got) != len(wantTypes) {
 		t.Fatalf("IPC calls = %v, want %v", got, wantTypes)
 	} else {
@@ -177,6 +184,172 @@ func TestLoginCompleteTerminalError(t *testing.T) {
 	}
 	if cancels := fake.cancelRecords(); len(cancels) != 0 {
 		t.Fatalf("terminal error cancelled the flow again: %v", cancels)
+	}
+}
+
+func TestLoginCompleteErrorReconcilesStatus(t *testing.T) {
+	const completeErr = "the redirect URL does not belong to this sign-in; paste the URL from this sign-in"
+	const terminal = "the browser authorization code was rejected or already used; start again"
+	redirect := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s"
+
+	tests := []struct {
+		name     string
+		status   api.LoginState
+		wantCode int
+		wantOut  string
+		wantErr  string
+	}{
+		{
+			name:     "done after a lost response",
+			status:   api.LoginState{Step: "done", Method: "browser", LoginID: "login-1", Email: "user@example.com"},
+			wantCode: 0,
+			wantOut:  "Signed in as user@example.com.",
+		},
+		{
+			name:     "terminal error",
+			status:   api.LoginState{Step: "error", Method: "browser", LoginID: "login-1", Error: terminal},
+			wantCode: 1,
+			wantErr:  terminal,
+		},
+		{
+			name:     "cancelled",
+			status:   api.LoginState{Step: "cancelled", Method: "browser", LoginID: "login-1"},
+			wantCode: 1,
+			wantErr:  "Sign-in cancelled.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, fake := newFakeLoginServer(t, fakeLoginConfig{
+				completeErrs: []*api.RemoteError{{Code: api.CodeBadRequest, Message: completeErr}},
+				statuses:     []api.LoginState{tt.status},
+			})
+
+			var out, errBuf bytes.Buffer
+			code := runBrowserSignIn(client, ipc.TypeLoginStart, ipc.TypeLoginStatus, ipc.TypeLoginCancel,
+				"", "", true, false, "login", strings.NewReader(redirect+"\n"), &out, &errBuf)
+
+			if code != tt.wantCode {
+				t.Fatalf("runBrowserSignIn() = %d, want %d\nstdout:\n%s\nstderr:\n%s", code, tt.wantCode, out.String(), errBuf.String())
+			}
+			if tt.wantOut != "" && !strings.Contains(out.String(), tt.wantOut) {
+				t.Fatalf("stdout missing %q:\n%s", tt.wantOut, out.String())
+			}
+			if tt.wantErr != "" && !strings.Contains(errBuf.String(), tt.wantErr) {
+				t.Fatalf("stderr missing %q:\n%s", tt.wantErr, errBuf.String())
+			}
+			if strings.Contains(errBuf.String(), completeErr) {
+				t.Fatalf("stderr kept the reconciled complete error:\n%s", errBuf.String())
+			}
+			if got := strings.Count(out.String(), "Redirect URL: "); got != 1 {
+				t.Fatalf("redirect prompt printed %d times, want 1 (no re-prompt):\n%s", got, out.String())
+			}
+
+			completions, _ := fake.completionRecords()
+			if len(completions) != 1 {
+				t.Fatalf("login_complete calls = %d, want 1", len(completions))
+			}
+			statusIDs := fake.statusIDsSeen()
+			if len(statusIDs) != 1 || statusIDs[0] != "login-1" {
+				t.Fatalf("login_status ids = %v, want [login-1]", statusIDs)
+			}
+			wantTypes := []string{ipc.TypeLoginStart, ipc.TypeLoginComplete, ipc.TypeLoginStatus}
+			if got := fake.typesSeen(); len(got) != len(wantTypes) {
+				t.Fatalf("IPC calls = %v, want %v", got, wantTypes)
+			} else {
+				for i, want := range wantTypes {
+					if got[i] != want {
+						t.Fatalf("IPC call %d = %q, want %q", i, got[i], want)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestLoginCompleteErrorStatusBrowserRetries(t *testing.T) {
+	const completeErr = "the browser profile lookup failed; try again"
+	redirect := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s"
+	client, fake := newFakeLoginServer(t, fakeLoginConfig{
+		completeErrs: []*api.RemoteError{{Code: api.CodeBadRequest, Message: completeErr}, nil},
+		statuses: []api.LoginState{
+			{Step: "browser", Method: "browser", LoginID: "login-1"},
+			{Step: "done", Method: "browser", LoginID: "login-1", Email: "user@example.com"},
+		},
+	})
+
+	var out, errBuf bytes.Buffer
+	code := runBrowserSignIn(client, ipc.TypeLoginStart, ipc.TypeLoginStatus, ipc.TypeLoginCancel,
+		"", "", true, false, "login", strings.NewReader(redirect+"\n"+redirect+"\n"), &out, &errBuf)
+
+	if code != 0 {
+		t.Fatalf("runBrowserSignIn() = %d, want 0\nstdout:\n%s\nstderr:\n%s", code, out.String(), errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), completeErr) {
+		t.Fatalf("stderr missing the retryable complete error:\n%s", errBuf.String())
+	}
+	if !strings.Contains(out.String(), "Signed in as user@example.com.") {
+		t.Fatalf("stdout missing the success line:\n%s", out.String())
+	}
+	if got := strings.Count(out.String(), "Redirect URL: "); got != 2 {
+		t.Fatalf("redirect prompt printed %d times, want 2:\n%s", got, out.String())
+	}
+	completions, _ := fake.completionRecords()
+	if len(completions) != 2 {
+		t.Fatalf("login_complete calls = %d, want 2", len(completions))
+	}
+	statusIDs := fake.statusIDsSeen()
+	if len(statusIDs) != 2 {
+		t.Fatalf("login_status calls = %d, want 2", len(statusIDs))
+	}
+	wantTypes := []string{
+		ipc.TypeLoginStart, ipc.TypeLoginComplete, ipc.TypeLoginStatus,
+		ipc.TypeLoginComplete, ipc.TypeLoginStatus,
+	}
+	if got := fake.typesSeen(); len(got) != len(wantTypes) {
+		t.Fatalf("IPC calls = %v, want %v", got, wantTypes)
+	} else {
+		for i, want := range wantTypes {
+			if got[i] != want {
+				t.Fatalf("IPC call %d = %q, want %q", i, got[i], want)
+			}
+		}
+	}
+}
+
+func TestLoginCompleteErrorStatusTransport(t *testing.T) {
+	client, fake := newFakeLoginServer(t, fakeLoginConfig{
+		completeErrs: []*api.RemoteError{{Code: api.CodeBadRequest, Message: "the redirect URL does not belong to this sign-in"}},
+		closeStatus:  true,
+	})
+	redirect := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s"
+
+	var out, errBuf bytes.Buffer
+	code := runBrowserSignIn(client, ipc.TypeLoginStart, ipc.TypeLoginStatus, ipc.TypeLoginCancel,
+		"", "", true, false, "login", strings.NewReader(redirect+"\n"+redirect+"\n"), &out, &errBuf)
+
+	if code == 0 {
+		t.Fatalf("runBrowserSignIn() = 0, want nonzero\nstdout:\n%s\nstderr:\n%s", out.String(), errBuf.String())
+	}
+	if errBuf.Len() == 0 {
+		t.Fatal("stderr is empty after a status transport failure")
+	}
+	if got := strings.Count(out.String(), "Redirect URL: "); got != 1 {
+		t.Fatalf("redirect prompt printed %d times, want 1 (no re-prompt):\n%s", got, out.String())
+	}
+	completions, _ := fake.completionRecords()
+	if len(completions) != 1 {
+		t.Fatalf("login_complete calls = %d, want 1", len(completions))
+	}
+	wantTypes := []string{ipc.TypeLoginStart, ipc.TypeLoginComplete, ipc.TypeLoginStatus}
+	if got := fake.typesSeen(); len(got) != len(wantTypes) {
+		t.Fatalf("IPC calls = %v, want %v", got, wantTypes)
+	} else {
+		for i, want := range wantTypes {
+			if got[i] != want {
+				t.Fatalf("IPC call %d = %q, want %q", i, got[i], want)
+			}
+		}
 	}
 }
 
@@ -222,6 +395,7 @@ type fakeLoginConfig struct {
 	start        api.LoginState
 	completeErrs []*api.RemoteError
 	statuses     []api.LoginState
+	closeStatus  bool
 }
 
 // fakeLoginServer is an in-process IPC daemon that records the CLI's calls.
@@ -229,6 +403,7 @@ type fakeLoginServer struct {
 	start        api.LoginState
 	completeErrs []*api.RemoteError
 	statuses     []api.LoginState
+	closeStatus  bool
 
 	mu            sync.Mutex
 	completeCalls int
@@ -253,7 +428,12 @@ func newFakeLoginServer(t *testing.T, cfg fakeLoginConfig) (*ipc.Client, *fakeLo
 			Step: "done", Method: "browser", LoginID: cfg.start.LoginID, Email: "user@example.com",
 		}}
 	}
-	fake := &fakeLoginServer{start: cfg.start, completeErrs: cfg.completeErrs, statuses: cfg.statuses}
+	fake := &fakeLoginServer{
+		start:        cfg.start,
+		completeErrs: cfg.completeErrs,
+		statuses:     cfg.statuses,
+		closeStatus:  cfg.closeStatus,
+	}
 
 	path := filepath.Join(t.TempDir(), "control.sock")
 	srv, err := ipc.UnixTransport{}.Listen(path)
@@ -345,7 +525,13 @@ func (f *fakeLoginServer) handle(conn *ipc.Conn, env *ipc.Envelope) error {
 			at = len(f.statuses) - 1
 		}
 		state := f.statuses[at]
+		closeStatus := f.closeStatus
 		f.mu.Unlock()
+		if closeStatus {
+			// Drop the connection without a reply: the CLI sees a transport
+			// failure on its status call.
+			return io.EOF
+		}
 		return conn.Reply(env.ID, ipc.TypeLoginState, state)
 
 	case ipc.TypeLoginCancel, ipc.TypeAccountsAddCancel:
