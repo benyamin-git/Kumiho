@@ -86,6 +86,11 @@ type Model struct {
 	busy      bool
 	loginErr  string
 
+	// loginNotice is the engine's one-time account notice (the v0.6.0
+	// legacy-browser removal), kept until a sign-in succeeds so a later
+	// accounts_list load cannot discard it before the login screen shows it.
+	loginNotice string
+
 	help     bool
 	quitting bool
 }
@@ -275,6 +280,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.ac.err = ""
 		m.ac.view = msg.view
+		if msg.view.Notice != "" {
+			m.loginNotice = msg.view.Notice
+		}
 		if m.ac.selected < 0 {
 			m.ac.selected = 0
 		}
@@ -681,6 +689,7 @@ func (m *Model) finishSignIn(adding bool, email string) (tea.Model, tea.Cmd) {
 	m.step = "method"
 	m.notice = "signed in as " + email
 	m.loginErr = ""
+	m.loginNotice = ""
 	return m, tea.Batch(fetchStatus(m.client), fetchAccounts(m.client))
 }
 
@@ -922,6 +931,9 @@ func (m *Model) renderLogin(b *strings.Builder) {
 	}
 	if m.loginErr != "" {
 		fmt.Fprintf(b, "\n%s\n", errStyle.Render(m.loginErr))
+	}
+	if m.loginNotice != "" {
+		fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.loginNotice))
 	}
 	fmt.Fprintln(b)
 	if m.step == "" || m.step == "method" {

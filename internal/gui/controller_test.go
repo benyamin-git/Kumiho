@@ -2136,6 +2136,28 @@ func TestControllerProjectsAccounts(t *testing.T) {
 	}
 }
 
+// TestControllerAccountsLegacyNoticeWithoutAccounts pins the all-removed
+// upgrade snapshot the Account status line must show: a notice with no rows
+// and no signed-in account. The JS status line reads accounts.notice before
+// its Loading/Not-signed-in fallbacks.
+func TestControllerAccountsLegacyNoticeWithoutAccounts(t *testing.T) {
+	const notice = "Old browser sign-in removed. Add your Firefox account again."
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.accounts = api.AccountsView{Notice: notice}
+		d.account = api.AccountInfo{Error: "not signed in"}
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsList}); err != nil {
+		t.Fatalf("Dispatch(accounts_list) = %v", err)
+	}
+	_ = ctrl.loadAccounts(context.Background())
+	st := ctrl.Snapshot()
+	if st.Accounts == nil || st.Accounts.Notice != notice || len(st.Accounts.Accounts) != 0 {
+		t.Fatalf("accounts after the all-removed upgrade = %+v", st.Accounts)
+	}
+}
+
 func TestControllerBrowserLoginAction(t *testing.T) {
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) {
@@ -2188,6 +2210,74 @@ func TestControllerBrowserLoginAction(t *testing.T) {
 // flow: login_complete carries the exact redirect URL, the controller reads
 // the terminal accounts_add_status reply immediately, claims the Account
 // notice and clears the account-flow ownership.
+// TestControllerBrowserLoginDoneWithErrorIsFailure pins F2: a terminal
+// done+error (the engine's account-limit or failed-save shape) must show the
+// error, never a success notice, and must not look like an added account.
+func TestControllerBrowserLoginDoneWithErrorIsFailure(t *testing.T) {
+	const limit = "account limit reached (5); remove one first"
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.accountsAddStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-1",
+		}
+		d.accountsAddStatusState = api.LoginState{
+			Step: "done", Method: "browser", Email: "new@example.com", LoginID: "login-1", Error: limit,
+		}
+		d.accounts = api.AccountsView{
+			Accounts: []api.AccountSummary{{ID: "a1", Email: "user@example.com", Active: true}},
+			Active:   "a1",
+		}
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_start) = %v", err)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStatus, Payload: []byte(`{"login_id":"login-1"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_status) = %v", err)
+	}
+
+	login := ctrl.Snapshot().Login
+	if login == nil || login.Step != "done" || login.Error != limit {
+		t.Fatalf("login after done+error = %+v", login)
+	}
+	n := ctrl.Snapshot().AccountNotice
+	if n == nil || n.Message != limit || n.Tone != toneBad || n.Expires != nil {
+		t.Fatalf("account notice after done+error = %+v", n)
+	}
+	// The following account reload must not replace the failure with the
+	// generic success copy or clear it.
+	waitFor(t, "account reload after the terminal error", func() bool {
+		return f.count(func(d *fakeDaemon) int { return d.accountsCalls }) >= 1
+	})
+	if n := ctrl.Snapshot().AccountNotice; n == nil || n.Message != limit || n.Tone != toneBad {
+		t.Fatalf("account notice after the reload = %+v", n)
+	}
+}
+
+func TestControllerLogoutClearsTheLoginProjection(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.loginStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-1",
+		}
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_start) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "browser" {
+		t.Fatalf("login before logout = %+v", login)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLogout}); err != nil {
+		t.Fatalf("Dispatch(logout) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login != nil {
+		t.Fatalf("stale login projection after logout = %+v", login)
+	}
+}
+
 func TestControllerLoginCompleteAccountFlow(t *testing.T) {
 	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
 	f := newFakeDaemon()

@@ -535,7 +535,9 @@ func (h *Harness) openExternal(raw json.RawMessage) error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return errors.New("open_external: refusing non-http(s) URL")
 	}
-	h.logf("open_external: %s", p.URL)
+	// The authorization URL carries the OAuth state and PKCE challenge; log
+	// the host only, never the complete URL.
+	h.logf("open_external: %s", u.Host)
 	return nil
 }
 

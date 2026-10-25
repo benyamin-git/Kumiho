@@ -831,7 +831,9 @@ func (h *host) openExternal(act Action) error {
 	if err := windows.ShellExecute(0, verb, file, nil, nil, windows.SW_SHOWNORMAL); err != nil {
 		return fmt.Errorf("open_external: %w", err)
 	}
-	h.log.logf("open_external: %s", p.URL)
+	// The authorization URL carries the state and PKCE challenge, so log only
+	// the origin host, never the complete URL.
+	h.log.logf("open_external: %s", u.Host)
 	return nil
 }
 

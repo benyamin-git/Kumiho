@@ -38,6 +38,35 @@ func TestPrintSignInDone(t *testing.T) {
 	}
 }
 
+func TestBrowserRedirectInstructionMentionsTheAddressBar(t *testing.T) {
+	for _, want := range []string{"can't open this address", "address bar holds the URL"} {
+		if !strings.Contains(browserRedirectInstruction, want) {
+			t.Fatalf("browserRedirectInstruction is missing %q: %q", want, browserRedirectInstruction)
+		}
+	}
+}
+
+func TestAnnounceAccountsNotice(t *testing.T) {
+	const notice = "Old browser sign-in removed. Add your Firefox account again."
+	tests := []struct {
+		name string
+		view api.AccountsView
+		want string
+	}{
+		{name: "all accounts removed", view: api.AccountsView{Notice: notice}, want: notice + "\n"},
+		{name: "no notice", view: api.AccountsView{}, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			announceAccountsNotice(&out, tt.view)
+			if got := out.String(); got != tt.want {
+				t.Fatalf("announceAccountsNotice() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBrowserRedirectPromptTrim(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -73,7 +102,7 @@ func TestBrowserRedirectPromptTrim(t *testing.T) {
 }
 
 func TestLoginCompleteRetryTrimAndPayload(t *testing.T) {
-	const wantInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here."
+	const wantInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here. The browser may say it can't open this address; the address bar holds the URL."
 
 	first := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=bad-code&state=bad-state"
 	second := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=good-code&state=good-state"

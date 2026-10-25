@@ -921,10 +921,12 @@ export default {
     // ------------------------------------------------------------- status
 
     // The status line's priority: Signing out... → bad account/add notice →
-    // browser waiting → notice → Loading → Not signed in → Subscription
-    // failure → empty. The in-flight loads have no wire flag, so the Loading
-    // lines are absence without a notice; an error notice outranks them so a
-    // failed load is never masked.
+    // browser waiting → notice → account-list notice → Loading → Not signed in
+    // → Subscription failure → empty. The in-flight loads have no wire flag,
+    // so the Loading lines are absence without a notice; an error notice
+    // outranks them so a failed load is never masked, and the one-time
+    // account-list notice (legacy-browser removal) must survive the
+    // no-account/loading-empty state that follows it.
     function statusLine(snapshot) {
       const notice = snapshot.account_notice;
       const account = snapshot.account || null;
@@ -941,13 +943,13 @@ export default {
         const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
         return { text: notice.message, tone: tone };
       }
+      if (accounts && accounts.notice) return { text: accounts.notice, tone: "" };
       if (!accounts) return { text: "Loading accounts...", tone: "" };
       if (!account) return { text: "Loading account...", tone: "" };
       if (!signedIn(account)) return { text: "Not signed in", tone: "" };
       if (account.error) {
         return { text: "Subscription details unavailable: " + account.error, tone: "warn" };
       }
-      if (accounts.notice) return { text: accounts.notice, tone: "" };
       return { text: "", tone: "" };
     }
 
@@ -1049,6 +1051,21 @@ export default {
       if (!view.adding) return;
       const step = (login && login.step) || "";
       if (step === "done") {
+        if (login && login.error) {
+          // A terminal done with an error (account limit or a failed save)
+          // is a failure, not a silent success: keep the user's password form
+          // open with the engine error, and for a browser wait close it with
+          // the error on the status line so Add account is usable again.
+          view.addError = login.error;
+          if (view.addMethod === "password") {
+            view.formError = login.error;
+            endStarting();
+            return;
+          }
+          resetAddForm();
+          view.addError = login.error;
+          return;
+        }
         resetAddForm();
         return;
       }

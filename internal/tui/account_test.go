@@ -612,8 +612,8 @@ func TestAccountRemoveActiveCopy(t *testing.T) {
 	one.Accounts = view.Accounts[:1]
 	m = &Model{screen: screenAccount, ac: accountState{loaded: true, view: one}}
 	m.handleAccountKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	if !strings.Contains(m.View(), "this signs out") {
-		t.Fatalf("last-remove copy missing sign-out hint:\n%s", m.View())
+	if !strings.Contains(m.View(), "removes your last account and clears the local session") {
+		t.Fatalf("last-remove copy missing session-cleared hint:\n%s", m.View())
 	}
 }
 

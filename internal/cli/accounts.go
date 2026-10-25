@@ -193,20 +193,28 @@ func runAccountsRemove(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "Removed %s.\n", target.Email)
 		return 0
 	}
-	switch {
-	case after.Active == "":
-		fmt.Fprintf(stdout, "Removed %s; signed out.\n", target.Email)
-	default:
-		active := "an account"
+	active := ""
+	if after.Active != "" {
+		active = "an account"
 		for _, a := range after.Accounts {
 			if a.ID == after.Active {
 				active = a.Email
 				break
 			}
 		}
-		fmt.Fprintf(stdout, "Removed %s; active account is %s.\n", target.Email, active)
 	}
+	fmt.Fprint(stdout, removedAccountCopy(target.Email, active))
 	return 0
+}
+
+// removedAccountCopy is the post-remove wording. Removing the last account is
+// not a logout: it clears the local session and disconnects, but performs no
+// refresh-token revocation, so the copy says exactly that.
+func removedAccountCopy(email, active string) string {
+	if active == "" {
+		return fmt.Sprintf("Removed %s; no accounts remain, so the local session was cleared.\n", email)
+	}
+	return fmt.Sprintf("Removed %s; active account is %s.\n", email, active)
 }
 
 func runAccountsRename(args []string, stdout, stderr io.Writer) int {

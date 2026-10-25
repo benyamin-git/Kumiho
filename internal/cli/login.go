@@ -24,8 +24,17 @@ const (
 	browserSignInTimeout   = 10 * time.Minute
 	browserPollInterval    = 2 * time.Second
 
-	browserRedirectInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here."
+	browserRedirectInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here. The browser may say it can't open this address; the address bar holds the URL."
 )
+
+// announceAccountsNotice surfaces the engine's one-time account notice (the
+// legacy-browser removal) on the CLI login path. The engine hands it out once,
+// so the client must print it when it loads the list rather than later.
+func announceAccountsNotice(w io.Writer, view api.AccountsView) {
+	if strings.TrimSpace(view.Notice) != "" {
+		fmt.Fprintln(w, view.Notice)
+	}
+}
 
 func runLogin(args []string, stdout, stderr io.Writer) int {
 	return runSignIn(args, false, stdout, stderr)
@@ -89,6 +98,7 @@ terminal the password flow is used for script compatibility.
 			return nil, err
 		}
 		view = &loaded
+		announceAccountsNotice(stdout, loaded)
 		return view, nil
 	}
 

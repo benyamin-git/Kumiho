@@ -774,7 +774,16 @@ func (c *Controller) dispatchLogin(act Action) error {
 	terminal := st.Step == "done" || st.Step == "error" || st.Step == "cancelled"
 	owned := accountAction || accountFlow
 	if c.mergeLogin(st) {
-		if owned && st.Step == "done" {
+		if owned && st.Step == "done" && st.Error != "" {
+			// The engine publishes done+error for a terminal failure (account
+			// limit, failed save). Never turn it into a success notice; keep
+			// the error on the owning screen until another action replaces it.
+			slot := slotShared
+			if accountFlow {
+				slot = slotAccount
+			}
+			c.setNotice(slot, st.Error, toneBad, 0)
+		} else if owned && st.Step == "done" {
 			message := "Account added"
 			if st.Email != "" {
 				message = "Signed in as " + st.Email
@@ -983,6 +992,9 @@ func (c *Controller) dispatchLogout() error {
 	c.observe(nil)
 	c.mu.Lock()
 	c.accountFlow = false
+	// Sign-out clears any browser/password projection still on screen; a
+	// stale waiting card must not survive the session it belonged to.
+	c.login = nil
 	c.mu.Unlock()
 	c.setNotice(slotAccount, "Signed out", toneGood, c.opts.NoticeTTL)
 	c.refreshStatus(ctx)

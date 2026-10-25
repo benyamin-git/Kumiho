@@ -599,7 +599,7 @@ func removeConfirmCopy(target api.AccountSummary, total int) string {
 	case target.Active && total > 1:
 		return fmt.Sprintf("remove active account %s? the next account will be used (y/N)", target.Email)
 	case total <= 1:
-		return fmt.Sprintf("remove %s? this signs out (y/N)", target.Email)
+		return fmt.Sprintf("remove %s? this removes your last account and clears the local session (y/N)", target.Email)
 	default:
 		return fmt.Sprintf("remove %s? (y/N)", target.Email)
 	}

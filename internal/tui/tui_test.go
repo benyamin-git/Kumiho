@@ -39,6 +39,22 @@ func TestDashboardShowsState(t *testing.T) {
 	}
 }
 
+func TestLoginShowsLegacyRemovalNotice(t *testing.T) {
+	const notice = "Old browser sign-in removed. Add your Firefox account again."
+	m := &Model{screen: screenLogin, step: "method"}
+	m.Update(accountsMsg{view: api.AccountsView{Notice: notice}})
+	if !strings.Contains(m.View(), notice) {
+		t.Fatalf("login view missing the legacy removal notice:\n%s", m.View())
+	}
+
+	// A later accounts_list load carries no notice; the login screen must not
+	// lose the one-time message before the user has seen it.
+	m.Update(accountsMsg{view: api.AccountsView{}})
+	if !strings.Contains(m.View(), notice) {
+		t.Fatalf("a later account load discarded the login notice:\n%s", m.View())
+	}
+}
+
 func TestLoginPasswordIsMasked(t *testing.T) {
 	m := &Model{screen: screenLogin, step: "password", email: "user@example.com", password: "hunter2"}
 	view := m.View()

@@ -35,6 +35,16 @@ func TestResolveAccountRef(t *testing.T) {
 	}
 }
 
+func TestRemovedAccountCopy(t *testing.T) {
+	if got := removedAccountCopy("last@example.com", ""); !strings.Contains(got, "no accounts remain") ||
+		!strings.Contains(got, "local session was cleared") || strings.Contains(got, "signed out") {
+		t.Fatalf("last-account copy = %q", got)
+	}
+	if got := removedAccountCopy("one@example.com", "two@example.com"); got != "Removed one@example.com; active account is two@example.com.\n" {
+		t.Fatalf("remaining-account copy = %q", got)
+	}
+}
+
 func TestFormatAccounts(t *testing.T) {
 	view := api.AccountsView{
 		Accounts: []api.AccountSummary{
