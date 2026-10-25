@@ -96,6 +96,7 @@ type Daemon interface {
 	LoginStart(context.Context, api.LoginStartPayload) (api.LoginState, error)
 	LoginStatus(context.Context, api.LoginStatusPayload) (api.LoginState, error)
 	LoginCancel(context.Context, api.LoginCancelPayload) (api.Result, error)
+	LoginComplete(context.Context, api.LoginCompletePayload) (api.Result, error)
 	Logout(context.Context) (api.Result, error)
 	// Events yields the daemon's unsolicited, pushed events (status
 	// snapshots, ping results, live log entries) that drive live refreshes.
@@ -398,16 +399,16 @@ func (c *Controller) Snapshot() State {
 //
 // Handled here: connect, disconnect, select_location, ping, settings_get,
 // settings_set, login_email, login_password, login_2fa, login_start,
-// login_status, login_cancel, accounts_list, accounts_add_start,
-// accounts_add_status, accounts_add_cancel, accounts_remove, accounts_use,
-// accounts_update, accounts_set_rotation, logout, logs_snapshot,
-// logs_subscribe, logs_unsubscribe, logs_clear, logs_export,
-// open_logs_folder, doctor_run, refresh, update_check. window_show, quit and
-// open_external are recognized no-ops: the shell owns window visibility,
-// process exit and opening links (D34). cleanup, service_start, service_stop
-// and prefs_set are host-side actions the shell (or the harness) intercepts
-// before Dispatch (T3.3/T1.7); reaching them here is an "unsupported action"
-// error instead of silence.
+// login_status, login_cancel, login_complete, accounts_list,
+// accounts_add_start, accounts_add_status, accounts_add_cancel,
+// accounts_remove, accounts_use, accounts_update, accounts_set_rotation,
+// logout, logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear,
+// logs_export, open_logs_folder, doctor_run, refresh, update_check.
+// window_show, quit and open_external are recognized no-ops: the shell owns
+// window visibility, process exit and opening links (D34). cleanup,
+// service_start, service_stop and prefs_set are host-side actions the shell
+// (or the harness) intercepts before Dispatch (T3.3/T1.7); reaching them here
+// is an "unsupported action" error instead of silence.
 func (c *Controller) Dispatch(act Action) error {
 	switch act.Name {
 	case ActionConnect:
@@ -426,6 +427,7 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchUpdateCheck()
 	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA,
 		ActionLoginStart, ActionLoginStatus, ActionLoginCancel,
+		ActionLoginComplete,
 		ActionAccountsAddStart, ActionAccountsAddStatus, ActionAccountsAddCancel:
 		return c.dispatchLogin(act)
 	case ActionAccountsList:
@@ -631,6 +633,13 @@ func (c *Controller) dispatchLogin(act Action) error {
 	c.mu.Lock()
 	accountFlow := c.accountFlow
 	c.mu.Unlock()
+	// login_complete is shared by both screens (the frozen vocabulary has no
+	// account-specific spelling): the add started through accounts_add_start
+	// owns it until its terminal reply, exactly like the password steps that
+	// reuse login_password.
+	if act.Name == ActionLoginComplete && accountFlow {
+		accountAction = true
+	}
 	switch act.Name {
 	case ActionLoginEmail:
 		var p api.LoginEmailPayload
@@ -675,6 +684,37 @@ func (c *Controller) dispatchLogin(act Action) error {
 		} else {
 			st, err = c.d.LoginStatus(ctx, p)
 		}
+	case ActionLoginComplete:
+		var p api.LoginCompletePayload
+		if p, err = decodePayload[api.LoginCompletePayload](act); err != nil {
+			return err
+		}
+		if _, err = c.d.LoginComplete(ctx, p); err != nil {
+			// Retryable: the daemon keeps the flow active, so the browser
+			// step and its URL stay on screen and the error is shown inline;
+			// the account-flow ownership survives for the next paste.
+			c.observe(err)
+			c.mu.Lock()
+			c.ensureLoginLocked().Error = err.Error()
+			c.mu.Unlock()
+			c.loginActionError(act.Name, accountFlow, err)
+			return err
+		}
+		c.observe(nil)
+		// A nil completion means the flow reached a terminal state; the
+		// terminal reply itself rides login_status/accounts_add_status. Read
+		// it once so the waiting card settles without waiting for a poll. A
+		// failed read must not be reported as a sign-in failure nor erase the
+		// flow: the screen's poll retries.
+		if accountAction {
+			st, err = c.d.AccountsAddStatus(ctx, api.LoginStatusPayload{LoginID: p.LoginID})
+		} else {
+			st, err = c.d.LoginStatus(ctx, api.LoginStatusPayload{LoginID: p.LoginID})
+		}
+		if err != nil {
+			c.observe(err)
+			return nil
+		}
 	case ActionLoginCancel, ActionAccountsAddCancel:
 		var p api.LoginCancelPayload
 		if p, err = decodePayload[api.LoginCancelPayload](act); err != nil {
@@ -687,7 +727,7 @@ func (c *Controller) dispatchLogin(act Action) error {
 		}
 		if err != nil {
 			c.observe(err)
-			c.loginActionError(act.Name, err)
+			c.loginActionError(act.Name, accountFlow, err)
 			return err
 		}
 		c.observe(nil)
@@ -727,7 +767,7 @@ func (c *Controller) dispatchLogin(act Action) error {
 			login.Step = "error"
 		}
 		c.mu.Unlock()
-		c.loginActionError(act.Name, err)
+		c.loginActionError(act.Name, accountFlow, err)
 		return err
 	}
 	c.observe(nil)
@@ -759,9 +799,10 @@ func (c *Controller) dispatchLogin(act Action) error {
 }
 
 // loginActionError writes the sign-in action's notice. Account-add actions
-// report on the Account screen; the onboarding verbs keep the shared notice
-// (the wizard renders it on its status line).
-func (c *Controller) loginActionError(name string, err error) {
+// and the completion of an account-owned browser flow report on the Account
+// screen; the onboarding verbs keep the shared notice (the wizard renders it
+// on its status line).
+func (c *Controller) loginActionError(name string, accountFlow bool, err error) {
 	prefix := "sign-in failed: "
 	slot := slotShared
 	switch name {
@@ -771,6 +812,11 @@ func (c *Controller) loginActionError(name string, err error) {
 		prefix, slot = "could not check sign-in: ", slotAccount
 	case ActionAccountsAddCancel:
 		prefix, slot = "could not cancel sign-in: ", slotAccount
+	case ActionLoginComplete:
+		prefix = "could not finish sign-in: "
+		if accountFlow {
+			slot = slotAccount
+		}
 	case ActionLoginStart:
 		prefix = "could not start sign-in: "
 	case ActionLoginStatus:
@@ -1545,6 +1591,7 @@ func (c *Controller) mergeLogin(st api.LoginState) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	login := c.ensureLoginLocked()
+	previousStep, previousID := login.Step, login.ID
 	if st.Step != "" {
 		login.Step = st.Step
 	}
@@ -1556,7 +1603,15 @@ func (c *Controller) mergeLogin(st api.LoginState) bool {
 	login.VerificationReason = st.VerificationReason
 	login.URL = st.URL
 	login.ID = st.LoginID
-	login.Error = st.Error
+	// A status poll for the same waiting browser flow carries no error; it
+	// must not erase the retryable completion error the waiting card shows
+	// inline. The error clears on the next completion attempt (which replaces
+	// it), on a new flow, on a cancel or on the terminal reply.
+	sameWaitingFlow := st.Step == "browser" && st.Error == "" &&
+		previousStep == "browser" && previousID != "" && previousID == st.LoginID
+	if !sameWaitingFlow {
+		login.Error = st.Error
+	}
 	if st.Step == "done" && st.Error == "" {
 		if login.Email != "" {
 			c.notice = newNotice(0, "Signed in as "+login.Email, toneInfo)

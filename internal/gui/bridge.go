@@ -77,6 +77,7 @@ const (
 	ActionLoginStart          = "login_start"
 	ActionLoginStatus         = "login_status"
 	ActionLoginCancel         = "login_cancel"
+	ActionLoginComplete       = "login_complete"
 )
 
 // actionNames lists every action the bridge accepts, in plan order.
@@ -118,6 +119,7 @@ var actionNames = []string{
 	ActionLoginStart,
 	ActionLoginStatus,
 	ActionLoginCancel,
+	ActionLoginComplete,
 }
 
 // knownActions is the set of accepted names, built from actionNames.

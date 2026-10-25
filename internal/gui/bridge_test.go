@@ -51,6 +51,7 @@ var frozenActions = []string{
 	"login_start",
 	"login_status",
 	"login_cancel",
+	"login_complete",
 }
 
 // TestEncodeStateEnvelopeShape pins the host → UI wire shape for the zero
@@ -169,6 +170,12 @@ func TestDecodeActionRoundTrip(t *testing.T) {
 			wantPayload: `{"path":"C:\\Users\\me\\kumiho.log"}`,
 		},
 		{
+			name:        "browser redirect completion",
+			raw:         `{"type":"action","name":"login_complete","payload":{"login_id":"login-1","redirect_url":"urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"}}`,
+			wantName:    ActionLoginComplete,
+			wantPayload: `{"login_id":"login-1","redirect_url":"urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"}`,
+		},
+		{
 			name:     "payload omitted",
 			raw:      `{"type":"action","name":"quit"}`,
 			wantName: ActionQuit,
@@ -223,11 +230,11 @@ func TestDecodeActionRejects(t *testing.T) {
 }
 
 // TestFrozenActionVocabulary pins the list to the plan's 23 names, the three
-// controller-ruled additions, and the eleven v0.6.0 account/sign-in actions:
+// controller-ruled additions, and the twelve v0.6.0 account/sign-in actions:
 // same members, same count, and every one decodes.
 func TestFrozenActionVocabulary(t *testing.T) {
-	if len(frozenActions) != 37 {
-		t.Fatalf("frozenActions has %d entries, want 37", len(frozenActions))
+	if len(frozenActions) != 38 {
+		t.Fatalf("frozenActions has %d entries, want 38", len(frozenActions))
 	}
 	if len(actionNames) != len(frozenActions) {
 		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))

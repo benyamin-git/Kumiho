@@ -989,8 +989,9 @@ func TestAccountsFixture(t *testing.T) {
 }
 
 // TestBrowserLoginFixtures pins the harness's browser flow: each start gets a
-// unique ID and URL, the status stays pending for two polls, then completes.
-// Passwords still start at the email page.
+// unique ID and URL, the status stays on the browser step until the pasted
+// redirect URL completes it, cancel ends it as cancelled, and passwords still
+// start at the email page.
 func TestBrowserLoginFixtures(t *testing.T) {
 	ctx := context.Background()
 	m := New()
@@ -1003,7 +1004,9 @@ func TestBrowserLoginFixtures(t *testing.T) {
 		first.URL != "https://example.test/mozilla-account/signin?flow=1" {
 		t.Fatalf("first browser start = %+v", first)
 	}
-	for i := 0; i < mockBrowserPolls; i++ {
+	// The waiting card has no timer: it stays up across polls until the user
+	// pastes the redirect URL.
+	for i := 0; i < 5; i++ {
 		st, err := m.AccountsAddStatus(ctx, api.LoginStatusPayload{LoginID: first.LoginID})
 		if err != nil {
 			t.Fatalf("AccountsAddStatus (%d): %v", i, err)
@@ -1012,11 +1015,26 @@ func TestBrowserLoginFixtures(t *testing.T) {
 			t.Fatalf("pending status %d = %+v", i, st)
 		}
 	}
+
+	// A blank redirect is refused like the daemon and keeps the flow waiting.
+	if _, err := m.LoginComplete(ctx, api.LoginCompletePayload{LoginID: first.LoginID, RedirectURL: "  "}); err == nil {
+		t.Fatal("LoginComplete accepted a blank redirect URL")
+	}
+	if st, _ := m.AccountsAddStatus(ctx, api.LoginStatusPayload{LoginID: first.LoginID}); st.Step != "browser" {
+		t.Fatalf("status after a refused completion = %+v, want browser", st)
+	}
+
+	if _, err := m.LoginComplete(ctx, api.LoginCompletePayload{
+		LoginID:     first.LoginID,
+		RedirectURL: "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1",
+	}); err != nil {
+		t.Fatalf("LoginComplete: %v", err)
+	}
 	done, err := m.AccountsAddStatus(ctx, api.LoginStatusPayload{LoginID: first.LoginID})
 	if err != nil {
 		t.Fatalf("AccountsAddStatus (done): %v", err)
 	}
-	if done.Step != "done" {
+	if done.Step != "done" || done.Email != demoEmail {
 		t.Fatalf("terminal status = %+v", done)
 	}
 
@@ -1028,6 +1046,18 @@ func TestBrowserLoginFixtures(t *testing.T) {
 		second.LoginID != "mock-browser-2" ||
 		second.URL != "https://example.test/mozilla-account/signin?flow=2" {
 		t.Fatalf("second browser start = %+v, first = %+v", second, first)
+	}
+
+	// Cancel ends the waiting flow, so a racing poll cannot resurrect the card.
+	if _, err := m.LoginCancel(ctx, api.LoginCancelPayload{LoginID: second.LoginID}); err != nil {
+		t.Fatalf("LoginCancel: %v", err)
+	}
+	cancelled, err := m.LoginStatus(ctx, api.LoginStatusPayload{LoginID: second.LoginID})
+	if err != nil {
+		t.Fatalf("LoginStatus (cancelled): %v", err)
+	}
+	if cancelled.Step != "cancelled" {
+		t.Fatalf("status after cancel = %+v, want cancelled", cancelled)
 	}
 
 	password, err := m.AccountsAddStart(ctx, api.LoginStartPayload{Method: "password"})

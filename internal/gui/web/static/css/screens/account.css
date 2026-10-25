@@ -292,6 +292,16 @@
   user-select: all;
 }
 
+/* The pasted redirect URL is long and one-shot: give it the card's width. */
+.acct__waiting .acct__redirect {
+  max-inline-size: none;
+}
+
+.acct__waiting-error {
+  color: var(--loss);
+  font-size: var(--text-sm);
+}
+
 .acct__waiting-actions,
 .acct__form-actions {
   display: flex;

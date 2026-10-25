@@ -12,7 +12,8 @@
  * Remove; Add account offers browser sign-in (the first choice) or the
  * password form reused from onboarding. A browser flow shows the waiting
  * card, opens the URL once through `open_external`, polls
- * `accounts_add_status` every second and cancels through
+ * `accounts_add_status` every second, finishes through `login_complete` with
+ * the redirect URL pasted from the browser's address bar, and cancels through
  * `accounts_add_cancel`. Rotation is a switch plus a 1–50% threshold.
  *
  * Everything renders from the store's state envelopes (the controller
@@ -68,6 +69,13 @@ const ROWS = [
   ["bandwidth", "Bandwidth"],
   ["token_expiry", "Token expiry"],
 ];
+
+// The sign-out confirmation's revoke disclosure (v0.6.0): sign-out best-effort
+// revokes the Mozilla sign-in, and the local sign-out always completes.
+const SIGNOUT_REVOKE =
+  "Kumiho will also try to revoke its Mozilla sign-in; local sign-out completes offline.";
+const SIGNOUT_REVOKE_ALL =
+  "Kumiho will also try to revoke its Mozilla sign-ins; local sign-out completes offline.";
 
 // The browser URL opened once across remounts. A loopback URL is one-shot,
 // so re-opening the same flow after a screen switch would be a navigation
@@ -212,21 +220,32 @@ function build(host) {
   empty.hidden = true;
   accounts.append(accountsHead, list, empty);
 
-  // The browser waiting card (one sign-in flow at a time).
+  // The browser waiting card (one sign-in flow at a time): the loopback URL,
+  // the redirect URL pasted from the browser, Open again and Cancel.
   const waiting = el("section", "card acct__waiting");
   waiting.hidden = true;
   const waitingTitle = el("h2", "acct__waiting-title", "Waiting for browser sign-in");
   waitingTitle.id = "acct-waiting-title";
   const waitingBody = el("p", "acct__waiting-body",
-    "Finish signing in in your browser. Kumiho stores the sign-in tokens, never your password.");
+    "Finish signing in in your browser, then paste the redirect URL from its address bar. Kumiho stores the sign-in tokens, never your password.");
   const waitingURL = el("p", "acct__waiting-url");
+  const redirect = fieldBox("acct-browser-redirect", "Redirect URL", "text", "off");
+  redirect.input.placeholder = "Paste the complete URL";
+  redirect.wrap.classList.add("acct__redirect");
+  const redirectError = el("p", "acct__waiting-error");
+  redirectError.id = "acct-browser-error";
+  redirectError.setAttribute("aria-live", "polite");
+  redirectError.hidden = true;
+  redirect.input.setAttribute("aria-describedby", redirectError.id);
   const waitingActions = el("div", "acct__waiting-actions");
   const openAgain = el("button", "button button--tonal acct__open", "Open again");
   openAgain.type = "button";
   const cancelBrowser = el("button", "button button--text acct__cancel-browser", "Cancel");
   cancelBrowser.type = "button";
-  waitingActions.append(openAgain, cancelBrowser);
-  waiting.append(waitingTitle, waitingBody, waitingURL, waitingActions);
+  const browserContinue = el("button", "button button--filled acct__browser-continue", "Continue");
+  browserContinue.type = "button";
+  waitingActions.append(openAgain, cancelBrowser, browserContinue);
+  waiting.append(waitingTitle, waitingBody, waitingURL, redirect.wrap, redirectError, waitingActions);
   waiting.setAttribute("aria-labelledby", waitingTitle.id);
 
   // The password form (the onboarding credential flow, inline).
@@ -301,15 +320,17 @@ function build(host) {
   question.id = "acct-confirm-question";
   const detail = el("p", "dialog__body", "The stored sign-in tokens are cleared and the tunnel disconnects.");
   detail.id = "acct-confirm-detail";
+  const revoke = el("p", "dialog__body", SIGNOUT_REVOKE);
+  revoke.id = "acct-confirm-revoke";
   dialog.setAttribute("aria-labelledby", title.id);
-  dialog.setAttribute("aria-describedby", question.id + " " + detail.id);
+  dialog.setAttribute("aria-describedby", question.id + " " + detail.id + " " + revoke.id);
   const cancel = el("button", "button button--tonal acct__cancel", "Cancel");
   cancel.type = "button";
   const confirm = el("button", "button button--danger acct__confirm", "Sign out");
   confirm.type = "button";
   const dialogActions = el("div", "dialog__actions");
   dialogActions.append(cancel, confirm);
-  dialog.append(title, question, detail, dialogActions);
+  dialog.append(title, question, detail, revoke, dialogActions);
 
   // Add account: the browser choice is the default and first.
   const addDialog = el("dialog", "dialog acct__add-dialog");
@@ -398,8 +419,11 @@ function build(host) {
     rows: rows,
     waiting: waiting,
     waitingURL: waitingURL,
+    redirect: redirect,
+    redirectError: redirectError,
     openAgain: openAgain,
     cancelBrowser: cancelBrowser,
+    browserContinue: browserContinue,
     addform: addform,
     addformTitle: addformTitle,
     addformBody: addformBody,
@@ -415,6 +439,7 @@ function build(host) {
     dialog: dialog,
     cancel: cancel,
     confirm: confirm,
+    revoke: revoke,
     addDialog: addDialog,
     addCancel: addCancel,
     addPassword: addPassword,
@@ -456,6 +481,13 @@ export default {
       startingMark: "",
       startTimer: 0,
       cancelling: false,
+      // Browser completion: the pasted redirect URL's round trip and its
+      // screen-local error.
+      completing: false,
+      completingMark: "",
+      completingTimer: 0,
+      redirectError: "",
+      redirectID: "",
       loginMark: null,
       formFocusKey: "",
       // Account dialogs' target ids.
@@ -553,6 +585,53 @@ export default {
           stopPolling();
           console.warn("kumiho: browser sign-in status refused: " + err);
         }
+      });
+    }
+
+    function endCompleting() {
+      view.completing = false;
+      clearTimeout(view.completingTimer);
+      view.completingTimer = 0;
+    }
+
+    // The pasted URL's round trip: the host accepts controller actions
+    // immediately and their outcome arrives through the state stream, so the
+    // field and buttons stay disabled until the login projection moves or the
+    // settle timer releases the guard.
+    function beginCompleting() {
+      view.completing = true;
+      view.completingMark = loginMark(ctx.store.get().login);
+      clearTimeout(view.completingTimer);
+      view.completingTimer = setTimeout(function () {
+        view.completingTimer = 0;
+        if (view.completing) {
+          endCompleting();
+          render();
+        }
+      }, SETTLE_MS);
+      render();
+    }
+
+    // Continue sends the pasted redirect URL. A blank field is rejected
+    // locally with the field's own error; the URL itself is never logged.
+    function submitRedirect() {
+      const login = ctx.store.get().login || null;
+      if (!login || login.step !== "browser" || !login.id || view.completing) return;
+      const url = ui.redirect.input.value.trim();
+      if (!url) {
+        view.redirectError = "Paste the complete redirect URL from the browser.";
+        render();
+        ui.redirect.input.focus();
+        return;
+      }
+      view.redirectError = "";
+      beginCompleting();
+      ctx.send("login_complete", { login_id: login.id, redirect_url: url }).then(function (err) {
+        if (!err) return;
+        endCompleting();
+        view.redirectError = err;
+        render();
+        console.warn("kumiho: login_complete refused: " + err);
       });
     }
 
@@ -741,6 +820,13 @@ export default {
       if (ui.waiting.hidden !== !waiting) ui.waiting.hidden = !waiting;
       if (!waiting) {
         stopPolling();
+        endCompleting();
+        // A one-shot URL's code must not linger in the DOM after the flow.
+        ui.redirect.input.value = "";
+        ui.redirectError.textContent = "";
+        ui.redirectError.hidden = true;
+        view.redirectID = "";
+        view.redirectError = "";
         // A completed flow's URL may be one-shot; keep a new flow's URL free
         // to open even when the daemon happens to reuse it.
         view.openedURL = "";
@@ -752,9 +838,24 @@ export default {
         ui.waitingURL.textContent = text;
         ui.waitingURL.title = text;
       }
+      // A new flow starts with an empty paste field, never the previous
+      // flow's one-shot code.
+      if ((login.id || "") !== view.redirectID) {
+        view.redirectID = login.id || "";
+        ui.redirect.input.value = "";
+        view.redirectError = "";
+      }
+      const error = view.redirectError || login.error || "";
+      if (ui.redirectError.textContent !== error) ui.redirectError.textContent = error;
+      ui.redirectError.hidden = !error;
+      if (error) ui.redirect.input.setAttribute("aria-invalid", "true");
+      else ui.redirect.input.removeAttribute("aria-invalid");
       ui.openAgain.disabled = !url;
-      ui.cancelBrowser.disabled = !login.id || view.cancelling;
+      ui.cancelBrowser.disabled = !login.id || view.cancelling || view.completing;
       ui.cancelBrowser.textContent = view.cancelling ? "Cancelling…" : "Cancel";
+      ui.redirect.input.disabled = view.completing;
+      ui.browserContinue.disabled = view.completing || !login.id;
+      ui.browserContinue.textContent = view.completing ? "Signing in…" : "Continue";
       if (url && view.openedURL !== url && openedBrowserURL !== url) {
         openedBrowserURL = url;
         openURL(url);
@@ -917,6 +1018,8 @@ export default {
         : "The stored sign-in tokens are cleared and the tunnel disconnects.";
       const detailNode = ui.dialog.querySelectorAll(".dialog__body")[1];
       if (detailNode.textContent !== detail) detailNode.textContent = detail;
+      const revoke = count > 1 ? SIGNOUT_REVOKE_ALL : SIGNOUT_REVOKE;
+      if (ui.revoke.textContent !== revoke) ui.revoke.textContent = revoke;
       const confirmLabel = count > 1 ? "Sign out all" : "Sign out";
       if (ui.confirm.textContent !== confirmLabel) ui.confirm.textContent = confirmLabel;
     }
@@ -1214,6 +1317,12 @@ export default {
       openURL((ctx.store.get().login || {}).url || "");
     });
     ui.cancelBrowser.addEventListener("click", cancelBrowserAdd);
+    ui.browserContinue.addEventListener("click", submitRedirect);
+    ui.redirect.input.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      submitRedirect();
+    });
     ui.formCancel.addEventListener("click", function () {
       resetAddForm();
       render();
@@ -1249,6 +1358,7 @@ export default {
       if (view.busy && fingerprint(snapshot) !== view.busyMark) endBusy();
       syncAddState(snapshot);
       if (view.starting && loginMark(snapshot.login) !== view.startingMark) endStarting();
+      if (view.completing && loginMark(snapshot.login) !== view.completingMark) endCompleting();
     }
 
     function render() {
@@ -1277,6 +1387,7 @@ export default {
       unsubscribe();
       clearTimeout(view.busyTimer);
       clearTimeout(view.startTimer);
+      clearTimeout(view.completingTimer);
       stopPolling();
       if (ui.dialog.open) ui.dialog.close();
       if (ui.addDialog.open) ui.addDialog.close();

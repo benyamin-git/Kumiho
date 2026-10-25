@@ -84,6 +84,8 @@ type fakeDaemon struct {
 	loginStatuses    []api.LoginStatusPayload
 	loginCancelErr   error
 	loginCancels     []api.LoginCancelPayload
+	loginCompleteErr error
+	loginCompletes   []api.LoginCompletePayload
 
 	locations         api.LocationsResult
 	locationsErr      error
@@ -186,6 +188,12 @@ func (f *fakeDaemon) accountAddStatusPayloads() []api.LoginStatusPayload {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]api.LoginStatusPayload(nil), f.accountsAddStatuses...)
+}
+
+func (f *fakeDaemon) loginCompletePayloads() []api.LoginCompletePayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]api.LoginCompletePayload(nil), f.loginCompletes...)
 }
 
 func (f *fakeDaemon) accountRemovePayloads() []api.AccountsRemovePayload {
@@ -421,6 +429,14 @@ func (f *fakeDaemon) LoginCancel(_ context.Context, p api.LoginCancelPayload) (a
 	f.calls = append(f.calls, "login_cancel")
 	f.loginCancels = append(f.loginCancels, p)
 	return api.Result{OK: true}, f.loginCancelErr
+}
+
+func (f *fakeDaemon) LoginComplete(_ context.Context, p api.LoginCompletePayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "login_complete")
+	f.loginCompletes = append(f.loginCompletes, p)
+	return api.Result{OK: true}, f.loginCompleteErr
 }
 
 func (f *fakeDaemon) login(method, value string) (api.LoginState, error) {
@@ -2168,6 +2184,239 @@ func TestControllerBrowserLoginAction(t *testing.T) {
 	}
 }
 
+// TestControllerLoginCompleteAccountFlow pins the Account screen's paste
+// flow: login_complete carries the exact redirect URL, the controller reads
+// the terminal accounts_add_status reply immediately, claims the Account
+// notice and clears the account-flow ownership.
+func TestControllerLoginCompleteAccountFlow(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.accountsAddStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-1",
+		}
+		d.accountsAddStatusState = api.LoginState{Step: "done", Email: "new@example.com"}
+		d.accounts = api.AccountsView{
+			Accounts: []api.AccountSummary{{ID: "a1", Email: "new@example.com", Active: true}},
+			Active:   "a1", Notice: "2 accounts",
+		}
+		d.status = api.Status{State: "IDLE", Authenticated: true, Email: "new@example.com"}
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_start) = %v", err)
+	}
+	payload := fmt.Sprintf(`{"login_id":"login-1","redirect_url":%q}`, redirect)
+	if err := ctrl.Dispatch(Action{Name: ActionLoginComplete, Payload: []byte(payload)}); err != nil {
+		t.Fatalf("Dispatch(login_complete) = %v", err)
+	}
+
+	got := f.loginCompletePayloads()
+	if len(got) != 1 || got[0].LoginID != "login-1" || got[0].RedirectURL != redirect || got[0].Code != "" {
+		t.Fatalf("login_complete payloads = %+v", got)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "done" || login.Email != "new@example.com" {
+		t.Fatalf("login after completion = %+v", login)
+	}
+	if n := ctrl.Snapshot().AccountNotice; n == nil || n.Message != "Signed in as new@example.com" || n.Tone != toneGood {
+		t.Fatalf("account notice after completion = %+v", n)
+	}
+	// The terminal reply reloads the list (the add-completion path).
+	waitFor(t, "account reload after completion", func() bool {
+		return f.count(func(d *fakeDaemon) int { return d.accountsCalls }) >= 1
+	})
+	// The account flow is over: no later onboarding verb can claim its notice.
+	ctrl.mu.Lock()
+	flow := ctrl.accountFlow
+	ctrl.mu.Unlock()
+	if flow {
+		t.Fatal("accountFlow still set after the terminal completion")
+	}
+	// The immediate read is the account-screen verb, never the onboarding one.
+	if calls := f.callLog(); !slices.Contains(calls, "accounts_add_status") || slices.Contains(calls, "login_status") {
+		t.Fatalf("daemon calls = %v, want accounts_add_status and no login_status", calls)
+	}
+}
+
+// TestControllerLoginCompleteOnboardingFlow pins the wizard's paste flow: the
+// completion reads login_status, reports on the shared notice and never
+// claims the Account screen's notice.
+func TestControllerLoginCompleteOnboardingFlow(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-2&code=code-2"
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.loginStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-2",
+		}
+		d.loginStatusState = api.LoginState{Step: "done", Email: "user@example.com"}
+		d.status = api.Status{State: "IDLE", Authenticated: true, Email: "user@example.com"}
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_start) = %v", err)
+	}
+	payload := fmt.Sprintf(`{"login_id":"login-2","redirect_url":%q}`, redirect)
+	if err := ctrl.Dispatch(Action{Name: ActionLoginComplete, Payload: []byte(payload)}); err != nil {
+		t.Fatalf("Dispatch(login_complete) = %v", err)
+	}
+
+	got := f.loginCompletePayloads()
+	if len(got) != 1 || got[0].LoginID != "login-2" || got[0].RedirectURL != redirect || got[0].Code != "" {
+		t.Fatalf("login_complete payloads = %+v", got)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "done" || login.Email != "user@example.com" {
+		t.Fatalf("login after completion = %+v", login)
+	}
+	if n := ctrl.Snapshot().Notice; n == nil || n.Message != "Signed in as user@example.com" || n.Tone != toneInfo {
+		t.Fatalf("shared notice after completion = %+v", n)
+	}
+	if n := ctrl.Snapshot().AccountNotice; n != nil {
+		t.Fatalf("onboarding completion claimed the account notice: %+v", n)
+	}
+	if calls := f.callLog(); !slices.Contains(calls, "login_status") || slices.Contains(calls, "accounts_add_status") {
+		t.Fatalf("daemon calls = %v, want login_status and no accounts_add_status", calls)
+	}
+}
+
+// TestControllerLoginCompleteRetryableError pins the retry contract: a
+// retryable completion error leaves the browser step and its URL on screen,
+// shows the error inline on the login view, writes the action's notice on the
+// owning screen and accepts a corrected paste afterwards.
+func TestControllerLoginCompleteRetryableError(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const daemonErr = "the redirect URL does not belong to this sign-in flow"
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.accountsAddStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-1",
+		}
+		d.loginCompleteErr = errors.New(daemonErr)
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_start) = %v", err)
+	}
+
+	payload := fmt.Sprintf(`{"login_id":"login-1","redirect_url":%q}`, redirect)
+	err := ctrl.Dispatch(Action{Name: ActionLoginComplete, Payload: []byte(payload)})
+	if !errors.Is(err, f.loginCompleteErr) {
+		t.Fatalf("Dispatch(login_complete, retryable) = %v, want the daemon error", err)
+	}
+	login := ctrl.Snapshot().Login
+	if login == nil || login.Step != "browser" || login.ID != "login-1" ||
+		login.URL != "https://example.test/signin" || login.Error != daemonErr {
+		t.Fatalf("login after retryable error = %+v, want the flow kept with an inline error", login)
+	}
+	n := ctrl.Snapshot().AccountNotice
+	if n == nil || n.Message != "could not finish sign-in: "+daemonErr || n.Tone != toneBad || n.Expires != nil {
+		t.Fatalf("account notice after retryable error = %+v", n)
+	}
+
+	// The waiting card's status poll carries no error of its own: it must not
+	// erase the inline completion error before the user can act on it.
+	f.set(func(d *fakeDaemon) {
+		d.accountsAddStatusState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-1",
+		}
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionAccountsAddStatus, Payload: []byte(`{"login_id":"login-1"}`)}); err != nil {
+		t.Fatalf("Dispatch(accounts_add_status) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "browser" ||
+		login.ID != "login-1" || login.Error != daemonErr {
+		t.Fatalf("login after the waiting poll = %+v, want the inline error kept", login)
+	}
+
+	// The flow is still active: a corrected paste completes it and clears the
+	// inline error.
+	f.set(func(d *fakeDaemon) {
+		d.loginCompleteErr = nil
+		d.accountsAddStatusState = api.LoginState{Step: "done", Email: "new@example.com"}
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginComplete, Payload: []byte(payload)}); err != nil {
+		t.Fatalf("Dispatch(login_complete, retry) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "done" || login.Error != "" {
+		t.Fatalf("login after the retry = %+v", login)
+	}
+}
+
+// TestControllerLoginCompleteLeavesTheWaitingCardPolling pins the non-
+// terminal reply window: when the immediate status read still reports the
+// browser step, the flow must stay intact so the screen's poll can land the
+// daemon's later done/error reply.
+func TestControllerLoginCompleteLeavesTheWaitingCardPolling(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-3&code=code-3"
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.loginStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-3",
+		}
+		d.loginStatusState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-3",
+		}
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_start) = %v", err)
+	}
+	payload := fmt.Sprintf(`{"login_id":"login-3","redirect_url":%q}`, redirect)
+	if err := ctrl.Dispatch(Action{Name: ActionLoginComplete, Payload: []byte(payload)}); err != nil {
+		t.Fatalf("Dispatch(login_complete) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "browser" ||
+		login.ID != "login-3" || login.URL != "https://example.test/signin" {
+		t.Fatalf("login after a pending completion read = %+v", login)
+	}
+
+	f.set(func(d *fakeDaemon) {
+		d.loginStatusState = api.LoginState{Step: "done", Email: "user@example.com"}
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStatus, Payload: []byte(`{"login_id":"login-3"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_status) = %v", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "done" || login.Email != "user@example.com" {
+		t.Fatalf("login after the poll = %+v", login)
+	}
+}
+
+// TestControllerLoginCompleteStatusFailureKeepsFlow pins that a failed
+// immediate status read after a successful completion is not reported as a
+// sign-in failure and never erases the waiting flow: the completion succeeded,
+// so the screen's poll keeps retrying.
+func TestControllerLoginCompleteStatusFailureKeepsFlow(t *testing.T) {
+	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-4&code=code-4"
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.loginStartState = api.LoginState{
+			Step: "browser", Method: "browser",
+			URL: "https://example.test/signin", LoginID: "login-4",
+		}
+		d.loginStatusErr = errors.New("status unavailable")
+	})
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStart, Payload: []byte(`{"method":"browser"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_start) = %v", err)
+	}
+	payload := fmt.Sprintf(`{"login_id":"login-4","redirect_url":%q}`, redirect)
+	if err := ctrl.Dispatch(Action{Name: ActionLoginComplete, Payload: []byte(payload)}); err != nil {
+		t.Fatalf("Dispatch(login_complete) = %v, want nil (the completion succeeded)", err)
+	}
+	if login := ctrl.Snapshot().Login; login == nil || login.Step != "browser" ||
+		login.ID != "login-4" || login.URL != "https://example.test/signin" {
+		t.Fatalf("login after a status failure = %+v, want the waiting flow intact", login)
+	}
+	if n := ctrl.Snapshot().AccountNotice; n != nil {
+		t.Fatalf("status failure after completion claimed the account notice: %+v", n)
+	}
+}
+
 // TestControllerAccountPasswordFlowKeepsAccountNotice pins the ownership of a
 // password sign-in started from Add account: its terminal login_password reply
 // reuses the shared login verb, but the success belongs on the Account screen.
@@ -2318,8 +2567,8 @@ func TestControllerLoginObject(t *testing.T) {
 }
 
 // TestAccountActionNamesAreAccepted pins the bridge vocabulary: the new
-// actions are appended after the existing frozen list, in IPC-name order, and
-// every one is accepted by DecodeAction's known set.
+// actions are appended after the existing frozen list, and every one is
+// accepted by DecodeAction's known set.
 func TestAccountActionNamesAreAccepted(t *testing.T) {
 	want := []string{
 		ActionAccountsList,
@@ -2333,6 +2582,7 @@ func TestAccountActionNamesAreAccepted(t *testing.T) {
 		ActionLoginStart,
 		ActionLoginStatus,
 		ActionLoginCancel,
+		ActionLoginComplete,
 	}
 	if len(actionNames) < len(want) {
 		t.Fatalf("actionNames has %d entries, want at least %d", len(actionNames), len(want))

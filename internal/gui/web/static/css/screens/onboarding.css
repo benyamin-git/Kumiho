@@ -334,6 +334,16 @@
   user-select: all;
 }
 
+/* The pasted redirect URL is long and one-shot: give it the card's width. */
+.onb__browser .onb__field {
+  max-inline-size: none;
+}
+
+.onb__browser-error {
+  color: var(--loss);
+  font-size: var(--text-sm);
+}
+
 .onb__browser-actions {
   display: flex;
   justify-content: end;

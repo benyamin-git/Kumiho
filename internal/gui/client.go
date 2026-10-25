@@ -372,6 +372,13 @@ func (c *DaemonClient) LoginCancel(ctx context.Context, p api.LoginCancelPayload
 	return res, err
 }
 
+// LoginComplete implements Daemon.
+func (c *DaemonClient) LoginComplete(ctx context.Context, p api.LoginCompletePayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeLoginComplete, p, &res)
+	return res, err
+}
+
 // Logout implements Daemon.
 func (c *DaemonClient) Logout(ctx context.Context) (api.Result, error) {
 	var res api.Result

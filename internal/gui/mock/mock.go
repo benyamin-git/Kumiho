@@ -46,15 +46,17 @@ type Mock struct {
 	lastConnect api.ConnectPayload
 	haveConnect bool
 
-	// browserPolls counts the status polls of the current browser flow. The
-	// fixture keeps the flow pending for a few polls so the harness can show
-	// its waiting card and exercise Cancel before completing. browserSeq
-	// makes each flow's ID and URL unique, like the daemon's one-shot loopback
-	// listener; the URL is opened only once per flow by the UI.
-	browserPolls int
-	browserSeq   int
-	browserID    string
-	browserURL   string
+	// browserStep is the fixture's current browser flow: "" when none exists,
+	// "browser" while waiting for the pasted redirect URL, "done" after a
+	// successful LoginComplete and "cancelled" after LoginCancel. The fixture
+	// has no timers: only those two verbs advance the flow, so the harness can
+	// exercise the waiting card and its paste field. browserSeq makes each
+	// flow's ID and URL unique, like the daemon's one-shot loopback listener;
+	// the URL is opened only once per flow by the UI.
+	browserStep string
+	browserSeq  int
+	browserID   string
+	browserURL  string
 
 	events chan *ipc.Envelope
 }
@@ -300,9 +302,9 @@ func (m *Mock) AccountsAddStart(ctx context.Context, p api.LoginStartPayload) (a
 	return m.startLogin(p), nil
 }
 
-// AccountsAddStatus implements gui.Daemon: the browser flow stays pending
-// for mockBrowserPolls polls, then completes (so the waiting card is usable
-// in the harness).
+// AccountsAddStatus implements gui.Daemon: the browser flow stays on the
+// waiting step until LoginComplete (or Cancel) advances it, so the harness can
+// exercise the paste field.
 func (m *Mock) AccountsAddStatus(ctx context.Context, _ api.LoginStatusPayload) (api.LoginState, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.LoginState{}, err
@@ -310,13 +312,16 @@ func (m *Mock) AccountsAddStatus(ctx context.Context, _ api.LoginStatusPayload) 
 	return m.browserStatus(), nil
 }
 
-// AccountsAddCancel implements gui.Daemon. It acknowledges.
+// AccountsAddCancel implements gui.Daemon: it ends the browser flow as
+// cancelled and acknowledges.
 func (m *Mock) AccountsAddCancel(ctx context.Context, _ api.LoginCancelPayload) (api.Result, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.Result{}, err
 	}
 	m.mu.Lock()
-	m.browserPolls = 0
+	if m.browserStep == "browser" {
+		m.browserStep = "cancelled"
+	}
 	m.mu.Unlock()
 	return api.Result{OK: true}, nil
 }
@@ -453,8 +458,8 @@ func (m *Mock) LoginStart(ctx context.Context, p api.LoginStartPayload) (api.Log
 	return m.startLogin(p), nil
 }
 
-// LoginStatus implements gui.Daemon: the browser flow stays pending for
-// mockBrowserPolls polls, then completes.
+// LoginStatus implements gui.Daemon: the browser flow stays on the waiting
+// step until LoginComplete (or Cancel) advances it.
 func (m *Mock) LoginStatus(ctx context.Context, _ api.LoginStatusPayload) (api.LoginState, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.LoginState{}, err
@@ -462,40 +467,63 @@ func (m *Mock) LoginStatus(ctx context.Context, _ api.LoginStatusPayload) (api.L
 	return m.browserStatus(), nil
 }
 
-// LoginCancel implements gui.Daemon. It acknowledges.
+// LoginCancel implements gui.Daemon: it ends the browser flow as cancelled
+// and acknowledges.
 func (m *Mock) LoginCancel(ctx context.Context, _ api.LoginCancelPayload) (api.Result, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.Result{}, err
 	}
 	m.mu.Lock()
-	m.browserPolls = 0
+	if m.browserStep == "browser" {
+		m.browserStep = "cancelled"
+	}
 	m.mu.Unlock()
 	return api.Result{OK: true}, nil
 }
 
-// mockBrowserPolls is how many status polls the fixture keeps a browser
-// flow pending. Two polls plus the one-second UI cadence leave a few seconds
-// to see the waiting card and press Cancel in the harness.
-const mockBrowserPolls = 2
+// LoginComplete implements gui.Daemon: a pasted redirect URL finishes the
+// waiting browser flow, which the next status poll reports as done. A blank
+// redirect is refused like the daemon; an unknown or inactive flow is a
+// bad_request.
+func (m *Mock) LoginComplete(ctx context.Context, p api.LoginCompletePayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	if strings.TrimSpace(p.RedirectURL) == "" {
+		return api.Result{}, &api.RemoteError{
+			Code: api.CodeBadRequest, Message: "paste the complete redirect URL from the browser",
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.browserStep != "browser" || (p.LoginID != "" && p.LoginID != m.browserID) {
+		return api.Result{}, &api.RemoteError{
+			Code: api.CodeBadRequest, Message: "no browser sign-in in progress",
+		}
+	}
+	m.browserStep = "done"
+	return api.Result{OK: true}, nil
+}
 
-// browserStatus advances the fixture's browser flow: pending for the first
-// polls, done after them. The count resets on every start and cancel.
+// browserStatus reports the fixture's current browser flow.
 func (m *Mock) browserStatus() api.LoginState {
 	m.mu.Lock()
-	m.browserPolls++
-	polls := m.browserPolls
-	st := api.LoginState{
-		Step:    "browser",
-		Method:  "browser",
-		URL:     m.browserURL,
-		LoginID: m.browserID,
+	defer m.mu.Unlock()
+	switch m.browserStep {
+	case "browser":
+		return api.LoginState{
+			Step:    "browser",
+			Method:  "browser",
+			URL:     m.browserURL,
+			LoginID: m.browserID,
+		}
+	case "done":
+		return api.LoginState{Step: "done", Email: demoEmail}
+	case "cancelled":
+		return api.LoginState{Step: "cancelled"}
+	default:
+		return api.LoginState{Step: "error", Error: "no browser sign-in in progress"}
 	}
-	if polls > mockBrowserPolls {
-		m.browserPolls = 0
-		st = api.LoginState{Step: "done"}
-	}
-	m.mu.Unlock()
-	return st
 }
 
 // startLogin resets the fixture's browser progress and gives each browser
@@ -504,11 +532,12 @@ func (m *Mock) startLogin(p api.LoginStartPayload) api.LoginState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	st := loginStartState(p)
-	m.browserPolls = 0
+	m.browserStep = ""
 	if st.Step == "browser" {
 		m.browserSeq++
 		m.browserID = fmt.Sprintf("mock-browser-%d", m.browserSeq)
 		m.browserURL = fmt.Sprintf("https://example.test/mozilla-account/signin?flow=%d", m.browserSeq)
+		m.browserStep = "browser"
 		st.LoginID = m.browserID
 		st.URL = m.browserURL
 	}

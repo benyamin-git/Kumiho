@@ -13,12 +13,14 @@
  * Everything renders from the store's state envelopes; actions go through
  * the transport and the screen re-renders from the next envelope — "" means
  * accepted, never completed (T1.7). Login runs over the frozen actions
- * (login_email/login_password/login_2fa) and reads the controller's Login
- * projection: a terminal `done` reply advances to Health check, an error
- * renders on the status line, and a live session (status.authenticated)
- * always shows the signed-in page instead of the credential fields — the
- * daemon's "already signed in" refusal can never dead-end the wizard
- * (inventory §Onboarding wizard "Already-signed-in handling").
+ * (login_email/login_password/login_2fa, plus login_start/login_status/
+ * login_cancel/login_complete for the browser flow) and reads the
+ * controller's Login projection: a terminal `done` reply advances to Health
+ * check, an error renders on the status line, and a live session
+ * (status.authenticated) always shows the signed-in page instead of the
+ * credential fields — the daemon's "already signed in" refusal can never
+ * dead-end the wizard (inventory §Onboarding wizard "Already-signed-in
+ * handling").
  *
  * The health step runs doctor_run once, when the page is first shown and no
  * report exists (the Diagnostics rule); Re-run checks repeats it. The
@@ -118,7 +120,7 @@ const LOGIN_LINK_BODY =
 const LOGIN_SIGNED_BODY =
   "Kumiho already has a signed-in Firefox account. Choose Continue to finish setting up, or sign out to use a different account.";
 const LOGIN_WAITING_BODY =
-  "Finish signing in in your browser. This page continues automatically when Mozilla sends you back.";
+  "Finish signing in in your browser, then paste the redirect URL from its address bar.";
 
 // The remaining steps' bodies and the shared sign-out dialog copy.
 const HEALTH_BODY =
@@ -128,6 +130,8 @@ const AUTOCONNECT_BODY =
 const FINISH_BODY = "Kumiho is ready. Press Connect on the Dashboard to start the tunnel.";
 const SIGNOUT_QUESTION = "Sign out of Kumiho?";
 const SIGNOUT_DETAIL = "The stored sign-in tokens are cleared and the tunnel disconnects.";
+const SIGNOUT_REVOKE =
+  "Kumiho will also try to revoke its Mozilla sign-in; local sign-out completes offline.";
 
 // Module-level session state: a router remount keeps the step and the
 // consent tick (never persisted; a fresh launch reloads the module).
@@ -283,11 +287,18 @@ function build(host) {
   const code = fieldBox("onb-code", "Verification code", "text", "");
   password.wrap.hidden = true;
   code.wrap.hidden = true;
-  // The browser waiting card: the loopback URL, Open again and Cancel.
+  // The browser waiting card: the loopback URL, the pasted redirect URL,
+  // Open again and Cancel.
   const browser = el("div", "onb__browser");
   browser.hidden = true;
   const browserBody = el("p", "onb__body", LOGIN_WAITING_BODY);
   const browserURL = el("p", "onb__browser-url");
+  const browserRedirect = fieldBox("onb-browser-redirect", "Redirect URL", "text", "Paste the complete URL");
+  const browserError = el("p", "onb__browser-error");
+  browserError.id = "onb-browser-error";
+  browserError.setAttribute("aria-live", "polite");
+  browserError.hidden = true;
+  browserRedirect.input.setAttribute("aria-describedby", browserError.id);
   const browserActions = el("div", "onb__browser-actions");
   const browserOpen = el("button", "button button--tonal onb__browser-open", "Open again");
   browserOpen.type = "button";
@@ -295,8 +306,11 @@ function build(host) {
   const browserCancel = el("button", "button button--text onb__browser-cancel", "Cancel");
   browserCancel.type = "button";
   browserCancel.id = "onb-browser-cancel";
-  browserActions.append(browserOpen, browserCancel);
-  browser.append(browserBody, browserURL, browserActions);
+  const browserContinue = el("button", "button button--filled onb__browser-continue", "Continue");
+  browserContinue.type = "button";
+  browserContinue.id = "onb-browser-continue";
+  browserActions.append(browserOpen, browserCancel, browserContinue);
+  browser.append(browserBody, browserURL, browserRedirect.wrap, browserError, browserActions);
   login.append(loginBody, methods, signed, email.wrap, password.wrap, code.wrap, browser);
 
   // Step 3: health check (the run summary lives on the status line; the
@@ -367,15 +381,17 @@ function build(host) {
   dialogQuestion.id = "onb-signout-question";
   const dialogDetail = el("p", "dialog__body", SIGNOUT_DETAIL);
   dialogDetail.id = "onb-signout-detail";
+  const dialogRevoke = el("p", "dialog__body", SIGNOUT_REVOKE);
+  dialogRevoke.id = "onb-signout-revoke";
   dialog.setAttribute("aria-labelledby", dialogTitle.id);
-  dialog.setAttribute("aria-describedby", dialogQuestion.id + " " + dialogDetail.id);
+  dialog.setAttribute("aria-describedby", dialogQuestion.id + " " + dialogDetail.id + " " + dialogRevoke.id);
   const cancel = el("button", "button button--tonal onb__dialog-cancel", "Cancel");
   cancel.type = "button";
   const confirm = el("button", "button button--danger onb__dialog-confirm", "Sign out");
   confirm.type = "button";
   const dialogActions = el("div", "dialog__actions");
   dialogActions.append(cancel, confirm);
-  dialog.append(dialogTitle, dialogQuestion, dialogDetail, dialogActions);
+  dialog.append(dialogTitle, dialogQuestion, dialogDetail, dialogRevoke, dialogActions);
 
   root.append(panel, status, nav, dialog);
   host.append(root);
@@ -398,8 +414,11 @@ function build(host) {
     code: code,
     browser: browser,
     browserURL: browserURL,
+    browserRedirect: browserRedirect,
+    browserError: browserError,
     browserOpen: browserOpen,
     browserCancel: browserCancel,
+    browserContinue: browserContinue,
     rerun: rerun,
     checks: checks,
     checksEmpty: checksEmpty,
@@ -435,6 +454,13 @@ export default {
       pollInFlight: false,
       openedURL: "",
       cancelling: false,
+      // Browser completion: the pasted redirect URL's round trip and its
+      // screen-local error.
+      completing: false,
+      completingMark: "",
+      completingTimer: 0,
+      redirectError: "",
+      redirectID: "",
       busy: null, // "signin" while a login round trip runs
       busyMark: "",
       busyTimer: 0,
@@ -615,6 +641,9 @@ export default {
       if (login && (login.step === "error" || login.step === "cancelled")) {
         view.submitted = false;
       }
+      if (view.completing && loginMark(snapshot) !== view.completingMark) {
+        endCompleting();
+      }
     }
 
     // --------------------------------------------------------------- flow
@@ -661,7 +690,7 @@ export default {
           if (page === "password") target = ui.password.input;
           else if (page === "2fa") target = ui.code.input;
           else if (page === "email") target = ui.email.input;
-          else if (page === "browser") target = ui.browserCancel;
+          else if (page === "browser") target = ui.browserRedirect.input;
           else target = ui.primary;
           break;
         case STEP_AUTOCONNECT:
@@ -760,6 +789,53 @@ export default {
         view.cancelling = false;
         render();
         console.warn("kumiho: login_cancel refused: " + err);
+      });
+    }
+
+    function endCompleting() {
+      view.completing = false;
+      clearTimeout(view.completingTimer);
+      view.completingTimer = 0;
+    }
+
+    // The pasted URL's round trip: the host accepts controller actions
+    // immediately and their outcome arrives through the state stream, so the
+    // field and buttons stay disabled until the login projection moves or the
+    // settle timer releases the guard.
+    function beginCompleting() {
+      view.completing = true;
+      view.completingMark = loginMark(ctx.store.get());
+      clearTimeout(view.completingTimer);
+      view.completingTimer = setTimeout(function () {
+        view.completingTimer = 0;
+        if (view.completing) {
+          endCompleting();
+          render();
+        }
+      }, SETTLE_MS);
+      render();
+    }
+
+    // Continue sends the pasted redirect URL. A blank field is rejected
+    // locally with the field's own error; the URL itself is never logged.
+    function submitRedirect() {
+      const login = ctx.store.get().login || null;
+      if (!login || login.step !== "browser" || !login.id || view.completing) return;
+      const url = ui.browserRedirect.input.value.trim();
+      if (!url) {
+        view.redirectError = "Paste the complete redirect URL from the browser.";
+        render();
+        ui.browserRedirect.input.focus();
+        return;
+      }
+      view.redirectError = "";
+      beginCompleting();
+      ctx.send("login_complete", { login_id: login.id, redirect_url: url }).then(function (err) {
+        if (!err) return;
+        endCompleting();
+        view.redirectError = err;
+        render();
+        console.warn("kumiho: login_complete refused: " + err);
       });
     }
 
@@ -1119,6 +1195,18 @@ export default {
           ui.browserURL.textContent = text;
           ui.browserURL.title = text;
         }
+        // A new flow starts with an empty paste field, never the previous
+        // flow's one-shot code.
+        if ((login.id || "") !== view.redirectID) {
+          view.redirectID = login.id || "";
+          ui.browserRedirect.input.value = "";
+          view.redirectError = "";
+        }
+        const error = view.redirectError || login.error || "";
+        if (ui.browserError.textContent !== error) ui.browserError.textContent = error;
+        ui.browserError.hidden = !error;
+        if (error) ui.browserRedirect.input.setAttribute("aria-invalid", "true");
+        else ui.browserRedirect.input.removeAttribute("aria-invalid");
         // Open the loopback URL once per flow (module-level so a screen
         // switch does not navigate a one-shot URL twice). "Open again" is
         // the explicit repeat.
@@ -1130,11 +1218,22 @@ export default {
         if (currentStep === STEP_LOGIN && login.id) startPolling(login.id);
         else stopPolling();
         ui.browserOpen.disabled = !url;
-        ui.browserCancel.disabled = !login.id || view.cancelling;
+        ui.browserCancel.disabled = !login.id || view.cancelling || view.completing;
         const cancelLabel = view.cancelling ? "Cancelling…" : "Cancel";
         if (ui.browserCancel.textContent !== cancelLabel) ui.browserCancel.textContent = cancelLabel;
+        ui.browserRedirect.input.disabled = !!view.busy || !!view.logoutBusy || view.completing;
+        ui.browserContinue.disabled = !!view.busy || !!view.logoutBusy || view.completing || !login.id;
+        const continueLabel = view.completing ? "Signing in…" : "Continue";
+        if (ui.browserContinue.textContent !== continueLabel) ui.browserContinue.textContent = continueLabel;
       } else {
         stopPolling();
+        endCompleting();
+        // A one-shot URL's code must not linger in the DOM after the flow.
+        ui.browserRedirect.input.value = "";
+        ui.browserError.textContent = "";
+        ui.browserError.hidden = true;
+        view.redirectID = "";
+        view.redirectError = "";
         view.openedURL = "";
       }
 
@@ -1289,6 +1388,12 @@ export default {
       openURL((ctx.store.get().login || {}).url || "");
     });
     ui.browserCancel.addEventListener("click", cancelBrowserLogin);
+    ui.browserContinue.addEventListener("click", submitRedirect);
+    ui.browserRedirect.input.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      submitRedirect();
+    });
     ui.back.addEventListener("click", onBack);
     ui.rerun.addEventListener("click", onRerun);
     ui.autoToggle.addEventListener("click", onAutoToggle);
@@ -1335,6 +1440,7 @@ export default {
       clearTimeout(view.logoutTimer);
       clearTimeout(view.autoTimer);
       clearTimeout(view.finishTimer);
+      clearTimeout(view.completingTimer);
       stopPolling();
       if (ui.dialog.open) ui.dialog.close();
     };
