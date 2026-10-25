@@ -540,6 +540,50 @@ func TestBrowserLoginExchangeClassification(t *testing.T) {
 		requireNoSecretsInLogs(t, ctrl, testBrowserCode, state, redirect, testBrowserAccess)
 	})
 
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"malformed success response", `{"access_token":`},
+		{"success response without a token", `{"refresh_token":"refresh-1"}`},
+	} {
+		t.Run(tc.name+" is terminal", func(t *testing.T) {
+			ctrl, srv := newBrowserTestController(t)
+			srv.setToken(http.StatusOK, tc.body)
+			ls := startBrowserLogin(t, ctrl, "", "")
+			state := browserAuthorizationState(t, ls.URL)
+			redirect := browserRedirectURL(state, testBrowserCode)
+
+			if err := ctrl.LoginComplete(ls.LoginID, redirect); err != nil {
+				t.Fatalf("unusable 2xx response must be terminal, not retryable: %v", err)
+			}
+			st := browserStatus(t, ctrl, ls.LoginID)
+			if st.Step != "error" || !strings.Contains(st.Error, "unusable") {
+				t.Fatalf("unusable response state = %+v", st)
+			}
+			ctrl.mu.Lock()
+			b := ctrl.browser
+			active, tokens := b.active, b.tokens
+			ctrl.mu.Unlock()
+			if active || tokens != nil {
+				t.Fatalf("unusable response kept active=%v tokens=%+v", active, tokens)
+			}
+			if calls, _ := srv.tokenSnapshot(); calls != 1 {
+				t.Fatalf("token calls = %d, want 1", calls)
+			}
+			if err := ctrl.LoginComplete(ls.LoginID, redirect); err == nil {
+				t.Fatal("a terminal unusable response accepted another completion")
+			}
+			if calls, _ := srv.tokenSnapshot(); calls != 1 {
+				t.Fatalf("terminal response re-exchanged the code: token calls = %d", calls)
+			}
+			if view := ctrl.Accounts(); len(view.Accounts) != 0 {
+				t.Fatalf("unusable response added an account: %+v", view)
+			}
+			requireNoSecretsInLogs(t, ctrl, testBrowserCode, state, redirect, testBrowserAccess)
+		})
+	}
+
 	t.Run("server error is retryable", func(t *testing.T) {
 		ctrl, srv := newBrowserTestController(t)
 		srv.setToken(http.StatusInternalServerError, `{"errno":500,"message":"boom"}`)
@@ -698,6 +742,45 @@ func TestBrowserLoginProfileRetry(t *testing.T) {
 	}
 	if calls, _ := srv.tokenSnapshot(); calls != 1 {
 		t.Fatalf("profile retry re-exchanged the code: token calls = %d", calls)
+	}
+	if calls, _ := srv.profileSnapshot(); calls != 2 {
+		t.Fatalf("profile calls = %d, want 2", calls)
+	}
+}
+
+func TestBrowserLoginProfileNonUnauthorizedIsRetryable(t *testing.T) {
+	ctrl, srv := newBrowserTestController(t)
+	srv.setProfile(http.StatusForbidden, `{"errno":403,"message":"Forbidden"}`)
+	ls := startBrowserLogin(t, ctrl, "", "")
+	state := browserAuthorizationState(t, ls.URL)
+	redirect := browserRedirectURL(state, testBrowserCode)
+
+	err := ctrl.LoginComplete(ls.LoginID, redirect)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "profile") {
+		t.Fatalf("profile 403 should be retryable, got %v", err)
+	}
+	if st := browserStatus(t, ctrl, ls.LoginID); st.Step != "browser" || !browserFlowActive(ctrl) {
+		t.Fatalf("flow after a profile 403 = %+v", st)
+	}
+	ctrl.mu.Lock()
+	tokens := ctrl.browser.tokens
+	ctrl.mu.Unlock()
+	if tokens == nil {
+		t.Fatal("profile 403 discarded the exchanged tokens")
+	}
+	if calls, _ := srv.tokenSnapshot(); calls != 1 {
+		t.Fatalf("token calls = %d, want 1", calls)
+	}
+
+	srv.setProfile(http.StatusOK, testBrowserProfileBody)
+	if err := ctrl.LoginComplete(ls.LoginID, redirect); err != nil {
+		t.Fatalf("profile retry after 403: %v", err)
+	}
+	if st := browserStatus(t, ctrl, ls.LoginID); st.Step != "done" {
+		t.Fatalf("state after profile 403 retry = %+v", st)
+	}
+	if calls, _ := srv.tokenSnapshot(); calls != 1 {
+		t.Fatalf("profile 403 retry re-exchanged the code: token calls = %d", calls)
 	}
 	if calls, _ := srv.profileSnapshot(); calls != 2 {
 		t.Fatalf("profile calls = %d, want 2", calls)
@@ -1030,6 +1113,35 @@ func TestBrowserLoginTimeout(t *testing.T) {
 	}
 	if err := ctrl.LoginCancel(fresh.LoginID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBrowserLoginCompleteTimeoutIsTerminal(t *testing.T) {
+	ctrl, srv := newBrowserTestController(t)
+	ls := startBrowserLogin(t, ctrl, "", "")
+	state := browserAuthorizationState(t, ls.URL)
+
+	// Expire the flow without polling LoginStatus first, so LoginComplete
+	// takes the active-flow timeout branch directly.
+	ctrl.mu.Lock()
+	ctrl.browser.created = time.Now().Add(-11 * time.Minute)
+	ctrl.mu.Unlock()
+
+	if err := ctrl.LoginComplete(ls.LoginID, browserRedirectURL(state, testBrowserCode)); err != nil {
+		t.Fatalf("terminal timeout must not be returned as a retryable error: %v", err)
+	}
+	st := browserStatus(t, ctrl, ls.LoginID)
+	if st.Step != "error" || st.Error != "browser sign-in timed out; start again" {
+		t.Fatalf("timeout state = %+v", st)
+	}
+	if browserFlowActive(ctrl) {
+		t.Fatal("timed-out flow is still active")
+	}
+	if calls, _ := srv.tokenSnapshot(); calls != 0 {
+		t.Fatalf("timed-out flow called the token endpoint %d times", calls)
+	}
+	if view := ctrl.Accounts(); len(view.Accounts) != 0 {
+		t.Fatalf("timed-out flow added an account: %+v", view)
 	}
 }
 

@@ -23,6 +23,7 @@ const (
 	browserRedirectMissingCode   = "the redirect URL has no authorization code; paste the complete URL from the browser"
 	browserExchangeRetryMessage  = "the browser token exchange failed; check the connection and try again"
 	browserExchangeRejected      = "the browser authorization code was rejected or already used; start again"
+	browserExchangeUnusable      = "the browser token exchange returned an unusable response; start again"
 	browserProfileRetryMessage   = "the browser profile lookup failed; try again"
 	browserProfileRejected       = "the browser sign-in was rejected; start again"
 	browserCompletingMessage     = "the browser sign-in is already being completed; try again"
@@ -110,7 +111,7 @@ func (c *Controller) LoginComplete(id, redirectURL string) error {
 		c.mu.Unlock()
 		c.log.Logf(logging.Warn, "auth", "browser sign-in failed: %s", browserTimeoutMessage)
 		c.notify()
-		return badRequestError(browserTimeoutMessage)
+		return nil
 	}
 	if b.completing {
 		c.mu.Unlock()
@@ -149,7 +150,7 @@ func (c *Controller) LoginComplete(id, redirectURL string) error {
 					c.mu.Unlock()
 					return badRequestError(browserExchangeRetryMessage)
 				}
-				message := c.failBrowserLocked(b, "error", browserExchangeRejected)
+				message := c.failBrowserLocked(b, "error", browserExchangeFailureMessage(exchangeErr))
 				c.mu.Unlock()
 				c.log.Logf(logging.Warn, "auth", "browser sign-in failed: %s", message)
 				c.notify()
@@ -382,10 +383,15 @@ func parseBrowserRedirect(raw string) (code, state string, err error) {
 
 // browserExchangeRetryable reports whether a token exchange may be retried
 // with the same code. Network errors, anti-bot challenges, 408/429 and 5xx are
-// transient; a 4xx OAuth rejection (invalid_grant, expired/used code, wrong
-// client) is terminal.
+// transient. A 4xx OAuth rejection (invalid_grant, expired/used code, wrong
+// client) and a 2xx response that cannot be parsed are terminal: the latter
+// may already have consumed the one-shot code.
 func browserExchangeRetryable(err error) bool {
 	if err == nil {
+		return false
+	}
+	var responseErr *fxa.ResponseError
+	if errors.As(err, &responseErr) {
 		return false
 	}
 	var apiErr *fxa.APIError
@@ -399,20 +405,27 @@ func browserExchangeRetryable(err error) bool {
 	return true
 }
 
+// browserExchangeFailureMessage picks the terminal message for a permanent
+// exchange failure without exposing the underlying error text.
+func browserExchangeFailureMessage(err error) string {
+	var responseErr *fxa.ResponseError
+	if errors.As(err, &responseErr) {
+		return browserExchangeUnusable
+	}
+	return browserExchangeRejected
+}
+
 // browserProfileRetryable reports whether the profile call may be retried with
-// the tokens already in hand. A 401 (and other permanent 4xx) discards them;
-// network errors, 408/429, anti-bot challenges and 5xx keep them.
+// the tokens already in hand. Only a 401 means the access token is dead;
+// network errors, anti-bot challenges, other 4xx responses, unusable responses
+// and 5xx all keep the exchanged tokens and may be retried.
 func browserProfileRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
 	var apiErr *fxa.APIError
-	if errors.As(err, &apiErr) {
-		switch apiErr.StatusCode {
-		case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusNotAcceptable:
-			return true
-		}
-		return apiErr.StatusCode >= 500
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized {
+		return false
 	}
 	return true
 }

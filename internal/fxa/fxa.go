@@ -69,6 +69,28 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("fxa error (HTTP %d): %s", e.StatusCode, e.Message)
 }
 
+// ResponseError marks an HTTP 2xx OAuth response whose body could not be
+// parsed or validated. For a one-shot grant such as an authorization code the
+// server may already have consumed the request, so callers must treat the
+// response as terminal instead of retrying the same request.
+type ResponseError struct {
+	Err error
+}
+
+func (e *ResponseError) Error() string {
+	if e == nil || e.Err == nil {
+		return "oauth response is unusable"
+	}
+	return e.Err.Error()
+}
+
+func (e *ResponseError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 // PermanentRefreshRejection reports whether the stored refresh token is dead
 // and the user must sign in again.
 func (e *APIError) PermanentRefreshRejection() bool {

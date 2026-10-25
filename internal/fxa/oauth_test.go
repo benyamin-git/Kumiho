@@ -284,6 +284,40 @@ func TestDestroy(t *testing.T) {
 	}
 }
 
+func TestExchangeCodeUnusableResponse(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"malformed JSON", `{"access_token":`},
+		{"missing access token", `{"refresh_token":"refresh-1"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, tc.body)
+			}))
+			defer srv.Close()
+
+			c := NewClient()
+			c.TokenEndpoint = srv.URL
+			_, err := c.ExchangeCode(context.Background(), "the-code", "the-verifier", OAuthRedirectURI)
+			var responseErr *ResponseError
+			if !errors.As(err, &responseErr) {
+				t.Fatalf("error = %v, want *ResponseError", err)
+			}
+			var apiErr *APIError
+			if errors.As(err, &apiErr) {
+				t.Fatalf("error = %v, must not be an APIError", err)
+			}
+			if responseErr.Error() == "" {
+				t.Fatal("ResponseError has an empty message")
+			}
+		})
+	}
+}
+
 func TestOAuthErrorParsing(t *testing.T) {
 	t.Run("exchange 400", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

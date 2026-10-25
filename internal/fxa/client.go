@@ -194,10 +194,10 @@ func (c *Client) tokensFromResponse(raw []byte, fallbackRefresh string) (*Tokens
 		ExpiresIn    int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, fmt.Errorf("oauth response: %w", err)
+		return nil, &ResponseError{Err: fmt.Errorf("oauth response: %w", err)}
 	}
 	if resp.AccessToken == "" {
-		return nil, errors.New("oauth response is missing access_token")
+		return nil, &ResponseError{Err: errors.New("oauth response is missing access_token")}
 	}
 	ttl := resp.ExpiresIn
 	if ttl <= 0 {
