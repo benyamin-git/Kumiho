@@ -6,7 +6,7 @@ LDFLAGS := -s -w -X $(MODULE)/internal/version.Version=$(VERSION) -X $(MODULE)/i
 GRADLE ?= ./gradlew
 GRADLE_FLAGS ?=
 
-.PHONY: all build build-arm64 build-windows build-gui build-probe build-web android-setup android-aar android-aar-emulator android-debug android-test android-emulator-test android-release android-verify test test-integration vet fmt lint clean
+.PHONY: all build build-arm64 build-windows build-gui build-probe build-web android-setup android-aar android-aar-emulator android-debug android-test android-emulator-test android-tv-emulator-test android-release android-verify test test-integration vet fmt lint clean
 
 all: build
 
@@ -57,6 +57,10 @@ android-test:
 android-emulator-test:
 	bash scripts/android-build-aar.sh --emulator
 	GRADLE="$(GRADLE)" GRADLE_FLAGS="$(GRADLE_FLAGS)" bash scripts/android-connected-test.sh
+
+android-tv-emulator-test:
+	bash scripts/android-build-aar.sh --emulator
+	GRADLE="$(GRADLE)" GRADLE_FLAGS="$(GRADLE_FLAGS)" bash scripts/android-tv-connected-test.sh
 
 android-release:
 	@test -n "$(KUMIHO_VERSION)" || { echo "usage: make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>" >&2; exit 2; }

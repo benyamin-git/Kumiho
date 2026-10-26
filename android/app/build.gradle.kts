@@ -156,6 +156,9 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.browser)
+    implementation(libs.androidx.tv.material)
+    implementation(libs.androidx.tv.foundation)
+    implementation(libs.androidx.tvprovider)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

@@ -191,7 +191,7 @@ pkg_installed() {
 ensure_sdk_packages() {
 	local missing=()
 	local pkg
-	for pkg in platform-tools "platforms;$SDK_PLATFORM" "platforms;$COMPILE_SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
+	for pkg in platform-tools "platforms;$SDK_PLATFORM" "platforms;$COMPILE_SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64" "system-images;$SDK_PLATFORM;google-tv;x86_64"; do
 		if pkg_installed "$pkg"; then
 			ok "installed: $pkg"
 		else
@@ -281,7 +281,7 @@ check_mode() {
 	if [ "$sdkmgr_found" = 1 ]; then
 		report 0 "sdkmanager: $v"
 		local pkg
-		for pkg in platform-tools "platforms;$SDK_PLATFORM" "platforms;$COMPILE_SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64"; do
+		for pkg in platform-tools "platforms;$SDK_PLATFORM" "platforms;$COMPILE_SDK_PLATFORM" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VER" emulator "system-images;$SDK_PLATFORM;google_apis;x86_64" "system-images;$SDK_PLATFORM;google-tv;x86_64"; do
 			if pkg_installed "$pkg"; then
 				report 0 "sdk package: $pkg"
 			else
