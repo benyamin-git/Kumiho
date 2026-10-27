@@ -275,3 +275,8 @@ them locally for any change under `android/`, `mobile/` or
 - **Never push without being asked.** Do not create tags, amend published
   commits, force-push, or open PRs unless explicitly requested.
 - `.superpowers/` and `.ai-state` are local scratch; keep them out of commits.
+
+## T3 Code
+
+T3 Code is the primary harness. Do not restart `kumiho.service`, its emulator,
+or any Gradle build from a T3 thread; follow the service rules above.
