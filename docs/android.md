@@ -87,6 +87,21 @@ refuses an update signed with a different key — uninstalling first erases the
 app's private state. A debug build cannot replace a release build (different
 package), and vice versa.
 
+## Android TV and Google TV
+
+One APK serves phones and televisions. On a TV, Kumiho uses the same engine,
+`VpnService`, accounts, settings and split tunneling with a ten-foot Compose
+for TV shell: a left rail, a large focus ring and remote-only navigation. The
+first run is the same four steps; browser sign-in uses the same in-app WebView
+with the paste and password fallbacks, and every Settings row opens a TV-sized
+dialog.
+
+The TV launcher shows the Kumiho banner from `android:banner`, and Google TV
+can show a **Kumiho** channel with **Open Kumiho** and **Connect** cards. The
+channel is best-effort: open the app once after installing, then let the
+launcher refresh. See [docs/android-tv.md](android-tv.md) for install,
+remote-navigation, channel, performance and physical-TV checklists.
+
 ## First run: the four-step setup
 
 The setup flow runs before the shell and has four numbered steps. The bottom

@@ -196,6 +196,31 @@ files when it finishes.
   on each APK. A 16 KB emulator/device run is optional and pending; do not
   claim it.
 
+## Android TV tests
+
+The TV suite lives under `android/app/src/androidTest/java/dev/benyamin/kumiho/tv/`
+and is filtered by the `dev.benyamin.kumiho.tv` package. Every TV test calls
+`TvEnvironment.isTelevision`, so the phone job skips the package and the TV job
+skips the phone tests.
+
+Create the Google TV AVD once (the setup script already installs the image):
+
+    sdkmanager "system-images;android-36;google-tv;x86_64"
+    avdmanager create avd -n kumiho-tv-api36 \
+      -k "system-images;android-36;google-tv;x86_64" -d tv_1080p
+    emulator -avd kumiho-tv-api36 -no-snapshot -gpu swiftshader_indirect &
+
+Then run:
+
+    make android-tv-emulator-test
+
+This builds the x86_64 AAR and runs only the TV package. The screenshot test
+writes Home, setup, Locations and Settings captures in Light, Dark and OLED to
+`/sdcard/Android/data/dev.benyamin.kumiho.debug/files/tv-screenshots`; pull
+them with `adb pull` and review overscan, focus and contrast.
+
+The TV physical checklist is in [docs/android-tv.md](android-tv.md#physical-tv-checklist-sony-x90l-api-31).
+
 ## APK verification
 
 `scripts/android-verify-apk.sh` is the release gate. It checks the badging

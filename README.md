@@ -1,7 +1,8 @@
 # Kumiho
 
-**Status:** v0.6.0 — working Linux and Windows 11 clients plus a native Android
-app: daemon + TUI/CLI/GUI over a Unix socket (Linux) or named pipe (Windows),
+**Status:** v0.7.0 (unreleased) — working Linux and Windows 11 clients plus a
+native Android app for phones and Android TV: daemon + TUI/CLI/GUI over a Unix
+socket (Linux) or named pipe (Windows),
 Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
 kill switch, watchdog with edge rotation, runtime settings, log viewer, account
@@ -11,7 +12,11 @@ labels, rotation and quota polling, and the same account surface in the CLI,
 TUI, Windows GUI and Android app. v0.6.1 (unreleased) replaces the browser
 sign-in exchange with direct Firefox Accounts OAuth: Android finishes it in an
 in-app WebView, desktop clients paste the browser's redirect URL, and old
-opaque browser accounts are removed. v0.5.2 adds
+opaque browser accounts are removed. v0.7.0 adds Android TV: one APK for
+phones and televisions, a Compose for TV shell with remote-only navigation,
+full parity for setup, dashboard, locations, account, settings, split
+tunneling, logs and diagnostics, a TV launcher banner and an optional Google
+TV channel with **Open** and **Connect** cards. v0.5.2 adds
 an opt-in Android setting that keeps LAN connections alive across a VPN
 transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
@@ -54,7 +59,8 @@ SERVFAIL instead of falling back to plaintext.
 Current targets: **Ubuntu 24.04 LTS amd64/arm64** (systemd daemon + TUI/CLI
 over a Unix socket), **Windows 11 amd64** (Windows service + Wintun, and
 TUI/CLI/GUI over a named pipe) and **Android 8.0+ (API 26+) on arm64-v8a or
-armeabi-v7a** (sideloaded app with the engine embedded in-process).
+armeabi-v7a**, phones and Android TV/Google TV (sideloaded app with the engine
+embedded in-process).
 
 ## Screenshots
 
@@ -96,7 +102,25 @@ before release:
   engine embedded in-process; physical acceptance is a partial pass with
   user-accepted exceptions, and the signed `v0.6.0` release is published
   (see [docs/android-testing.md](docs/android-testing.md)).
+- **Android TV / Google TV** — the same APK and engine with a Compose for TV
+  shell, a launcher banner and an optional Google TV channel; see
+  [docs/android-tv.md](docs/android-tv.md).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
+
+## What's new in v0.7.0 (unreleased)
+
+- **One APK, phone and TV** — the Android app detects a television at runtime
+  and swaps the phone shell for a ten-foot Compose for TV shell. Phone setup
+  and layouts are unchanged.
+- **Full TV parity** — setup and browser sign-in, Dashboard with connect
+  options, Locations with search/ping, Account management, all 21 Settings
+  rows and dialogs, split tunneling, Logs and Diagnostics, with remote-only
+  D-pad navigation.
+- **TV launcher presence** — `LEANBACK_LAUNCHER`, a 320×180 banner, a TV icon
+  and a best-effort Google TV preview channel with **Open Kumiho** and
+  **Connect** cards (`kumiho://tv/open`, `kumiho://tv/connect`).
+- **TV tests and CI** — a Google TV AVD target, `make android-tv-emulator-test`,
+  TV connected coverage, screenshot capture and a separate `android-tv` CI job.
 
 ## What's new in v0.6.1 (unreleased)
 
@@ -278,8 +302,9 @@ for common issues.
   info → Run anyway), and `install.ps1` needs an Administrator shell.
 - On Android, IPv6 is captured and blackholed rather than tunneled, so apps
   can wait for an `AAAA` attempt to fail before falling back to IPv4. The UI
-  is English-only, there is no home-screen widget or launcher shortcut (the
-  Quick Settings tile covers fast access), and there is no auto-update.
+  is English-only and there is no auto-update (the Quick Settings tile covers
+  fast access on phones, and the TV launcher banner plus an optional Google TV
+  channel cover televisions).
   Always-on and lockdown are Android settings and some OEM battery managers
   delay or refuse Always-on starts. Physical acceptance is a partial pass with
   user-accepted exceptions; the signed `v0.6.0` release is published. See
@@ -305,6 +330,7 @@ Cross-compile from any OS with Go >= 1.27:
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
+    make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
     make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
@@ -399,7 +425,8 @@ changes the daemon, CLI or TUI.
 
 ## Android app
 
-Kumiho's Android app (v0.6.0) is a native sideloaded client, not a front end
+Kumiho's Android app (v0.7.0) is a native sideloaded client for phones and
+Android TV/Google TV, not a front end
 for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
 notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
@@ -419,13 +446,17 @@ full-screen in-app **Mozilla account** WebView (with paste and password
 fallbacks). Split tunneling, the five-account
 list with browser re-authentication and rotation, logs with sharing, diagnostics
 and proxy-only mode (local SOCKS5/HTTP without a VPN interface) are all there
-too.
+too. On Android TV and Google TV the same screens use the Compose for TV shell:
+a left rail, remote-only focus traversal, a launcher banner and an optional
+channel with **Open** and **Connect** cards; see
+[docs/android-tv.md](docs/android-tv.md).
 
-> **Release status.** The app builds and its unit, lint, assemble and
-> emulator suites pass. Physical first-connect/DNS/browsing/exit-IP acceptance
-> passed on a Galaxy S25 FE for v0.5.2; the remaining checklist items are
-> user-accepted exceptions (a partial acceptance, not a full pass), and v0.6.0
-> physical acceptance is pending. The production-signed
+> **Release status.** The app builds and its unit, lint and assemble gates pass;
+> the phone emulator suite passed in earlier cycles, and the new TV connected
+> suite is prepared but not yet run. Physical first-connect/DNS/browsing/exit-IP
+> acceptance passed on a Galaxy S25 FE for v0.5.2; the remaining checklist items
+> are user-accepted exceptions (a partial acceptance, not a full pass), and
+> v0.6.0 and v0.7.0 physical acceptance is pending. The production-signed
 > [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
 > carries three APKs and `SHA256SUMS`. Verify a download against the release
 > checksums; a local APK is not a published release.

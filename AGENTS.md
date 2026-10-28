@@ -7,8 +7,8 @@ entitlement, plus a native Android app with the same engine embedded in
 process. The daemon owns the desktop tunnel; clients — the TUI, the CLI and a
 Windows GUI — talk to it over local IPC. Supported targets: **Ubuntu 24.04
 LTS** (amd64/arm64, systemd + Unix socket), **Windows 11 amd64** (service +
-Wintun + named pipe) and **Android 8.0+** (arm64-v8a/armeabi-v7a, sideloaded
-`VpnService` app over gomobile). Read
+Wintun + named pipe), **Android 8.0+** (arm64-v8a/armeabi-v7a, sideloaded
+`VpnService` app over gomobile) on phones and Android TV/Google TV. Read
 [README.md](README.md) first; the protocol and design live in
 [PLAN.md](PLAN.md), user documentation in [docs/](docs/) (Android:
 [docs/android.md](docs/android.md),
@@ -31,6 +31,7 @@ needed to build or test.
     make android-debug  # AAR + debug APK
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
+    make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
     make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     make android-verify # verify every release APK in dist/
     make test           # go test ./...
@@ -109,6 +110,8 @@ them locally for any change under `android/`, `mobile/` or
   - `android` (ubuntu-24.04): JDK 17 + SDK/NDK/gomobile, emulator AAR, JVM
     tests/lint/debug APK, the API 36 connected suite, an unsigned
     `assembleRelease`, and the verifier over the unsigned release APKs.
+  - `android-tv` (ubuntu-24.04): the same JVM/lint/assemble build and the
+    API 36 Google TV connected suite (`tv_1080p`, `scripts/android-tv-connected-test.sh`).
 - `.github/workflows/release.yml` — on `v*` tags: builds linux/amd64,
   linux/arm64 and windows/amd64; packages zips (CLI, `kumiho-gui.exe`,
   `wintun.dll`, `install.sh`/`install.ps1`, systemd units, licenses including
@@ -207,6 +210,9 @@ them locally for any change under `android/`, `mobile/` or
   is only the validated system-browser fallback when the WebView cannot be
   created, and the waiting card offers paste and password alternatives. WebView
   cookies persist across attempts and are cleared on sign-out.
+  `ui/tv/` is the additive ten-foot shell (rail, focus surfaces, TV-native
+  screens, setup and account reuse); `tv/TvEnvironment` selects it and
+  `tv/TvChannelPublisher` publishes the best-effort Google TV channel.
   `res/xml/network_security_config.xml` permits cleartext only for
   `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android
   provider adopts the detached
@@ -236,6 +242,9 @@ them locally for any change under `android/`, `mobile/` or
 - Emoji: country-flag emoji in locations are a deliberate, user-approved
   departure from design ban 3 (v0.5.1); Windows renders regional-indicator
   letters.
+- TV: Compose for TV type scale and remote-first focus (larger type, focus
+  ring, overscan-safe frame) is an approved form-factor departure, not a
+  second palette. TV assets: `tv_banner`, `ic_launcher_tv`, channel logo.
 - Approved: 2026-10-15
 
 ## Vendor policy

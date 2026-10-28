@@ -54,6 +54,12 @@ https://kotlinlang.org)
     Kumiho; the Android UI is original Compose code and no code from FoxyVPN's
     Android app is included.
 
+Compose for TV (androidx.tv:tv-material) and TvProvider
+(androidx.tvprovider:tvprovider) (https://developer.android.com/training/tv)
+    Apache License 2.0. TV Material 3 components and the preview-channel /
+    preview-program API used by the Android TV shell and the Google TV channel.
+    Resolved by Gradle and pinned in android/gradle/libs.versions.toml.
+
 gomobile / golang.org/x/mobile (https://pkg.go.dev/golang.org/x/mobile)
     BSD 3-Clause License. Tool used to bind the Go engine into the Android
     app as an AAR. The generated archive is a build output and is not

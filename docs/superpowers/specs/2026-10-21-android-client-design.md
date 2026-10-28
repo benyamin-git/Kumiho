@@ -91,6 +91,9 @@ surfaces, and every desktop setting remains reachable.
 
 - Google Play or F-Droid distribution; sideloaded GitHub Releases only.
 - Home-screen widget, launcher long-press shortcuts, Android TV, Wear OS, Auto.
+  **Superseded (2026-10-26):** Android TV is now an approved target; see
+  [2026-10-26-android-tv-design.md](2026-10-26-android-tv-design.md). The
+  widget, long-press shortcuts, Wear OS and Auto remain out.
 - iOS, macOS, or any non-Android platform.
 - Localization; English-only UI (logical start/end layout is still used).
 - Material You / dynamic color.

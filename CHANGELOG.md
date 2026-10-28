@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-10-28
+
+Android TV and Google TV support. The Android app now ships one APK for phones
+and televisions and switches to a ten-foot Compose for TV shell when it detects
+a television.
+
+### Added
+
+- **Android TV shell** with a left rail, focus surfaces, overscan-safe layout
+  and remote-only navigation for Home, Locations, Account and Settings; Logs
+  and Diagnostics are under More.
+- **Full TV parity** for the four-step setup and in-app Firefox Accounts
+  WebView, the dashboard and connect options, the location tree, the
+  five-account surface, all 21 Settings rows and their dialogs, split
+  tunneling, Logs and Diagnostics.
+- **TV launcher presence**: `LEANBACK_LAUNCHER`, a 320×180 banner, a 160×160
+  TV icon and a best-effort Google TV preview channel with **Open Kumiho** and
+  **Connect** cards (`kumiho://tv/open`, `kumiho://tv/connect`).
+- **TV tests and CI**: a Google TV AVD, `make android-tv-emulator-test`, TV
+  connected coverage, screenshot capture and a separate `android-tv` CI job.
+
+### Changed
+
+- The Android default version is now `0.7.0` (versionCode 700). Debug builds
+  remain `dev.benyamin.kumiho.debug`.
+
+### Notes
+
+- The channel is app-owned and launcher-controlled; some launchers hide it
+  until the app has been opened once.
+- Physical Sony X90L acceptance of the TV shell and the watchdog redial step
+  is still pending.
+
 ## [0.6.1] - unreleased
 
 Direct Firefox Accounts OAuth replaces the v0.6.0 browser sign-in. Browser
