@@ -1490,7 +1490,10 @@ func (c *Controller) ensureAccount(ctx context.Context) {
 		c.account = &cp
 		c.accountLoaded = true
 		c.accountAuth = c.status.Authenticated
-		c.accountNotice = clearNoticeError(c.accountNotice)
+		// Only the entitlement-load error is stale here. A terminal sign-in
+		// failure shares this slot and must survive the background refresh
+		// (the Account screen keeps it until another action replaces it).
+		c.accountNotice = clearAccountLoadNotice(c.accountNotice)
 		c.mu.Unlock()
 	}()
 }
@@ -1706,6 +1709,16 @@ func (c *Controller) clearNoticeError(slot noticeSlot) {
 // accounts_list must not erase a Guardian failure (and vice versa).
 func clearAccountListNotice(n *Notice) *Notice {
 	if n != nil && n.Tone == toneBad && strings.HasPrefix(n.Message, "could not load accounts: ") {
+		return nil
+	}
+	return n
+}
+
+// clearAccountLoadNotice clears only the entitlement load error. Sign-in and
+// account-add failures use the same slot and must survive a successful
+// background account refresh.
+func clearAccountLoadNotice(n *Notice) *Notice {
+	if n != nil && n.Tone == toneBad && strings.HasPrefix(n.Message, "could not load the account: ") {
 		return nil
 	}
 	return n
