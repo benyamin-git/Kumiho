@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +36,32 @@ type upstreamSession interface {
 	Totals() (up, down int64)
 	IsConnected() bool
 	Close() error
+}
+
+// defaultDialUpstream normalizes a failed dial to a nil interface. Returning
+// upstream.Dial's typed nil *Session directly would wrap it in a non-nil
+// upstreamSession, defeating Connect's nil check and handing a nil session to
+// the data path.
+func defaultDialUpstream(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
+	sess, err := upstream.Dial(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if sess == nil {
+		return nil, errors.New("upstream: dial returned a nil session")
+	}
+	return sess, nil
+}
+
+// isNilSession reports whether sess is nil or a typed-nil pointer. A typed
+// nil stored in the interface is not equal to nil; a dialer must never be
+// allowed to turn a failed connect into a data path over a nil session.
+func isNilSession(sess upstreamSession) bool {
+	if sess == nil {
+		return true
+	}
+	v := reflect.ValueOf(sess)
+	return v.Kind() == reflect.Ptr && v.IsNil()
 }
 
 // fatalError stops the tunnel until user action (quota, token).
@@ -136,7 +163,10 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 			}
 		}
 	}
-	if sess == nil {
+	if isNilSession(sess) {
+		if lastErr == nil {
+			lastErr = errors.New("upstream: dial returned a nil session")
+		}
 		err = fmt.Errorf("connect %s: %w", cand.Address(), lastErr)
 		c.connectFailed(err)
 		return err
@@ -777,6 +807,10 @@ func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candid
 		KeepaliveCheck:   keepaliveCheck,
 		KeepaliveIdle:    keepaliveIdle,
 		KeepaliveTimeout: keepaliveTimeoutFor(cfg.KeepaliveProfile),
+		// Older Android TV CA stores lack GlobalSign Root E46, which the
+		// Fastly MASQUE edge chain uses; the pool carries the system roots
+		// plus that anchor.
+		RootCAs: upstream.EdgeRootCAs(),
 		// The marked direct dialer stays wired for the direct path and as
 		// the dialer that reaches the proxy itself.
 		Dialer: c.upstreamDialer,

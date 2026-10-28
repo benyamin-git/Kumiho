@@ -225,6 +225,9 @@ func (c *Controller) redialOnce(stop <-chan struct{}) (upstreamSession, error) {
 		return nil, err
 	}
 	sess, err := c.dialUpstream(ctx, opts)
+	if err == nil && isNilSession(sess) {
+		return nil, errors.New("upstream: dial returned a nil session")
+	}
 	if err == nil {
 		c.rememberEdgePeer(cand.Host, sess)
 	}

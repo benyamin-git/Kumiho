@@ -196,11 +196,9 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		rotationQuotaTimeout: 5 * time.Second,
 		exitCheckURL:         "https://www.cloudflare.com/cdn-cgi/trace",
 		browserTimeout:       10 * time.Minute,
-		dialUpstream: func(ctx context.Context, opts upstream.Options) (upstreamSession, error) {
-			return upstream.Dial(ctx, opts)
-		},
-		state: StateUnauthenticated,
-		since: time.Now(),
+		dialUpstream:         defaultDialUpstream,
+		state:                StateUnauthenticated,
+		since:                time.Now(),
 
 		watchdogInterval: defaultWatchdogInterval,
 		redialJitterMin:  defaultRedialJitterMin,

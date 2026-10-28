@@ -175,6 +175,53 @@ func TestConnectValidation(t *testing.T) {
 	}
 }
 
+func TestDefaultDialUpstreamReturnsNilInterfaceOnError(t *testing.T) {
+	sess, err := defaultDialUpstream(context.Background(), upstream.Options{})
+	if err == nil {
+		t.Fatal("defaultDialUpstream succeeded without a host")
+	}
+	if sess != nil {
+		t.Fatalf("defaultDialUpstream session = %#v, want a nil interface", sess)
+	}
+}
+
+// A dialer that returns a typed-nil *upstream.Session with an error must not
+// turn into a data path over a nil session. Before the typed-nil guard this
+// panicked in rememberEdgePeer after logging "edge session up".
+func TestConnectTypedNilDialerFailsCleanly(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	ctrl.exitCheckURL = ""
+
+	oldMin, oldMax := dialRetryBackoffMin, dialRetryBackoffMax
+	dialRetryBackoffMin, dialRetryBackoffMax = time.Millisecond, 2*time.Millisecond
+	defer func() { dialRetryBackoffMin, dialRetryBackoffMax = oldMin, oldMax }()
+
+	dialErr := errors.New("upstream: TLS handshake: certificate signed by unknown authority")
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		return (*upstream.Session)(nil), dialErr
+	}
+
+	err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true})
+	if err == nil {
+		t.Fatal("Connect succeeded with a typed-nil session")
+	}
+	if !strings.Contains(err.Error(), dialErr.Error()) {
+		t.Fatalf("Connect error = %v, want the dial error %v", err, dialErr)
+	}
+	if st := ctrl.Snapshot(); st.State != string(StateIdle) {
+		t.Fatalf("state after the failed connect = %s, want idle", st.State)
+	}
+}
+
 func guardianPassServer(t *testing.T, token string, quota *atomic.Int32) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
