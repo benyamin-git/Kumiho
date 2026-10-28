@@ -91,6 +91,12 @@ import kotlinx.coroutines.withContext
 fun SettingsRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    content: @Composable (SettingsState, SettingsAppState, SettingsActions) -> Unit = { state, appState, actions ->
+        SettingsScreen(state = state, appState = appState, actions = actions, modifier = modifier)
+    },
+    splitContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
+        SplitTunnelRoute(container = container, onBack = onBack, modifier = modifier)
+    },
 ) {
     val coordinator = container.vpnServiceCoordinator
     val serviceState by coordinator.state.collectAsStateWithLifecycle()
@@ -106,11 +112,7 @@ fun SettingsRoute(
     // rotation through rememberSaveable.
     var splitOpen by rememberSaveable { mutableStateOf(false) }
     if (splitOpen) {
-        SplitTunnelRoute(
-            container = container,
-            onBack = { splitOpen = false },
-            modifier = modifier,
-        )
+        splitContent { splitOpen = false }
         return
     }
 
@@ -185,54 +187,51 @@ fun SettingsRoute(
         }
     }
 
-    SettingsScreen(
-        state = state,
-        appState = SettingsAppState(
-            theme = theme,
-            accent = accent,
-            accentPreviews = previews,
-            alwaysOn = serviceState.alwaysOn,
-            lockdown = serviceState.lockdown,
-            notificationsAllowed = notificationsAllowed,
-            batteryUnrestricted = batteryUnrestricted,
-            launchError = launchError,
-            splitMode = splitState.settings.mode,
-            splitAppCount = splitState.settings.packages.size,
-            bypassEnabled = bypassState.enabled,
-            bypassLoaded = !bypassState.loading,
-            bypassNeedsReconnect = bypassReconnect,
-            bypassError = bypassState.error,
-        ),
-        actions = SettingsActions(
-            onToggleAdvanced = settingsViewModel::toggleAdvanced,
-            onToggle = settingsViewModel::toggle,
-            onApply = settingsViewModel::apply,
-            onReset = settingsViewModel::reset,
-            onClearError = settingsViewModel::clearError,
-            onRetryLoad = settingsViewModel::retryLoad,
-            onRetryNotice = settingsViewModel::retryNotice,
-            onDismissNotice = settingsViewModel::dismissNotice,
-            onThemeSelected = container.themeRepository::setTheme,
-            onAccentSelected = container.themeRepository::setAccent,
-            onCheckForUpdates = settingsViewModel::checkForUpdates,
-            onOpenRelease = { url ->
-                if (url.startsWith("https://")) {
-                    open(Intent(Intent.ACTION_VIEW, url.toUri()))
-                }
-            },
-            onOpenNotificationSettings = {
-                open(PermissionController.notificationSettingsIntent(context))
-            },
-            onOpenBatterySettings = {
-                open(PermissionController.batterySettingsIntent())
-            },
-            onOpenVpnSettings = { open(PermissionController.vpnSettingsIntent()) },
-            onDismissLaunchError = { launchError = null },
-            onToggleBypass = container.allowBypassRepository::setEnabled,
-            onOpenSplitTunneling = { splitOpen = true },
-        ),
-        modifier = modifier,
+    val appState = SettingsAppState(
+        theme = theme,
+        accent = accent,
+        accentPreviews = previews,
+        alwaysOn = serviceState.alwaysOn,
+        lockdown = serviceState.lockdown,
+        notificationsAllowed = notificationsAllowed,
+        batteryUnrestricted = batteryUnrestricted,
+        launchError = launchError,
+        splitMode = splitState.settings.mode,
+        splitAppCount = splitState.settings.packages.size,
+        bypassEnabled = bypassState.enabled,
+        bypassLoaded = !bypassState.loading,
+        bypassNeedsReconnect = bypassReconnect,
+        bypassError = bypassState.error,
     )
+    val actions = SettingsActions(
+        onToggleAdvanced = settingsViewModel::toggleAdvanced,
+        onToggle = settingsViewModel::toggle,
+        onApply = settingsViewModel::apply,
+        onReset = settingsViewModel::reset,
+        onClearError = settingsViewModel::clearError,
+        onRetryLoad = settingsViewModel::retryLoad,
+        onRetryNotice = settingsViewModel::retryNotice,
+        onDismissNotice = settingsViewModel::dismissNotice,
+        onThemeSelected = container.themeRepository::setTheme,
+        onAccentSelected = container.themeRepository::setAccent,
+        onCheckForUpdates = settingsViewModel::checkForUpdates,
+        onOpenRelease = { url ->
+            if (url.startsWith("https://")) {
+                open(Intent(Intent.ACTION_VIEW, url.toUri()))
+            }
+        },
+        onOpenNotificationSettings = {
+            open(PermissionController.notificationSettingsIntent(context))
+        },
+        onOpenBatterySettings = {
+            open(PermissionController.batterySettingsIntent())
+        },
+        onOpenVpnSettings = { open(PermissionController.vpnSettingsIntent()) },
+        onDismissLaunchError = { launchError = null },
+        onToggleBypass = container.allowBypassRepository::setEnabled,
+        onOpenSplitTunneling = { splitOpen = true },
+    )
+    content(state, appState, actions)
 }
 
 /**

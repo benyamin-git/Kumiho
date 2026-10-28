@@ -81,6 +81,9 @@ fun SplitTunnelRoute(
     container: AppContainer,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    content: @Composable (SplitTunnelUiState, Boolean, SplitTunnelActions) -> Unit = { state, reconnect, actions ->
+        SplitTunnelScreen(state = state, reconnectRequired = reconnect, actions = actions, modifier = modifier)
+    },
 ) {
     val repository = container.splitTunnelRepository
     val appsSource = container.installedAppsRepository
@@ -93,21 +96,17 @@ fun SplitTunnelRoute(
 
     BackHandler(onBack = onBack)
 
-    SplitTunnelScreen(
-        state = state,
-        reconnectRequired = reconnectRequired,
-        actions = SplitTunnelActions(
-            onModeSelected = splitViewModel::setMode,
-            onTogglePackage = splitViewModel::togglePackage,
-            onSearchChange = splitViewModel::onSearchChange,
-            onClearSearch = splitViewModel::clearSearch,
-            onShowSystem = splitViewModel::setShowSystem,
-            onRetryRepository = splitViewModel::retryRepository,
-            onRetryApps = splitViewModel::retryApps,
-            onBack = onBack,
-        ),
-        modifier = modifier,
+    val splitActions = SplitTunnelActions(
+        onModeSelected = splitViewModel::setMode,
+        onTogglePackage = splitViewModel::togglePackage,
+        onSearchChange = splitViewModel::onSearchChange,
+        onClearSearch = splitViewModel::clearSearch,
+        onShowSystem = splitViewModel::setShowSystem,
+        onRetryRepository = splitViewModel::retryRepository,
+        onRetryApps = splitViewModel::retryApps,
+        onBack = onBack,
     )
+    content(state, reconnectRequired, splitActions)
 }
 
 /**

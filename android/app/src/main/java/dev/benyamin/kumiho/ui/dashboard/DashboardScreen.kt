@@ -59,6 +59,9 @@ import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 fun DashboardRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    content: @Composable (DashboardState, DashboardActions) -> Unit = { state, actions ->
+        DashboardScreen(state = state, actions = actions, modifier = modifier)
+    },
 ) {
     val coordinator = container.vpnServiceCoordinator
     val serviceState by coordinator.state.collectAsStateWithLifecycle()
@@ -118,27 +121,24 @@ fun DashboardRoute(
         }
     }
 
-    DashboardScreen(
-        state = state,
-        actions = DashboardActions(
-            onPower = dashboardViewModel::onPower,
-            onOpenOptions = dashboardViewModel::openOptions,
-            onCloseOptions = dashboardViewModel::closeOptions,
-            onSelectRecommended = dashboardViewModel::selectRecommended,
-            onSelectSaved = dashboardViewModel::selectSaved,
-            onToggleCountry = dashboardViewModel::toggleCountry,
-            onSelectCity = dashboardViewModel::selectCity,
-            onToggleProxyOnly = dashboardViewModel::setProxyOnly,
-            onConnectFromOptions = dashboardViewModel::connectFromOptions,
-            onReloadLocations = dashboardViewModel::loadLocations,
-            onOpenVpnSettings = dashboardViewModel::openVpnSettings,
-            onConfirmLockdownDisconnect = dashboardViewModel::confirmLockdownDisconnect,
-            onCancelLockdown = dashboardViewModel::cancelLockdownPrompt,
-            onDismissNotice = dashboardViewModel::dismissNotice,
-            onRetryNotice = dashboardViewModel::retryNotice,
-        ),
-        modifier = modifier,
+    val actions = DashboardActions(
+        onPower = dashboardViewModel::onPower,
+        onOpenOptions = dashboardViewModel::openOptions,
+        onCloseOptions = dashboardViewModel::closeOptions,
+        onSelectRecommended = dashboardViewModel::selectRecommended,
+        onSelectSaved = dashboardViewModel::selectSaved,
+        onToggleCountry = dashboardViewModel::toggleCountry,
+        onSelectCity = dashboardViewModel::selectCity,
+        onToggleProxyOnly = dashboardViewModel::setProxyOnly,
+        onConnectFromOptions = dashboardViewModel::connectFromOptions,
+        onReloadLocations = dashboardViewModel::loadLocations,
+        onOpenVpnSettings = dashboardViewModel::openVpnSettings,
+        onConfirmLockdownDisconnect = dashboardViewModel::confirmLockdownDisconnect,
+        onCancelLockdown = dashboardViewModel::cancelLockdownPrompt,
+        onDismissNotice = dashboardViewModel::dismissNotice,
+        onRetryNotice = dashboardViewModel::retryNotice,
     )
+    content(state, actions)
 }
 
 /** Every callback the stateless dashboard needs; grouped to stay readable. */
@@ -303,13 +303,13 @@ private fun NoticeRow(
 }
 
 @Composable
-private fun noticeText(text: NoticeText): String = when (text) {
+internal fun noticeText(text: NoticeText): String = when (text) {
     is NoticeText.Raw -> text.text
     is NoticeText.Local -> stringResource(messageResource(text.message))
 }
 
 @Composable
-private fun noticeActionLabel(action: DashboardNoticeAction): String = stringResource(
+internal fun noticeActionLabel(action: DashboardNoticeAction): String = stringResource(
     when (action) {
         DashboardNoticeAction.RETRY_REFRESH,
         DashboardNoticeAction.RETRY_CONNECT,

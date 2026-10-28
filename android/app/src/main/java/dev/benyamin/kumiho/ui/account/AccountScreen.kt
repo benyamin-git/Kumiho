@@ -140,6 +140,9 @@ object AccountTags {
 fun AccountRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    content: @Composable (AccountUiState, AccountActions) -> Unit = { state, actions ->
+        AccountScreen(state = state, actions = actions, modifier = modifier)
+    },
 ) {
     val coordinator = container.vpnServiceCoordinator
     val serviceState by coordinator.state.collectAsStateWithLifecycle()
@@ -178,46 +181,43 @@ fun AccountRoute(
         onPauseOrDispose { viewModel.setScreenResumed(false) }
     }
 
-    AccountScreen(
-        state = state,
-        actions = AccountActions(
-            onRefresh = viewModel::refresh,
-            onRetry = viewModel::retry,
-            onDismissMessage = viewModel::dismissMessage,
-            onSubmitEmail = viewModel::submitEmail,
-            onSubmitPassword = viewModel::submitPassword,
-            onSubmitCode = viewModel::submitCode,
-            onRecheck = viewModel::recheckEmailLink,
-            onSignOut = viewModel::requestSignOut,
-            onDismissSignOut = viewModel::dismissSignOut,
-            onConfirmSignOut = viewModel::confirmSignOut,
-            onAddAccount = viewModel::openAddDialog,
-            onDismissAdd = viewModel::dismissAddDialog,
-            onAddBrowser = { viewModel.startBrowser() },
-            onAddPassword = viewModel::startPassword,
-            onUse = viewModel::useAccount,
-            onReauth = viewModel::reauth,
-            onRemoveRequest = viewModel::requestRemove,
-            onRemoveConfirm = viewModel::confirmRemove,
-            onDismissRemove = viewModel::dismissRemove,
-            onRenameRequest = viewModel::requestRename,
-            onRenameConfirm = viewModel::confirmRename,
-            onDismissRename = viewModel::dismissRename,
-            onRotation = viewModel::setRotation,
-            onThreshold = viewModel::setThreshold,
-            onOpenBrowser = viewModel::openBrowser,
-            onCloseBrowser = viewModel::closeBrowserWebView,
-            onBrowserRedirect = viewModel::submitBrowserRedirect,
-            onToggleBrowserPaste = viewModel::toggleBrowserPaste,
-            onBrowserPasteChange = viewModel::setBrowserPasteValue,
-            onBrowserPasteSubmit = viewModel::submitBrowserPaste,
-            onUseBrowserPassword = viewModel::startPassword,
-            onCancelBrowser = viewModel::cancelBrowser,
-            onBrowserUnavailable = viewModel::browserUnavailable,
-            onCancelAdd = viewModel::cancelAddAccount,
-        ),
-        modifier = modifier,
+    val actions = AccountActions(
+        onRefresh = viewModel::refresh,
+        onRetry = viewModel::retry,
+        onDismissMessage = viewModel::dismissMessage,
+        onSubmitEmail = viewModel::submitEmail,
+        onSubmitPassword = viewModel::submitPassword,
+        onSubmitCode = viewModel::submitCode,
+        onRecheck = viewModel::recheckEmailLink,
+        onSignOut = viewModel::requestSignOut,
+        onDismissSignOut = viewModel::dismissSignOut,
+        onConfirmSignOut = viewModel::confirmSignOut,
+        onAddAccount = viewModel::openAddDialog,
+        onDismissAdd = viewModel::dismissAddDialog,
+        onAddBrowser = { viewModel.startBrowser() },
+        onAddPassword = viewModel::startPassword,
+        onUse = viewModel::useAccount,
+        onReauth = viewModel::reauth,
+        onRemoveRequest = viewModel::requestRemove,
+        onRemoveConfirm = viewModel::confirmRemove,
+        onDismissRemove = viewModel::dismissRemove,
+        onRenameRequest = viewModel::requestRename,
+        onRenameConfirm = viewModel::confirmRename,
+        onDismissRename = viewModel::dismissRename,
+        onRotation = viewModel::setRotation,
+        onThreshold = viewModel::setThreshold,
+        onOpenBrowser = viewModel::openBrowser,
+        onCloseBrowser = viewModel::closeBrowserWebView,
+        onBrowserRedirect = viewModel::submitBrowserRedirect,
+        onToggleBrowserPaste = viewModel::toggleBrowserPaste,
+        onBrowserPasteChange = viewModel::setBrowserPasteValue,
+        onBrowserPasteSubmit = viewModel::submitBrowserPaste,
+        onUseBrowserPassword = viewModel::startPassword,
+        onCancelBrowser = viewModel::cancelBrowser,
+        onBrowserUnavailable = viewModel::browserUnavailable,
+        onCancelAdd = viewModel::cancelAddAccount,
     )
+    content(state, actions)
 }
 
 /** The stateless Account screen. */
@@ -1125,7 +1125,7 @@ private fun AccountWaitingSurface(error: String?, modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun accountNoticeText(message: AccountMessage?): String? = when (message) {
+internal fun accountNoticeText(message: AccountMessage?): String? = when (message) {
     null -> null
     AccountMessage.TIMEOUT -> stringResource(R.string.account_timeout)
     AccountMessage.LOAD_FAILED -> stringResource(R.string.account_load_failed)

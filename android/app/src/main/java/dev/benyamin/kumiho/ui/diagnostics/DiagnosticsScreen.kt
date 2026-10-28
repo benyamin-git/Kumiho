@@ -96,6 +96,24 @@ object DiagnosticsTags {
 fun DiagnosticsRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    content: @Composable (
+        DiagnosticsUiState,
+        Boolean,
+        SplitMode,
+        Int,
+        DiagnosticsActions,
+        String?,
+    ) -> Unit = { state, serviceBound, splitMode, splitAppCount, actions, launchError ->
+        DiagnosticsScreen(
+            state = state,
+            serviceBound = serviceBound,
+            splitMode = splitMode,
+            splitAppCount = splitAppCount,
+            actions = actions,
+            modifier = modifier,
+            launchError = launchError,
+        )
+    },
 ) {
     val coordinator = container.vpnServiceCoordinator
     val serviceState by coordinator.state.collectAsStateWithLifecycle()
@@ -128,32 +146,32 @@ fun DiagnosticsRoute(
         }
     }
 
-    DiagnosticsScreen(
-        state = state,
-        serviceBound = serviceState.binding,
-        splitMode = splitState.settings.mode,
-        splitAppCount = splitState.settings.packages.size,
-        launchError = launchError,
-        actions = DiagnosticsActions(
-            onRerun = viewModel::rerun,
-            onCopyReport = { report ->
-                clipboard.setText(AnnotatedString(report))
-                viewModel.notifyCopied()
-            },
-            onDismissMessage = {
-                launchError = null
-                viewModel.dismissMessage()
-            },
-            onOpenVpnSettings = { open(PermissionController.vpnSettingsIntent()) },
-            onOpenNotificationSettings = {
-                open(PermissionController.notificationSettingsIntent(context))
-            },
-            onOpenBatterySettings = { open(PermissionController.batterySettingsIntent()) },
-            onRequestReset = viewModel::requestReset,
-            onDismissReset = viewModel::dismissReset,
-            onConfirmReset = viewModel::confirmReset,
-        ),
-        modifier = modifier,
+    val actions = DiagnosticsActions(
+        onRerun = viewModel::rerun,
+        onCopyReport = { report ->
+            clipboard.setText(AnnotatedString(report))
+            viewModel.notifyCopied()
+        },
+        onDismissMessage = {
+            launchError = null
+            viewModel.dismissMessage()
+        },
+        onOpenVpnSettings = { open(PermissionController.vpnSettingsIntent()) },
+        onOpenNotificationSettings = {
+            open(PermissionController.notificationSettingsIntent(context))
+        },
+        onOpenBatterySettings = { open(PermissionController.batterySettingsIntent()) },
+        onRequestReset = viewModel::requestReset,
+        onDismissReset = viewModel::dismissReset,
+        onConfirmReset = viewModel::confirmReset,
+    )
+    content(
+        state,
+        serviceState.binding,
+        splitState.settings.mode,
+        splitState.settings.packages.size,
+        actions,
+        launchError,
     )
 }
 
@@ -723,7 +741,7 @@ private fun DiagnosticsWaitingSurface(error: String?, modifier: Modifier = Modif
 }
 
 @Composable
-private fun diagnosticsMessageText(message: DiagnosticsMessage?): String? = when (message) {
+internal fun diagnosticsMessageText(message: DiagnosticsMessage?): String? = when (message) {
     null -> null
     DiagnosticsMessage.RESET_DONE -> stringResource(R.string.diagnostics_reset_done)
     DiagnosticsMessage.RESET_FAILED -> stringResource(R.string.diagnostics_reset_failed)
@@ -732,7 +750,7 @@ private fun diagnosticsMessageText(message: DiagnosticsMessage?): String? = when
 }
 
 @Composable
-private fun checkTitle(name: String): String {
+internal fun checkTitle(name: String): String {
     val res = when (name) {
         "vpn-permission" -> R.string.diagnostics_check_vpn_permission
         "always-on" -> R.string.diagnostics_row_always_on
@@ -784,7 +802,7 @@ private fun privateDns(mode: String?): String = when (mode) {
     else -> stringResource(R.string.diagnostics_not_reported)
 }
 
-private fun DoctorStatus.labelRes(): Int = when (this) {
+internal fun DoctorStatus.labelRes(): Int = when (this) {
     DoctorStatus.OK -> R.string.diagnostics_status_ok
     DoctorStatus.WARN -> R.string.diagnostics_status_warn
     DoctorStatus.FAIL -> R.string.diagnostics_status_fail

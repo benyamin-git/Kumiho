@@ -106,6 +106,9 @@ class EngineLogsGateway(private val engine: EngineClient) : LogsGateway {
 fun LogsRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    content: @Composable (LogsUiState, LogsActions, String?) -> Unit = { state, actions, launchError ->
+        LogsScreen(state = state, actions = actions, modifier = modifier, launchError = launchError)
+    },
 ) {
     val coordinator = container.vpnServiceCoordinator
     val serviceState by coordinator.state.collectAsStateWithLifecycle()
@@ -134,50 +137,46 @@ fun LogsRoute(
     val exportFailed = stringResource(R.string.logs_export_failed)
     val shareTitle = stringResource(R.string.logs_share_title)
 
-    LogsScreen(
-        state = state,
-        launchError = launchError,
-        actions = LogsActions(
-            onLevelSelected = viewModel::setLevel,
-            onSearchChange = viewModel::setSearch,
-            onClearSearch = viewModel::clearSearch,
-            onFollowChange = viewModel::setFollow,
-            onClear = viewModel::clear,
-            onCopyLine = { entry ->
-                clipboard.setText(AnnotatedString(LogFormat.copyLine(entry)))
-                viewModel.notifyCopied()
-            },
-            onShare = {
-                try {
-                    val file = LogExporter.writeTo(
-                        LogExporter.exportsDir(context.cacheDir),
-                        state.entries,
-                        Instant.now(),
-                    )
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file,
-                    )
-                    val send = Intent(Intent.ACTION_SEND)
-                        .setType("text/plain")
-                        .putExtra(Intent.EXTRA_STREAM, uri)
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    context.startActivity(Intent.createChooser(send, shareTitle))
-                    launchError = null
-                } catch (error: RuntimeException) {
-                    launchError = error.message?.takeIf { it.isNotBlank() } ?: exportFailed
-                    viewModel.notifyExportFailed()
-                }
-            },
-            onDismissMessage = {
+    val actions = LogsActions(
+        onLevelSelected = viewModel::setLevel,
+        onSearchChange = viewModel::setSearch,
+        onClearSearch = viewModel::clearSearch,
+        onFollowChange = viewModel::setFollow,
+        onClear = viewModel::clear,
+        onCopyLine = { entry ->
+            clipboard.setText(AnnotatedString(LogFormat.copyLine(entry)))
+            viewModel.notifyCopied()
+        },
+        onShare = {
+            try {
+                val file = LogExporter.writeTo(
+                    LogExporter.exportsDir(context.cacheDir),
+                    state.entries,
+                    Instant.now(),
+                )
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file,
+                )
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                context.startActivity(Intent.createChooser(send, shareTitle))
                 launchError = null
-                viewModel.dismissMessage()
-            },
-            onRetry = viewModel::retry,
-        ),
-        modifier = modifier,
+            } catch (error: RuntimeException) {
+                launchError = error.message?.takeIf { it.isNotBlank() } ?: exportFailed
+                viewModel.notifyExportFailed()
+            }
+        },
+        onDismissMessage = {
+            launchError = null
+            viewModel.dismissMessage()
+        },
+        onRetry = viewModel::retry,
     )
+    content(state, actions, launchError)
 }
 
 /** The stateless logs console. */
@@ -519,7 +518,7 @@ private fun LogsWaitingSurface(error: String?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun logsMessageText(message: LogsMessage?): String? = when (message) {
+internal fun logsMessageText(message: LogsMessage?): String? = when (message) {
     null -> null
     LogsMessage.CLEARED -> stringResource(R.string.logs_cleared)
     LogsMessage.COPIED -> stringResource(R.string.logs_copied)

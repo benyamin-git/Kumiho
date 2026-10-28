@@ -237,7 +237,7 @@ fun BrowserWaitingCard(
 
 /** The local validation copy for the paste field, resolved by the UI. */
 @Composable
-private fun pasteMessageText(message: BrowserPasteMessage): String = stringResource(
+internal fun pasteMessageText(message: BrowserPasteMessage): String = stringResource(
     when (message) {
         BrowserPasteMessage.REQUIRED -> R.string.browser_waiting_paste_required
     },

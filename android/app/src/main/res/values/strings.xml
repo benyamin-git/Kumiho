@@ -2,6 +2,22 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Kumiho</string>
 
+    <!-- Android TV. -->
+    <string name="tv_loading">Loading Kumiho…</string>
+    <string name="tv_back">Back</string>
+    <string name="tv_locations_title">Locations</string>
+    <string name="tv_settings_title">Settings</string>
+    <string name="tv_logs_title">Logs</string>
+    <string name="tv_diagnostics_title">Diagnostics</string>
+    <string name="tv_diagnostics_facts">Android facts</string>
+    <string name="tv_logs_empty">No log lines yet.</string>
+    <string name="tv_channel_description">VPN status and one-press connect</string>
+    <string name="tv_channel_open_title">Open Kumiho</string>
+    <string name="tv_channel_open_text">See the dashboard, locations and account.</string>
+    <string name="tv_channel_connect_title">Connect</string>
+    <string name="tv_channel_connect_text">Open Kumiho and connect the tunnel.</string>
+    <string name="tv_options_back_hint">Press Back to close this page.</string>
+
     <!-- Shared components. -->
     <string name="power_description">Power</string>
 

@@ -42,14 +42,24 @@ import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.KumihoTypography
+import dev.benyamin.kumiho.ui.tv.TvRoot
+import dev.benyamin.kumiho.ui.tv.theme.TvKumihoTheme
 
 /**
  * The app root. It renders nothing themed until the stored palette has loaded,
  * so a dark or OLED choice never flashes light; a palette failure gets its own
  * explicit surface rather than a raw-colour fallback.
+ *
+ * [isTv] picks the ten-foot presentation; both branches share the container,
+ * the engine and every view model.
  */
 @Composable
-fun KumihoApp(container: AppContainer) {
+fun KumihoApp(
+    container: AppContainer,
+    isTv: Boolean,
+    tvConnectRequested: Boolean = false,
+    onTvConnectConsumed: () -> Unit = {},
+) {
     val paletteState by container.themeRepository.state.collectAsStateWithLifecycle()
     // null means "not read yet": a returning user must never see the setup
     // screen flash before the stored completion arrives.
@@ -59,19 +69,29 @@ fun KumihoApp(container: AppContainer) {
     when (val state = paletteState) {
         PaletteState.Loading -> KumihoLoadingSurface()
         is PaletteState.Error -> PaletteErrorSurface(state.message, container.themeRepository::retry)
-        is PaletteState.Ready -> KumihoTheme(colors = state.colors) {
-            when (setupComplete) {
-                null -> SetupGateLoading()
-                false -> SetupRoute(container)
-                true -> AppShell(
-                    nav = nav,
-                    home = { DashboardRoute(container) },
-                    locations = { LocationsRoute(container) },
-                    account = { AccountRoute(container) },
-                    settings = { SettingsRoute(container) },
-                    logs = { LogsRoute(container) },
-                    diagnostics = { DiagnosticsRoute(container) },
+        is PaletteState.Ready -> if (isTv) {
+            TvKumihoTheme(colors = state.colors) {
+                TvRoot(
+                    container = container,
+                    tvConnectRequested = tvConnectRequested,
+                    onConnectConsumed = onTvConnectConsumed,
                 )
+            }
+        } else {
+            KumihoTheme(colors = state.colors) {
+                when (setupComplete) {
+                    null -> SetupGateLoading()
+                    false -> SetupRoute(container)
+                    true -> AppShell(
+                        nav = nav,
+                        home = { DashboardRoute(container) },
+                        locations = { LocationsRoute(container) },
+                        account = { AccountRoute(container) },
+                        settings = { SettingsRoute(container) },
+                        logs = { LogsRoute(container) },
+                        diagnostics = { DiagnosticsRoute(container) },
+                    )
+                }
             }
         }
     }

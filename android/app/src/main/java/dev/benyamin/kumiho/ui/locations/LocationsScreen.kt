@@ -83,6 +83,9 @@ import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 fun LocationsRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    content: @Composable (LocationsState, LocationsActions) -> Unit = { state, actions ->
+        LocationsScreen(state = state, actions = actions, modifier = modifier)
+    },
 ) {
     val coordinator = container.vpnServiceCoordinator
     val serviceState by coordinator.state.collectAsStateWithLifecycle()
@@ -101,22 +104,19 @@ fun LocationsRoute(
     }
     val state by locationsViewModel.state.collectAsStateWithLifecycle()
 
-    LocationsScreen(
-        state = state,
-        actions = LocationsActions(
-            onQueryChange = locationsViewModel::onQueryChange,
-            onClearQuery = locationsViewModel::clearQuery,
-            onToggleCountry = locationsViewModel::toggleCountry,
-            onSelect = locationsViewModel::select,
-            onRefresh = locationsViewModel::refresh,
-            onRetryLoad = locationsViewModel::retryLoad,
-            onPingAll = locationsViewModel::pingAll,
-            onToggleAll = locationsViewModel::toggleAll,
-            onDismissNotice = locationsViewModel::dismissNotice,
-            onRetryNotice = locationsViewModel::retryNotice,
-        ),
-        modifier = modifier,
+    val actions = LocationsActions(
+        onQueryChange = locationsViewModel::onQueryChange,
+        onClearQuery = locationsViewModel::clearQuery,
+        onToggleCountry = locationsViewModel::toggleCountry,
+        onSelect = locationsViewModel::select,
+        onRefresh = locationsViewModel::refresh,
+        onRetryLoad = locationsViewModel::retryLoad,
+        onPingAll = locationsViewModel::pingAll,
+        onToggleAll = locationsViewModel::toggleAll,
+        onDismissNotice = locationsViewModel::dismissNotice,
+        onRetryNotice = locationsViewModel::retryNotice,
     )
+    content(state, actions)
 }
 
 /** Every callback the stateless Locations screen needs; grouped to stay readable. */
@@ -386,7 +386,7 @@ private fun SelectionSummary(
 
 /** `Recommended`, or `Country · City · host`; the raw address when unresolved. */
 @Composable
-private fun selectionText(selection: LocationSelection?): String {
+internal fun selectionText(selection: LocationSelection?): String {
     if (selection == null) return stringResource(R.string.locations_selection_none)
     val separator = stringResource(R.string.locations_selection_separator)
     val parts = mutableListOf<String>()
@@ -518,7 +518,7 @@ private fun NoticeBanner(
 }
 
 @Composable
-private fun noticeText(text: LocationsNoticeText): String = when (text) {
+internal fun noticeText(text: LocationsNoticeText): String = when (text) {
     is LocationsNoticeText.Raw -> text.text
     is LocationsNoticeText.Local -> stringResource(messageResource(text.message))
 }
@@ -813,7 +813,7 @@ private fun ServerDetail(server: Server, city: City) {
 }
 
 @Composable
-private fun latencyText(latency: LatencyState): String = when (latency) {
+internal fun latencyText(latency: LatencyState): String = when (latency) {
     LatencyState.Untested -> stringResource(R.string.locations_latency_none)
     LatencyState.Timeout -> stringResource(R.string.locations_latency_timeout)
     is LatencyState.Measured -> stringResource(R.string.locations_latency, latency.milliseconds)
