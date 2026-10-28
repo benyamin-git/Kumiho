@@ -97,6 +97,7 @@ private fun LocationCard(
         state.countryName(status?.location) ?: status?.location
     }
     val city = state.cityNameForServer(status?.server)
+        ?.takeUnless { it.equals(country, ignoreCase = true) }
     val name = when {
         state.locationIsRecommended -> stringResource(R.string.dashboard_location_recommended)
         country != null && city != null ->

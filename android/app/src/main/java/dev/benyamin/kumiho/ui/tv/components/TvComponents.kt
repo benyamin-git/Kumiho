@@ -79,11 +79,10 @@ fun TvButton(
         enabled = enabled,
         shape = MaterialTheme.shapes.small,
         containerColor = container,
+        focusRingColor = if (primary) colors.onPrimary else Color.Unspecified,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = TvDimens.Space2, vertical = TvDimens.Space1),
+            modifier = Modifier.padding(horizontal = TvDimens.Space2, vertical = TvDimens.Space1),
             contentAlignment = Alignment.Center,
         ) {
             Text(text = label, style = MaterialTheme.typography.labelLarge, color = content)

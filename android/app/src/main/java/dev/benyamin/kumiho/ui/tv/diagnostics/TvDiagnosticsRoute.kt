@@ -182,6 +182,11 @@ fun TvDiagnosticsScreen(
                         onClick = actions.onOpenNotificationSettings,
                         modifier = Modifier.testTag(DiagnosticsTags.OPEN_NOTIFICATION_SETTINGS),
                     )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+                ) {
                     TvButton(
                         label = stringResource(R.string.diagnostics_open_battery_settings),
                         onClick = actions.onOpenBatterySettings,

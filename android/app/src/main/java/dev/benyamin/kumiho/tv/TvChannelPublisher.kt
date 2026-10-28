@@ -58,28 +58,29 @@ object TvChannelPublisher {
         deletePrograms(context, helper, channelId)
 
         val now = System.currentTimeMillis()
-        publishProgram(
+        val openId = publishProgram(
             context = context,
             helper = helper,
             channelId = channelId,
             providerId = OPEN_ID,
             title = context.getString(R.string.tv_channel_open_title),
             description = context.getString(R.string.tv_channel_open_text),
-            poster = R.drawable.tv_channel_open,
+            poster = R.drawable.tv_channel_open_v2,
             deepLink = OPEN_URI,
             start = now,
         )
-        publishProgram(
+        val connectId = publishProgram(
             context = context,
             helper = helper,
             channelId = channelId,
             providerId = CONNECT_ID,
             title = context.getString(R.string.tv_channel_connect_title),
             description = context.getString(R.string.tv_channel_connect_text),
-            poster = R.drawable.tv_channel_connect,
+            poster = R.drawable.tv_channel_connect_v2,
             deepLink = CONNECT_URI,
             start = now + TimeUnit.SECONDS.toMillis(1),
         )
+        Log.i(TAG, "Published channel $channelId with programs $openId and $connectId")
     }
 
     private fun deletePrograms(
@@ -87,15 +88,24 @@ object TvChannelPublisher {
         helper: PreviewChannelHelper,
         channelId: Long,
     ) {
+        // TvProvider forbids a selection on preview_program ("Selection not
+        // allowed"), so read the small preview-program table and filter by
+        // channel client-side.
         val ids = mutableListOf<Long>()
         context.contentResolver.query(
             TvContractCompat.PreviewPrograms.CONTENT_URI,
-            arrayOf("_id"),
-            TvContractCompat.PreviewPrograms.COLUMN_CHANNEL_ID + " = ?",
-            arrayOf(channelId.toString()),
+            arrayOf("_id", TvContractCompat.PreviewPrograms.COLUMN_CHANNEL_ID),
+            null,
+            null,
             null,
         )?.use { cursor ->
-            while (cursor.moveToNext()) ids += cursor.getLong(0)
+            val idColumn = cursor.getColumnIndexOrThrow("_id")
+            val channelColumn = cursor.getColumnIndexOrThrow(
+                TvContractCompat.PreviewPrograms.COLUMN_CHANNEL_ID,
+            )
+            while (cursor.moveToNext()) {
+                if (cursor.getLong(channelColumn) == channelId) ids += cursor.getLong(idColumn)
+            }
         }
         ids.forEach(helper::deletePreviewProgram)
     }
@@ -111,7 +121,7 @@ object TvChannelPublisher {
         poster: Int,
         deepLink: String,
         start: Long,
-    ) {
+    ): Long {
         val program = PreviewProgram.Builder()
             .setChannelId(channelId)
             .setType(TvContractCompat.PreviewProgramColumns.TYPE_CLIP)
@@ -123,11 +133,14 @@ object TvChannelPublisher {
             .setStartTimeUtcMillis(start)
             .setEndTimeUtcMillis(start + TimeUnit.HOURS.toMillis(1))
             .build()
-        helper.publishPreviewProgram(program)
+        return helper.publishPreviewProgram(program)
     }
 
-    private fun resourceUri(context: Context, res: Int): Uri =
-        Uri.parse("android.resource://${context.packageName}/$res")
+    private fun resourceUri(context: Context, res: Int): Uri {
+        val type = context.resources.getResourceTypeName(res)
+        val name = context.resources.getResourceEntryName(res)
+        return Uri.parse("android.resource://${context.packageName}/$type/$name")
+    }
 
     private fun Uri.toIntentUri(): Uri =
         Uri.parse(Intent(Intent.ACTION_VIEW, this).toUri(Intent.URI_INTENT_SCHEME))

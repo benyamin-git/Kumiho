@@ -24,8 +24,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -930,6 +937,7 @@ private fun TvField(
     onDone: () -> Unit = {},
 ) {
     val house = LocalKumihoColors.current
+    val focusManager = LocalFocusManager.current
     androidx.compose.material3.MaterialTheme(
         colorScheme = house.toColorScheme(),
         typography = KumihoTypography,
@@ -947,7 +955,15 @@ private fun TvField(
             keyboardActions = KeyboardActions(onDone = { onDone() }),
             modifier = modifier
                 .fillMaxWidth()
-                .heightIn(min = 64.dp),
+                .heightIn(min = 64.dp)
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                        focusManager.moveFocus(FocusDirection.Down)
+                        true
+                    } else {
+                        false
+                    }
+                },
         )
     }
 }

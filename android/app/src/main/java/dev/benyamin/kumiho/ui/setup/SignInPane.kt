@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.setup
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,11 +11,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +25,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -31,6 +44,24 @@ import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.theme.Dimens
+
+/**
+ * A focus ring for the Material 3 buttons in this pane when it is shown inside
+ * the ten-foot TV shell. Material 3's buttons do not draw one, so a focused
+ * submit button would otherwise be invisible on a television.
+ */
+@Composable
+private fun Modifier.tvButtonFocusRing(active: Boolean): Modifier {
+    if (!active) return this
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .border(
+            width = if (focused) 2.dp else 0.dp,
+            color = MaterialTheme.colorScheme.onPrimary,
+            shape = ButtonDefaults.shape,
+        )
+}
 
 /**
  * The Firefox Accounts pane: email, password, then either a code or the
@@ -52,10 +83,35 @@ fun SignInPane(
     onBrowser: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     signedInNote: String? = null,
+    tvFocus: Boolean = false,
 ) {
     var email by rememberSaveable { mutableStateOf(state.email) }
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+
+    val focusManager = LocalFocusManager.current
+    val emailFocus = remember { FocusRequester() }
+    val passwordFocus = remember { FocusRequester() }
+    val codeFocus = remember { FocusRequester() }
+
+    LaunchedEffect(state.phase, tvFocus) {
+        if (!tvFocus) return@LaunchedEffect
+        val target = when (state.phase) {
+            SignInPhase.PASSWORD -> passwordFocus
+            SignInPhase.CODE -> codeFocus
+            else -> null
+        }
+        target?.let { runCatching { it.requestFocus() } }
+    }
+
+    val downToNext = Modifier.onPreviewKeyEvent { event ->
+        if (tvFocus && event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+            focusManager.moveFocus(FocusDirection.Down)
+            true
+        } else {
+            false
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -70,6 +126,7 @@ fun SignInPane(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = Dimens.ControlHeight)
+                            .tvButtonFocusRing(tvFocus)
                             .testTag(SetupTags.SIGN_IN_BROWSER),
                     ) {
                         Text(stringResource(R.string.sign_in_browser))
@@ -98,6 +155,8 @@ fun SignInPane(
                     keyboardActions = KeyboardActions(onDone = { onSubmitEmail(email) }),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .focusRequester(emailFocus)
+                        .then(downToNext)
                         .testTag(SetupTags.SIGN_IN_EMAIL),
                 )
                 Button(
@@ -106,6 +165,7 @@ fun SignInPane(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = Dimens.ControlHeight)
+                        .tvButtonFocusRing(tvFocus)
                         .testTag(SetupTags.SIGN_IN_EMAIL_SUBMIT),
                 ) {
                     Text(stringResource(R.string.sign_in_email_submit))
@@ -145,6 +205,8 @@ fun SignInPane(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .focusRequester(passwordFocus)
+                        .then(downToNext)
                         .testTag(SetupTags.SIGN_IN_PASSWORD),
                 )
                 Text(
@@ -162,6 +224,7 @@ fun SignInPane(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = Dimens.ControlHeight)
+                        .tvButtonFocusRing(tvFocus)
                         .testTag(SetupTags.SIGN_IN_PASSWORD_SUBMIT),
                 ) {
                     Text(stringResource(R.string.sign_in_password_submit))
@@ -213,6 +276,8 @@ fun SignInPane(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .focusRequester(codeFocus)
+                        .then(downToNext)
                         .testTag(SetupTags.SIGN_IN_CODE),
                 )
                 Button(
@@ -225,6 +290,7 @@ fun SignInPane(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = Dimens.ControlHeight)
+                        .tvButtonFocusRing(tvFocus)
                         .testTag(SetupTags.SIGN_IN_CODE_SUBMIT),
                 ) {
                     Text(stringResource(R.string.sign_in_code_submit))
@@ -278,6 +344,7 @@ fun SignInPane(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = Dimens.ControlHeight)
+                        .tvButtonFocusRing(tvFocus)
                         .testTag(SetupTags.SIGN_IN_RECHECK),
                 ) {
                     Text(stringResource(R.string.sign_in_recheck))

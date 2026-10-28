@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -55,6 +56,10 @@ fun TvConnectOptionsPage(
 ) {
     BackHandler(onBack = onClose)
     val firstFocus = remember { FocusRequester() }
+    val proxyFocus = remember { FocusRequester() }
+    val lockdownFocus = remember { FocusRequester() }
+    val connectFocus = remember { FocusRequester() }
+    val backFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
     val colors = MaterialTheme.colorScheme
 
@@ -91,6 +96,7 @@ fun TvConnectOptionsPage(
                         state = state,
                         actions = actions,
                         firstFocus = firstFocus,
+                        rightFocus = proxyFocus,
                     )
                 }
             }
@@ -110,7 +116,12 @@ fun TvConnectOptionsPage(
                     onClick = { actions.onToggleProxyOnly(!state.options.proxyOnly) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(DashboardTags.SHEET_PROXY_ONLY),
+                        .testTag(DashboardTags.SHEET_PROXY_ONLY)
+                        .focusRequester(proxyFocus)
+                        .focusProperties {
+                            left = firstFocus
+                            down = lockdownFocus
+                        },
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -147,7 +158,13 @@ fun TvConnectOptionsPage(
                     onClick = actions.onOpenVpnSettings,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(DashboardTags.SHEET_LOCKDOWN),
+                        .testTag(DashboardTags.SHEET_LOCKDOWN)
+                        .focusRequester(lockdownFocus)
+                        .focusProperties {
+                            left = firstFocus
+                            up = proxyFocus
+                            down = if (state.optionsConnectEnabled) connectFocus else backFocus
+                        },
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -190,7 +207,12 @@ fun TvConnectOptionsPage(
                     onClick = actions.onConnectFromOptions,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(DashboardTags.SHEET_CONNECT),
+                        .testTag(DashboardTags.SHEET_CONNECT)
+                        .focusRequester(connectFocus)
+                        .focusProperties {
+                            up = lockdownFocus
+                            down = backFocus
+                        },
                     enabled = state.optionsConnectEnabled,
                     primary = true,
                 )
@@ -203,7 +225,12 @@ fun TvConnectOptionsPage(
                 TvButton(
                     label = stringResource(R.string.tv_back),
                     onClick = onClose,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(backFocus)
+                        .focusProperties {
+                            up = if (state.optionsConnectEnabled) connectFocus else lockdownFocus
+                        },
                 )
             }
         }
@@ -215,6 +242,7 @@ private fun Picker(
     state: DashboardState,
     actions: DashboardActions,
     firstFocus: FocusRequester,
+    rightFocus: FocusRequester,
 ) {
     val choice = state.effectiveChoice
     val colors = MaterialTheme.colorScheme
@@ -225,7 +253,8 @@ private fun Picker(
         onClick = actions.onSelectRecommended,
         modifier = Modifier
             .testTag(DashboardTags.PICKER_RECOMMENDED)
-            .focusRequester(firstFocus),
+            .focusRequester(firstFocus)
+            .focusProperties { right = rightFocus },
     )
     if (state.status?.location != null) {
         val saved = if (state.locationIsRecommended) {
@@ -238,7 +267,9 @@ private fun Picker(
             summary = saved,
             selected = choice == LocationChoice.Saved,
             onClick = actions.onSelectSaved,
-            modifier = Modifier.testTag(DashboardTags.PICKER_SAVED),
+            modifier = Modifier
+                .testTag(DashboardTags.PICKER_SAVED)
+                .focusProperties { right = rightFocus },
         )
     }
 
@@ -284,7 +315,8 @@ private fun Picker(
                     onClick = { actions.onToggleCountry(country.code) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(countryTag(country.code)),
+                        .testTag(countryTag(country.code))
+                        .focusProperties { right = rightFocus },
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -321,7 +353,8 @@ private fun Picker(
                             onClick = { actions.onSelectCity(country.code, city.code) },
                             modifier = Modifier
                                 .padding(start = TvDimens.Space4)
-                                .testTag(cityTag(country.code, city.code)),
+                                .testTag(cityTag(country.code, city.code))
+                                .focusProperties { right = rightFocus },
                         )
                     }
                 }

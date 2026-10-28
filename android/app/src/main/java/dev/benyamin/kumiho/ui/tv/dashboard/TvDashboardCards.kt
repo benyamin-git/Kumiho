@@ -13,6 +13,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -36,6 +39,9 @@ import java.time.ZoneId
 fun TvDashboardCards(
     state: DashboardState,
     onOpenOptions: () -> Unit,
+    powerFocus: FocusRequester,
+    optionsFocus: FocusRequester,
+    locationFocus: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -44,7 +50,13 @@ fun TvDashboardCards(
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
     ) {
         if (state.showLocationCard) {
-            LocationCard(state = state, onOpenOptions = onOpenOptions)
+            LocationCard(
+                state = state,
+                onOpenOptions = onOpenOptions,
+                powerFocus = powerFocus,
+                optionsFocus = optionsFocus,
+                locationFocus = locationFocus,
+            )
         }
         if (state.showExitCard) {
             ExitCard(state = state)
@@ -59,7 +71,13 @@ fun TvDashboardCards(
 }
 
 @Composable
-private fun LocationCard(state: DashboardState, onOpenOptions: () -> Unit) {
+private fun LocationCard(
+    state: DashboardState,
+    onOpenOptions: () -> Unit,
+    powerFocus: FocusRequester,
+    optionsFocus: FocusRequester,
+    locationFocus: FocusRequester,
+) {
     val status = state.status
     val country = if (state.locationIsRecommended) {
         null
@@ -67,6 +85,7 @@ private fun LocationCard(state: DashboardState, onOpenOptions: () -> Unit) {
         state.countryName(status?.location) ?: status?.location
     }
     val city = state.cityNameForServer(status?.server)
+        ?.takeUnless { it.equals(country, ignoreCase = true) }
     val name = when {
         state.locationIsRecommended -> stringResource(R.string.dashboard_location_recommended)
         country != null && city != null ->
@@ -78,7 +97,12 @@ private fun LocationCard(state: DashboardState, onOpenOptions: () -> Unit) {
         onClick = onOpenOptions,
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(DashboardTags.CARD_LOCATION),
+            .testTag(DashboardTags.CARD_LOCATION)
+            .focusRequester(locationFocus)
+            .focusProperties {
+                down = optionsFocus
+                left = powerFocus
+            },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
             CardTitle(stringResource(R.string.dashboard_location_title))
@@ -115,8 +139,8 @@ private fun ExitCard(state: DashboardState) {
     Panel(modifier = Modifier.testTag(DashboardTags.CARD_EXIT)) {
         CardTitle(stringResource(R.string.dashboard_exit_title))
         Text(
-            text = state.status?.exitIp ?: DashboardFormat.DASH,
-            style = MaterialTheme.typography.titleMedium,
+            text = (state.status?.exitIp ?: DashboardFormat.DASH).replace(":", ":\u200B"),
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
         val country = state.status?.exitCountry

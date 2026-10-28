@@ -652,6 +652,7 @@
     <string name="account_row_quota_unknown">Quota unknown</string>
     <string name="account_reauth_required">Sign-in expired</string>
     <string name="account_actions">Account actions</string>
+    <string name="tv_account_manage">Manage</string>
     <string name="account_use">Use this account</string>
     <string name="account_reauth">Re-authenticate</string>
     <string name="account_rename">Rename</string>

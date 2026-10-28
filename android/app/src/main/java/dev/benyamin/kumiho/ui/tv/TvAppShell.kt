@@ -91,10 +91,12 @@ fun TvAppShell(
                             onLogs = {
                                 moreOpen = false
                                 nav.openMoreRoute(MoreRoute.Logs)
+                                runCatching { railFocus.getValue(Destination.More).requestFocus() }
                             },
                             onDiagnostics = {
                                 moreOpen = false
                                 nav.openMoreRoute(MoreRoute.Diagnostics)
+                                runCatching { railFocus.getValue(Destination.More).requestFocus() }
                             },
                         )
                         state.moreRoute != null -> when (state.moreRoute) {

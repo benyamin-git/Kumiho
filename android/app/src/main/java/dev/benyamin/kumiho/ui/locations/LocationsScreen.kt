@@ -394,7 +394,9 @@ internal fun selectionText(selection: LocationSelection?): String {
         parts += stringResource(R.string.locations_recommended)
     } else {
         selection.countryName?.let(parts::add)
-        selection.cityName?.let(parts::add)
+        selection.cityName
+            ?.takeUnless { it.equals(selection.countryName, ignoreCase = true) }
+            ?.let(parts::add)
     }
     selection.serverName?.let(parts::add)
     return parts.joinToString(separator)

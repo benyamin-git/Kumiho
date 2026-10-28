@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
@@ -37,6 +38,7 @@ fun TvFocusableSurface(
     enabled: Boolean = true,
     shape: Shape = MaterialTheme.shapes.medium,
     containerColor: Color = Color.Unspecified,
+    focusRingColor: Color = Color.Unspecified,
     content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -55,13 +57,18 @@ fun TvFocusableSurface(
             .background(if (containerColor == Color.Unspecified) colors.surfaceVariant else containerColor)
             .border(
                 width = if (focused) TvDimens.FocusRing else 1.dp,
-                color = if (focused) colors.primary else colors.borderVariant,
+                color = if (focused) {
+                    if (focusRingColor == Color.Unspecified) colors.primary else focusRingColor
+                } else {
+                    colors.borderVariant
+                },
                 shape = shape,
             )
             .onFocusChanged { focused = it.isFocused }
             .semantics { role = Role.Button }
             .clickable(enabled = enabled, onClick = onClick)
             .padding(TvDimens.MinTarget / 4),
+        contentAlignment = Alignment.Center,
         content = content,
     )
 }

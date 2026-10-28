@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -119,6 +120,7 @@ fun TvAccountScreen(
                                 onSubmitCode = actions.onSubmitCode,
                                 onRecheck = actions.onRecheck,
                                 onBrowser = null,
+                                tvFocus = true,
                             )
                         }
                         TvButton(
@@ -149,6 +151,7 @@ fun TvAccountScreen(
                                 onRecheck = actions.onRecheck,
                                 onBrowser = actions.onAddBrowser,
                                 signedInNote = stringResource(R.string.account_signed_in_note),
+                                tvFocus = true,
                             )
                         }
                     }
@@ -318,15 +321,14 @@ private fun AccountsBlock(
         return
     }
     accounts.forEach { account ->
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
         ) {
             TvFocusableSurface(
                 onClick = { actions.onUse(account.id) },
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .testTag(AccountTags.accountRow(account.id)),
             ) {
                 Row(
@@ -335,15 +337,29 @@ private fun AccountsBlock(
                     horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = account.label.ifBlank { account.email },
-                            style = MaterialTheme.typography.titleSmall,
-                            color = colors.onSurface,
-                        )
+                        val label = account.label.trim()
+                        val sameAsEmail = label.equals(account.email, ignoreCase = true)
+                        if (label.isNotEmpty() && !sameAsEmail) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = colors.onSurface,
+                            )
+                        }
                         Text(
                             text = account.email,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onSurfaceVariant,
+                            style = if (label.isEmpty() || sameAsEmail) {
+                                MaterialTheme.typography.titleSmall
+                            } else {
+                                MaterialTheme.typography.bodySmall
+                            },
+                            color = if (label.isEmpty() || sameAsEmail) {
+                                colors.onSurface
+                            } else {
+                                colors.onSurfaceVariant
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = methodLabel(account.method) +
@@ -373,9 +389,11 @@ private fun AccountsBlock(
                 }
             }
             TvButton(
-                label = stringResource(R.string.account_actions),
+                label = stringResource(R.string.tv_account_manage),
                 onClick = { onManage(account) },
-                modifier = Modifier.testTag(AccountTags.OVERFLOW),
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .testTag(AccountTags.OVERFLOW),
             )
         }
     }

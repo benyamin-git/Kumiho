@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -86,6 +87,9 @@ fun TvLocationsScreen(
             runCatching { firstFocus.requestFocus() }
         }
     }
+    val downToList = Modifier.focusProperties {
+        if (state.rows.isNotEmpty()) down = firstFocus
+    }
 
     Column(
         modifier = modifier
@@ -95,21 +99,21 @@ fun TvLocationsScreen(
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
     ) {
         TvPageHeader(title = stringResource(R.string.tv_locations_title))
+        SearchField(
+            query = state.query,
+            onQueryChange = actions.onQueryChange,
+            onClear = actions.onClearQuery,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SearchField(
-                query = state.query,
-                onQueryChange = actions.onQueryChange,
-                onClear = actions.onClearQuery,
-                modifier = Modifier.weight(1f),
-            )
             TvButton(
                 label = stringResource(R.string.locations_refresh),
                 onClick = actions.onRefresh,
-                modifier = Modifier.testTag(LocationsTags.REFRESH),
+                modifier = Modifier.testTag(LocationsTags.REFRESH).then(downToList),
                 enabled = !state.refreshing,
             )
             TvButton(
@@ -119,7 +123,7 @@ fun TvLocationsScreen(
                     stringResource(R.string.locations_ping_all)
                 },
                 onClick = actions.onPingAll,
-                modifier = Modifier.testTag(LocationsTags.PING_ALL),
+                modifier = Modifier.testTag(LocationsTags.PING_ALL).then(downToList),
                 enabled = state.canPingAll,
             )
             TvButton(
@@ -127,7 +131,7 @@ fun TvLocationsScreen(
                     if (state.anyExpanded) R.string.locations_collapse_all else R.string.locations_expand_all,
                 ),
                 onClick = actions.onToggleAll,
-                modifier = Modifier.testTag(LocationsTags.TOGGLE_ALL),
+                modifier = Modifier.testTag(LocationsTags.TOGGLE_ALL).then(downToList),
                 enabled = state.canToggleAll,
             )
         }

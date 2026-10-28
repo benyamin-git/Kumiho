@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -57,6 +58,10 @@ fun TvDashboardScreen(
     actions: DashboardActions,
     modifier: Modifier = Modifier,
 ) {
+    val powerFocus = remember { FocusRequester() }
+    val optionsFocus = remember { FocusRequester() }
+    val locationFocus = remember { FocusRequester() }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -87,11 +92,22 @@ fun TvDashboardScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
                 ) {
-                    PowerHero(state = state, onPower = actions.onPower, onOpenOptions = actions.onOpenOptions)
+                    PowerHero(
+                        state = state,
+                        onPower = actions.onPower,
+                        onOpenOptions = actions.onOpenOptions,
+                        powerFocus = powerFocus,
+                        optionsFocus = optionsFocus,
+                        locationFocus = locationFocus,
+                        hasLocationCard = state.showLocationCard,
+                    )
                 }
                 TvDashboardCards(
                     state = state,
                     onOpenOptions = actions.onOpenOptions,
+                    powerFocus = powerFocus,
+                    optionsFocus = optionsFocus,
+                    locationFocus = locationFocus,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxSize(),
@@ -122,6 +138,10 @@ private fun PowerHero(
     state: DashboardState,
     onPower: () -> Unit,
     onOpenOptions: () -> Unit,
+    powerFocus: FocusRequester,
+    optionsFocus: FocusRequester,
+    locationFocus: FocusRequester,
+    hasLocationCard: Boolean,
 ) {
     val label = phaseLabel(state.phase)
     val status = state.status
@@ -159,7 +179,12 @@ private fun PowerHero(
         containerColor = container,
         modifier = Modifier
             .size(200.dp)
-            .testTag(DashboardTags.POWER),
+            .testTag(DashboardTags.POWER)
+            .focusRequester(powerFocus)
+            .focusProperties {
+                down = optionsFocus
+                if (hasLocationCard) right = locationFocus
+            },
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
@@ -206,7 +231,14 @@ private fun PowerHero(
     TvButton(
         label = stringResource(R.string.dashboard_connect_options),
         onClick = onOpenOptions,
-        modifier = Modifier.testTag(DashboardTags.CONNECT_OPTIONS),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(DashboardTags.CONNECT_OPTIONS)
+            .focusRequester(optionsFocus)
+            .focusProperties {
+                up = powerFocus
+                if (hasLocationCard) right = locationFocus
+            },
     )
     if (state.powerBusy) {
         Text(
