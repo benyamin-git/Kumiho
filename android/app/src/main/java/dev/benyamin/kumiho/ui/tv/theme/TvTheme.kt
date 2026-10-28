@@ -8,22 +8,30 @@ import androidx.tv.material3.ColorScheme
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Shapes
 import dev.benyamin.kumiho.ui.theme.KumihoColors
+import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
 /**
- * Applies the house palette to the TV Material theme. No raw hex lives here:
+ * Applies the house palette to both Material themes. No raw hex lives here:
  * every role is the matching [KumihoColors] role. The phone `KumihoTheme`
- * remains the only theme for phone routes.
+ * remains the only theme for phone routes; the Material 3 theme is supplied
+ * too because the shared sign-in and editor text fields are Material 3.
  */
 @Composable
 fun TvKumihoTheme(colors: KumihoColors, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalKumihoColors provides colors) {
-        MaterialTheme(
-            colorScheme = colors.toTvColorScheme(),
-            typography = TvTypography,
-            shapes = TvShapes,
-            content = content,
-        )
+        androidx.compose.material3.MaterialTheme(
+            colorScheme = colors.toColorScheme(),
+            typography = TvM3Typography,
+            shapes = KumihoShapes,
+        ) {
+            MaterialTheme(
+                colorScheme = colors.toTvColorScheme(),
+                typography = TvTypography,
+                shapes = TvShapes,
+                content = content,
+            )
+        }
     }
 }
 
