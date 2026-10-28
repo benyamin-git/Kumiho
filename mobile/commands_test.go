@@ -497,6 +497,18 @@ func TestPanicRecovery(t *testing.T) {
 	if !found {
 		t.Fatal("the panic was not logged")
 	}
+
+	// The recovered panic must leave a stack in the log: without it a nil
+	// dereference on a device is undebuggable from the exported log.
+	stacked := false
+	for _, e := range f.ring.Snapshot() {
+		if strings.Contains(e.Msg, "boom") && strings.Contains(e.Msg, "goroutine") {
+			stacked = true
+		}
+	}
+	if !stacked {
+		t.Fatal("the panic log has no stack trace")
+	}
 }
 
 func TestConcurrentCommandsAndClose(t *testing.T) {

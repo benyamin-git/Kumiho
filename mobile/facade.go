@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
@@ -160,7 +161,7 @@ func (f *facade) guard(what string, fn func() (string, error)) (resp string, err
 	defer func() {
 		if r := recover(); r != nil {
 			message := fmt.Sprintf("%s panicked: %v", what, r)
-			f.logf(logging.Error, "mobile", "%s", message)
+			f.logf(logging.Error, "mobile", "%s\n%s", message, debug.Stack())
 			resp, err = "", &facadeError{code: api.CodeInternal, message: message}
 		}
 	}()
