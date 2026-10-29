@@ -281,8 +281,9 @@ directory to the machine `PATH`, so `kumiho` works in new shells. The
 overrides work the same as on Linux (`accounts.json` stays beside the path
 set by `KUMIHO_TOKENS`), except that on Windows
 `KUMIHO_RUNTIME_DIR` relocates only the daemon log directory (default
-`%ProgramData%\kumiho\logs`); the control endpoint stays the fixed
-`\\.\pipe\kumiho\control` named pipe.
+`%ProgramData%\kumiho\logs`). The control endpoint is
+`\\.\pipe\kumiho\control`; `KUMIHO_CONTROL_ENDPOINT` relocates it so a
+development daemon can run beside the installed service.
 
 ## Transport notes
 

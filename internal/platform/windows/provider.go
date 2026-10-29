@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 
 	"github.com/benyamin-git/kumiho/internal/fxa"
 	"github.com/benyamin-git/kumiho/internal/netcfg"
@@ -55,7 +56,14 @@ func (p *Provider) BypassDialer() *net.Dialer { return &net.Dialer{} }
 func (p *Provider) Paths() settings.Paths { return windowsPaths() }
 
 // ControlEndpoint returns the named-pipe control endpoint (D7/D19).
-func (p *Provider) ControlEndpoint() string { return `\\.\pipe\kumiho\control` }
+// KUMIHO_CONTROL_ENDPOINT relocates it so a dev daemon can listen beside the
+// installed service, which owns the machine-wide default pipe.
+func (p *Provider) ControlEndpoint() string {
+	if v := os.Getenv(settings.EnvControlEndpoint); v != "" {
+		return v
+	}
+	return `\\.\pipe\kumiho\control`
+}
 
 // ChownControlEndpoint is a no-op: the pipe ACL is applied by the server when
 // it creates the pipe.

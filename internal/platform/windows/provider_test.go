@@ -49,7 +49,16 @@ func TestUserAgent(t *testing.T) {
 }
 
 func TestControlEndpoint(t *testing.T) {
+	t.Setenv(settings.EnvControlEndpoint, "")
 	const want = `\\.\pipe\kumiho\control`
+	if got := New().ControlEndpoint(); got != want {
+		t.Fatalf("ControlEndpoint() = %q, want %q", got, want)
+	}
+}
+
+func TestControlEndpointEnvOverride(t *testing.T) {
+	const want = `\\.\pipe\kumiho-dev\control`
+	t.Setenv(settings.EnvControlEndpoint, want)
 	if got := New().ControlEndpoint(); got != want {
 		t.Fatalf("ControlEndpoint() = %q, want %q", got, want)
 	}

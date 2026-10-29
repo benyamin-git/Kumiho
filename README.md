@@ -370,7 +370,9 @@ config/state from `/etc/kumiho` and `/var/lib/kumiho` and listens on
 listens on the named pipe `\\.\pipe\kumiho\control` (see PLAN.md §8). For
 development or alternative locations on either OS, override with
 `KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS`, and `KUMIHO_RUNTIME_DIR`
-(see `scripts/dev-env.sh` and `scripts/dev-env.ps1`).
+(see `scripts/dev-env.sh` and `scripts/dev-env.ps1`). On Windows,
+`KUMIHO_CONTROL_ENDPOINT` moves the control pipe so a development daemon can
+run beside the installed service.
 
 ## Windows GUI
 

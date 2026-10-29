@@ -3,9 +3,10 @@
 // Production paths match PLAN.md §8 and can be overridden with environment
 // variables for development and tests:
 //
-//	KUMIHO_CONFIG      /etc/kumiho/config.toml
-//	KUMIHO_STATE       /var/lib/kumiho/state.json
-//	KUMIHO_RUNTIME_DIR /run/kumiho
+//	KUMIHO_CONFIG           /etc/kumiho/config.toml
+//	KUMIHO_STATE            /var/lib/kumiho/state.json
+//	KUMIHO_RUNTIME_DIR      /run/kumiho
+//	KUMIHO_CONTROL_ENDPOINT \\.\pipe\kumiho\control (Windows only)
 package settings
 
 import (
@@ -37,6 +38,10 @@ const (
 	EnvState   = "KUMIHO_STATE"
 	EnvTokens  = "KUMIHO_TOKENS"
 	EnvRuntime = "KUMIHO_RUNTIME_DIR"
+	// EnvControlEndpoint overrides the Windows control pipe. It exists so a
+	// development daemon can run beside the installed service, which owns the
+	// machine-wide default pipe.
+	EnvControlEndpoint = "KUMIHO_CONTROL_ENDPOINT"
 )
 
 // DefaultPaths returns the production paths, applying environment overrides.

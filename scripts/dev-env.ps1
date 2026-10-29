@@ -15,4 +15,7 @@ $env:KUMIHO_CONFIG = Join-Path $dir 'config.toml'
 $env:KUMIHO_STATE = Join-Path $dir 'state.json'
 $env:KUMIHO_TOKENS = Join-Path $dir 'tokens.json'
 $env:KUMIHO_RUNTIME_DIR = $dir
-Write-Host "kumiho dev paths set under $dir"
+# The installed service owns the machine-wide default pipe; use a dev pipe so
+# both can run side by side.
+$env:KUMIHO_CONTROL_ENDPOINT = '\\.\pipe\kumiho-dev\control'
+Write-Host "kumiho dev paths set under $dir (pipe $env:KUMIHO_CONTROL_ENDPOINT)"
