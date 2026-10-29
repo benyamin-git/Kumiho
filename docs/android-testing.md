@@ -343,8 +343,10 @@ writes `android/keystore.properties` with mode 600, runs
 `scripts/android-release.sh`, appends the three APKs to `SHA256SUMS`, and
 attaches them to the GitHub release. A step trap removes the temporary
 keystore and properties, and an `always()` step is a backstop. The workflow
-runs on stable `vMAJOR.MINOR.PATCH` tags; prerelease tags such as `v0.5.0-rc.1`
-are intentionally skipped until a prerelease/versionCode policy exists. Tags
+runs on stable `vMAJOR.MINOR.PATCH` tags. While the project is on the `v0.x`
+series, the GitHub release is marked as a prerelease. Hyphenated tags such as
+`v0.5.0-rc.1` are skipped because the Android release script expects a stable
+`MAJOR.MINOR.PATCH` version. Tags
 `v0.5.0` (2026-10-22), `v0.5.1` (2026-10-23), `v0.5.2` (2026-10-23) and
 `v0.6.0` (2026-10-24) ran the workflow successfully and published the desktop
 and Android assets.

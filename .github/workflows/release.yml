@@ -10,8 +10,9 @@ permissions:
 jobs:
   release:
     # The Android release script accepts stable MAJOR.MINOR.PATCH tags only.
-    # Prerelease tags (for example v0.5.0-rc.1) are intentionally not published
-    # by this workflow until a prerelease policy exists.
+    # Hyphenated tags (for example v0.5.0-rc.1) are not published. While the
+    # project is on the v0.x series, stable tags are published as GitHub
+    # prereleases.
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -113,8 +114,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          release_args=()
+          if [[ "$GITHUB_REF_NAME" == v0.* ]]; then
+            release_args+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             --title "Kumiho $GITHUB_REF_NAME" \
+            "${release_args[@]}" \
             --generate-notes \
             "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" \
             "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" \

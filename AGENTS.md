@@ -119,7 +119,8 @@ them locally for any change under `android/`, `mobile/` or
   five `ANDROID_*` secrets (including the certificate fingerprint), appends
   the APKs to `SHA256SUMS`, attaches all desktop and Android assets, and
   creates the GitHub release. The signing material is removed by a step trap
-  and an `always()` step. Prerelease tags are not published.
+  and an `always()` step. During the `v0.x` series every release is published
+  as a GitHub prerelease; hyphenated tags are not published.
 - The Android CI job and release steps are implemented and were exercised by
   the `v0.5.0` release on 2026-10-22, the `v0.5.1` release on 2026-10-23, the
   `v0.5.2` release on 2026-10-23 and the `v0.6.0` release on 2026-10-24; all
