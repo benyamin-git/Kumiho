@@ -13,12 +13,13 @@ This guide describes the app as implemented for **v0.7.1**
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. v0.6.0 physical acceptance is pending. The production-signed
-> [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
+> full pass. v0.6.0, v0.7.0 and v0.7.1 physical acceptance is pending. The
+> production-signed
+> [v0.7.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1)
 > is published with the three Android APKs and `SHA256SUMS`; the signing key and
 > GitHub Actions secret values remain user-owned. Local builds are test builds,
 > not published releases. The direct Firefox Accounts OAuth browser flow
-> described below replaced the v0.6.0 flow and is in the published v0.7.0 APK.
+> described below replaced the v0.6.0 flow and is in the published v0.7.1 APK.
 
 ## Requirements
 

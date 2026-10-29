@@ -24,8 +24,8 @@ transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
 screen on Android, the Windows GUI and the TUI. v0.5.0 adds the
 Android client (sideload-only; physical acceptance is a partial pass with
-user-accepted exceptions). v0.6.0 physical acceptance is pending; the
-signed [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
+user-accepted exceptions). v0.6.0 and v0.7.0 physical acceptance is pending; the
+signed [v0.7.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1)
 is published; see [docs/android-testing.md](docs/android-testing.md).
 v0.4.0 adds backend
 parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
@@ -470,12 +470,12 @@ channel with **Open** and **Connect** cards; see
 [docs/android-tv.md](docs/android-tv.md).
 
 > **Release status.** The app builds and its unit, lint and assemble gates pass;
-> the phone emulator suite passed in earlier cycles, and the new TV connected
-> suite is prepared but not yet run. Physical first-connect/DNS/browsing/exit-IP
+> the phone emulator suite passes in CI, and the TV connected suite passes in CI
+> after the post-v0.7.1 layout fixes. Physical first-connect/DNS/browsing/exit-IP
 > acceptance passed on a Galaxy S25 FE for v0.5.2; the remaining checklist items
 > are user-accepted exceptions (a partial acceptance, not a full pass), and
-> v0.6.0 and v0.7.0 physical acceptance is pending. The production-signed
-> [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
+> v0.6.0, v0.7.0 and v0.7.1 physical acceptance is pending. The production-signed
+> [v0.7.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1)
 > carries three APKs and `SHA256SUMS`. Verify a download against the release
 > checksums; a local APK is not a published release.
 

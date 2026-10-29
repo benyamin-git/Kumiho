@@ -347,9 +347,25 @@ runs on stable `vMAJOR.MINOR.PATCH` tags. While the project is on the `v0.x`
 series, the GitHub release is marked as a prerelease. Hyphenated tags such as
 `v0.5.0-rc.1` are skipped because the Android release script expects a stable
 `MAJOR.MINOR.PATCH` version. Tags
-`v0.5.0` (2026-10-22), `v0.5.1` (2026-10-23), `v0.5.2` (2026-10-23) and
-`v0.6.0` (2026-10-24) ran the workflow successfully and published the desktop
-and Android assets.
+`v0.5.0` (2026-10-22), `v0.5.1` (2026-10-23), `v0.5.2` (2026-10-23),
+`v0.6.0` (2026-10-24), `v0.7.0` (2026-10-28) and `v0.7.1` (2026-10-30) ran the
+workflow successfully and published the desktop and Android assets.
+
+### Published v0.7.1 release
+
+Tag `v0.7.1` points at commit `b152f7c`. The
+[release workflow](https://github.com/benyamin-git/kumiho/actions/runs/40955499396)
+passed and the [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1)
+contains Linux amd64/arm64 and Windows amd64 zips, the three signed Android
+APKs, and `SHA256SUMS`. The workflow's APK verifier checked package
+`dev.benyamin.kumiho`, version `0.7.1`/701, min/target SDK 26/36, the exact arm
+ABIs, 16 KB alignment, the arm64 `p_align=0x4000` and the production
+certificate. The universal APK is 26.08 MiB (arm64-v8a 14.26 MiB, armeabi-v7a
+13.90 MiB). v0.7.1 physical acceptance is pending.
+
+The tag's main-branch CI exposed a TV setup layout bug: the side column took the
+row width and left the step content at zero width. It is fixed on main after the
+tag, together with the TV connected-test fixes, and is not in the tag's APK.
 
 ### Published v0.6.0 release
 
