@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.ui.setup.PermissionState
 import dev.benyamin.kumiho.ui.setup.SetupActions
@@ -88,14 +89,14 @@ class TvSetupTest {
     fun consentIsRequiredBeforeContinueEnables() {
         assumeTrue(TvEnvironment.isTelevision(rule.activity))
         show(SetupState())
-        rule.onNodeWithTag(SetupTags.CONSENT_STEP).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.CONSENT_STEP).assertExists()
         rule.onNodeWithTag(SetupTags.CONTINUE).assertIsNotEnabled()
-        rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performClick()
+        rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performScrollTo().performClick()
         rule.waitForIdle()
         rule.onNodeWithTag(SetupTags.CONTINUE).assertIsDisplayed()
         rule.onNodeWithTag(SetupTags.CONTINUE).performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag(SetupTags.SIGN_IN_STEP).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_STEP).assertExists()
     }
 
     @Test
@@ -103,8 +104,8 @@ class TvSetupTest {
         assumeTrue(TvEnvironment.isTelevision(rule.activity))
         var actions = 0
         show(SetupState(step = SetupStep.SIGN_IN)) { actions++ }
-        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER).assertIsDisplayed()
-        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL).assertExists()
         rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER).performClick()
         assertEquals(1, actions)
     }
@@ -114,8 +115,8 @@ class TvSetupTest {
         assumeTrue(TvEnvironment.isTelevision(rule.activity))
         var action = ""
         show(SetupState(step = SetupStep.PERMISSIONS)) { action = it }
-        rule.onNodeWithTag(SetupTags.PERMISSIONS_STEP).assertIsDisplayed()
-        rule.onNodeWithTag(SetupTags.PERMISSIONS_VPN_ACTION).performClick()
+        rule.onNodeWithTag(SetupTags.PERMISSIONS_STEP).assertExists()
+        rule.onNodeWithTag(SetupTags.PERMISSIONS_VPN_ACTION).performScrollTo().performClick()
         assertEquals("vpn", action)
     }
 

@@ -132,15 +132,15 @@ class TvDashboardTest {
             var open by remember { mutableStateOf(false) }
             var choice by remember { mutableStateOf<LocationChoice>(LocationChoice.Recommended) }
             val state = DashboardState(
-                phase = DashboardPhase.CONNECTED,
+                phase = DashboardPhase.OFF,
                 status = status(),
-                options = ConnectOptionsState(open = open, choice = null),
+                options = ConnectOptionsState(open = open, choice = null, expanded = setOf("gb")),
                 locations = LocationLoad.Ready(
                     listOf(
                         Country("gb", "United Kingdom", listOf(City("lon", "London", emptyList()))),
                     ),
                 ),
-            ).copy(options = ConnectOptionsState(open = open, choice = choice))
+            ).copy(options = ConnectOptionsState(open = open, choice = choice, expanded = setOf("gb")))
             TvKumihoTheme(palette()) {
                 TvDashboardScreen(
                     state = state,

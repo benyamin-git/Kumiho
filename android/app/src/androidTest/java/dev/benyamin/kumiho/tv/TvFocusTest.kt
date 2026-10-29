@@ -73,7 +73,7 @@ class TvFocusTest {
                 }
             }
         }
-        first.requestFocus()
+        rule.runOnIdle { first.requestFocus() }
         rule.waitForIdle()
         rule.onNodeWithTag("one").assertIsFocused()
 
