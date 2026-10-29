@@ -546,6 +546,9 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		m.screen = screenLocations
 		m.loc.err = ""
+		m.loc.sortSpeed = false
+		m.loc.speedOrderRTTs = nil
+		m.loc.cursor = 0
 		if m.loc.countries == nil {
 			m.loc.loading = true
 			return m, fetchLocations(m.client, false)

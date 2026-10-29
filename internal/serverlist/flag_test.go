@@ -20,6 +20,7 @@ func TestFlagEmoji(t *testing.T) {
 		{name: "too short", code: "D", want: ""},
 		{name: "digit", code: "D1", want: ""},
 		{name: "inner space", code: "D E", want: ""},
+		{name: "unknown code", code: "ZZ", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

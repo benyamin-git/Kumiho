@@ -81,182 +81,219 @@ func TestLoginDoneSwitchesToDashboard(t *testing.T) {
 }
 
 func TestLocationsView(t *testing.T) {
-	m := &Model{
-		screen: screenLocations,
-		loc: locationsState{
-			countries: []serverlist.Country{
-				{
-					Code: "REC", Name: "Recomended Location",
-					Cities: []serverlist.City{{
-						Code: "p", Name: "Recommended",
-						Servers: []serverlist.Server{{Hostname: "p.m1.fastly-masque.net", Port: 2499}},
-					}},
-				},
-				{
-					Code: "DE", Name: "Germany",
-					Cities: []serverlist.City{{
-						Code: "FRA", Name: "Frankfurt",
-						Servers: []serverlist.Server{{Hostname: "fra1.example.net", Port: 2499}},
-					}},
-				},
-			},
-			expandedCountries: map[string]bool{"REC": true},
-			expandedCities:    map[string]bool{"REC/p": true},
-			rtts:              map[string]*float64{},
-		},
-	}
+	m := testLocationsModel()
 	view := m.View()
-	for _, want := range []string{"Locations", "Recomended Location", "p.m1.fastly-masque.net", "Germany", "🇩🇪 Germany"} {
+	for _, want := range []string{
+		"Locations",
+		"★ REC · p.m1.fastly-masque.net:2499",
+		"🇩🇪 DE · Frankfurt · fra1.example.net:443",
+		"🇺🇸 US · New York · a.example.net:2499",
+		"🇺🇸 US · San Francisco · west.example.net:443",
+	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("locations view missing %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "🇷🇪") {
-		t.Errorf("recommended row must not carry a flag:\n%s", view)
+	for _, unwanted := range []string{"Germany (", "cities", "connect", "quic", "expand", "🇷🇪"} {
+		if strings.Contains(view, unwanted) {
+			t.Errorf("flat locations view still contains %q:\n%s", unwanted, view)
+		}
 	}
-	// REC (country) + its city + server + DE country = 4 visible rows.
-	if rows := m.locationRows(); len(rows) != 4 {
-		t.Fatalf("rows = %d, want 4", len(rows))
+	if rows := m.locationRows(); len(rows) != 6 {
+		t.Fatalf("rows = %d, want 6", len(rows))
 	}
 }
 
-// testLocationsModel returns a REC/US/DE tree with a duplicate, a quarantined
-// and a no-connect server, all collapsed.
+// testLocationsModel returns a flat REC/US/DE set with a duplicate, a
+// quarantined server, a no-connect server and a connect target whose host and
+// port differ from the record's hostname/port.
 func testLocationsModel() *Model {
 	return &Model{
 		screen: screenLocations,
 		loc: locationsState{
 			countries: []serverlist.Country{
 				{
-					Code: "REC", Name: "Recommended Location",
+					Code: "DE", Name: "Germany",
 					Cities: []serverlist.City{{
-						Code: "p", Name: "Recommended",
-						Servers: []serverlist.Server{{Hostname: "p.m1.fastly-masque.net", Port: 2499}},
+						Code: "FRA", Name: "Frankfurt",
+						Servers: []serverlist.Server{{Hostname: "fra1.example.net", Port: 443}},
 					}},
 				},
 				{
 					Code: "US", Name: "United States",
-					Cities: []serverlist.City{{
-						Code: "NYC", Name: "New York",
-						Servers: []serverlist.Server{
-							{Hostname: "a.example.net", Port: 2499},
-							{Hostname: "A.EXAMPLE.NET", Port: 2499},
-							{Hostname: "down.example.net", Port: 2499, Quarantined: true},
-							{
-								Hostname: "noc.example.net", Port: 2499,
-								Protocols: []serverlist.Protocol{{Name: "http", Host: "noc.example.net", Port: 80}},
+					Cities: []serverlist.City{
+						{
+							Code: "NYC", Name: "New York",
+							Servers: []serverlist.Server{
+								{Hostname: "a.example.net", Port: 2499},
+								{Hostname: "A.EXAMPLE.NET", Port: 2499},
+								{Hostname: "down.example.net", Port: 2499, Quarantined: true},
+								{Hostname: "huge.example.net", Port: 70_000},
+								{
+									Hostname: "noc.example.net", Port: 2499,
+									Protocols: []serverlist.Protocol{{Name: "http", Host: "noc.example.net", Port: 80}},
+								},
+								{
+									Hostname: "target.example.net", Port: 443,
+									Protocols: []serverlist.Protocol{
+										{Name: "connect", Host: "edge.example.net", Port: 8443, Scheme: "https"},
+										{Name: "quic", Host: "edge.example.net", Port: 8443, Scheme: "https"},
+									},
+								},
 							},
 						},
-					}},
+						{
+							Code: "SFO", Name: "San Francisco",
+							Servers: []serverlist.Server{{Hostname: "west.example.net", Port: 443}},
+						},
+					},
 				},
 				{
-					Code: "DE", Name: "Germany",
+					Code: serverlist.RecommendedCode, Name: "Recommended Location",
 					Cities: []serverlist.City{{
-						Code: "FRA", Name: "Frankfurt",
-						Servers: []serverlist.Server{{Hostname: "fra1.example.net", Port: 2499}},
+						Code: "rec", Name: "Recommended",
+						Servers: []serverlist.Server{{Hostname: "p.m1.fastly-masque.net", Port: 2499}},
 					}},
 				},
 			},
-			expandedCountries: map[string]bool{},
-			expandedCities:    map[string]bool{},
-			rtts:              map[string]*float64{},
+			rtts: map[string]*float64{},
 		},
 	}
 }
 
-func TestLocationsToggleAll(t *testing.T) {
-	m := testLocationsModel()
-	if m.anyExpanded() {
-		t.Fatal("fixture should start collapsed")
+func locationAddresses(m *Model) []string {
+	rows := m.locationRows()
+	addresses := make([]string, len(rows))
+	for i, row := range rows {
+		addresses[i] = row.address
 	}
-	m.toggleAllExpanded()
-	if !m.anyExpanded() {
-		t.Fatal("toggle should expand every group")
-	}
-	if got, want := len(m.loc.expandedCountries), 3; got != want {
-		t.Fatalf("expanded countries = %d, want %d", got, want)
-	}
-	if got, want := len(m.loc.expandedCities), 3; got != want {
-		t.Fatalf("expanded cities = %d, want %d", got, want)
-	}
-	for _, key := range []string{"REC", "US", "DE", "REC/p", "US/NYC", "DE/FRA"} {
-		if key == "REC" || key == "US" || key == "DE" {
-			if !m.loc.expandedCountries[key] {
-				t.Errorf("country %q not expanded", key)
-			}
-			continue
-		}
-		if !m.loc.expandedCities[key] {
-			t.Errorf("city %q not expanded", key)
-		}
-	}
-	m.toggleAllExpanded()
-	if m.anyExpanded() {
-		t.Fatal("second toggle should collapse every group")
-	}
-	if len(m.loc.expandedCountries) != 0 || len(m.loc.expandedCities) != 0 {
-		t.Fatalf("maps not emptied: %d countries, %d cities", len(m.loc.expandedCountries), len(m.loc.expandedCities))
-	}
+	return addresses
 }
 
-func TestLocationsToggleAllIgnoredWhileFiltering(t *testing.T) {
+func TestLocationRowsAreFlatAndSkipUnusableServers(t *testing.T) {
 	m := testLocationsModel()
-	m.loc.filter = "fra"
-	m.loc.expandedCountries["DE"] = true
-	m.loc.expandedCities["DE/FRA"] = true
-	m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if !m.loc.expandedCountries["DE"] || !m.loc.expandedCities["DE/FRA"] {
-		t.Fatal("x must not change expansion while filtering")
-	}
-	if len(m.loc.expandedCountries) != 1 || len(m.loc.expandedCities) != 1 {
-		t.Fatalf("unexpected expansion mutation: %d countries, %d cities", len(m.loc.expandedCountries), len(m.loc.expandedCities))
-	}
-
-	m = &Model{screen: screenLocations, loc: locationsState{
-		expandedCountries: map[string]bool{},
-		expandedCities:    map[string]bool{},
-	}}
-	m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if m.anyExpanded() {
-		t.Fatal("x with no loaded tree must do nothing")
-	}
-}
-
-func TestAllLocationHosts(t *testing.T) {
-	m := testLocationsModel()
-	got := m.allLocationHosts()
+	addresses := locationAddresses(m)
 	want := []string{
 		"p.m1.fastly-masque.net:2499",
+		"fra1.example.net:443",
 		"a.example.net:2499",
-		"fra1.example.net:2499",
+		"A.EXAMPLE.NET:2499",
+		"edge.example.net:8443",
+		"west.example.net:443",
 	}
-	if len(got) != len(want) {
-		t.Fatalf("hosts = %v, want %v", got, want)
+	if strings.Join(addresses, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("addresses = %v, want %v", addresses, want)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("hosts[%d] = %q, want %q (all: %v)", i, got[i], want[i], got)
+	for _, unwanted := range []string{"down.example.net:2499", "noc.example.net:2499", "huge.example.net:70000", "http"} {
+		for _, address := range addresses {
+			if address == unwanted {
+				t.Fatalf("hidden server %q leaked into the rows: %v", unwanted, addresses)
+			}
 		}
 	}
 }
 
-func TestLocationsPingAllStartsAndAcks(t *testing.T) {
+func TestLocationFilterMatchesEveryField(t *testing.T) {
+	m := testLocationsModel()
+	for _, query := range []string{
+		"germany", "de", "fra", "frankfurt", "nyc", "new york",
+		"target.example.net", "edge.example.net:8443", "8443", "quic",
+	} {
+		m.loc.filter = query
+		if rows := m.locationRows(); len(rows) == 0 {
+			t.Errorf("filter %q returned no rows", query)
+		}
+	}
+	for _, query := range []string{"http", "zzz"} {
+		m.loc.filter = query
+		if rows := m.locationRows(); len(rows) != 0 {
+			t.Errorf("filter %q = %v, want no rows", query, locationAddresses(m))
+		}
+	}
+}
+
+func TestLocationOrderIsCountryThenCityThenHost(t *testing.T) {
+	m := testLocationsModel()
+	want := []string{
+		"p.m1.fastly-masque.net:2499",
+		"fra1.example.net:443",
+		"a.example.net:2499",
+		"A.EXAMPLE.NET:2499",
+		"edge.example.net:8443",
+		"west.example.net:443",
+	}
+	if got := locationAddresses(m); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("country order = %v, want %v", got, want)
+	}
+}
+
+func TestLocationSpeedOrderPutsTimeoutsLast(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.sortSpeed = true
+	m.loc.rtts = map[string]*float64{
+		"p.m1.fastly-masque.net:2499": floatPtr(100),
+		"fra1.example.net:443":        floatPtr(5),
+		"a.example.net:2499":          floatPtr(10),
+		"edge.example.net:8443":       floatPtr(20),
+		"west.example.net:443":        nil,
+	}
+	want := []string{
+		"p.m1.fastly-masque.net:2499", // REC stays first
+		"fra1.example.net:443",
+		"a.example.net:2499",
+		"A.EXAMPLE.NET:2499",
+		"edge.example.net:8443",
+		"west.example.net:443", // timeout last
+	}
+	if got := locationAddresses(m); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("speed order = %v, want %v", got, want)
+	}
+}
+
+func TestLocationSpeedOrderDoesNotReorderDuringARun(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.sortSpeed = true
+	m.loc.speedOrderRTTs = map[string]*float64{
+		"p.m1.fastly-masque.net:2499": floatPtr(1),
+		"fra1.example.net:443":        floatPtr(2),
+		"a.example.net:2499":          floatPtr(3),
+		"edge.example.net:8443":       floatPtr(4),
+		"west.example.net:443":        floatPtr(5),
+	}
+	before := locationAddresses(m)
+	m.loc.ping = &pingRun{
+		total:   5,
+		pending: map[string]bool{"p.m1.fastly-masque.net:2499": true, "fra1.example.net:443": true},
+	}
+	m.loc.rtts = map[string]*float64{
+		"p.m1.fastly-masque.net:2499": floatPtr(99),
+		"fra1.example.net:443":        floatPtr(2),
+		"a.example.net:2499":          floatPtr(3),
+		"edge.example.net:8443":       floatPtr(4),
+		"west.example.net:443":        floatPtr(5),
+	}
+	if got := locationAddresses(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Fatalf("rows reordered during a run: %v -> %v", before, got)
+	}
+}
+
+func TestLocationsPingAllOnly(t *testing.T) {
 	m := testLocationsModel()
 	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")}); cmd == nil {
 		t.Fatal("P should start a ping command")
 	}
 	run := m.loc.ping
-	if run == nil || !run.all {
-		t.Fatalf("ping run = %+v, want an all-run", run)
-	}
-	if run.total != 3 || len(run.pending) != 3 {
-		t.Fatalf("total = %d, pending = %d, want 3/3", run.total, len(run.pending))
+	if run == nil || run.total != 5 || len(run.pending) != 5 {
+		t.Fatalf("ping run = %+v, want 5/5", run)
 	}
 	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")}); cmd != nil {
 		t.Fatal("a second P must be ignored while pinging")
 	}
-	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}); cmd != nil {
-		t.Fatal("p must be ignored while Ping all runs")
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}); cmd != nil || m.loc.ping == nil {
+		t.Fatal("p must be a no-op, not a visible-only ping")
+	}
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")}); cmd != nil {
+		t.Fatal("x must be a no-op")
 	}
 	m.ackPing("not-requested.example.net:2499")
 	if m.loc.ping == nil {
@@ -268,19 +305,88 @@ func TestLocationsPingAllStartsAndAcks(t *testing.T) {
 	if m.loc.ping != nil {
 		t.Fatalf("run not cleared after every host acked: %+v", m.loc.ping)
 	}
+	if !m.loc.sortSpeed {
+		t.Fatal("a completed run with answers should switch to speed order")
+	}
+	if m.loc.cursor != 0 {
+		t.Fatalf("cursor = %d, want top after a speed-order commit", m.loc.cursor)
+	}
 }
 
-func TestLocationsFooterShowsPingAllCount(t *testing.T) {
+func TestLocationsPingAllUsesEveryTargetWhenFiltered(t *testing.T) {
 	m := testLocationsModel()
-	m.loc.ping = &pingRun{all: true, total: 35, pending: map[string]bool{"a": true}}
-	if view := m.View(); !strings.Contains(view, "pinging 35 servers...") {
-		t.Fatalf("all-run footer missing count:\n%s", view)
+	m.loc.filter = "frankfurt"
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")}); cmd == nil {
+		t.Fatal("P should start a ping command")
 	}
-	m.loc.ping = &pingRun{all: false, total: 35, pending: map[string]bool{"a": true}}
-	if view := m.View(); strings.Contains(view, "pinging 35 servers...") {
-		t.Fatalf("visible-only run must not show the all-run footer:\n%s", view)
+	if m.loc.ping == nil || m.loc.ping.total != 5 {
+		t.Fatalf("filtered Ping all = %+v, want every usable target", m.loc.ping)
 	}
 }
+
+func TestLocationsRefreshResetsSpeedOrderAndLatency(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.sortSpeed = true
+	m.loc.speedOrderRTTs = map[string]*float64{"a.example.net:2499": floatPtr(10)}
+	m.loc.rtts = map[string]*float64{"a.example.net:2499": floatPtr(10)}
+	m.loc.cursor = 3
+	m.loc.ping = &pingRun{total: 1, pending: map[string]bool{"a.example.net:2499": true}}
+	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}); cmd == nil {
+		t.Fatal("r should reload the list")
+	}
+	if m.loc.sortSpeed || m.loc.speedOrderRTTs != nil || len(m.loc.rtts) != 0 || m.loc.cursor != 0 || m.loc.ping != nil {
+		t.Fatalf("refresh did not reset the visit: %+v", m.loc)
+	}
+}
+
+func TestLocationsEnteringResetsSpeedOrder(t *testing.T) {
+	m := testLocationsModel()
+	m.screen = screenDashboard
+	m.loc.sortSpeed = true
+	m.loc.speedOrderRTTs = map[string]*float64{"a.example.net:2499": floatPtr(10)}
+	m.loc.cursor = 2
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	if m.screen != screenLocations || m.loc.sortSpeed || m.loc.speedOrderRTTs != nil || m.loc.cursor != 0 {
+		t.Fatalf("o did not reset the visit: screen=%v loc=%+v", m.screen, m.loc)
+	}
+}
+
+func TestLocationsNoMatchAndEmptyCopy(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.filter = "zzz"
+	if view := m.View(); !strings.Contains(view, "no locations match the filter") {
+		t.Fatalf("no-match copy missing:\n%s", view)
+	}
+	m.loc.countries = nil
+	m.loc.filter = ""
+	if view := m.View(); !strings.Contains(view, "no locations loaded") {
+		t.Fatalf("empty copy missing:\n%s", view)
+	}
+}
+
+func TestLocationsFooterAndHelp(t *testing.T) {
+	m := testLocationsModel()
+	m.loc.ping = &pingRun{total: 35, pending: map[string]bool{"a": true}}
+	view := m.View()
+	if !strings.Contains(view, "pinging 35 servers...") {
+		t.Fatalf("ping count footer missing:\n%s", view)
+	}
+	if !strings.Contains(view, "enter select • P ping all • / filter • r refresh • esc back • ? help • q quit") {
+		t.Fatalf("locations footer missing:\n%s", view)
+	}
+	help := &strings.Builder{}
+	m.renderHelp(help)
+	if !strings.Contains(help.String(), "locations    arrows/hjkl move • enter select • P ping all • / filter • r refresh • esc back") {
+		t.Fatalf("locations help line missing:\n%s", help.String())
+	}
+	for _, gone := range []string{"expand/select", "ping shown", "expand/collapse"} {
+		if strings.Contains(help.String(), gone) {
+			t.Fatalf("help still contains %q:\n%s", gone, help.String())
+		}
+	}
+}
+
+func floatPtr(v float64) *float64 { return &v }
 
 func testSettingsModel() *Model {
 	return &Model{

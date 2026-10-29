@@ -96,15 +96,7 @@ func captureLocations() locationsState {
 				}},
 			},
 		},
-		expandedCountries: map[string]bool{
-			serverlist.RecommendedCode: true,
-			"DE":                       true,
-		},
-		expandedCities: map[string]bool{
-			serverlist.RecommendedCode + "/rec": true,
-			"DE/BER":                            true,
-		},
-		cursor: 5, // de1.edge.example:443
+		cursor: 0,
 		rtts: map[string]*float64{
 			"p.m1.fastly-masque.net:2499": &recommended,
 			"de1.edge.example:443":        &rtt,
