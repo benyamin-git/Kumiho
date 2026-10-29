@@ -127,7 +127,11 @@ internal fun TvSetupScreen(
 ) {
     val colors = MaterialTheme.colorScheme
     val primaryFocus = remember { FocusRequester() }
-    LaunchedEffect(state.step) { runCatching { primaryFocus.requestFocus() } }
+    val stepScroll = rememberScrollState()
+    LaunchedEffect(state.step) {
+        stepScroll.scrollTo(0)
+        runCatching { primaryFocus.requestFocus() }
+    }
 
     Row(
         modifier = modifier
@@ -170,7 +174,7 @@ internal fun TvSetupScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(stepScroll),
                 verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
             ) {
                 when (state.step) {

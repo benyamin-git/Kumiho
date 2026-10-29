@@ -134,7 +134,7 @@ class TvDashboardTest {
             var choice by remember { mutableStateOf<LocationChoice>(LocationChoice.Recommended) }
             var expanded by remember { mutableStateOf(emptySet<String>()) }
             val state = DashboardState(
-                phase = DashboardPhase.CONNECTED,
+                phase = DashboardPhase.OFF,
                 status = status(),
                 options = ConnectOptionsState(open = open, choice = null),
                 locations = LocationLoad.Ready(
