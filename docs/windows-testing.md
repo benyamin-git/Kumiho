@@ -1169,12 +1169,16 @@ the upgrade-specific lines below are then N/A — record that.
       kumiho login
 
   On a network known to answer with a Fastly `406`, expect an immediate,
-  clear failure — `anti-bot challenge solving is disabled; enable
-  solve_challenges and try again` — with no silent hang and no retry loop.
-  With `Solve challenges` on again, repeat the sign-in.
+  clear failure on the challenged host — `anti-bot challenge solving is
+  disabled; enable solve_challenges and try again` — with no silent hang and
+  no retry loop. Password sign-in still tries the sibling FxA host, so it can
+  succeed even with the setting off; the disabled wording appears only when
+  every host is challenged. With `Solve challenges` on again, repeat the
+  sign-in.
 
-  Expect: the solver answers the challenge and the request succeeds; the log
-  shows `[fastly]` steps followed by the successful request.
+  Expect: the request succeeds, either because the solver answers the
+  challenge (the log shows `[fastly]` steps) or because the sibling FxA host
+  answers without a challenge (no `[fastly]` lines).
 
 - [ ] If no challenge can be provoked on this network, record that explicitly
       in the v0.4.0 notes and do not claim a solver success. Still verify the

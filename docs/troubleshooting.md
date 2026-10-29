@@ -146,13 +146,21 @@ Mozilla's edge answers some control-plane requests with a `406` anti-bot
 challenge (Fastly's proof-of-work, `PAT` or `clientmetrics`). With
 `solve_challenges=on` (the default) Kumiho fetches the challenged origin,
 falls back to the related apex when the origin serves no challenge page,
-answers the challenge, installs the cookies and retries the request — up to
-five attempts in total. `[fastly]` lines in the log show each step.
+answers the challenge, installs the cookies and retries the request. The
+Guardian path allows up to five attempts. The Firefox Accounts login first
+tries the sibling host `oauth.accounts.firefox.com` — the same auth server on a
+hostname that a Fastly hard block (an empty `406`, common on
+`POST /v1/account/login` from flagged or datacenter addresses) does not cover —
+and only spends a solve when every host still answers `406`. A dropped
+connection on that sibling is retried once. `[fastly]` lines in the log show
+each solve step; the sibling attempt is silent unless it also fails.
 
 If it still fails the error is explicit: `could not solve the anti-bot
 challenge; retry or disable solve_challenges`. A captcha or an unknown
 challenge type cannot be solved and fails the same way. Setting
-`solve_challenges=off` produces the immediate
+`solve_challenges=off` skips the solver: the challenged host then fails
+immediately (the login still tries the sibling host), and when no host can be
+cleared the error is
 `anti-bot challenge solving is disabled; enable solve_challenges and try
 again`; that is a diagnostic step to isolate the problem, not a fix.
 

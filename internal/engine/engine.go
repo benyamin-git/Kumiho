@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/fastly"
@@ -709,6 +710,14 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 	if method != MethodPassword && method != MethodBrowser {
 		return api.LoginState{Step: "error", Error: fmt.Sprintf("unknown sign-in method %q", method)}
 	}
+	if email != "" && strings.IndexFunc(email, invalidEmailRune) >= 0 {
+		return api.LoginState{
+			Step:   "email",
+			Method: loginMethod(method),
+			Email:  email,
+			Error:  "enter a valid email address",
+		}
+	}
 
 	c.mu.Lock()
 	if err := c.ensureAccountsLocked(); err != nil {
@@ -836,6 +845,11 @@ func loginMethod(method string) string {
 	}
 	return "email"
 }
+
+// invalidEmailRune reports characters that never belong in an email address:
+// control characters (Windows IME noise reaches the daemon as NUL) and
+// whitespace.
+func invalidEmailRune(r rune) bool { return r < 0x20 || r == 0x7f || unicode.IsSpace(r) }
 
 // LoginPassword performs the FxA login and either completes it or moves to
 // the 2FA step.

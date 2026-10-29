@@ -56,6 +56,9 @@ func newTestControllerWithProvider(t *testing.T, handler http.HandlerFunc, plat 
 	t.Cleanup(server.Close)
 	client := fxa.NewClient()
 	client.BaseURL = server.URL + "/v1"
+	// Fixtures must never reach the production fallback host; tests that
+	// exercise the fallback point it at their own server explicitly.
+	client.FallbackBaseURL = ""
 	// Keep logout's best-effort token revocation hermetic: never fall through
 	// to the production destroy endpoint from a test.
 	client.DestroyEndpoint = server.URL + "/v1/oauth/destroy"
@@ -1091,6 +1094,42 @@ func TestChallengeSolveSettingConsultedPerCall(t *testing.T) {
 	}
 	if enabled == disabled {
 		t.Fatalf("enabled and disabled messages must differ, both %q", enabled)
+	}
+}
+
+// A Fastly hard block on the primary auth host (406 with an empty body that
+// no challenge page can clear) must not strand a password login: the FxA
+// client replays the request against the sibling auth-server hostname.
+func TestLoginFallsBackWhenPrimaryHostIsHardBlocked(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+	})
+	fallback := httptest.NewServer(loginOKHandler(t))
+	t.Cleanup(fallback.Close)
+	ctrl.fxa.FallbackBaseURL = fallback.URL + "/v1"
+
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	st := ctrl.LoginPassword(context.Background(), "pw")
+	if st.Step != "done" || st.Error != "" {
+		t.Fatalf("login = %+v, want a completed sign-in through the fallback", st)
+	}
+	accounts := ctrl.Accounts()
+	if len(accounts.Accounts) != 1 || accounts.Accounts[0].Email != "user@example.com" {
+		t.Fatalf("accounts = %+v", accounts)
+	}
+}
+
+// A NUL or whitespace from a Windows IME/keyboard event must be rejected
+// before it reaches FxA, which answers such a body with errno 107.
+func TestLoginStartRejectsControlCharactersInEmail(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request to %s", r.URL.Path)
+	})
+	st := ctrl.LoginStart(MethodPassword, "user@example.com\x00\x00", "")
+	if st.Step != "email" || st.Error != "enter a valid email address" {
+		t.Fatalf("state = %+v, want the email step with a validation error", st)
 	}
 }
 

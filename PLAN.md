@@ -107,9 +107,20 @@ no interactive captcha UI.
   origin, one round at a time). One solve has a 60 s budget with 250–750 ms
   jitter between rounds; every attempt is logged at warn under the `fastly` tag.
 - Unsupported types — captcha included — fail with a clear error naming the
-  type. FxA and Guardian retry a challenged request up to 5 times.
-  `solve_challenges` defaults on and is read per control-plane request, so it
-  applies immediately; off restores the immediate, clearly worded failure.
+  type. The Guardian client retries a challenged request up to 5 times.
+  The Firefox Accounts client instead tries each host once without solving,
+  then gives each challenged host one solve: a second 406 means that host
+  cannot be cleared (Fastly also hard-blocks
+  `POST api.accounts.firefox.com/v1/account/login` with an empty 406 that no
+  challenge cookie can clear). The sibling host
+  `https://oauth.accounts.firefox.com/v1` — the same auth-server build behind
+  a hostname the block does not cover — therefore answers first in the common
+  hard-block case, before any solve is spent. A transport-level failure on
+  that sibling (the edge can reset the connection after challenging the
+  primary) is retried once after 500 ms. `solve_challenges` defaults on and is
+  read per control-plane request, so it applies immediately; off restores the
+  immediate, clearly worded failure on the primary host, and the fallback is
+  still tried.
 - The solver sends a Chrome 126 (Windows) UA while Mozilla API requests keep the
   MozillaVPN UA (§2.1).
 

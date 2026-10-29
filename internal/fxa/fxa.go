@@ -13,6 +13,13 @@ import (
 const (
 	// DefaultBaseURL is the FxA auth server root.
 	DefaultBaseURL = "https://api.accounts.firefox.com/v1"
+	// DefaultFallbackBaseURL is the same FxA auth server behind Mozilla's
+	// OAuth hostname. Fastly can hard-block POST /account/login on the api
+	// host (HTTP 406 with an empty body and no challenge page, which no
+	// solved challenge can clear) while the oauth host keeps answering with
+	// the identical auth-server build. The fallback is tried after a 406 and
+	// before any solve, so the normal path never depends on it.
+	DefaultFallbackBaseURL = "https://oauth.accounts.firefox.com/v1"
 	// ClientID is the Firefox VPN OAuth client.
 	ClientID = "5882386c6d801776"
 	// Scope requests the VPN entitlement plus profile.

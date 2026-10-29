@@ -584,7 +584,10 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) appendRunes(runes []rune) {
-	s := string(runes)
+	s := appendPrintableRunes("", runes)
+	if s == "" {
+		return
+	}
 	switch m.step {
 	case "email":
 		m.email += s
@@ -618,12 +621,14 @@ func (m *Model) advanceLogin() (tea.Model, tea.Cmd) {
 	m.loginErr = ""
 	switch m.step {
 	case "email":
-		if strings.TrimSpace(m.email) == "" {
+		email := strings.TrimSpace(m.email)
+		if email == "" {
 			m.loginErr = "email is required"
 			return m, nil
 		}
+		m.email = email
 		m.busy = true
-		return m, callLogin(m.client, ipc.TypeLoginEmail, api.LoginEmailPayload{Email: m.email})
+		return m, callLogin(m.client, ipc.TypeLoginEmail, api.LoginEmailPayload{Email: email})
 	case "password":
 		if m.password == "" {
 			m.loginErr = "password is required"
