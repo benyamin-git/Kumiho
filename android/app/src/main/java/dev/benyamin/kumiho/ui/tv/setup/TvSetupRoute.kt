@@ -205,16 +205,6 @@ internal fun TvSetupScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
         ) {
-            Text(
-                text = stringResource(R.string.setup_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(setupStepLabel(state.step)),
-                style = MaterialTheme.typography.headlineMedium,
-                color = colors.onSurface,
-            )
             state.error?.let { failure ->
                 Column(
                     modifier = Modifier
