@@ -199,6 +199,7 @@ internal fun TvSetupScreen(
         }
         Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),

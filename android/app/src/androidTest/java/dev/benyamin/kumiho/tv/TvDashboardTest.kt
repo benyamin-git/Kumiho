@@ -80,13 +80,14 @@ class TvDashboardTest {
         proxy: (Boolean) -> Unit = {},
         city: (String, String) -> Unit = { _, _ -> },
         connect: () -> Unit = {},
+        toggle: (String) -> Unit = {},
     ): DashboardActions = DashboardActions(
         onPower = {},
         onOpenOptions = open,
         onCloseOptions = close,
         onSelectRecommended = {},
         onSelectSaved = {},
-        onToggleCountry = {},
+        onToggleCountry = toggle,
         onSelectCity = city,
         onToggleProxyOnly = proxy,
         onConnectFromOptions = connect,
@@ -131,6 +132,7 @@ class TvDashboardTest {
         rule.setContent {
             var open by remember { mutableStateOf(false) }
             var choice by remember { mutableStateOf<LocationChoice>(LocationChoice.Recommended) }
+            var expanded by remember { mutableStateOf(emptySet<String>()) }
             val state = DashboardState(
                 phase = DashboardPhase.CONNECTED,
                 status = status(),
@@ -140,7 +142,7 @@ class TvDashboardTest {
                         Country("gb", "United Kingdom", listOf(City("lon", "London", emptyList()))),
                     ),
                 ),
-            ).copy(options = ConnectOptionsState(open = open, choice = choice))
+            ).copy(options = ConnectOptionsState(open = open, choice = choice, expanded = expanded))
             TvKumihoTheme(palette()) {
                 TvDashboardScreen(
                     state = state,
@@ -152,6 +154,9 @@ class TvDashboardTest {
                             choice = LocationChoice.Picked(country, city)
                         },
                         connect = { connectClicks++ },
+                        toggle = { code ->
+                            expanded = if (code in expanded) expanded - code else expanded + code
+                        },
                     ),
                 )
             }
