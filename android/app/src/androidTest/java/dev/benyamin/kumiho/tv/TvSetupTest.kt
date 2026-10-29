@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.ui.setup.PermissionState
 import dev.benyamin.kumiho.ui.setup.SetupActions
@@ -95,7 +96,7 @@ class TvSetupTest {
         rule.onNodeWithTag(SetupTags.CONTINUE).assertIsDisplayed()
         rule.onNodeWithTag(SetupTags.CONTINUE).performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag(SetupTags.SIGN_IN_STEP).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_STEP).performScrollTo().assertIsDisplayed()
     }
 
     @Test

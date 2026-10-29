@@ -129,8 +129,8 @@ internal fun TvSetupScreen(
     val primaryFocus = remember { FocusRequester() }
     val stepScroll = rememberScrollState()
     LaunchedEffect(state.step) {
-        stepScroll.scrollTo(0)
         runCatching { primaryFocus.requestFocus() }
+        stepScroll.scrollTo(0)
     }
 
     Row(
