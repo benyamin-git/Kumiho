@@ -91,15 +91,25 @@ export GOFLAGS="${GOFLAGS:+$GOFLAGS }-mod=readonly"
 echo "android-build-aar: bind $targets -> $out"
 echo "android-build-aar: version $VERSION ($COMMIT, $DATE)"
 
+# gomobile resolves the module graph over the network on a cold runner; a
+# dropped proxy or checksum-database connection is transient, so retry once.
+bind() {
+	gomobile bind \
+		-target "$targets" \
+		-androidapi 26 \
+		-javapkg=dev.benyamin.kumiho.go \
+		-trimpath \
+		-ldflags "$ldflags" \
+		-o "$out" \
+		"${module}/mobile"
+}
+
 set -x
-gomobile bind \
-	-target "$targets" \
-	-androidapi 26 \
-	-javapkg=dev.benyamin.kumiho.go \
-	-trimpath \
-	-ldflags "$ldflags" \
-	-o "$out" \
-	"${module}/mobile"
+if ! bind; then
+	echo "android-build-aar: bind failed; retrying once" >&2
+	sleep 5
+	bind
+fi
 set +x
 
 [ -f "$out" ] || {
