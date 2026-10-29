@@ -1,9 +1,7 @@
-/* Locations screen (T2.3). Consumes the shell's primitives (button, card,
- * field/input) and the injected colour roles; geometry, type and spacing
- * come from tokens.css. No literal colours (ban 9), logical properties only
- * (ban 10), no shadows (ban 7). The list card's metrics follow the walk-era
- * widget and the inventory: 8 px padding, indent 8/28/48 per level, and
- * 36-unit rows (--row-h, the house table-row density). */
+/* Locations screen: one flat listbox of server rows. Consumes the shell's
+ * primitives (button, card, field/input) and the injected colour roles;
+ * geometry, type and spacing come from tokens.css. No literal colours
+ * (ban 9), logical properties only (ban 10), no shadows (ban 7). */
 
 .loc {
   display: flex;
@@ -26,59 +24,49 @@
   min-inline-size: 110px;
 }
 
-.loc__test {
-  min-inline-size: 140px;
-}
-
 .loc__ping-all {
   min-inline-size: 110px;
 }
 
-.loc__toggle {
-  min-inline-size: 130px;
-}
-
 /* ----------------------------------------------------------------- filter */
 
-/* The house field (label above the input); the inventory's 260-wide input. */
+/* The search field is wider than the old filter because its copy names every
+   matchable field; it still stays inside the data column on narrow windows. */
 .loc__field {
-  inline-size: 260px;
+  inline-size: 320px;
+  max-inline-size: 100%;
 }
 
-/* ------------------------------------------------------------------- tree */
+/* ------------------------------------------------------------------- list */
 
-.loc__tree {
+.loc__list {
   /* The inventory's minimum list height and the input cue's scroll cap. */
   min-block-size: 200px;
   max-block-size: 480px;
   overflow-y: auto;
-  /* The walk list's 8 px content padding (the .card primitive's 16 is
-     overridden here). */
+  /* The card primitive's 16 px padding becomes the list's 8 px inset. */
   padding: var(--space-2);
 }
 
 /* The card primitive sets no display rule, so [hidden] wins; keep the
    explicit rule for safety if that changes. */
-.loc__tree[hidden] {
+.loc__list[hidden] {
   display: none;
+}
+
+.loc__list:focus-visible {
+  outline: var(--focus-ring-w) solid var(--primary);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .loc__row {
   display: flex;
   align-items: center;
-  min-block-size: var(--row-h); /* 36 px, the inventory's tree-row metric */
-  padding-inline: var(--space-2);
+  gap: var(--space-3);
+  min-block-size: 48px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-button);
   cursor: pointer;
-}
-
-/* The walk indents: country 8, city 28, server 48 units. */
-.loc__row[aria-level="2"] {
-  padding-inline-start: 28px;
-}
-
-.loc__row[aria-level="3"] {
-  padding-inline-start: 48px;
 }
 
 /* The hovered row on the lower container step, the current row (keyboard
@@ -91,21 +79,82 @@
   background: var(--surface-container-3);
 }
 
-.loc__caret {
-  flex: none;
-  margin-inline-end: var(--space-1);
-  color: var(--on-surface);
+/* The selected server keeps a quiet primary tint, so the check and the
+   aria-selected state never rely on colour alone. */
+.loc__row[aria-selected="true"] {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .loc__flag {
+  display: inline-flex;
   flex: none;
-  margin-inline-end: var(--space-1);
+  inline-size: 24px;
+  block-size: 18px;
+  overflow: hidden;
+  border: 1px solid var(--outline);
+  border-radius: 2px;
 }
 
-.loc__label {
+.loc__flag .flag-icon {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.loc__flag .flag-icon--star {
+  color: var(--primary);
+}
+
+.loc__flag .flag-icon--globe {
+  color: var(--text-muted);
+}
+
+.loc__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.loc__title,
+.loc__detail {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.loc__title {
+  color: var(--on-surface);
+  font-size: var(--text-md);
+}
+
+.loc__detail {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.loc__trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.loc__latency {
+  min-inline-size: 3.5em;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-align: end;
+}
+
+.loc__check {
+  color: var(--primary);
+  font-size: var(--text-md);
+}
+
+.loc__check[hidden] {
+  display: none;
 }
 
 /* ---------------------------------------------------------------- empty/status */

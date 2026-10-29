@@ -30,6 +30,49 @@
   margin-inline-start: var(--space-2);
 }
 
+/* The native select keeps its own keyboard and accessibility behavior; the
+   flag is a decorative companion beside it. The hidden slot keeps its width
+   so choosing Saved selection never shifts the control. */
+.dash__location {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dash__location .input {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.dash__flag {
+  display: inline-flex;
+  flex: none;
+  inline-size: 24px;
+  block-size: 18px;
+  overflow: hidden;
+  border: 1px solid var(--outline);
+  border-radius: 2px;
+}
+
+.dash__flag[hidden] {
+  display: inline-flex;
+  visibility: hidden;
+}
+
+.dash__flag .flag-icon {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.dash__flag .flag-icon--star {
+  color: var(--primary);
+}
+
+.dash__flag .flag-icon--globe {
+  color: var(--text-muted);
+}
+
 /* -------------------------------------------------- Connect options popover */
 
 .dash__menu {

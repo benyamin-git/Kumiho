@@ -1737,6 +1737,29 @@ func TestDispatchRefreshForcesLocationsDownload(t *testing.T) {
 	}
 }
 
+// TestDispatchRefreshLocationsClearsRTTs pins P4: a Locations refresh is a
+// new visit, so the controller's GUI-local latency projection is cleared
+// before the reload (the screen also returns to country order).
+func TestDispatchRefreshLocationsClearsRTTs(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	ctrl := NewController(f, quietOptions())
+	startPoll(t, ctrl)
+	waitFor(t, "initial locations load", func() bool { return ctrl.Snapshot().LocationsLoaded })
+
+	ctrl.mu.Lock()
+	ctrl.rtts = map[string]string{"edge.example.net:443": "42 ms"}
+	ctrl.mu.Unlock()
+	if err := ctrl.Dispatch(Action{Name: ActionRefresh, Payload: []byte(`{"locations":true}`)}); err != nil {
+		t.Fatalf("Dispatch(refresh, locations) = %v", err)
+	}
+	if got := ctrl.Snapshot().RTTs; len(got) != 0 {
+		t.Fatalf("RTTs after locations refresh = %v, want cleared", got)
+	}
+}
+
 // TestDispatchRefreshLocationsFailureKeepsRows covers a failed forced
 // re-download: the loaded rows stay and the raw error lands on the locations
 // notice (inventory §Locations "a failed refresh keeps the rows and reports

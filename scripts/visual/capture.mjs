@@ -97,6 +97,7 @@ const ACCENTS = ["blue", "teal", "green", "orange", "rose", "violet"];
 //   action      /action envelope name (and optional payload) after navigating
 //   emitLog     /dev/log message after navigating
 //   fill        {selector, value} typed into a screen control after the action
+//   select      {selector, value} chosen in a native select after the action
 //   click       selectors clicked in order after the action/fill (screen
 //               controls like the logs level button)
 //   scrollBottom selector of a scrollable element scrolled to its bottom
@@ -110,7 +111,14 @@ const STATES = [
   { name: "connected", screen: "dashboard", scenario: "connected" },
   { name: "connecting", screen: "dashboard", scenario: "connecting" },
   { name: "error", screen: "dashboard", scenario: "error" },
-  { name: "connect-options", screen: "dashboard", hint: "connect-options" },
+  {
+    // A selected country makes the native select's decorative companion
+    // flag visible in the options capture (Saved selection hides it).
+    name: "connect-options",
+    screen: "dashboard",
+    hint: "connect-options",
+    select: { selector: "#dash-opt-location", value: "DE" },
+  },
   { name: "signout-confirm", screen: "account", hint: "signout-confirm" },
   {
     // The v0.6.0 account list's Add account dialog, browser and password
@@ -231,14 +239,13 @@ const STATES = [
     click: ["#logs-clear"],
   },
   {
-    // The locations screen with Test-speed labels on its auto-revealed
-    // selection (DE/Berlin): the mock's 42 ms / timeout pair.
-    name: "speed-test",
+    // Ping all through the real button: the mock alternates 42 ms / timeout
+    // across every loaded target, and the completed run switches the flat
+    // list to speed order. Wait for the busy guard to release before capture.
+    name: "speed-order",
     screen: "locations",
-    action: {
-      name: "ping",
-      payload: { hosts: ["de1.edge.example:443", "de2.edge.example:443"] },
-    },
+    click: [".loc__ping-all"],
+    waitAfter: ".loc__ping-all:not([disabled])",
   },
   // The onboarding wizard (T3.4): every step, dark and light, with
   // gui.toml's `onboarded` flag false so the first-run gate is the real one;
@@ -930,6 +937,9 @@ async function main() {
         }
         if (state.fill) {
           await page.fill(state.fill.selector, state.fill.value);
+        }
+        if (state.select) {
+          await page.selectOption(state.select.selector, state.select.value);
         }
         for (const selector of state.click || []) {
           await page.click(selector);

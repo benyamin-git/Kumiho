@@ -1320,6 +1320,14 @@ func (c *Controller) dispatchRefresh(act Action) error {
 	if err != nil {
 		return err
 	}
+	if req.Locations {
+		// A Locations refresh is a new visit: the screen returns to country
+		// order, and the controller drops its GUI-local latency projection so
+		// the reload cannot re-show labels from the previous run.
+		c.mu.Lock()
+		c.rtts = nil
+		c.mu.Unlock()
+	}
 	err = c.refreshStatus(context.Background())
 	if err != nil {
 		c.setNotice(slotShared, "could not refresh the status: "+err.Error(), toneBad, 0)

@@ -30,7 +30,7 @@
  */
 
 import { connectionStatus } from "../store.js";
-import { flagFor } from "../flags.js";
+import { flagIcon } from "../flags.js";
 
 // The busy guard's settle: an action whose signals repeat byte-for-byte (an
 // identical repeat failure) stops blocking after this long (see the file
@@ -100,8 +100,13 @@ function build(host) {
   const location = document.createElement("select");
   location.className = "input";
   location.id = "dash-opt-location";
+  const locationFlag = el("span", "dash__flag");
+  locationFlag.setAttribute("aria-hidden", "true");
+  locationFlag.hidden = true;
+  const locationControl = el("div", "dash__location");
+  locationControl.append(location, locationFlag);
   const locationField = el("div", "field");
-  locationField.append(locationLabel, location);
+  locationField.append(locationLabel, locationControl);
 
   const proxyInput = document.createElement("input");
   proxyInput.type = "checkbox";
@@ -188,6 +193,7 @@ function build(host) {
     trigger: trigger,
     popover: popover,
     location: location,
+    locationFlag: locationFlag,
     proxyInput: proxyInput,
     killRadios: killRadios,
     optConnect: optConnect,
@@ -327,8 +333,23 @@ export default {
         view.options.killSwitchBase = killSwitch;
       }
       ui.location.value = view.options.location;
+      renderLocationFlag();
       ui.proxyInput.checked = view.options.proxyOnly;
       for (const radio of ui.killRadios) radio.checked = radio.value === view.options.killSwitch;
+    }
+
+    // renderLocationFlag draws the decorative companion beside the native
+    // select; the option text itself stays text-only.
+    function renderLocationFlag() {
+      const code = ui.location.value;
+      ui.locationFlag.replaceChildren();
+      if (!code) {
+        // Reserve the flag slot so hiding it never shifts the native select.
+        ui.locationFlag.hidden = true;
+        return;
+      }
+      ui.locationFlag.hidden = false;
+      ui.locationFlag.append(flagIcon(code));
     }
 
     // rebuildLocations renders "Saved selection" plus every country as the
@@ -339,9 +360,7 @@ export default {
       const options = [el("option", null, "Saved selection")];
       options[0].value = "";
       for (const country of view.locations) {
-        const flag = flagFor(country.code);
-        const option = el("option", null,
-          (flag ? flag + " " : "") + country.name + " (" + country.code + ")");
+        const option = el("option", null, country.name + " (" + country.code + ")");
         option.value = country.code;
         if (country.code === view.options.location) found = true;
         options.push(option);
@@ -349,6 +368,7 @@ export default {
       ui.location.replaceChildren.apply(ui.location, options);
       if (!found) view.options.location = "";
       ui.location.value = view.options.location;
+      renderLocationFlag();
     }
 
     function setRow(entry, text, tone) {
@@ -453,6 +473,7 @@ export default {
 
     function onLocation() {
       view.options.location = ui.location.value;
+      renderLocationFlag();
     }
 
     function onProxy() {

@@ -423,6 +423,26 @@ func TestDevNoStore(t *testing.T) {
 	}
 }
 
+// TestEmbeddedFlagAsset pins the real SVG route: the GUI's flags live under
+// static/flags/4x3 and must be served from the embedded tree with the image
+// type and the normal CSP/token protection.
+func TestEmbeddedFlagAsset(t *testing.T) {
+	s := startServer(t, StaticFS(), Options{})
+	got := do(t, "GET", s.URL()+"flags/4x3/us.svg")
+	if got.status != http.StatusOK {
+		t.Fatalf("GET flags/4x3/us.svg = %d; want 200", got.status)
+	}
+	if ct := got.header.Get("Content-Type"); ct != "image/svg+xml" {
+		t.Errorf("flag Content-Type = %q; want image/svg+xml", ct)
+	}
+	if !strings.Contains(got.body, "<svg") || len(got.body) == 0 {
+		t.Errorf("flag body is not a non-empty SVG")
+	}
+	if csp := got.header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
+		t.Errorf("flag CSP = %q; want default-src 'self'", csp)
+	}
+}
+
 func TestContentTypes(t *testing.T) {
 	assets := fstest.MapFS{
 		"index.html": {Data: []byte(pageWithMarker(""))},
