@@ -85,7 +85,7 @@ token recovery are removed rather than kept as a fallback.
 - Changing the password/TOTP/unblock flow, except shared token refresh and
   logout handling.
 - Multi-account semantics, rotation or quota changes.
-- v0.7.0 region/location work.
+- v0.8.0 region/location work.
 - iOS, desktop embedded WebView2 login, or an Android Custom Tab flow as the
   primary browser path.
 - Releasing, tagging, pushing or publishing anything.
@@ -106,7 +106,7 @@ token recovery are removed rather than kept as a fallback.
 | D10 | Fetch the FxA profile after token exchange to obtain UID/email/display name. | The authorization response has no user identity; the `profile` scope is already requested. | decided | user |
 | D11 | Re-authentication must use the stored email; a different account is rejected and its new tokens discarded. | Prevents silently replacing the wrong account; keeps labels and IDs meaningful. | decided | user |
 | D12 | Sign-out best-effort revokes the FxA refresh token, then always deletes local state. | Follows Mozilla OAuth guidance while keeping offline sign-out reliable. | decided | user |
-| D13 | Target v0.6.1; do not tag/push before the phone test and explicit approval. | This is a post-v0.6.0 bug fix, not v0.7.0 work. | decided | user |
+| D13 | Target v0.6.1; do not tag/push before the phone test and explicit approval. | This is a post-v0.6.0 bug fix, not v0.8.0 roadmap work; v0.7.0 became Android TV. | decided | user |
 | D14 | Expose the paste flow in CLI, TUI and Windows GUI. | All desktop clients share the engine and should not diverge silently. | decided | user |
 | D15 | Android WebView is a full-screen dedicated screen with a top bar. | Avoids dialog sizing/clipping and gives the login page full room. | decided | user |
 | D16 | Keep the labels **Continue in browser** and **Browser**. | The in-app WebView is still a browser surface; minimal copy churn. | decided | user |
