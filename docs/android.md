@@ -202,40 +202,41 @@ system dialog; a denial closes the sheet and shows the reason.
 
 ### Locations
 
-**Locations** loads the full country/server list, with the engine's
-recommended entry first. Country rows carry their country-flag emoji, and so
-do the connect-sheet country picker and the current-selection summary;
-Recommended and servers stay unprefixed. A country row expands directly to
-its servers — there is no city level — and its subtitle counts them
-(`N servers`, quarantined included). Server rows name the city as context:
-`City · protocols · port`, with the per-server latency trailing. Search
-matches country name/code, city name and server hostname, case-insensitively;
-matching branches open while the query is active and closing the search
-restores the previous expansion. Refresh keeps the previous tree on failure
-and offers one Retry.
+**Locations** is one flat server-only list. There are no country or city
+header rows, carets or expand/collapse controls. The engine's recommended
+entry is first, then countries A–Z, cities A–Z and hostnames A–Z. Every row
+carries a real 4:3 country flag (a red star for Recommended and a globe for
+an unknown code), the full `Country · City` on the first line and
+`hostname:port · protocols` on the second; the latency or selection check
+trails the row. A quarantined or targetless server is never listed. Refresh
+keeps the previous list on failure and offers one Retry.
 
-The toolbar is one row: Refresh, **Ping all** and
-**Expand all**/**Collapse all**. Ping all pings every usable server in the
-loaded list regardless of the filter or expansion, deduped by `host:port`
-and skipping quarantined entries; its button reads **Pinging N…**, and the
-button stays disabled until the run ends. A measured round trip shows
-milliseconds, an unanswered probe shows **timeout**, and an untested host
-shows **—**; nothing pings on load, typing, expanding, refreshing or
-resuming. The run window is 12 seconds for a normal list and scales with
-the target count (1.5 seconds per 24-host batch plus margin). Expand all
-opens every country, and the label flips to Collapse all while anything is
-open; the control is disabled while the search field is non-empty.
+Search matches country name/code, city name/code, server hostname,
+`host:port` and protocol names, case-insensitively. The placeholder is
+**Country, city, server, or protocol**, and the no-match card names that
+scope. The current-selection summary keeps the flag and shows
+`Country · City · host:port · protocols`, including when its server is no
+longer in the loaded list. There is no connected-location hint; the summary
+is the only current-selection display.
 
-Collapsed country rows show their best latency — the fastest measured RTT
-among their servers, or **timeout** when only timeouts came back, or **—**
-before any run — and the list re-sorts live as results arrive: measured
-countries first, ascending, then the rest in engine order, with
-Recommended pinned first; servers inside a country the same way.
+The toolbar is Refresh and **Ping all**. Ping all probes every usable server
+in the loaded list regardless of the search, deduped by address and skipping
+quarantined entries; its button reads **Pinging N…** and stays disabled until
+the run ends. A measured round trip shows milliseconds, an unanswered probe
+shows **timeout**, and an untested host shows **—**; nothing pings on load,
+typing, refreshing or resuming. The run window is 12 seconds for a normal
+list and scales with the target count (1.5 seconds per 24-host batch plus
+margin).
+
+Only a completed run with at least one result switches the list to speed
+order: finite RTTs ascending, failures and untested servers last, and
+Recommended always first. The order lasts for the current visit and Refresh
+restores country order. A timeout counts as a result; a transport failure or
+a run with no results leaves the current order alone.
 
 Selecting a row saves it for the **next** connection — the current session
 keeps its server and exit IP — so the screen says to disconnect on Home and
-connect again. A server the engine quarantined (three failed connects) is
-marked, skipped by Ping all and not selectable.
+connect again.
 
 ## Settings
 
@@ -762,7 +763,7 @@ sign-off has happened.
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
-| Locations tree, refresh, Ping all, Expand all | Locations one-level list, live filter, speed order, 24-way ping |
+| Locations flat server list, refresh, search and Ping all | Flat server list, real flags, live search, deferred speed order, 24-way ping |
 | Desktop runtime settings, overrides/reset | Settings groups with 19 engine rows and the 2 Android-owned rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
 | Account entitlement and sign-out | Account screen |
@@ -778,9 +779,11 @@ sign-off has happened.
 | No telemetry/backups | No telemetry, no backup, no-backup token storage |
 | Protocol v1 / desktop untouched | No IPC change; the mobile facade and Android provider are additive |
 
-Android deliberately diverges in one place: the Locations tab is one expandable
-level (country → server, city as row context) and re-sorts by measured speed,
-while the desktop trees keep country → city → server.
+All four location surfaces — Android phone, Android TV, the Windows GUI and
+the TUI — use the same flat server-only list, country/city/hostname order,
+one Ping all action and speed order that switches only at completion. The GUI
+dashboard's native country select is intentionally text-only with a real flag
+beside it (D39); the TUI keeps emoji flags.
 
 ## Related documentation
 

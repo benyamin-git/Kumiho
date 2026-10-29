@@ -71,7 +71,7 @@ Captured in the Dark theme with sample data. The Windows GUI images are
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: flagged country rows, Test speed / Ping all / Expand all actions and ping times](screenshots/windows-gui/locations.png) |
+| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: flat server rows with real flags, search, Ping all and ping times](screenshots/windows-gui/locations.png) |
 
 ![Windows GUI settings: theme and accent controls, version, and background service rows](screenshots/windows-gui/settings.png)
 
@@ -79,7 +79,7 @@ Captured in the Dark theme with sample data. The Windows GUI images are
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: flagged country tree with expanded rows, ping times and expand/collapse-all hints](screenshots/linux-tui/locations.png) |
+| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: flat flagged server rows, Recommended first, one-line addresses and ping times](screenshots/linux-tui/locations.png) |
 
 ![Linux TUI settings: all settings rows and the TLS split hint](screenshots/linux-tui/settings.png)
 
@@ -382,8 +382,8 @@ that runs per logged-in user. It has six screens:
 
 - **Dashboard** — the connection state, Connect/Disconnect, per-connect
   options (location, proxy only, kill switch) and the live status card;
-- **Locations** — a filterable country/city/server tree with country flags,
-  Test speed, Ping all and Expand all/Collapse all;
+- **Locations** — a filterable flat server list with real country flags and
+  one Ping all action that orders the list by measured speed;
 - **Settings** — Light/Dark/OLED theme, six accents, start at login, plus the
   daemon's own settings with per-setting overrides;
 - **Account** — the account list (add, use, rename, remove, re-authenticate),
@@ -438,10 +438,10 @@ v0.6.0 APK.
 The app has a four-step setup (consent, browser or password Firefox Accounts
 sign-in, VPN and notification permissions, Always-on guidance), then the same
 surfaces as the desktop clients: a dashboard with connect options and live
-status, locations with country flags, a search, one **Ping all** action that
-orders the list by measured speed, and Expand all/Collapse all, and all 21
-settings rows (19 engine settings plus the read-only Always-on/lockdown rows
-Android owns), with overrides and Reset. Browser sign-in completes in a
+status, locations with real country flags, a search, one **Ping all** action
+that orders the list by measured speed, and all 21 settings rows (19 engine
+settings plus the read-only Always-on/lockdown rows Android owns), with
+overrides and Reset. Browser sign-in completes in a
 full-screen in-app **Mozilla account** WebView (with paste and password
 fallbacks). Split tunneling, the five-account
 list with browser re-authentication and rotation, logs with sharing, diagnostics

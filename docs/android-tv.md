@@ -92,6 +92,10 @@ colour: rows scale and gain a border when focused.
   without a browser still shows the release notes and download link.
 - Logs can be viewed, copied line by line and shared with Android's share
   sheet. Diagnostics can be copied and re-run.
+- The Locations tab is one flat server list with real 32×24 flags, a
+  two-line `Country · City` / `host:port · protocols` row, search and one
+  **Ping all** action. There are no carets or expand/collapse controls, and
+  D-pad focus stays on the list after a search or a speed-order switch.
 - Proxy-only mode remains available but needs a local client; a TV usually
   has none, so the normal use is a full tunnel.
 - IPv6 is blackholed, non-DNS UDP is blocked, and DNS runs as DoH inside the
@@ -103,9 +107,9 @@ colour: rows scale and gain a border when focused.
 - The TV shell renders on the device GPU with Compose for TV. Use the
   launcher's own frame rate as the reference; there is no TV-specific
   rendering path or WebView in the tunnel path.
-- The location tree and log console use lazy lists. Very large server lists
-  or a log ring at its cap stay scrollable; focus movement is bounded by the
-  visible list.
+- The flat location list and log console use lazy lists. Very large server
+  lists or a log ring at its cap stay scrollable; focus movement is bounded
+  by the visible list.
 - The TV channel publish happens once per activity start on a background
   coroutine and does not touch the engine.
 
@@ -144,7 +148,10 @@ TV's own launcher or Wi-Fi behaviour.
 - [ ] Setup: consent, browser sign-in (WebView), VPN permission,
       notifications and Always-on guidance all complete with the remote.
 - [ ] Dashboard: connect, disconnect, reconnect and the options page.
-- [ ] Locations: search, expand/collapse, select a server, ping all.
+- [ ] Locations: search and no-match copy, real 32×24 flags, flat focusable
+      rows, select a server, then Ping all and inspect the speed order
+      (Recommended first, failures last); confirm there are no carets or
+      expand/collapse controls.
 - [ ] Account: add, rename, remove, rotate and sign out.
 - [ ] Settings: theme, accent, update check, split tunneling, bypass and every
       engine row/dialog.

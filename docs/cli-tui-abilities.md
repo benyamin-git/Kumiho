@@ -352,31 +352,37 @@ the password flow. Steps in the password flow are `email` → `password` → `2f
   new account on completion; only an in-flight flow blocks a second start.
 
 ## Locations screen
-Shows a tree: countries (`Name (CODE) - N cities`, `REC` first), cities nested
-under expanded countries (`City (code)`), servers under expanded cities
-(`* host:port` plus `  <n> ms` in green or `  timeout` dimmed when pinged).
-`*` marks the persisted selection (country row if it matches `status.location`,
-server row if it matches `status.server`). `(no locations loaded)` when empty;
+Shows one flat server-only list. There are no country or city header rows,
+carets or expansion state. Each row is one line:
+`<flag> CC · City · host:port` (Recommended is `★ REC · host:port`; a normal
+row omits the city when it adds nothing), followed by `  <n> ms` in green or
+`  timeout` dimmed when pinged. There are no protocols on the row. `*` marks
+the persisted selection by address. `no locations loaded` when empty;
 `loading locations...` while fetching; error line on failure. A filter line
 `filter: <text>_` appears while filtering or when a filter is set.
+
 Keys:
-- arrows / `k` `j` — move cursor over visible rows.
-- `enter` — on a country toggles expansion; on a city toggles expansion; on a
-  server persists it via `select_location` (country code, city code,
-  `host:port`) — **does not connect**; success notice `location saved`,
-  failure `selection failed: <err>` (status refreshed either way).
-- `p` — TCP-ping every **visible** server row (only expanded, filter-matched
-  servers); results stream in and update rows live.
-- `/` — filter mode: type to filter by country name or code (not city names;
-  case-insensitive substring), `backspace` edits, `enter` keeps the filter and
-  leaves filter mode, `esc` clears the filter, `ctrl+c` quits.
-- `r` — force server-list refresh (`--refresh`).
-- `esc` — back to Dashboard. Footer: `enter expand/select • p ping • r refresh
-  • / filter • esc back • ? help`.
-- On first successful load the persisted selection is auto-expanded (country
-  and the city containing the selected server).
-- Empty filter shows all countries collapsed except auto-expanded ones; filter
-  rows are re-evaluated live and the cursor resets to the top.
+- arrows / `k` `j` — move the cursor over visible rows.
+- `enter` — persist the current server via `select_location` (country code,
+  city code, connect target) — **does not connect**; success notice
+  `location saved`, failure `selection failed: <err>` (status refreshed either
+  way).
+- `P` — Ping all: TCP-ping every usable server in the loaded list regardless
+  of the filter, deduped by address and skipping quarantined/targetless
+  records. Results stream in and update labels without reordering rows. When
+  the run completes with at least one result, the list switches once to speed
+  order: finite RTTs ascending, failures and untested last, Recommended first;
+  the cursor returns to the top. A timeout counts as a result. `p` and `x` are
+  no-ops.
+- `/` — filter mode: matches country name/code, city name/code, hostname,
+  `host:port` or protocol name, case-insensitively; `backspace` edits, `enter`
+  keeps the filter and leaves filter mode, `esc` clears the filter, `ctrl+c`
+  quits. Filtering never resets the order.
+- `r` — force server-list refresh (`--refresh`); clears speed order, latency
+  labels and the cursor and returns to country order.
+- `esc` — back to Dashboard. Footer: `enter select • P ping all • / filter •
+  r refresh • esc back • ? help • q quit`.
+- Leaving and re-entering through `o` resets speed order and the cursor.
 
 ## Settings screen
 Shows 19 rows (label, value; `*` marks a key whose effective value comes from
@@ -525,7 +531,7 @@ Full-screen replacement listing:
 - `global       ? help • q / ctrl+c quit`
 - `dashboard    space connect/disconnect • l login • o locations • s settings
   • a account • g logs • r refresh`
-- `locations    arrows/hjkl move • enter expand/select • p ping • / filter •
+- `locations    arrows/hjkl move • enter select • P ping all • / filter •
   r refresh • esc back`
 - `settings     arrows move • enter change • d reset to default • r refresh •
   esc back`
@@ -768,20 +774,23 @@ default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
   protocol request does not exist (flagged above).
 
 ## Locations (list, search/filter, selection, ping)
-- List: Remote Settings server list; `REC` (Recommended Location) first, then
-  alphabetical; cities and servers nested; quarantined servers excluded;
-  `CatchAll Anycast` records dropped. Daemon caches 30 min; `refresh`
-  bypasses; failures fall back to the cache with a warning log.
+- List: Remote Settings server list; one flat server list with `REC`
+  (Recommended Location) first, then countries A–Z, cities A–Z and hostnames
+  A–Z; quarantined and targetless servers excluded; `CatchAll Anycast` records
+  dropped. Daemon caches 30 min; `refresh` bypasses; failures fall back to the
+  cache with a warning log.
 - Selection: `select_location` persists country/city/server without
   connecting; shown as `*` in the TUI and used by the next connect (or
   auto-picked after 3 consecutive connect failures for that server).
-- Filtering: TUI `/` filters countries by name/code (client-side). CLI `--to`
-  accepts country code, city code, server host or `host:port`, host prefix,
-  or unique country-name substring (client-side matching; the daemon accepts
+- Filtering: TUI `/` matches country name/code, city name/code, hostname,
+  `host:port` and protocol names (client-side). CLI `--to` accepts country
+  code, city code, server host or `host:port`, host prefix, or unique
+  country-name substring (client-side matching; the daemon accepts
   `location_code`/`city_code`/`server` directly).
 - Ping: daemon TCP probes streamed per host (`ping_result`); CLI waits ≤6 s and
-  prints ms/unreachable/no result; TUI pings visible servers and shows RTT or
-  `timeout` live. No ping history or cancellation.
+  prints ms/unreachable/no result; TUI Ping all probes every usable server and
+  shows RTT or `timeout`, then switches to speed order once at completion. No
+  ping history or cancellation.
 
 ## Connect / disconnect semantics and states
 - States: `UNAUTHENTICATED`, `IDLE`, `CONNECTING`, `CONNECTED`, `RECONNECTING`,

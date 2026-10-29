@@ -489,7 +489,7 @@ and
 
 - [ ] TUI parity: run `kumiho` and exercise every screen:
       `?` help; `space` disconnect (`state: IDLE`) and connect again;
-      `o` locations, `p` ping, `/` filter, `enter` select a country;
+      `o` locations, `P` ping all, `/` filter, `enter` select a server;
       `s` settings (cycle a value, `d` reset it); `a` account (list, `u` use,
       `n` rename, `t` rotation, `r` refresh);
       `g` logs (`v` level, `/` search, `f` follow, `c` clear);
@@ -757,19 +757,30 @@ never persisted).
 
 ### 16.4 Locations
 
-- [ ] Open `Locations`.
+- [ ] Open `Locations`, and open **Options** on the Dashboard.
 
-  Expect: **Refresh** and **Test speed**; a **Filter** box (placeholder
-  `Country or city`) that narrows the country → city → server tree live as you
-  type; the recommended region first; the persisted server marked
-  `· selected`; latency shown as `· 42 ms` or `· timeout` after a test.
+  Expect: the Locations screen is one flat server-only list, with no country
+  or city headers, carets or expand/collapse controls. **Refresh** and **Ping
+  all** are the only actions. The search box is labelled `Search locations`
+  and its placeholder is `Country, city, server, or protocol`. Rows show a
+  real 4:3 country flag, `Country · City` on line 1 and
+  `host:port · protocols` on line 2, with latency or the selection check
+  trailing. Quarantined and targetless servers are absent. The Dashboard
+  Location picker is a native select whose options are text-only
+  `Name (CC)`; a real flag beside it follows the chosen country, and `Saved
+  selection` shows a globe.
 
-- [ ] Exercise the tree.
+- [ ] Exercise search and Ping all.
 
-  Expect: **Test speed** probes the visible servers and streams latency labels
-  (the button disables while it runs); clicking a country or city expands or
-  collapses it; clicking a server row saves the selection (status
-  `Location saved`) **without** connecting; **Refresh** reloads the list.
+  Expect: search matches country name/code, city name/code, hostname,
+  `host:port` and protocol names; a miss shows `No locations match the
+  filter.` while keeping the action row. **Ping all** probes every usable
+  server even while a search is active, streams `42 ms`/`timeout` labels
+  without reordering rows, then switches once to speed order when the run
+  completes (finite RTTs ascending, failures/untested last, Recommended
+  first). A timeout counts as a result; a refresh resets the list to country
+  order and clears the labels. Clicking a server row saves it (status
+  `Location saved`) **without** connecting; nothing expands.
 
 ### 16.5 Settings
 

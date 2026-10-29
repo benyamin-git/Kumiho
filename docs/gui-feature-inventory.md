@@ -182,75 +182,74 @@ click; disabled buttons leave the tab order. No confirmations on this screen.
 **Data sources:** everything on the card comes from the daemon status
 snapshot/events. Nothing here is a local preference.
 
+The Connect action's **Options** popover keeps the native country `<select>`:
+options are text-only (`Saved selection`, `Name (CC)`) and a real 4:3 country
+flag sits beside the control, following the selected country. The flag is a
+separate decorative node, never option text (D39).
+
 ---
 
 ## Locations
 
-**Reached:** rail item `Locations`. Loads the country → city → server tree on
-first view (30 s timeout).
+**Reached:** rail item `Locations`. Loads one flat server-only list on first
+view (30 s timeout). There are no country/city parent rows, carets or
+expansion state.
 
 **Visible elements, top to bottom:**
 
 1. **Title row:** heading `Locations`.
-2. **Action row:** `Refresh` (tonal, 110) and `Test speed` (tonal, 140).
-3. **Filter row:** label `Filter` and a single-line input with the cue
-   placeholder `Country or city` (260 wide, house control height).
-   Typing filters immediately (case-insensitive); the country names and
-   codes, city names and codes are matched as substrings. While a filter is
-   active every surviving country is auto-expanded so matching cities are
-   visible. Clearing the box restores the user's earlier expansion state.
-4. **Tree list** (card, minimum 200 units high, 36-unit rows; indentation by
-   level: country 8, city 28, server 48 units):
-   - Country row text: `Name (CC) · n cities` (`1 city` for one), preceded by
-     an expand/collapse caret (▸ collapsed, ▾ expanded; drawn, not a glyph
-     from the label font). **REC first** — the recommended random entry sorts
-     first as served by the daemon; its row is whatever the live data spells
-     (e.g. `Recomended Location (REC) · 1 city`).
-   - City row text: `Name (CC)`, with its own caret.
-   - Server row text: `host:port`, plus ` · 42 ms` or ` · timeout` when a
-     speed test measured it, plus ` · selected` on the persisted selection.
-   - Quarantined servers and servers without a connect target are never
-     listed.
-   - On load, the tree auto-reveals the persisted selection (expands its
-     country and city).
-   - **Appearance/state:** the current row is highlighted with a rounded
-     container-step fill; the hovered row uses a lighter step; the keyboard
-     focus draws a ring around the whole list. While the list is empty:
-     either a centred quiet line `Loading locations…` (first fetch in
-     flight) or `No locations match the filter.` (settled empty set), in
-     place of the card.
+2. **Action row:** `Refresh` (tonal) and `Ping all` (tonal). Both are disabled
+   while a Ping all run is in flight; Ping all is also disabled when there is
+   no usable target. No Test speed, expand or collapse action exists.
+3. **Search row:** label `Search locations` and a single-line input with the
+   placeholder `Country, city, server, or protocol`. Typing filters
+   immediately and case-insensitively on country name/code, city name/code,
+   hostname, `host:port` and protocol names. The filter is session-local and
+   does not reset the order.
+4. **Flat list** (card, minimum 200 units high, 36-unit rows): one row per
+   usable server, ordered Recommended first, then country A–Z, city A–Z and
+   hostname A–Z. Each row has a real 4:3 SVG country flag (Recommended uses a
+   star, an unknown code a globe), a two-line body and a trailing slot:
+   - line 1: full `Country · City` (the city is omitted when blank or equal
+     to the country);
+   - line 2: `host:port · protocol, protocol` (protocols are omitted when
+     none);
+   - trailing: `42 ms`, `timeout` or `—`, plus a check on the current
+     selection. The selection is done by address and country; it persists
+     without connecting.
+
+   Quarantined servers and servers without a connect target are never listed.
+   While the list is empty: `Loading locations…` during the first fetch,
+   `No locations match the filter.` for an empty filtered result, or
+   `No locations loaded` when the daemon returned nothing.
 5. **Status line** (bottom, single small line, tone-coloured), priority
-   order:
-   - `Loading locations...` (load in flight);
-   - the raw load error (bad tone);
-   - `Testing speed...` (ping in flight);
-   - `Speed test failed: <err>` (bad tone, stays until the next run);
-   - `No locations match the filter` (loaded, filter matched nothing);
-   - `No locations loaded` (loaded, no data at all);
-   - the view-model's last notice (e.g. `Location saved`, or
-     `could not save the location: <err>`) — persists until replaced.
+   order: load in flight, raw load error, `Pinging N servers...`, speed
+   failure, `No locations match the filter`, `No locations loaded`, then the
+   view-model's last notice (`Location saved`, `could not save the location:
+   <err>`).
 
 **Interactions:**
 
-- **Click a country/city row** (press+release on the same row): expand or
-  collapse. **Click a server row**: persist that selection via the daemon
-  (`Location saved` notice; does **not** connect). Selection persists across
-  restarts on the daemon side and the next connect uses it.
+- **Click a server row**: persist it via the daemon (`Location saved`; no
+  connect). There is nothing to expand.
 - **Keyboard:** `Up`/`Down` move the current row; `PageUp`/`PageDown` move by
-  a viewport; `Home`/`End` jump to first/last; `Enter` or `Space` activates
-  the current row (same as click). Any focus movement scrolls the current row
-  into view.
+  a viewport; `Home`/`End` jump to first/last; `Enter` or `Space` selects the
+  current row. Focus movement scrolls the row into view.
 - **Mouse wheel:** scrolls three rows per notch.
-- **Refresh:** asks the daemon to re-download the server list (30 s
-  timeout); a refresh keeps the stale rows visible while it runs, and a
-  failed refresh keeps the rows and reports the error in the status line.
-- **Test speed:** probes up to the first 16 visible server rows (filtered and
-  expanded), one run at a time — while it runs the button is disabled and a
-  re-click is ignored; results stream in individually as `42 ms` / `timeout`
-  labels (10 s request timeout).
+- **Refresh:** re-downloads the server list (30 s timeout) and resets the
+  list to country order with no latency labels; a failed refresh keeps the
+  stale rows and reports the error.
+- **Ping all:** probes every usable server in the loaded list regardless of
+  the filter, deduped by address and skipping quarantined entries, one run at
+  a time (10 s request timeout). Latency labels stream in; a run keeps its
+  pre-run order while in flight. Only a completed run with at least one result
+  switches to speed order: finite RTTs ascending, failures and untested rows
+  last, Recommended always first. A timeout counts as a result; a transport
+  failure leaves the current order alone. Refresh and adopting a changed
+  server list both reset to country order.
 
-**Data sources:** tree/countries/selection from the daemon; RTTs from
-streamed ping events; filter text and expansion state are session-local (not
+**Data sources:** list/selection from the daemon; RTT labels from streamed
+ping events; filter text, current row and sort mode are session-local (not
 persisted); the status notice comes from the shared view-model.
 
 ---
@@ -861,8 +860,8 @@ theme/accent values resolve to defaults; a stored window smaller than
 | `onboarded` | `true`/`false` | `false` | When true, launch goes straight to the Dashboard; set only by `Open Kumiho` in the wizard. |
 
 Not in `gui.toml` (session-only): logs level/search/follow/scroll,
-Locations filter/expansion/scroll, Settings scroll offset, theme-independent
-screen caches.
+Locations filter/scroll, Settings scroll offset, theme-independent screen
+caches.
 
 ---
 
@@ -985,8 +984,8 @@ covering a missing/stopped service.
   setup retry 15 s.
 - Busy guards: connect/disconnect buttons, tray action, Settings mutation,
   Account sign-out/add/use/remove/rename/re-auth/rotation, Onboarding busy
-  state, Diagnostics run, Test speed, Setup Retry, Logs reconcile — at most
-  one in flight, repeat clicks ignored or buttons disabled.
+  state, Diagnostics run, Ping all, Setup Retry, Logs reconcile — at most one
+  in flight, repeat clicks ignored or buttons disabled.
 - State words: `Off` (IDLE/empty), `Connected`, `Proxy only`, `Connecting`,
   `Reconnecting`, `Waiting for network`, `Not signed in`, `Error` (FATAL).
   The header additionally has `Loading...`, `Status unavailable`,
@@ -1024,11 +1023,11 @@ covering a missing/stopped service.
 **Locations behavior**
 
 - Ping results are event-driven labels (`42 ms` / `timeout`), keyed
-  `host:port`; up to 16 visible server rows per run; one run at a time.
-- Selection is persist-only (no connect), survives restarts, and the tree
-  reveals it on load.
-- Filtering auto-expands countries; expansion state is local; a failed
-  refresh keeps stale rows.
+  `host:port`; Ping all probes every usable server regardless of the filter,
+  one run at a time.
+- Selection is persist-only (no connect) and survives restarts; the row is
+  marked with a check, with no auto-reveal because the list is flat.
+- Filtering never expands anything; a failed refresh keeps stale rows.
 
 **Settings behavior**
 
@@ -1096,10 +1095,9 @@ covering a missing/stopped service.
    `Disconnect` "while it is up"; the code shows `Disconnect` for every
    non-idle/loading state (`Connecting`, `Reconnecting`, `Waiting for
    network`, `Proxy only`) and disables it while an action is in flight.
-6. **`Test speed` scope.** The guide says it measures "the servers shown";
-   the code silently caps a run at the **first 16 visible server rows**. Is
-   the cap acceptable/needed in the rewrite (or should it measure all
-   visible)?
+6. **`Test speed` scope.** **Resolved (v0.8.0):** Test speed is removed. The
+   single Ping all probes every usable server even when filtered, then
+   switches to speed order when the run completes.
 7. **Header tone inconsistency.** The Dashboard chip tones `Error`/`Connected`
    (bad/good) but the header shows the same word in the normal text tone
    (tone is only used for `Status unavailable` / `Daemon unreachable`).

@@ -128,8 +128,11 @@ The action row holds:
   `Waiting for network`; every other state keeps `Connect`). The button is
   held disabled from the click until the action settles.
 - **Options** — a small popover with the per-connect choices:
-  - **Location** — a `Saved selection` entry plus every country the daemon
-    serves, as `Name (CC)` prefixed with the country's flag;
+  - **Location** — a native select with a `Saved selection` entry plus every
+    country the daemon serves as text-only `Name (CC)` options. A real 4:3
+    country flag sits beside the select and follows the chosen country; Saved
+    selection shows the globe fallback. Option text never contains the flag
+    (D39);
   - **Proxy only** — *Keep system routing untouched; SOCKS5 proxy only.*;
   - **Kill switch** — `On`, `Off` or `Last` (*Last keeps the value currently
     in effect*), seeded from the current setting;
@@ -153,22 +156,35 @@ header already says so and the card stays empty.
 
 ## Locations
 
-**Reached:** the `Locations` rail item. A filter box at the top narrows the
-tree live as you type. Countries contain their cities, and cities their
-servers; the recommended region is listed first and country rows carry their
-country-flag emoji (Recommended, cities and servers do not). The current
-selection is marked `· selected`, and each server may show a latency such as
-`· 42 ms` or `· timeout`.
+**Reached:** the `Locations` rail item. The screen is one flat server-only
+list; there are no country or city header rows, carets or expand/collapse
+controls. Rows are ordered Recommended first, then country A–Z, city A–Z and
+hostname A–Z. Each row shows a real 4:3 SVG country flag (a star for
+Recommended, a globe for an unknown code), the full `Country · City` on the
+first line and `hostname:port · protocols` on the second. The latency or the
+current-selection check trails the row. Quarantined and targetless servers are
+never listed.
 
-The action row has **Refresh**, **Test speed**, **Ping all** and
-**Expand all**/**Collapse all**. Test speed probes the visible servers (up to
-16 hosts) and fills in the latency figures. Ping all probes every usable
-server in the loaded list — countries, cities and Recommended, deduped by
-address and skipping quarantined entries — regardless of the filter, and its
-status line reads `Pinging N servers...`. Expand all opens every country and
-city; the label flips to Collapse all while anything is open, and the control
-is disabled while the filter is non-empty. A status line below reports the
-last action's result.
+The search box at the top narrows the list live as you type. Its placeholder
+is **Country, city, server, or protocol**, and it matches country name/code,
+city name/code, hostname, `host:port` and protocol names, case-insensitively.
+A no-match result keeps the list area's `No locations match the filter.` copy
+and the status line's `No locations match the filter`.
+
+The action row is **Refresh** and **Ping all**. Ping all probes every usable
+server in the loaded list regardless of the filter, deduped by address and
+skipping quarantined entries; its status line reads `Pinging N servers...` and
+the button stays disabled until the run ends. Per-row labels update as results
+stream in. Only a completed run with at least one result switches the list to
+speed order: finite RTTs ascending, failures and untested rows last, and
+Recommended always first. A timeout counts as a result; a transport failure
+leaves the current order alone. A new run keeps the current order while it is
+in flight. Refresh resets country order and the local latency labels; a
+changed list is also a new visit. A status line below reports the last
+action's result.
+
+Clicking a server row saves it for the **next** connection (status
+`Location saved`) without connecting; the current session is unchanged.
 
 ## Settings
 

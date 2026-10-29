@@ -5,7 +5,8 @@ Gradle commands, APK verification, signing, release automation and the
 physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
-> tree: **479 JVM tests / 145 connected tests / lint 0 errors + 15 warnings**.
+> tree: **491 JVM tests / 157 phone + 21 TV connected testcases / lint 0
+> errors + 26 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
 > Galaxy S25 FE for v0.5.2; v0.6.0 physical acceptance is pending and the
 > sign-off is recorded below. The release automation is implemented:
@@ -127,10 +128,11 @@ cache is warm. The unit/lint/assemble gate directly:
 
 Current expected result on the current tree:
 
-- **479 JVM tests, 0 failures, 0 errors, 0 skipped**;
-- **lint 0 errors, 15 warnings** — the pre-existing `OldTargetApi`,
-  `UnusedAttribute`, `ObsoleteSdkInt` and five `UnusedResources`, two `Typos`
-  and two `ModifierParameter`, plus `UseKtx` and two dependency-update notices;
+- **491 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **lint 0 errors, 26 warnings** — dependency-update notices, the existing
+  `OldTargetApi`, `UnusedAttribute`, `ObsoleteSdkInt`, unused resources, four
+  `ModifierParameter` and four `UseKtx` notices, plus four generated-flag
+  `IconDuplicates` and one `IconMissingDensityFolder` from the bundled assets;
 - `app/build/outputs/apk/debug/app-debug.apk`.
 
 The debug build is one APK containing the AAR's arm libraries and installs as
@@ -174,8 +176,10 @@ Then run:
     cd android
     ./gradlew --offline -PkumihoEmulator=true :app:connectedDebugAndroidTest
 
-Current expected result: **145 tests, 0 failures, 0 errors, 0 skipped**. The
-suite includes the AAR probe, setup, dashboard, locations, settings, split
+Current expected result: **157 phone tests**, plus the 21 TV-only testcases
+which skip by assumption on the phone AVD; the Gradle task is green. The suite
+includes the AAR probe, setup, dashboard, the flat Locations list and its
+connect targets, flags, search and Ping-all/speed-order paths, settings, split
 tunneling, account, logs, diagnostics, notification/tile reducers and the
 screenshot capture tests. A connected run uninstalls the app and its external
 files when it finishes.
@@ -214,10 +218,11 @@ Then run:
 
     make android-tv-emulator-test
 
-This builds the x86_64 AAR and runs only the TV package. The screenshot test
-writes Home, setup, Locations and Settings captures in Light, Dark and OLED to
+This builds the x86_64 AAR and runs only the TV package (**21 testcases**). The
+screenshot test writes Home, setup, the flat Locations list and Settings
+captures in Light, Dark and OLED to
 `/sdcard/Android/data/dev.benyamin.kumiho.debug/files/tv-screenshots`; pull
-them with `adb pull` and review overscan, focus and contrast.
+them with `adb pull` and review the real flags, overscan, focus and contrast.
 
 The TV physical checklist is in [docs/android-tv.md](android-tv.md#physical-tv-checklist-sony-x90l-api-31).
 
@@ -494,6 +499,25 @@ remain open.
 - [ ] **STOP** if in-tunnel DNS fails while the tunnel is up: collect the
       establish → bind → query evidence, do not switch to Private DNS or a
       fallback resolver, and re-plan the DNS delivery.
+
+### Locations
+
+- [ ] Open Locations on a phone. Expect one flat server-only list, no country
+      or city headers/carets and no expand/collapse action. Recommended is
+      first; rows show a real flag, `Country · City`, then
+      `hostname:port · protocols`, with latency or a selection check trailing.
+- [ ] Search by country name/code, city name/code, hostname, `host:port` and a
+      protocol name. A miss shows **No matches** with the search scope; the
+      placeholder reads **Country, city, server, or protocol**. No connected-
+      location hint appears.
+- [ ] Select a row: the check and summary update, and the next connection uses
+      it. The current session is unchanged.
+- [ ] Ping all while a search is active. Every usable server is probed even if
+      filtered out; labels stream in without moving rows; the list switches to
+      speed order only when the run completes (Recommended first, failures
+      last). Refresh restores country order and clears the labels.
+- [ ] Confirm a quarantined or targetless server is absent from the list and is
+      not pinged.
 
 ### Notification, Quick Settings tile and proxy-only (T16)
 

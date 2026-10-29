@@ -117,7 +117,7 @@ States, all driven through the harness (dark theme, blue accent):
 | `service-stopped` | diagnostics: Stop clicked (dev service settles to Stopped) |
 | `service-started` | diagnostics: Start clicked (dev service settles to Running) |
 | `live-entry` | `/dev/log`, then capture the logs screen |
-| `speed-test` | `ping` action for the locations screen's auto-revealed servers (`42 ms` / `timeout` labels) |
+| `speed-order` | real **Ping all** click for every usable server; captures the completed speed order with `42 ms` / `timeout` labels |
 | `welcome`, `login`, `login-signed-in`, `login-browser`, `login-choice-password`, `login-password`, `login-2fa`, `health-check`, `autoconnect`, `finish` | wizard-step hints on `#/onboarding?state=…`, dark and light; `prefs_set {"onboarded":false}` arms the real first-run gate (restored after each capture) |
 | `login-signed-in` | wizard hint `login` with the default authenticated scenario (the already-signed-in variant) |
 | `login-password`, `login-2fa` | wizard hint `login` on the `signed-out` scenario, submitting an email (the password page; the 2FA page via the mock's `2fa@…` rule) |

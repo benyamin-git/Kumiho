@@ -6,13 +6,14 @@
 # port) and is restarted before each screen so no notice leaks between
 # captures. The script stops it when done.
 #
-# The GUI binary is rebuilt with Version=v0.5.1 (override with
-# KUMIHO_CAPTURE_VERSION) so the Settings screen shows the release version,
-# not the git-describe development label.
+# The GUI binary is rebuilt with the v0.8.0 UI target label (override with
+# KUMIHO_CAPTURE_VERSION) so the Settings screenshot shows the redesign's
+# release label, not the git-describe development label. This does not bump
+# the app version.
 #
 # Prerequisites: Go, Node 22+, a primed Playwright cache (see
-# scripts/visual/README.md), and Noto Color Emoji so flags render as flags.
-# The TUI renderer uses npx playwright.
+# scripts/visual/README.md), the real served GUI SVG flags, and Noto Color
+# Emoji so the TUI flags render as flags. The TUI renderer uses npx playwright.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,7 +22,7 @@ cd "$repo"
 
 captures="${KUMIHO_CAPTURES_DIR:-/tmp/opencode/captures}"
 tui_tmp="${KUMIHO_TUI_CAPTURE_DIR:-/tmp/opencode/kumiho-tui-capture}"
-version="${KUMIHO_CAPTURE_VERSION:-v0.5.1}"
+version="${KUMIHO_CAPTURE_VERSION:-v0.8.0}"
 commit="$(git rev-parse --short HEAD)"
 date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -56,7 +57,7 @@ for screen in dashboard locations settings; do
 done
 
 cp "$captures/dashboard/dark-connected.png" "$repo/screenshots/windows-gui/dashboard.png"
-cp "$captures/locations/dark-speed-test.png" "$repo/screenshots/windows-gui/locations.png"
+cp "$captures/locations/dark-speed-order.png" "$repo/screenshots/windows-gui/locations.png"
 cp "$captures/settings/dark.png" "$repo/screenshots/windows-gui/settings.png"
 
 echo "capturing the TUI views"

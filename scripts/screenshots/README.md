@@ -14,10 +14,11 @@ Run from the repository root:
 
     scripts/screenshots/capture.sh
 
-The script rebuilds the web harness with `Version=v0.5.1` (override with
-`KUMIHO_CAPTURE_VERSION`), starts it on `0.0.0.0:7407`, and restarts it before
-each screen so a notice from one state cannot leak into the next. It stops the
-harness when done.
+The script rebuilds the web harness with the v0.8.0 UI target label (override
+with `KUMIHO_CAPTURE_VERSION`), starts it on `0.0.0.0:7407`, and restarts it
+before each screen so a notice from one state cannot leak into the next. It
+stops the harness when done. The label is a screenshot target, not an app
+version bump.
 
 ## Prerequisites
 
@@ -26,8 +27,9 @@ harness when done.
   `scripts/visual/capture.mjs`; the TUI renderer uses `npx playwright
   screenshot`. The resolution order and cache setup are documented in
   `scripts/visual/README.md`.
-- Noto Color Emoji, so country flags render as flags instead of fallback
-  letters:
+- The real 4:3 GUI SVG flags under
+  `internal/gui/web/static/flags/4x3/` and Noto Color Emoji, so the TUI
+  country flags render as flags instead of fallback letters:
 
       sudo apt-get install -y fonts-noto-color-emoji
       fc-cache -f
@@ -43,7 +45,7 @@ The GUI images come from the existing visual-review manifest:
 | Output | Source |
 | --- | --- |
 | `windows-gui/dashboard.png` | `dashboard/dark-connected.png` |
-| `windows-gui/locations.png` | `locations/dark-speed-test.png` |
+| `windows-gui/locations.png` | `locations/dark-speed-order.png` |
 | `windows-gui/settings.png` | `settings/dark.png` |
 
 The TUI side runs the normal test package with `KUMIHO_TUI_CAPTURE_DIR` set,

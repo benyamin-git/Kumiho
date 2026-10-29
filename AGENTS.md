@@ -240,13 +240,15 @@ them locally for any change under `android/`, `mobile/` or
 - Palette: skill `design` — six accents, default blue
 - Themes: Light / Dark / OLED; first run follows prefers-color-scheme; OLED opt-in
 - Type: system-ui (Segoe UI Variable on Windows 11), one family
-- Emoji: country-flag emoji in locations are a deliberate, user-approved
-  departure from design ban 3 (v0.5.1); Windows renders regional-indicator
-  letters.
+- Flags: Android phone/TV and the Windows GUI use the bundled real 4:3
+  `flag-icons` assets; the TUI keeps country-flag emoji, an approved departure
+  from design ban 3 (v0.5.1). The GUI dashboard keeps its native `<select>`
+  with text-only option labels; a real flag sits beside the selected country
+  (v0.8.0 D39).
 - TV: Compose for TV type scale and remote-first focus (larger type, focus
   ring, overscan-safe frame) is an approved form-factor departure, not a
   second palette. TV assets: `tv_banner`, `ic_launcher_tv`, channel logo.
-- Approved: 2026-10-15
+- Approved: 2026-10-15; locations redesign approved 2026-10-29
 
 ## Vendor policy
 
