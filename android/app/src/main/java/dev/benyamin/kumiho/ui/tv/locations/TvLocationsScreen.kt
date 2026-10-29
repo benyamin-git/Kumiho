@@ -228,7 +228,7 @@ fun TvLocationsScreen(
                 state.rows.forEachIndexed { index, row ->
                     ServerRow(
                         row = row,
-                        latency = state.latencyOf(row.server),
+                        latency = state.latencyOf(row),
                         selected = state.isSelected(row.country, row.city, row.server),
                         saving = state.isSaving(row.server),
                         onSelect = actions.onSelect,
@@ -348,7 +348,7 @@ private fun ServerRow(
                 serverRowTag(
                     row.country.code,
                     row.city.code,
-                    LocationTree.addressOf(row.server),
+                    row.address,
                 ),
             ),
     ) {

@@ -25,14 +25,32 @@ object LocationTree {
     fun isRecommended(country: Country): Boolean =
         country.code.equals(RECOMMENDED_CODE, ignoreCase = true)
 
+    /**
+     * The address the engine persists and pings, mirroring
+     * `serverlist.Server.ConnectTarget`: prefer the `connect` protocol's
+     * host/port, fall back to `hostname:port` only when the record has no
+     * protocols at all, and reject a record whose protocols lack `connect`.
+     */
+    fun connectTarget(server: Server): String? {
+        val protocols = server.protocols
+        if (protocols.isNotEmpty()) {
+            val connect = protocols.firstOrNull { it.name == "connect" } ?: return null
+            return target(
+                connect.host.ifBlank { server.hostname },
+                connect.port.takeIf { it != 0 } ?: server.port,
+            )
+        }
+        return target(server.hostname, server.port)
+    }
+
+    private fun target(host: String, port: Int): String? {
+        val value = host.trim()
+        return if (value.isNotEmpty() && port in 1..65_535) "$value:$port" else null
+    }
+
     /** A server the list may show, select or ping. */
     fun isUsable(server: Server): Boolean =
-        !server.quarantined &&
-            server.hostname.isNotBlank() &&
-            server.port in 1..65_535
-
-    /** The address the engine persists and pings: `hostname:port`. */
-    fun addressOf(server: Server): String = "${server.hostname}:${server.port}"
+        !server.quarantined && connectTarget(server) != null
 
     /**
      * The latency map key for one address. Host names compare case-insensitively
@@ -73,9 +91,8 @@ object LocationTree {
         for (country in countries) {
             for (city in country.cities) {
                 for (server in city.servers) {
-                    if (isUsable(server)) {
-                        flattened += LocationRow(country, city, server)
-                    }
+                    if (!isUsable(server)) continue
+                    flattened += LocationRow(country, city, server, connectTarget(server)!!)
                 }
             }
         }
@@ -86,14 +103,14 @@ object LocationTree {
                     { if (isRecommended(it.value.country)) 0 else 1 },
                     {
                         if (sortMode == LocationSortMode.SPEED) {
-                            if (measuredRtt(latency, it.value.server) == null) 1 else 0
+                            if (measuredRtt(latency, it.value.address) == null) 1 else 0
                         } else {
                             0
                         }
                     },
                     {
                         if (sortMode == LocationSortMode.SPEED) {
-                            measuredRtt(latency, it.value.server) ?: 0.0
+                            measuredRtt(latency, it.value.address) ?: 0.0
                         } else {
                             0.0
                         }
@@ -119,7 +136,7 @@ object LocationTree {
             for (city in country.cities) {
                 for (server in city.servers) {
                     if (!isUsable(server)) continue
-                    val address = addressOf(server)
+                    val address = connectTarget(server) ?: continue
                     if (seen.add(addressKey(address))) targets += address
                 }
             }
@@ -158,8 +175,11 @@ object LocationTree {
             search@ for (country in branches) {
                 for (city in country.cities) {
                     for (entry in city.servers) {
-                        if (!entry.hostname.equals(host, ignoreCase = true)) continue
-                        if (port != null && entry.port != port) continue
+                        val target = connectTarget(entry) ?: continue
+                        val targetHost = DashboardFormat.hostOf(target)
+                        val targetPort = portOf(target)
+                        if (targetHost == null || !targetHost.equals(host, ignoreCase = true)) continue
+                        if (port != null && targetPort != port) continue
                         matchedCountry = country
                         matchedCity = city
                         matchedServer = entry
@@ -192,8 +212,8 @@ object LocationTree {
      * last measurement, or a timeout. A null RTT is an answer from the engine
      * and is deliberately distinct from having no answer at all.
      */
-    fun latencyOf(latency: Map<String, Double?>, server: Server): LatencyState {
-        val key = addressKey(addressOf(server))
+    fun latencyOf(latency: Map<String, Double?>, address: String): LatencyState {
+        val key = addressKey(address)
         if (!latency.containsKey(key)) return LatencyState.Untested
         val rtt = latency[key]
         if (rtt == null || rtt.isNaN() || rtt < 0.0) return LatencyState.Timeout
@@ -201,8 +221,8 @@ object LocationTree {
     }
 
     /** A finite measured RTT used for speed ordering, or null. */
-    private fun measuredRtt(latency: Map<String, Double?>, server: Server): Double? {
-        val rtt = latency[addressKey(addressOf(server))] ?: return null
+    private fun measuredRtt(latency: Map<String, Double?>, address: String): Double? {
+        val rtt = latency[addressKey(address)] ?: return null
         if (rtt.isNaN() || rtt.isInfinite() || rtt < 0.0) return null
         return rtt
     }
@@ -222,6 +242,8 @@ data class LocationRow(
     val country: Country,
     val city: City,
     val server: Server,
+    /** The connect target (`connect` protocol host/port, or the no-protocol fallback). */
+    val address: String,
 ) {
     val countryCode: String get() = country.code.trim().lowercase()
 
@@ -236,8 +258,6 @@ data class LocationRow(
     /** `Country · City`, or just the country when the city adds nothing. */
     val title: String
         get() = listOfNotNull(countryName, cityName).joinToString(LocationTree.SEPARATOR)
-
-    val address: String get() = LocationTree.addressOf(server)
 
     /** Distinct protocol names in engine order. */
     val protocolNames: List<String> get() = LocationTree.protocolNames(server)
@@ -297,7 +317,7 @@ data class LocationSelection(
 
     /** The canonical `host:port`, or the engine's raw address when unresolved. */
     val serverAddress: String?
-        get() = server?.let(LocationTree::addressOf)
+        get() = server?.let(LocationTree::connectTarget)
             ?: address?.takeIf { it.isNotBlank() }
 
     /** The matched server's distinct protocol names; empty for a raw address. */
@@ -306,9 +326,9 @@ data class LocationSelection(
 
     /** True when this selection marks that server row as current. */
     fun marks(country: Country, city: City, server: Server): Boolean {
-        val selected = this.server ?: return false
-        return selected.hostname.equals(server.hostname, ignoreCase = true) &&
-            selected.port == server.port &&
+        val selected = serverAddress ?: return false
+        val target = LocationTree.connectTarget(server) ?: return false
+        return selected.equals(target, ignoreCase = true) &&
             (countryCode.isBlank() || countryCode.equals(country.code, ignoreCase = true))
     }
 }

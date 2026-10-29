@@ -50,7 +50,7 @@ class LocationFilterTest {
                 LocationTree.addressKey("share.example.net:443"),
             ),
             LocationFilter.apply(rows, "quic").map {
-                LocationTree.addressKey(LocationTree.addressOf(it.server))
+                LocationTree.addressKey(it.address)
             }.toSet(),
         )
         assertFalse(LocationFilter.matches(row, "port 2499"))

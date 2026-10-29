@@ -175,6 +175,33 @@ class LocationsViewModelTest {
         }
 
     @Test
+    fun `select persists the connect target not the record hostname`() =
+        runTest(mainRule.testDispatcher) {
+            val target = Server(
+                hostname = "edge.example.net",
+                port = 443,
+                quarantined = false,
+                protocols = listOf(Protocol("connect", "connect.example.net", 8443, "https")),
+            )
+            val city = City("nyc", "New York", listOf(target))
+            val country = Country("us", "United States", listOf(city))
+            gateway.countries = listOf(country)
+            val viewModel = viewModel()
+            runCurrent()
+
+            assertEquals(listOf("connect.example.net:8443"), viewModel.state.value.allTargets)
+            assertEquals("connect.example.net:8443", viewModel.state.value.rows.single().address)
+
+            viewModel.select(country, city, target)
+            runCurrent()
+
+            assertEquals(
+                listOf(SelectionRequest("us", "nyc", "connect.example.net:8443")),
+                gateway.selections,
+            )
+        }
+
+    @Test
     fun `only one save runs at a time and a failed save retries the same request`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(US)
@@ -228,7 +255,7 @@ class LocationsViewModelTest {
 
             viewModel.onQueryChange("  QUIC ")
             val filtered = viewModel.state.value.rows
-            assertEquals(listOf("edge.example.net:2499"), filtered.map { LocationTree.addressOf(it.server) })
+            assertEquals(listOf("edge.example.net:2499"), filtered.map { it.address })
 
             viewModel.clearQuery()
             assertEquals(5, viewModel.state.value.rows.size)
@@ -299,7 +326,8 @@ class LocationsViewModelTest {
 
             assertEquals(LocationSortMode.COUNTRY, viewModel.state.value.sortMode)
             assertEquals("de", viewModel.state.value.rows[1].country.code)
-            assertEquals(80L, (viewModel.state.value.latencyOf(EDGE) as LatencyState.Measured).milliseconds)
+            val edgeRow = viewModel.state.value.rows.first { it.server === EDGE }
+            assertEquals(80L, (viewModel.state.value.latencyOf(edgeRow) as LatencyState.Measured).milliseconds)
 
             gateway.emitPing(SHARE_ADDRESS, 20.0)
             gateway.emitPing(WEST_ADDRESS, 10.0)

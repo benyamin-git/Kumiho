@@ -113,6 +113,66 @@ class LocationTreeTest {
         assertEquals(listOf(EDGE_ADDRESS), LocationTree.pingAllTargets(listOf(country)))
     }
 
+    @Test
+    fun `the connect protocol target is the row ping and selection address`() {
+        val server = Server(
+            hostname = "edge.example.net",
+            port = 443,
+            quarantined = false,
+            protocols = listOf(
+                Protocol("connect", "connect.example.net", 8443, "https"),
+                Protocol("quic", "edge.example.net", 443, "https"),
+            ),
+        )
+        val city = City("nyc", "New York", listOf(server))
+        val country = Country("us", "United States", listOf(city))
+
+        val row = LocationTree.rows(listOf(country)).single()
+
+        assertEquals("connect.example.net:8443", row.address)
+        assertEquals("connect.example.net:8443 · connect, quic", row.detail)
+        assertEquals(listOf("connect.example.net:8443"), LocationTree.pingAllTargets(listOf(country)))
+
+        val selection = LocationTree.currentSelection(
+            countries = listOf(country),
+            location = "us",
+            server = "connect.example.net:8443",
+        )
+        assertEquals("connect.example.net:8443", selection?.serverAddress)
+        assertTrue(selection!!.marks(country, city, server))
+    }
+
+    @Test
+    fun `connect target fields fall back and a protocol list without connect is targetless`() {
+        val fallback = Server(
+            hostname = "edge.example.net",
+            port = 2499,
+            quarantined = false,
+            protocols = listOf(Protocol("connect", "", 0, "https")),
+        )
+        assertEquals("edge.example.net:2499", LocationTree.connectTarget(fallback))
+
+        val plain = Server("plain.example.net", 443, false, emptyList())
+        assertEquals("plain.example.net:443", LocationTree.connectTarget(plain))
+        assertTrue(LocationTree.isUsable(plain))
+
+        val quicOnly = Server(
+            hostname = "quic.example.net",
+            port = 443,
+            quarantined = false,
+            protocols = listOf(Protocol("quic", "quic.example.net", 443, "https")),
+        )
+        val targetless = Country(
+            "us",
+            "United States",
+            listOf(City("nyc", "New York", listOf(quicOnly))),
+        )
+        assertNull(LocationTree.connectTarget(quicOnly))
+        assertFalse(LocationTree.isUsable(quicOnly))
+        assertTrue(LocationTree.rows(listOf(targetless)).isEmpty())
+        assertTrue(LocationTree.pingAllTargets(listOf(targetless)).isEmpty())
+    }
+
     // ---- default order ---------------------------------------------------
 
     @Test
@@ -281,10 +341,10 @@ class LocationTreeTest {
     fun `latency is untested timeout or measured by address key`() {
         val key = LocationTree.addressKey(EDGE_ADDRESS)
 
-        assertEquals(LatencyState.Untested, LocationTree.latencyOf(emptyMap(), EDGE))
-        assertEquals(LatencyState.Timeout, LocationTree.latencyOf(mapOf(key to null), EDGE))
-        assertEquals(LatencyState.Measured(42), LocationTree.latencyOf(mapOf(key to 42.4), EDGE))
-        assertEquals(LatencyState.Timeout, LocationTree.latencyOf(mapOf(key to -1.0), EDGE))
+        assertEquals(LatencyState.Untested, LocationTree.latencyOf(emptyMap(), EDGE_ADDRESS))
+        assertEquals(LatencyState.Timeout, LocationTree.latencyOf(mapOf(key to null), EDGE_ADDRESS))
+        assertEquals(LatencyState.Measured(42), LocationTree.latencyOf(mapOf(key to 42.4), EDGE_ADDRESS))
+        assertEquals(LatencyState.Timeout, LocationTree.latencyOf(mapOf(key to -1.0), EDGE_ADDRESS))
     }
 
     private companion object {

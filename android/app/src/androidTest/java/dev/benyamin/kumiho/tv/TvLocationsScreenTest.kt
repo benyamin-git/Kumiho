@@ -129,7 +129,7 @@ class TvLocationsScreenTest : TvTestBase() {
         onQueryChange = { calls += "query-$it" },
         onClearQuery = { calls += "clear" },
         onSelect = { country, city, server ->
-            calls += "select-${country.code}-${city.code}-${LocationTree.addressOf(server)}"
+            calls += "select-${country.code}-${city.code}-${LocationTree.connectTarget(server)}"
         },
         onRefresh = { calls += "refresh" },
         onRetryLoad = { calls += "retry-load" },

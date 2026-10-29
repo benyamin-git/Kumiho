@@ -204,13 +204,13 @@ data class LocationsState(
     val canPingAll: Boolean
         get() = !pingingAll && !loading && loadError == null && allTargets.isNotEmpty()
 
-    fun latencyOf(server: Server): LatencyState = LocationTree.latencyOf(latency, server)
+    fun latencyOf(row: LocationRow): LatencyState = LocationTree.latencyOf(latency, row.address)
 
     fun isSelected(country: Country, city: City, server: Server): Boolean =
         selection?.marks(country, city, server) == true
 
     fun isSaving(server: Server): Boolean =
-        savingServer == LocationTree.addressKey(LocationTree.addressOf(server))
+        savingServer == LocationTree.connectTarget(server)?.let(LocationTree::addressKey)
 }
 
 /**
@@ -391,7 +391,7 @@ class LocationsViewModel(
             SelectionRequest(
                 countryCode = country.code,
                 cityCode = city.code,
-                address = LocationTree.addressOf(server),
+                address = LocationTree.connectTarget(server) ?: return,
             ),
         )
     }
