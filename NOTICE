@@ -32,6 +32,11 @@ Wintun (https://www.wintun.net/)
     not used or distributed. The Go binding (golang.zx2c4.com/wintun) is
     MIT-licensed and vendored.
 
+flag-icons (https://github.com/lipis/flag-icons)
+    MIT License. Pinned v7.6.0 4:3 country flag SVGs, served by the GUI and
+    rasterized into the Android app's WebP flag assets. Source, checksums and
+    the full license are in third_party/flag-icons.
+
 jchv/go-webview2 (https://github.com/jchv/go-webview2)
     MIT License. WebView2 binding for the Windows GUI. Embeds Microsoft's
     WebView2Loader DLLs (webviewloader/sdk/, 3-Clause BSD License,
