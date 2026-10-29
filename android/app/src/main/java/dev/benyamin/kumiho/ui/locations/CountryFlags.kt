@@ -30,20 +30,6 @@ object CountryFlags {
     }
 
     /**
-     * The ISO 3166-1 alpha-2 flag emoji, or "" for REC, blank or a non-ASCII
-     * code. The TUI keeps this representation; graphical Android surfaces use
-     * [CountryFlag] and the bundled flag bitmap instead.
-     */
-    fun emoji(code: String?): String {
-        val normalized = code.orEmpty().trim().uppercase(Locale.ROOT)
-        if (normalized == "REC") return ""
-        if (normalized.length != 2 || normalized.any { it !in 'A'..'Z' }) return ""
-        val base = 0x1F1E6
-        return String(Character.toChars(base + (normalized[0] - 'A'))) +
-            String(Character.toChars(base + (normalized[1] - 'A')))
-    }
-
-    /**
      * A decorative 4:3 flag, star for Recommended or globe fallback. The
      * surrounding country/city text carries the meaning, so the image has no
      * content description (D38).

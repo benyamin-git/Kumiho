@@ -22,13 +22,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
- * A list row: optional icon, a title and subtitle, an optional trailing slot.
+ * A list row: optional leading content and icon, a title and subtitle, and
+ * an optional trailing slot.
  * Always at least 56dp tall so the whole row is a comfortable target.
  */
 @Composable
@@ -36,7 +35,7 @@ fun KumihoRow(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    titlePrefix: String? = null,
+    leading: (@Composable () -> Unit)? = null,
     icon: Painter? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
@@ -55,6 +54,7 @@ fun KumihoRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
         ) {
+            leading?.invoke()
             if (icon != null) {
                 Icon(
                     painter = icon,
@@ -64,8 +64,7 @@ fun KumihoRow(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                TitleLine(
-                    prefix = titlePrefix,
+                Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -80,27 +79,6 @@ fun KumihoRow(
             }
             trailing?.invoke()
         }
-    }
-}
-
-/** The title line with an optional decorative prefix the accessibility tree hides. */
-@Composable
-private fun TitleLine(prefix: String?, text: String, style: TextStyle, color: Color) {
-    if (prefix.isNullOrEmpty()) {
-        Text(text = text, style = style, color = color)
-        return
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
-    ) {
-        Text(
-            text = prefix,
-            style = style,
-            color = color,
-            modifier = Modifier.clearAndSetSemantics {},
-        )
-        Text(text = text, style = style, color = color)
     }
 }
 

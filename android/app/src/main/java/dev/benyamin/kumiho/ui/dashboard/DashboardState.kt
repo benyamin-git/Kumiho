@@ -425,6 +425,7 @@ object DashboardTags {
     const val PICKER_RETRY = "dashboard_picker_retry"
     const val PICKER_EMPTY = "dashboard_picker_empty"
     const val PICKER_COUNTRY_PREFIX = "dashboard_picker_country_"
+    const val PICKER_FLAG_PREFIX = "dashboard_picker_flag_"
     const val PICKER_CITY_PREFIX = "dashboard_picker_city_"
 
     const val LOCKDOWN_DIALOG = "dashboard_lockdown_dialog"
@@ -437,6 +438,9 @@ object DashboardTags {
 
 /** The tag for one country row. */
 fun countryTag(code: String): String = DashboardTags.PICKER_COUNTRY_PREFIX + code
+
+/** The tag for one country flag in a picker. */
+fun countryFlagTag(code: String): String = DashboardTags.PICKER_FLAG_PREFIX + code
 
 /** The tag for one city row. */
 fun cityTag(countryCode: String, cityCode: String): String =

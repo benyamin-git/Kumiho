@@ -163,6 +163,10 @@ class TvDashboardTest {
         rule.onNodeWithTag(DashboardTags.SHEET_CONNECT).assertExists()
 
         rule.onNodeWithTag(dev.benyamin.kumiho.ui.dashboard.countryTag("gb")).performClick()
+        rule.onNodeWithTag(
+            dev.benyamin.kumiho.ui.dashboard.countryFlagTag("gb"),
+            useUnmergedTree = true,
+        ).assertExists()
         rule.onNodeWithTag(dev.benyamin.kumiho.ui.dashboard.cityTag("gb", "lon")).performClick()
         assertEquals("gb/lon", cityPicked)
         rule.onNodeWithTag(DashboardTags.SHEET_CONNECT).performClick()

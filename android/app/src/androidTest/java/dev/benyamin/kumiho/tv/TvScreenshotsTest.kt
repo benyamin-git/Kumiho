@@ -21,9 +21,11 @@ import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.engine.Settings
+import dev.benyamin.kumiho.ui.dashboard.ConnectOptionsState
 import dev.benyamin.kumiho.ui.dashboard.DashboardActions
 import dev.benyamin.kumiho.ui.dashboard.DashboardPhase
 import dev.benyamin.kumiho.ui.dashboard.DashboardState
+import dev.benyamin.kumiho.ui.dashboard.LocationChoice
 import dev.benyamin.kumiho.ui.dashboard.LocationLoad
 import dev.benyamin.kumiho.ui.locations.LatencyState
 import dev.benyamin.kumiho.ui.locations.LocationTree
@@ -66,6 +68,8 @@ class TvScreenshotsTest : TvTestBase() {
         output.mkdirs()
 
         capture(output, "home")
+        rule.runOnIdle { screen = Screen.Options }
+        capture(output, "options")
         rule.runOnIdle { screen = Screen.Setup }
         capture(output, "setup")
         rule.runOnIdle { screen = Screen.Locations }
@@ -85,6 +89,7 @@ class TvScreenshotsTest : TvTestBase() {
             ) {
                 when (screen) {
                     Screen.Home -> TvDashboardScreen(state = dashboardState(), actions = dashboardActions())
+                    Screen.Options -> TvDashboardScreen(state = optionsState(), actions = dashboardActions())
                     Screen.Setup -> TvSetupScreen(state = SetupState(step = SetupStep.CONSENT), actions = setupActions())
                     Screen.Locations -> TvLocationsScreen(state = locationsState(), actions = locationsActions())
                     Screen.Settings -> TvSettingsScreen(
@@ -260,7 +265,15 @@ class TvScreenshotsTest : TvTestBase() {
         onOpenSplitTunneling = {},
     )
 
-    private enum class Screen { Home, Setup, Locations, Settings }
+    private fun optionsState() = dashboardState().copy(
+        options = ConnectOptionsState(
+            open = true,
+            choice = LocationChoice.Saved,
+            expanded = setOf("gb"),
+        ),
+    )
+
+    private enum class Screen { Home, Options, Setup, Locations, Settings }
 
     private companion object {
         const val GIB = 1024L * 1024L * 1024L

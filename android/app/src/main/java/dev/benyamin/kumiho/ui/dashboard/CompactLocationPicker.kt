@@ -96,7 +96,7 @@ fun CompactLocationPicker(
                     val expanded = country.code in state.options.expanded
                     CountryRow(
                         name = country.name,
-                        titlePrefix = CountryFlags.emoji(country.code),
+                        countryCode = country.code,
                         expanded = expanded,
                         onClick = { onToggleCountry(country.code) },
                         modifier = Modifier.testTag(countryTag(country.code)),
@@ -125,16 +125,23 @@ fun CompactLocationPicker(
 @Composable
 private fun CountryRow(
     name: String,
+    countryCode: String,
     expanded: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    titlePrefix: String? = null,
 ) {
     KumihoRow(
         title = name,
-        titlePrefix = titlePrefix,
         modifier = modifier,
         onClick = onClick,
+        leading = {
+            CountryFlags.Flag(
+                code = countryCode,
+                width = 20.dp,
+                height = 15.dp,
+                modifier = Modifier.testTag(countryFlagTag(countryCode)),
+            )
+        },
         trailing = {
             Icon(
                 imageVector = if (expanded) {

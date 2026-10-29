@@ -100,6 +100,24 @@ class DashboardScreenshotsTest {
             ).copy(locations = LocationLoad.Ready(COUNTRIES))
         }
         capture(output, "permission")
+
+        rule.runOnIdle {
+            state = DashboardState.fromService(
+                ServiceState(
+                    binding = true,
+                    engineReady = true,
+                    status = status(state = STATE_IDLE, location = "us"),
+                ),
+            ).copy(
+                options = ConnectOptionsState(
+                    open = true,
+                    choice = LocationChoice.Saved,
+                    expanded = setOf("us"),
+                ),
+                locations = LocationLoad.Ready(COUNTRIES),
+            )
+        }
+        capture(output, "picker")
     }
 
     private fun capture(output: File, screen: String) {

@@ -218,6 +218,7 @@ class DashboardScreenTest {
         rule.onNodeWithTag(DashboardTags.PICKER_RECOMMENDED).performScrollTo().performClick()
         rule.onNodeWithTag(countryTag("us")).performScrollTo()
             .assertTextContains("United States")
+        rule.onNodeWithTag(countryFlagTag("us"), useUnmergedTree = true).assertExists()
         rule.onNodeWithText("🇺🇸").assertDoesNotExist()
         rule.onNodeWithTag(countryTag("us")).performScrollTo().performClick()
         rule.onNodeWithTag(cityTag("us", "nyc")).performScrollTo().performClick()

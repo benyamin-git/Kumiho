@@ -33,6 +33,7 @@ import dev.benyamin.kumiho.ui.dashboard.DashboardTags
 import dev.benyamin.kumiho.ui.dashboard.LocationChoice
 import dev.benyamin.kumiho.ui.dashboard.LocationLoad
 import dev.benyamin.kumiho.ui.dashboard.cityTag
+import dev.benyamin.kumiho.ui.dashboard.countryFlagTag
 import dev.benyamin.kumiho.ui.dashboard.countryTag
 import dev.benyamin.kumiho.ui.dashboard.sheetHintText
 import dev.benyamin.kumiho.ui.locations.CountryFlags
@@ -323,10 +324,11 @@ private fun Picker(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
                     ) {
-                        Text(
-                            text = CountryFlags.emoji(country.code),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = colors.onSurface,
+                        CountryFlags.Flag(
+                            code = country.code,
+                            width = 32.dp,
+                            height = 24.dp,
+                            modifier = Modifier.testTag(countryFlagTag(country.code)),
                         )
                         Text(
                             text = country.name,
