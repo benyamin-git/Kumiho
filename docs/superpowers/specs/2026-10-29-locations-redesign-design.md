@@ -143,6 +143,7 @@ country order by default, speed order only after a completed Ping all.
 | D36 | Filtering does not change the sort mode: Ping all still measures all servers and clearing a filter keeps the current speed order until the visit ends. | The filter is a view, not a new measurement or ordering event. | assumed | recommendation |
 | D37 | Render protocols as distinct non-empty names joined with `, ` in engine order; omit the separator when there are none. | Matches the existing protocol vocabulary and avoids empty punctuation. | assumed | recommendation |
 | D38 | Flags are decorative in accessibility terms (`contentDescription`/`alt` empty); country/city text and row semantics carry the meaning; row selection remains announced. | The icon must not duplicate or replace the accessible name. | assumed | recommendation |
+| D39 | Keep the GUI dashboard’s native `<select>`; remove emoji from its option text, keep options text-only, and show one real flag beside the control for the currently selected country. | Native options cannot contain images; this keeps the accessible select while still giving the dashboard a real flag. | decided | user |
 
 ## Architecture
 
@@ -193,8 +194,9 @@ against its existing server-list model:
 - **Windows GUI (`internal/gui/web/static`).** `locations.js` flattens the
   projection into server rows, owns the filter/ping run/sort mode and renders
   the row markup. `flags.js` exposes flag asset/icon helpers instead of the
-  emoji string helper. `dashboard.js` inserts the flag element before the
-  dashboard location label. `locations.css` owns the 48 px row, flags,
+  emoji string helper. `dashboard.js` keeps the native `<select>` and inserts
+  the current-selection flag beside it; its option text is text-only (D39).
+  `locations.css` owns the 48 px row, flags,
   two-line typography, selected state and focus treatment.
 - **TUI (`internal/tui/locations.go`).** The tree model becomes a flat row
   slice; the viewport renders one line per server, keeps the existing emoji
