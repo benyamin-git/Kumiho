@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,12 +25,13 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.benyamin.kumiho.AppContainer
@@ -49,7 +49,6 @@ import dev.benyamin.kumiho.ui.locations.LocationsNoticeTone
 import dev.benyamin.kumiho.ui.locations.LocationsRoute
 import dev.benyamin.kumiho.ui.locations.LocationsState
 import dev.benyamin.kumiho.ui.locations.LocationsTags
-import dev.benyamin.kumiho.ui.locations.countryRowTag
 import dev.benyamin.kumiho.ui.locations.latencyText
 import dev.benyamin.kumiho.ui.locations.noticeText
 import dev.benyamin.kumiho.ui.locations.selectionText
@@ -71,8 +70,8 @@ fun TvLocationsRoute(container: AppContainer, modifier: Modifier = Modifier) {
 }
 
 /**
- * The ten-foot location tree: a search row, refresh/ping/expand controls, the
- * saved selection and the whole country/server list as focusable rows.
+ * The ten-foot location list: a search row, refresh and ping controls, the
+ * saved selection and one flat focusable server list.
  */
 @Composable
 fun TvLocationsScreen(
@@ -82,9 +81,15 @@ fun TvLocationsScreen(
 ) {
     val colors = MaterialTheme.colorScheme
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(state.rows.firstOrNull()?.key, state.showLoading, state.showError) {
+    val listScroll = rememberScrollState()
+    LaunchedEffect(state.rows.firstOrNull()?.key, state.listResetToken) {
         if (state.rows.isNotEmpty()) {
             runCatching { firstFocus.requestFocus() }
+        }
+    }
+    LaunchedEffect(state.listResetToken) {
+        if (state.rows.isNotEmpty()) {
+            listScroll.scrollTo(0)
         }
     }
     val downToList = Modifier.focusProperties {
@@ -126,14 +131,6 @@ fun TvLocationsScreen(
                 modifier = Modifier.testTag(LocationsTags.PING_ALL).then(downToList),
                 enabled = state.canPingAll,
             )
-            TvButton(
-                label = stringResource(
-                    if (state.anyExpanded) R.string.locations_collapse_all else R.string.locations_expand_all,
-                ),
-                onClick = actions.onToggleAll,
-                modifier = Modifier.testTag(LocationsTags.TOGGLE_ALL).then(downToList),
-                enabled = state.canToggleAll,
-            )
         }
 
         state.notice?.let { notice ->
@@ -145,14 +142,6 @@ fun TvLocationsScreen(
         }
 
         SelectionSummary(state = state)
-        if (state.sessionActive) {
-            Text(
-                text = stringResource(R.string.locations_connected_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.testTag(LocationsTags.CONNECTED_HINT),
-            )
-        }
 
         when {
             state.showLoading -> CenterMessage(
@@ -232,31 +221,23 @@ fun TvLocationsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(listScroll)
                     .testTag(LocationsTags.LIST),
                 verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
             ) {
                 state.rows.forEachIndexed { index, row ->
-                    when (row) {
-                        is LocationRow.CountryRow -> CountryRow(
-                            row = row,
-                            searching = state.searching,
-                            latency = state.countryLatency(row.country),
-                            onToggle = actions.onToggleCountry,
-                            modifier = if (index == 0) {
-                                Modifier.focusRequester(firstFocus)
-                            } else {
-                                Modifier
-                            },
-                        )
-                        is LocationRow.ServerRow -> ServerRow(
-                            row = row,
-                            latency = state.latencyOf(row.server),
-                            selected = state.isSelected(row.country, row.city, row.server),
-                            saving = state.isSaving(row.server),
-                            onSelect = actions.onSelect,
-                        )
-                    }
+                    ServerRow(
+                        row = row,
+                        latency = state.latencyOf(row.server),
+                        selected = state.isSelected(row.country, row.city, row.server),
+                        saving = state.isSaving(row.server),
+                        onSelect = actions.onSelect,
+                        modifier = if (index == 0) {
+                            Modifier.focusRequester(firstFocus)
+                        } else {
+                            Modifier
+                        },
+                    )
                 }
             }
         }
@@ -281,6 +262,9 @@ private fun SearchField(
             value = query,
             onValueChange = onQueryChange,
             label = { androidx.compose.material3.Text(stringResource(R.string.locations_search_label)) },
+            placeholder = {
+                androidx.compose.material3.Text(stringResource(R.string.locations_search_placeholder))
+            },
             singleLine = true,
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -305,8 +289,6 @@ private fun SearchField(
 private fun SelectionSummary(state: LocationsState) {
     val colors = MaterialTheme.colorScheme
     val selection = state.selection
-    val text = selectionText(selection)
-    val flag = selection?.flag.orEmpty()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -321,94 +303,47 @@ private fun SelectionSummary(state: LocationsState) {
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
         )
-        Text(
-            text = if (flag.isEmpty()) text else "$flag $text",
-            style = MaterialTheme.typography.titleSmall,
-            color = colors.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun CountryRow(
-    row: LocationRow.CountryRow,
-    searching: Boolean,
-    latency: LatencyState,
-    onToggle: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = MaterialTheme.colorScheme
-    val name = if (LocationTree.isRecommended(row.country)) {
-        stringResource(R.string.locations_recommended)
-    } else {
-        row.country.name
-    }
-    val flag = CountryFlags.emoji(row.country.code)
-    val serverCount = row.country.cities.sumOf { it.servers.size }
-    TvFocusableSurface(
-        onClick = { onToggle(row.country.code) },
-        enabled = !searching,
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag(countryRowTag(row.country.code)),
-    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
         ) {
+            if (selection != null) {
+                CountryFlags.Flag(
+                    code = selection.countryCode,
+                    recommended = selection.recommended,
+                    width = 20.dp,
+                    height = 15.dp,
+                )
+            }
             Text(
-                text = flag,
+                text = selectionText(selection),
                 style = MaterialTheme.typography.titleSmall,
                 color = colors.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.onSurface,
-                )
-                Text(
-                    text = pluralStringResource(R.plurals.locations_country_servers, serverCount, serverCount),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = latencyText(latency),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-            )
-            if (!searching) {
-                Text(
-                    text = if (row.expanded) "▾" else "▸",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
         }
     }
 }
 
+/** One server in the flat ten-foot list; there is no disclosure or expansion. */
 @Composable
 private fun ServerRow(
-    row: LocationRow.ServerRow,
+    row: LocationRow,
     latency: LatencyState,
     selected: Boolean,
     saving: Boolean,
     onSelect: (dev.benyamin.kumiho.engine.Country, City, Server) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    val enabled = !row.server.quarantined && !saving
     TvFocusableSurface(
         onClick = { onSelect(row.country, row.city, row.server) },
-        enabled = enabled,
+        enabled = !saving,
         containerColor = if (selected) colors.primary.copy(alpha = 0.16f) else colors.surface,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(start = TvDimens.Space4)
+            .semantics(mergeDescendants = true) { this.selected = selected }
             .testTag(
                 serverRowTag(
                     row.country.code,
@@ -422,26 +357,27 @@ private fun ServerRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
         ) {
+            CountryFlags.Flag(
+                code = row.country.code,
+                recommended = LocationTree.isRecommended(row.country),
+                width = 32.dp,
+                height = 24.dp,
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = row.server.hostname,
+                    text = row.title,
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = row.city.name + " · " + row.server.port,
+                    text = row.detail,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (row.server.quarantined) {
-                    Text(
-                        text = stringResource(R.string.locations_quarantined),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LocalKumihoColors.current.warning,
-                    )
-                }
             }
             Text(
                 text = latencyText(latency),
@@ -456,6 +392,7 @@ private fun ServerRow(
                 },
                 style = MaterialTheme.typography.titleSmall,
                 color = colors.primary,
+                modifier = Modifier.clearAndSetSemantics { },
             )
         }
     }

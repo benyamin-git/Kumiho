@@ -256,29 +256,16 @@
     <string name="locations_engine_unavailable_title">Kumiho cannot start</string>
     <string name="locations_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
     <string name="locations_search_label">Search locations</string>
+    <string name="locations_search_placeholder">Country, city, server, or protocol</string>
     <string name="locations_search_clear">Clear search</string>
     <string name="locations_refresh">Refresh locations</string>
     <string name="locations_refresh_action">Refresh</string>
     <string name="locations_ping_all">Ping all</string>
     <string name="locations_pinging_all">Pinging %1$d…</string>
-    <string name="locations_expand_all">Expand all</string>
-    <string name="locations_collapse_all">Collapse all</string>
-    <string name="locations_selected">Selected</string>
     <string name="locations_summary_label">Current selection</string>
     <string name="locations_selection_none">No server selected yet — the dashboard uses Recommended</string>
     <string name="locations_selection_separator" translatable="false">" · "</string>
     <string name="locations_recommended">Recommended</string>
-    <string name="locations_connected_hint">This location is saved for your next connection. Disconnect on Home, then connect again; the current session keeps its server and exit IP.</string>
-    <string name="locations_quarantined">Quarantined</string>
-    <string name="locations_expand">Expand</string>
-    <string name="locations_collapse">Collapse</string>
-    <string name="locations_server_protocols">%1$s · port %2$d</string>
-    <string name="locations_server_port">port %1$d</string>
-    <string name="locations_server_city">%1$s · %2$s</string>
-    <plurals name="locations_country_servers">
-        <item quantity="one">%1$d server</item>
-        <item quantity="other">%1$d servers</item>
-    </plurals>
     <string name="locations_latency">%1$d ms</string>
     <string name="locations_latency_timeout">timeout</string>
     <string name="locations_latency_none" translatable="false">—</string>
@@ -287,11 +274,12 @@
     <string name="locations_empty_title">No locations</string>
     <string name="locations_empty_message">The engine returned no locations. Refresh to try again.</string>
     <string name="locations_no_match_title">No matches</string>
-    <string name="locations_no_match_message">No country, city or server matches “%1$s”.</string>
+    <string name="locations_no_match_message">No country, city, server, or protocol matches “%1$s”.</string>
     <string name="locations_load_failed_title">Locations did not load</string>
     <string name="locations_message_refresh_failed">The refresh failed. The list below is the last one that loaded.</string>
     <string name="locations_message_select_failed">The location could not be saved.</string>
     <string name="locations_message_ping_all_failed">Ping all could not start.</string>
+    <string name="locations_message_ping_all_no_results">No server responded to Ping all.</string>
 
     <!-- Settings (T13). -->
     <string name="settings_loading">Loading settings…</string>

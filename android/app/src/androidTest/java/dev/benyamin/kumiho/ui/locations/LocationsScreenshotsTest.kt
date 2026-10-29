@@ -97,7 +97,6 @@ class LocationsScreenshotsTest {
         loading = false,
         loaded = true,
         countries = COUNTRIES,
-        expandedCountries = setOf("rec", "us", "de"),
         selection = LocationTree.currentSelection(COUNTRIES, "us", EDGE_ADDRESS),
         latency = mapOf(
             LocationTree.addressKey(EDGE_ADDRESS) to 42.4,
@@ -105,25 +104,21 @@ class LocationsScreenshotsTest {
             LocationTree.addressKey(LONG_ADDRESS) to 128.0,
             LocationTree.addressKey(BER_ADDRESS) to 17.0,
         ),
-        sessionActive = true,
     )
 
     private fun searchState() = treeState().copy(query = "ber")
 
     private fun noticeState() = treeState().copy(
-        sessionActive = false,
         notice = LocationsNotice.refreshFailed("the engine did not answer"),
     )
 
     private fun noOpActions() = LocationsActions(
         onQueryChange = {},
         onClearQuery = {},
-        onToggleCountry = {},
         onSelect = { _, _, _ -> },
         onRefresh = {},
         onRetryLoad = {},
         onPingAll = {},
-        onToggleAll = {},
         onDismissNotice = {},
         onRetryNotice = {},
     )
@@ -179,6 +174,6 @@ class LocationsScreenshotsTest {
             cities = listOf(City(code = "ber", name = "Berlin", servers = listOf(BER_SERVER))),
         )
 
-        val COUNTRIES = LocationTree.ordered(listOf(US, REC, DE))
+        val COUNTRIES = listOf(US, REC, DE)
     }
 }

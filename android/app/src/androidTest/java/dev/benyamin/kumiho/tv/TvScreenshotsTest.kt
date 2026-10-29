@@ -188,25 +188,21 @@ class TvScreenshotsTest : TvTestBase() {
         loading = false,
         loaded = true,
         countries = COUNTRIES,
-        expandedCountries = setOf("rec", "gb"),
         selection = LocationTree.currentSelection(COUNTRIES, "gb", "lon1.example.net:443"),
         latency = mapOf(
             LocationTree.addressKey("lon1.example.net:443") to 42.4,
             LocationTree.addressKey("fra1.example.net:443") to null,
             LocationTree.addressKey("auto.example.net:443") to 17.0,
         ),
-        sessionActive = true,
     )
 
     private fun locationsActions() = LocationsActions(
         onQueryChange = {},
         onClearQuery = {},
-        onToggleCountry = {},
         onSelect = { _, _, _ -> },
         onRefresh = {},
         onRetryLoad = {},
         onPingAll = {},
-        onToggleAll = {},
         onDismissNotice = {},
         onRetryNotice = {},
     )

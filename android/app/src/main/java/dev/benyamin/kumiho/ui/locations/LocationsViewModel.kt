@@ -7,7 +7,6 @@ import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.PingResult
 import dev.benyamin.kumiho.engine.Server
-import dev.benyamin.kumiho.ui.dashboard.DashboardPhase
 import dev.benyamin.kumiho.vpn.ServiceState
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CancellationException
@@ -24,33 +23,24 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The engine/service calls the Locations screen makes. It exists so the view
- * model is a plain JVM state machine: the production implementation talks to
- * the app-scoped [VpnServiceCoordinator], and every JVM test uses a fake.
- *
- * There is deliberately no connect method: `select_location` persists a choice
- * and updates the dashboard, and changing the live location is a disconnect
- * followed by a connect on Home (the T12 ruling). A gateway with no connect
- * cannot grow one by accident.
+ * The engine/service calls the Locations screen needs; a fake implements this
+ * in the JVM tests. Selection persists a choice, but this screen never
+ * connects and never owns a tunnel.
  */
 interface LocationsGateway {
-    /** The service's mirrored state; the current selection and session phase come from here. */
     val service: StateFlow<ServiceState>
 
-    /** The server-list tree, optionally forcing a refresh. */
+    /** Results arrive independently of the [ping] call's return. */
+    val pings: Flow<PingResult>
+
     suspend fun locations(refresh: Boolean): List<Country>
 
-    /** Persists a location choice; never connects. */
     suspend fun selectLocation(countryCode: String, cityCode: String?, server: String)
 
-    /** Starts the engine's 24-way probes; results stream through [pings]. */
     suspend fun ping(hosts: List<String>)
-
-    /** One result per requested host; a null RTT means the probe timed out. */
-    val pings: Flow<PingResult>
 }
 
-/** The production gateway: the same engine the dashboard and setup use. */
+/** The real gateway over the app-scoped VPN coordinator. */
 class CoordinatorLocationsGateway(
     private val coordinator: VpnServiceCoordinator,
 ) : LocationsGateway {
@@ -58,8 +48,7 @@ class CoordinatorLocationsGateway(
 
     /**
      * Pings come from whichever engine the coordinator currently holds; a
-     * rebind switches the source without the screen re-subscribing. This is
-     * T11's notice pattern, applied to the engine's ping flow.
+     * rebind switches the source without the screen re-subscribing.
      */
     override val pings: Flow<PingResult> = channelFlow {
         coordinator.engine.filterNotNull().collectLatest { client ->
@@ -79,18 +68,19 @@ class CoordinatorLocationsGateway(
     }
 }
 
-/** A selection request: exactly what `select_location` receives. */
+/** The exact persisted tuple a row tap sends to `select_location`. */
 data class SelectionRequest(
     val countryCode: String,
     val cityCode: String?,
     val address: String,
 )
 
-/** Copy the view model generates itself; the screen resolves it to a resource. */
+/** Local failure copy with an optional detail from the engine. */
 enum class LocationsMessage {
     REFRESH_FAILED,
     SELECT_FAILED,
     PING_ALL_FAILED,
+    PING_ALL_NO_RESULTS,
 }
 
 /** Notice text: either the engine's own words or a local message code. */
@@ -133,13 +123,19 @@ data class LocationsNotice(
             tone = LocationsNoticeTone.WARNING,
             action = LocationsNoticeAction.RETRY_PING_ALL,
         )
+
+        fun pingAllNoResults(): LocationsNotice = LocationsNotice(
+            text = LocationsNoticeText.Local(LocationsMessage.PING_ALL_NO_RESULTS),
+            tone = LocationsNoticeTone.WARNING,
+            action = LocationsNoticeAction.RETRY_PING_ALL,
+        )
     }
 }
 
 /**
- * The whole screen state; the view model is its only producer and the screen
- * only reads it. The rows, ping targets and latency cells are derived here
- * through [LocationTree], so every rule is unit-testable on the JVM.
+ * The whole screen state. The view model is its only producer; the screen only
+ * reads it. Rows, ping targets and the latency cells are derived through
+ * [LocationTree], so every rule is unit-testable on the JVM.
  */
 data class LocationsState(
     /** The first load is running and there is no tree to show yet. */
@@ -148,41 +144,52 @@ data class LocationsState(
     val refreshing: Boolean = false,
     /** At least one load succeeded (an empty successful load is honest, not an error). */
     val loaded: Boolean = false,
-    /** The tree, REC first, as the last successful load returned it. */
+    /** The loaded tree as the last successful load returned it. */
     val countries: List<Country> = emptyList(),
     /** The first load failed and there is no tree; only then is it a screen state. */
     val loadError: String? = null,
     val notice: LocationsNotice? = null,
     val query: String = "",
-    /** Country expansion keys ([LocationTree.countryKey]). */
-    val expandedCountries: Set<String> = emptySet(),
     /** The engine's reported selection, resolved against the tree. */
     val selection: LocationSelection? = null,
     /** The last RTT per address key; a null value is a timeout, an absent key is untested. */
     val latency: Map<String, Double?> = emptyMap(),
+    /** Country order by default; speed order only for the current visit after a good run. */
+    val sortMode: LocationSortMode = LocationSortMode.COUNTRY,
+    /** Changes when the list should jump back to its first row. */
+    val listResetToken: Int = 0,
+    /**
+     * The latency snapshot speed order was last committed against. It stays
+     * frozen while a newer run is in flight, so rows never jump under the user;
+     * null means "use latency" when constructing a state directly.
+     */
+    val speedOrderLatency: Map<String, Double?>? = null,
     /** A Ping all run is in flight. */
     val pingingAll: Boolean = false,
     /** The static target count shown on the Ping all button for this run. */
     val pingAllCount: Int = 0,
     /** The address key of the server whose save is in flight. */
     val savingServer: String? = null,
-    /** A tunnel or proxy session is up, so the saved choice only applies after a reconnect. */
-    val sessionActive: Boolean = false,
 ) {
     val hasTree: Boolean get() = countries.isNotEmpty()
 
     val searching: Boolean get() = query.isNotBlank()
 
-    /** The visible rows for the current query and expansion state. */
+    /** The visible flat server rows for the current query and sort order. */
     val rows: List<LocationRow>
-        get() = LocationTree.rows(countries, query, expandedCountries, latency)
+        get() = LocationTree.rows(
+            countries = countries,
+            query = query,
+            latency = if (sortMode == LocationSortMode.SPEED) {
+                speedOrderLatency ?: latency
+            } else {
+                latency
+            },
+            sortMode = sortMode,
+        )
 
-    /** The whole loaded tree's `host:port` targets, independent of filter and expansion. */
+    /** Every usable loaded server, independent of the filter. */
     val allTargets: List<String> get() = LocationTree.pingAllTargets(countries)
-
-    /** True when a country is stored as open, so the toggle reads "Collapse all". */
-    val anyExpanded: Boolean
-        get() = expandedCountries.isNotEmpty()
 
     /** Honest screen states, each true only when it is the only thing to show. */
     val showLoading: Boolean get() = loading && !hasTree
@@ -193,18 +200,11 @@ data class LocationsState(
 
     val showNoMatch: Boolean get() = hasTree && searching && rows.isEmpty()
 
-    /** Ping all is offered whenever the loaded tree has a usable target and no run is active. */
+    /** Ping all is offered whenever the loaded tree has a target and no run is active. */
     val canPingAll: Boolean
         get() = !pingingAll && !loading && loadError == null && allTargets.isNotEmpty()
 
-    /** The expansion toggle only acts on a loaded tree without a search filter. */
-    val canToggleAll: Boolean get() = hasTree && query.isEmpty()
-
     fun latencyOf(server: Server): LatencyState = LocationTree.latencyOf(latency, server)
-
-    /** The LatencyState a country row shows (D9). */
-    fun countryLatency(country: Country): LatencyState =
-        LocationTree.countryLatencyOf(latency, country)
 
     fun isSelected(country: Country, city: City, server: Server): Boolean =
         selection?.marks(country, city, server) == true
@@ -214,13 +214,9 @@ data class LocationsState(
 }
 
 /**
- * The Locations state machine: the tree, the filter, expansion, the current
- * selection from the service, saving a choice and the manual speed test.
- *
- * It contains no Android call and no gomobile call. The service is the source
- * of truth for the current selection: `select_location` persists and pushes a
- * fresh status, and the mark moves when that push arrives, never from an
- * optimistic local guess. Nothing pings unless the user taps Test speed.
+ * The Locations state machine: the flat list, filter, current selection,
+ * saving and the manual all-servers ping. It makes no Android or gomobile
+ * call; the service is the source of truth for the current selection.
  */
 class LocationsViewModel(
     private val gateway: LocationsGateway,
@@ -238,8 +234,14 @@ class LocationsViewModel(
     private var loadJob: Job? = null
     private var pingJob: Job? = null
 
-    /** Address keys of the current test that have not answered yet. Main-confined. */
+    /** Address keys of the current run that have not answered yet. Main-confined. */
     private val pendingPings = mutableSetOf<String>()
+
+    /** Whether the active run produced at least one result, including a timeout. */
+    private var runHadResult = false
+
+    /** Whether the active run failed at the transport level. */
+    private var runFailed = false
 
     init {
         viewModelScope.launch {
@@ -255,8 +257,6 @@ class LocationsViewModel(
 
     private fun onService(snapshot: ServiceState) {
         status = snapshot.status
-        val active = DashboardPhase.from(snapshot).active
-        mutableState.update { it.copy(sessionActive = active) }
         refreshSelection()
     }
 
@@ -278,9 +278,9 @@ class LocationsViewModel(
         }
     }
 
-    // ---- tree ------------------------------------------------------------
+    // ---- loading ---------------------------------------------------------
 
-    /** The Refresh action: forces a network refresh and keeps the old tree on failure. */
+    /** The Refresh action: forces a network refresh, resets RTTs and keeps the old tree on failure. */
     fun refresh() = load(refresh = true)
 
     /** The retry the initial error state offers. */
@@ -288,6 +288,7 @@ class LocationsViewModel(
 
     private fun load(refresh: Boolean) {
         if (loadJob?.isActive == true) return
+        cancelPing()
         mutableState.update { current ->
             current.copy(
                 loading = !current.hasTree,
@@ -298,12 +299,16 @@ class LocationsViewModel(
                 } else {
                     current.notice
                 },
+                latency = emptyMap(),
+                sortMode = LocationSortMode.COUNTRY,
+                listResetToken = current.listResetToken + 1,
+                speedOrderLatency = null,
             )
         }
         loadJob = viewModelScope.launch {
             try {
                 val countries = gateway.locations(refresh)
-                applyTree(LocationTree.ordered(countries))
+                applyTree(countries)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -333,7 +338,7 @@ class LocationsViewModel(
     private fun applyFailure(detail: String) {
         mutableState.update { current ->
             if (current.hasTree) {
-                // A refresh failure must never blank a tree that worked.
+                // A refresh failure must never blank a list that worked.
                 current.copy(
                     loading = false,
                     refreshing = false,
@@ -351,7 +356,7 @@ class LocationsViewModel(
         }
     }
 
-    // ---- filter / expansion ---------------------------------------------
+    // ---- filter / visit --------------------------------------------------
 
     /** Every keystroke only touches the query: no load, no ping, no network. */
     fun onQueryChange(query: String) {
@@ -362,40 +367,26 @@ class LocationsViewModel(
         mutableState.update { it.copy(query = "") }
     }
 
-    fun toggleCountry(code: String) {
-        val key = code.trim().lowercase()
-        mutableState.update { current ->
-            current.copy(
-                expandedCountries = if (key in current.expandedCountries) {
-                    current.expandedCountries - key
-                } else {
-                    current.expandedCountries + key
-                },
+    /**
+     * A real re-entry into the screen resets speed order to country order for
+     * the new visit. Latency labels stay cached; only their ordering authority
+     * ends. Rotation is handled by the route and does not call this.
+     */
+    fun beginVisit() {
+        mutableState.update {
+            it.copy(
+                sortMode = LocationSortMode.COUNTRY,
+                listResetToken = it.listResetToken + 1,
+                speedOrderLatency = null,
             )
         }
     }
 
-    /**
-     * Opens every country, or clears the stored set when anything is already
-     * open. The filter-forced view never counts as stored expansion and the
-     * control is inert while a query is active.
-     */
-    fun toggleAll() {
-        val current = mutableState.value
-        if (current.query.isNotEmpty() || !current.hasTree) return
-        if (current.anyExpanded) {
-            mutableState.update { it.copy(expandedCountries = emptySet()) }
-            return
-        }
-        val allCountries = current.countries.mapTo(mutableSetOf(), LocationTree::countryKey)
-        mutableState.update { it.copy(expandedCountries = allCountries) }
-    }
-
     // ---- selection -------------------------------------------------------
 
-    /** A server row's tap; quarantined servers are not selectable. */
+    /** A server row's tap; unusable servers are not selectable. */
     fun select(country: Country, city: City, server: Server) {
-        if (server.quarantined) return
+        if (!LocationTree.isUsable(server)) return
         select(
             SelectionRequest(
                 countryCode = country.code,
@@ -454,6 +445,8 @@ class LocationsViewModel(
 
         pendingPings.clear()
         targets.mapTo(pendingPings, LocationTree::addressKey)
+        runHadResult = false
+        runFailed = false
         mutableState.update {
             it.copy(
                 pingingAll = true,
@@ -479,6 +472,8 @@ class LocationsViewModel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                if (!mutableState.value.pingingAll) return@launch
+                runFailed = true
                 stopPing()
                 mutableState.update {
                     it.copy(notice = LocationsNotice.pingAllFailed(messageOf(error)))
@@ -494,16 +489,58 @@ class LocationsViewModel(
     private fun onPing(result: PingResult) {
         val key = LocationTree.addressKey(result.host)
         val wasPending = pendingPings.remove(key)
+        if (wasPending) runHadResult = true
         mutableState.update { current ->
-            current.copy(latency = current.latency + (key to result.rttMs))
+            if (current.pingingAll) {
+                current.copy(latency = current.latency + (key to result.rttMs))
+            } else {
+                current
+            }
         }
         if (wasPending && pendingPings.isEmpty()) stopPing()
     }
 
+    /**
+     * Ends the active run. Only a completed, non-failed run with at least one
+     * result commits speed order, and it commits the whole run's latency once.
+     */
     private fun stopPing() {
+        if (!mutableState.value.pingingAll) {
+            pendingPings.clear()
+            pingJob?.cancel()
+            pingJob = null
+            return
+        }
+        val switchToSpeed = runHadResult && !runFailed
+        val noResults = !runHadResult && !runFailed
         pendingPings.clear()
         pingJob?.cancel()
         pingJob = null
+        runHadResult = false
+        runFailed = false
+        mutableState.update { current ->
+            current.copy(
+                pingingAll = false,
+                pingAllCount = 0,
+                sortMode = if (switchToSpeed) LocationSortMode.SPEED else current.sortMode,
+                listResetToken = if (switchToSpeed) {
+                    current.listResetToken + 1
+                } else {
+                    current.listResetToken
+                },
+                speedOrderLatency = if (switchToSpeed) current.latency else current.speedOrderLatency,
+                notice = if (noResults) LocationsNotice.pingAllNoResults() else current.notice,
+            )
+        }
+    }
+
+    /** Stops a run without letting it change the order, for a fresh load. */
+    private fun cancelPing() {
+        pendingPings.clear()
+        pingJob?.cancel()
+        pingJob = null
+        runHadResult = false
+        runFailed = false
         mutableState.update { it.copy(pingingAll = false, pingAllCount = 0) }
     }
 

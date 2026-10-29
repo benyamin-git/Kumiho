@@ -16,15 +16,14 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
@@ -37,22 +36,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -69,7 +67,6 @@ import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.components.KumihoEmptyState
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
-import dev.benyamin.kumiho.ui.components.KumihoRow
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
@@ -104,15 +101,23 @@ fun LocationsRoute(
     }
     val state by locationsViewModel.state.collectAsStateWithLifecycle()
 
+    // A tab switch leaves this composition and a fresh true resets speed order
+    // for the new visit. Rotation restores the saved flag, so it does not.
+    var entered by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(locationsViewModel) {
+        if (!entered) {
+            locationsViewModel.beginVisit()
+            entered = true
+        }
+    }
+
     val actions = LocationsActions(
         onQueryChange = locationsViewModel::onQueryChange,
         onClearQuery = locationsViewModel::clearQuery,
-        onToggleCountry = locationsViewModel::toggleCountry,
         onSelect = locationsViewModel::select,
         onRefresh = locationsViewModel::refresh,
         onRetryLoad = locationsViewModel::retryLoad,
         onPingAll = locationsViewModel::pingAll,
-        onToggleAll = locationsViewModel::toggleAll,
         onDismissNotice = locationsViewModel::dismissNotice,
         onRetryNotice = locationsViewModel::retryNotice,
     )
@@ -123,24 +128,21 @@ fun LocationsRoute(
 data class LocationsActions(
     val onQueryChange: (String) -> Unit,
     val onClearQuery: () -> Unit,
-    val onToggleCountry: (String) -> Unit,
     val onSelect: (Country, City, Server) -> Unit,
     val onRefresh: () -> Unit,
     val onRetryLoad: () -> Unit,
     val onPingAll: () -> Unit,
-    val onToggleAll: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onRetryNotice: () -> Unit,
 )
 
 /**
  * The stateless Locations screen: a pinned search field and toolbar, the
- * current selection, the connected hint, the notice banner and the full
- * country/server tree.
+ * current selection, the notice banner and one flat server list.
  *
  * It makes no engine, service or Android call, so a Compose test renders it
- * from fake state. Nothing here selects or connects on its own: a server row
- * tap is a request, and the check mark only follows the service status.
+ * from fake state. A row tap is a request, and the check mark only follows the
+ * service status.
  */
 @Composable
 fun LocationsScreen(
@@ -148,6 +150,13 @@ fun LocationsScreen(
     actions: LocationsActions,
     modifier: Modifier = Modifier,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.listResetToken) {
+        if (state.rows.isNotEmpty()) {
+            listState.scrollToItem(0)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -173,20 +182,6 @@ fun LocationsScreen(
                 top = Dimens.Space2,
             ),
         )
-        if (state.sessionActive) {
-            InlineBanner(
-                icon = Icons.Filled.Info,
-                tint = MaterialTheme.colorScheme.primary,
-                text = stringResource(R.string.locations_connected_hint),
-                modifier = Modifier
-                    .padding(
-                        start = Dimens.ScreenPadding,
-                        end = Dimens.ScreenPadding,
-                        top = Dimens.Space2,
-                    )
-                    .testTag(LocationsTags.CONNECTED_HINT),
-            )
-        }
         state.notice?.let { notice ->
             NoticeBanner(
                 notice = notice,
@@ -206,9 +201,10 @@ fun LocationsScreen(
                 state.showError -> ErrorContent(error = state.loadError.orEmpty(), onRetry = actions.onRetryLoad)
                 state.showEmpty -> EmptyContent(onRefresh = actions.onRefresh)
                 state.showNoMatch -> NoMatchContent(query = state.query, onClear = actions.onClearQuery)
-                else -> Tree(
+                else -> ServerList(
                     state = state,
                     actions = actions,
+                    listState = listState,
                 )
             }
         }
@@ -232,6 +228,7 @@ private fun SearchField(
             .fillMaxWidth()
             .testTag(LocationsTags.SEARCH),
         label = { Text(stringResource(R.string.locations_search_label)) },
+        placeholder = { Text(stringResource(R.string.locations_search_placeholder)) },
         singleLine = true,
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -291,19 +288,6 @@ private fun Toolbar(state: LocationsState, actions: LocationsActions) {
             enabled = state.canPingAll,
             loading = state.pingingAll,
             onClick = actions.onPingAll,
-            modifier = Modifier.weight(1f),
-        )
-        ToolbarAction(
-            label = stringResource(
-                if (state.anyExpanded) {
-                    R.string.locations_collapse_all
-                } else {
-                    R.string.locations_expand_all
-                },
-            ),
-            tag = LocationsTags.TOGGLE_ALL,
-            enabled = state.canToggleAll,
-            onClick = actions.onToggleAll,
             modifier = Modifier.weight(1f),
         )
     }
@@ -366,25 +350,34 @@ private fun SelectionSummary(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            val plain = selectionText(selection)
-            val flag = selection?.flag.orEmpty()
-            Text(
-                text = if (flag.isEmpty()) plain else "$flag $plain",
-                modifier = if (flag.isEmpty()) {
-                    Modifier
-                } else {
-                    Modifier.clearAndSetSemantics { contentDescription = plain }
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+            ) {
+                if (selection != null) {
+                    CountryFlags.Flag(
+                        code = selection.countryCode,
+                        recommended = selection.recommended,
+                        width = 20.dp,
+                        height = 15.dp,
+                    )
+                }
+                Text(
+                    text = selectionText(selection),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
 
-/** `Recommended`, or `Country · City · host`; the raw address when unresolved. */
+/**
+ * `Recommended`, or `Country · City · host:port · protocols`; the raw address
+ * when unresolved. City and protocols are omitted when they add nothing.
+ */
 @Composable
 internal fun selectionText(selection: LocationSelection?): String {
     if (selection == null) return stringResource(R.string.locations_selection_none)
@@ -394,49 +387,142 @@ internal fun selectionText(selection: LocationSelection?): String {
         parts += stringResource(R.string.locations_recommended)
     } else {
         selection.countryName?.let(parts::add)
-        selection.cityName
-            ?.takeUnless { it.equals(selection.countryName, ignoreCase = true) }
-            ?.let(parts::add)
+        selection.cityName?.let(parts::add)
     }
-    selection.serverName?.let(parts::add)
+    selection.serverAddress?.let(parts::add)
+    if (selection.protocolNames.isNotEmpty()) {
+        parts += selection.protocolNames.joinToString(", ")
+    }
     return parts.joinToString(separator)
 }
 
-/** A quiet informational banner: icon, words, no action. */
+// ---- flat server list ---------------------------------------------------
+
 @Composable
-private fun InlineBanner(
-    icon: ImageVector,
-    tint: Color,
-    text: String,
-    modifier: Modifier = Modifier,
+private fun ServerList(
+    state: LocationsState,
+    actions: LocationsActions,
+    listState: LazyListState,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = tint.copy(alpha = 0.1f),
-        border = BorderStroke(1.dp, tint.copy(alpha = 0.5f)),
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(LocationsTags.LIST),
+        contentPadding = PaddingValues(
+            start = Dimens.ScreenPadding,
+            end = Dimens.ScreenPadding,
+            top = Dimens.Space1,
+            bottom = Dimens.Space4,
+        ),
     ) {
-        Row(
-            modifier = Modifier.padding(Dimens.Space3),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .size(20.dp),
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+        items(items = state.rows, key = { it.key }) { row ->
+            ServerRow(
+                row = row,
+                latency = state.latencyOf(row.server),
+                selected = state.isSelected(row.country, row.city, row.server),
+                saving = state.isSaving(row.server),
+                onSelect = actions.onSelect,
             )
         }
     }
 }
+
+/**
+ * One server: the flag, the full `Country · City`, the second line
+ * `hostname:port · protocols`, and the latency/check trailing. The row is
+ * intentionally a single tap target; there is nothing to expand.
+ */
+@Composable
+private fun ServerRow(
+    row: LocationRow,
+    latency: LatencyState,
+    selected: Boolean,
+    saving: Boolean,
+    onSelect: (Country, City, Server) -> Unit,
+) {
+    val server = row.server
+    val enabled = !saving
+    val background = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+    }
+    Surface(
+        color = background,
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = Dimens.RowHeight)
+            .semantics(mergeDescendants = true) { this.selected = selected }
+            .then(
+                if (enabled) {
+                    Modifier.clickable(role = Role.Button) { onSelect(row.country, row.city, server) }
+                } else {
+                    Modifier
+                },
+            )
+            .testTag(serverRowTag(row.country.code, row.city.code, LocationTree.addressOf(server))),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Dimens.Space2, end = Dimens.Space4, top = Dimens.Space1, bottom = Dimens.Space1),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
+        ) {
+            CountryFlags.Flag(
+                code = row.country.code,
+                recommended = LocationTree.isRecommended(row.country),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = row.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = row.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (saving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Text(
+                    text = latencyText(latency),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun latencyText(latency: LatencyState): String = when (latency) {
+    LatencyState.Untested -> stringResource(R.string.locations_latency_none)
+    LatencyState.Timeout -> stringResource(R.string.locations_latency_timeout)
+    is LatencyState.Measured -> stringResource(R.string.locations_latency, latency.milliseconds)
+}
+
+// ---- notices and content states ----------------------------------------
 
 /** The one notice with its tone, words, detail and the one retry it offers. */
 @Composable
@@ -529,9 +615,8 @@ private fun messageResource(message: LocationsMessage): Int = when (message) {
     LocationsMessage.REFRESH_FAILED -> R.string.locations_message_refresh_failed
     LocationsMessage.SELECT_FAILED -> R.string.locations_message_select_failed
     LocationsMessage.PING_ALL_FAILED -> R.string.locations_message_ping_all_failed
+    LocationsMessage.PING_ALL_NO_RESULTS -> R.string.locations_message_ping_all_no_results
 }
-
-// ---- content states -----------------------------------------------------
 
 @Composable
 private fun LoadingContent() {
@@ -608,217 +693,6 @@ private fun NoMatchContent(query: String, onClear: () -> Unit) {
             },
         )
     }
-}
-
-// ---- the tree -----------------------------------------------------------
-
-@Composable
-private fun Tree(state: LocationsState, actions: LocationsActions) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(LocationsTags.LIST),
-        contentPadding = PaddingValues(
-            start = Dimens.ScreenPadding,
-            end = Dimens.ScreenPadding,
-            top = Dimens.Space1,
-            bottom = Dimens.Space4,
-        ),
-    ) {
-        items(items = state.rows, key = { it.key }) { row ->
-            when (row) {
-                is LocationRow.CountryRow -> CountryRow(
-                    row = row,
-                    searching = state.searching,
-                    latency = state.countryLatency(row.country),
-                    onToggle = actions.onToggleCountry,
-                )
-                is LocationRow.ServerRow -> ServerRow(
-                    row = row,
-                    latency = state.latencyOf(row.server),
-                    selected = state.isSelected(row.country, row.city, row.server),
-                    saving = state.isSaving(row.server),
-                    onSelect = actions.onSelect,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CountryRow(
-    row: LocationRow.CountryRow,
-    searching: Boolean,
-    latency: LatencyState,
-    onToggle: (String) -> Unit,
-) {
-    val name = if (LocationTree.isRecommended(row.country)) {
-        stringResource(R.string.locations_recommended)
-    } else {
-        row.country.name
-    }
-    val flag = CountryFlags.emoji(row.country.code)
-    val serverCount = row.country.cities.sumOf { it.servers.size }
-    KumihoRow(
-        title = name,
-        titlePrefix = flag.takeIf { it.isNotEmpty() },
-        subtitle = pluralStringResource(R.plurals.locations_country_servers, serverCount, serverCount),
-        modifier = Modifier
-            .semantics { heading() }
-            .testTag(countryRowTag(row.country.code)),
-        onClick = if (searching) null else ({ onToggle(row.country.code) }),
-        trailing = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
-            ) {
-                Text(
-                    text = latencyText(latency),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (!searching) {
-                    ExpandGlyph(expanded = row.expanded)
-                }
-            }
-        },
-    )
-}
-
-@Composable
-private fun ExpandGlyph(expanded: Boolean) {
-    Icon(
-        imageVector = if (expanded) {
-            Icons.Filled.KeyboardArrowDown
-        } else {
-            Icons.AutoMirrored.Filled.KeyboardArrowRight
-        },
-        contentDescription = stringResource(
-            if (expanded) R.string.locations_collapse else R.string.locations_expand,
-        ),
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(24.dp),
-    )
-}
-
-/**
- * One server: the host name (ellipsized, never taking the latency or the check
- * with it), the protocol/port line, a quarantine mark, and the latency.
- */
-@Composable
-private fun ServerRow(
-    row: LocationRow.ServerRow,
-    latency: LatencyState,
-    selected: Boolean,
-    saving: Boolean,
-    onSelect: (Country, City, Server) -> Unit,
-) {
-    val server = row.server
-    val enabled = !server.quarantined && !saving
-    val background = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-    } else {
-        Color.Transparent
-    }
-    Surface(
-        color = background,
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = Dimens.RowHeight)
-            .semantics { this.selected = selected }
-            .then(
-                if (enabled) {
-                    Modifier.clickable(role = Role.Button) { onSelect(row.country, row.city, server) }
-                } else {
-                    Modifier
-                },
-            )
-            .testTag(serverRowTag(row.country.code, row.city.code, LocationTree.addressOf(server))),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = Dimens.Space6, end = Dimens.Space4, top = Dimens.Space2, bottom = Dimens.Space2),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = server.hostname,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                ServerDetail(server = server, city = row.city)
-            }
-            if (saving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Text(
-                    text = latencyText(latency),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (selected) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = stringResource(R.string.locations_selected),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** `New York · connect, quic · port 2499`, plus the honest quarantine mark. */
-@Composable
-private fun ServerDetail(server: Server, city: City) {
-    val separator = stringResource(R.string.locations_selection_separator)
-    val protocols = server.protocols
-        .map { it.name.trim() }
-        .filter { it.isNotEmpty() }
-        .distinct()
-        .joinToString(", ")
-    val detail = if (protocols.isEmpty()) {
-        stringResource(R.string.locations_server_port, server.port)
-    } else {
-        stringResource(R.string.locations_server_protocols, protocols, server.port)
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
-    ) {
-        Text(
-            text = stringResource(R.string.locations_server_city, city.name, detail),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        if (server.quarantined) {
-            Text(
-                text = separator + stringResource(R.string.locations_quarantined),
-                style = MaterialTheme.typography.bodySmall,
-                color = LocalKumihoColors.current.warning,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun latencyText(latency: LatencyState): String = when (latency) {
-    LatencyState.Untested -> stringResource(R.string.locations_latency_none)
-    LatencyState.Timeout -> stringResource(R.string.locations_latency_timeout)
-    is LatencyState.Measured -> stringResource(R.string.locations_latency, latency.milliseconds)
 }
 
 /** Themed loading while the service binds, or the engine error it reported. */

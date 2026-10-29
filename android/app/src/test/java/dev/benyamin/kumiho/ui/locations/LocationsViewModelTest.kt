@@ -21,20 +21,14 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 /**
- * The Locations state machine on the JVM: a fake gateway, virtual time and no
- * Android, Compose or daemon.
- *
- * The contract this file pins is deliberately narrow: loading and refreshing,
- * the live filter and expansion, `select_location` exactly once per choice and
- * never a connect, the current selection following the service's status push
- * instead of a local guess, and a speed test that only ever runs when asked.
+ * The Locations state machine on the JVM: the flat list, filter, selection,
+ * persistence, the all-servers ping run and the transient speed order.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LocationsViewModelTest {
@@ -50,16 +44,19 @@ class LocationsViewModelTest {
     // ---- loading ---------------------------------------------------------
 
     @Test
-    fun `the first load puts REC first and shows the tree`() =
+    fun `the first load puts Recommended first in the flat rows`() =
         runTest(mainRule.testDispatcher) {
             gateway.countries = listOf(US, REC, DE)
 
             val viewModel = viewModel()
-            assertTrue("before the load resolves there is only a waiting state", viewModel.state.value.showLoading)
+            assertTrue(viewModel.state.value.showLoading)
             runCurrent()
 
             val state = viewModel.state.value
-            assertEquals(listOf("rec", "us", "de"), state.countries.map { it.code })
+            assertEquals(
+                listOf("rec", "de", "us", "us", "us"),
+                state.rows.map { it.country.code },
+            )
             assertEquals(1, gateway.locationCalls)
             assertEquals(listOf(false), gateway.refreshFlags)
             assertTrue(state.loaded)
@@ -70,7 +67,7 @@ class LocationsViewModelTest {
         }
 
     @Test
-    fun `an initial load failure is an error state whose retry loads again`() =
+    fun `an initial load failure is an error whose retry loads again`() =
         runTest(mainRule.testDispatcher) {
             gateway.locationsError = IllegalStateException("daemon offline")
 
@@ -79,24 +76,22 @@ class LocationsViewModelTest {
 
             assertTrue(viewModel.state.value.showError)
             assertEquals("daemon offline", viewModel.state.value.loadError)
-            assertFalse(viewModel.state.value.showLoading)
 
             gateway.locationsError = null
             gateway.countries = listOf(REC, US)
             viewModel.retryLoad()
             runCurrent()
 
-            val state = viewModel.state.value
-            assertFalse(state.showError)
-            assertNull(state.loadError)
-            assertEquals(listOf("rec", "us"), state.countries.map { it.code })
+            assertFalse(viewModel.state.value.showError)
+            assertNull(viewModel.state.value.loadError)
+            assertEquals(listOf("rec", "us", "us", "us"), viewModel.state.value.rows.map { it.country.code })
             assertEquals(2, gateway.locationCalls)
         }
 
     @Test
-    fun `a refresh failure keeps the tree and offers a retry that refreshes`() =
+    fun `a refresh failure keeps the rows and offers the existing retry`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
 
@@ -105,8 +100,7 @@ class LocationsViewModelTest {
             runCurrent()
 
             val failed = viewModel.state.value
-            assertEquals("a failed refresh must not blank the tree", 3, failed.countries.size)
-            assertTrue(failed.hasTree)
+            assertEquals(5, failed.rows.size)
             assertFalse(failed.refreshing)
             assertEquals(LocationsNoticeAction.RETRY_REFRESH, failed.notice?.action)
             assertEquals(
@@ -117,734 +111,423 @@ class LocationsViewModelTest {
             gateway.locationsError = null
             viewModel.retryNotice()
             runCurrent()
-
-            val retried = viewModel.state.value
-            assertNull("a successful refresh clears its own notice", retried.notice)
-            assertEquals(3, retried.countries.size)
-            assertEquals(listOf(false, true, true), gateway.refreshFlags)
+            assertEquals(3, gateway.locationCalls)
+            assertNull(viewModel.state.value.notice)
         }
 
     @Test
-    fun `a successful empty load is an honest empty state not an error`() =
+    fun `a successful empty load is honest`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = emptyList()
-
             val viewModel = viewModel()
             runCurrent()
 
-            val state = viewModel.state.value
-            assertTrue(state.showEmpty)
-            assertFalse(state.showError)
-            assertFalse(state.hasTree)
+            assertTrue(viewModel.state.value.loaded)
+            assertTrue(viewModel.state.value.showEmpty)
+            assertFalse(viewModel.state.value.showError)
         }
 
     // ---- selection -------------------------------------------------------
 
     @Test
-    fun `the current selection comes from the service status and marks its row`() =
+    fun `the current selection follows the service status and marks its row`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
 
-            assertNull("nothing is selected before the engine says so", viewModel.state.value.selection)
-
-            gateway.serviceState.value = snapshot(state = STATE_CONNECTED, location = "us", server = EDGE)
+            gateway.serviceState.value = snapshot("CONNECTED", "us", EDGE_ADDRESS)
             runCurrent()
 
             val state = viewModel.state.value
-            val selection = state.selection
-            requireNotNull(selection)
-            assertEquals("United States", selection.countryName)
-            assertEquals("New York", selection.cityName)
-            assertEquals("edge.example.net", selection.serverName)
-            assertFalse(selection.recommended)
-            assertTrue(state.isSelected(US, NYC, EDGE_SERVER))
-            assertFalse(state.isSelected(US, NYC, SHARE_SERVER))
-            assertTrue(state.sessionActive)
+            assertEquals("United States", state.selection?.countryName)
+            assertEquals("New York", state.selection?.cityName)
+            assertEquals(EDGE_ADDRESS, state.selection?.serverAddress)
+            assertEquals(listOf("connect", "quic"), state.selection?.protocolNames)
+            assertTrue(state.isSelected(US, NYC, EDGE))
+            assertFalse(state.isSelected(US, NYC, SHARE))
         }
 
     @Test
-    fun `no status at all means no selection`() =
+    fun `saving persists the exact country city and address and never marks early`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
+            gateway.countries = listOf(US)
             val viewModel = viewModel()
             runCurrent()
+            gateway.selectGate = CompletableDeferred()
 
-            assertNull(viewModel.state.value.selection)
-            assertFalse(viewModel.state.value.sessionActive)
-        }
-
-    @Test
-    fun `saving sends the exact country city and address and never marks early`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.select(US, NYC, EDGE_SERVER)
+            viewModel.select(US, NYC, SHARE)
             runCurrent()
 
             assertEquals(
-                listOf(SelectionRequest(countryCode = "us", cityCode = "nyc", address = EDGE)),
+                listOf(SelectionRequest("us", "nyc", SHARE_ADDRESS)),
                 gateway.selections,
             )
-            assertNull("the row must not move before the engine reports it", viewModel.state.value.selection)
-            assertFalse(viewModel.state.value.isSelected(US, NYC, EDGE_SERVER))
+            assertTrue(viewModel.state.value.isSaving(SHARE))
+            assertFalse(viewModel.state.value.isSelected(US, NYC, SHARE))
 
-            gateway.serviceState.value = snapshot(state = STATE_IDLE, location = "us", server = EDGE)
+            gateway.selectGate?.complete(Unit)
             runCurrent()
-
-            assertTrue(viewModel.state.value.isSelected(US, NYC, EDGE_SERVER))
-            assertNull(viewModel.state.value.savingServer)
-            assertEquals("a save is never a connect", 1, gateway.selections.size)
-            assertEquals(0, gateway.pingCalls.size)
+            assertFalse(viewModel.state.value.isSaving(SHARE))
+            assertFalse(
+                "the mark moves only when the service pushes a status",
+                viewModel.state.value.isSelected(US, NYC, SHARE),
+            )
         }
 
     @Test
-    fun `a quarantined server cannot be selected`() =
+    fun `only one save runs at a time and a failed save retries the same request`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US)
             val viewModel = viewModel()
             runCurrent()
+            gateway.selectGate = CompletableDeferred()
 
-            viewModel.select(DE, BER, QUARANTINED_SERVER)
+            viewModel.select(US, NYC, EDGE)
             runCurrent()
-
-            assertTrue(gateway.selections.isEmpty())
-            assertNull(viewModel.state.value.savingServer)
-        }
-
-    @Test
-    fun `only one save runs at a time`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            val viewModel = viewModel()
-            runCurrent()
-
-            val gate = CompletableDeferred<Unit>()
-            gateway.selectGate = gate
-            viewModel.select(US, NYC, EDGE_SERVER)
-            runCurrent()
-            assertEquals(LocationTree.addressKey(EDGE), viewModel.state.value.savingServer)
-
-            viewModel.select(US, NYC, SHARE_SERVER)
-            runCurrent()
-            assertEquals("a second tap while saving is ignored", 1, gateway.selections.size)
-
-            gate.complete(Unit)
-            runCurrent()
-            assertNull(viewModel.state.value.savingServer)
+            viewModel.select(US, NYC, SHARE)
             assertEquals(1, gateway.selections.size)
-        }
 
-    @Test
-    fun `a failed save offers a retry that repeats the same request`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            gateway.selectError = IllegalStateException("write failed")
-            val viewModel = viewModel()
+            gateway.selectGate?.complete(Unit)
             runCurrent()
-
-            viewModel.select(US, NYC, EDGE_SERVER)
+            gateway.selectError = IllegalStateException("save failed")
+            viewModel.select(US, NYC, SHARE)
             runCurrent()
 
             val notice = viewModel.state.value.notice
-            requireNotNull(notice)
-            assertEquals(LocationsNoticeAction.RETRY_SELECT, notice.action)
-            assertEquals(LocationsNoticeTone.ERROR, notice.tone)
-            assertEquals(SelectionRequest("us", "nyc", EDGE), notice.request)
-            assertNull(viewModel.state.value.savingServer)
+            assertEquals(LocationsNoticeAction.RETRY_SELECT, notice?.action)
+            assertEquals(SelectionRequest("us", "nyc", SHARE_ADDRESS), notice?.request)
 
             gateway.selectError = null
             viewModel.retryNotice()
             runCurrent()
-
-            assertEquals(2, gateway.selections.size)
-            assertEquals(notice.request, gateway.selections.last())
-            assertNull(viewModel.state.value.notice)
+            assertEquals(3, gateway.selections.size)
+            assertEquals(SHARE_ADDRESS, gateway.selections.last().address)
         }
 
     @Test
-    fun `a live session still allows a save and reports the hint`() =
+    fun `quarantined and targetless servers cannot be selected`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US)
             val viewModel = viewModel()
             runCurrent()
 
-            gateway.serviceState.value = snapshot(state = STATE_CONNECTED, location = "us", server = EDGE)
-            runCurrent()
-            assertTrue(viewModel.state.value.sessionActive)
-
-            viewModel.select(US, NYC, SHARE_SERVER)
-            runCurrent()
-
-            assertEquals(
-                listOf(SelectionRequest("us", "nyc", "share.example.net:443")),
-                gateway.selections,
-            )
-            assertEquals("the hint never blocks the choice", 1, gateway.selections.size)
+            viewModel.select(US, NYC, QUARANTINED)
+            viewModel.select(US, NYC, server("", 443))
+            viewModel.select(US, NYC, server("bad.example.net", 0))
+            assertTrue(gateway.selections.isEmpty())
         }
 
-    // ---- filter and expansion -------------------------------------------
+    // ---- filter and visit ------------------------------------------------
 
     @Test
-    fun `expanding and collapsing a country drives the visible rows`() =
+    fun `the query filters flat rows without changing the order`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
 
-            viewModel.toggleCountry("US")
-            runCurrent()
-            assertEquals(
-                listOf(
-                    "country:rec",
-                    "country:us",
-                    "server:us/nyc/edge.example.net:2499",
-                    "server:us/nyc/share.example.net:443",
-                    "server:us/sfo/share.example.net:443",
-                    "server:us/sfo/west.example.net:443",
-                    "country:de",
-                ),
-                viewModel.state.value.rows.map { it.key },
-            )
-
-            viewModel.toggleCountry("us")
-            runCurrent()
-            assertEquals(3, viewModel.state.value.rows.size)
-        }
-
-    @Test
-    fun `a query narrows the tree and clearing it restores the expansion`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-            val before = viewModel.state.value.rows.map { it.key }
-
-            viewModel.onQueryChange("germany")
-            runCurrent()
-
-            val filtered = viewModel.state.value
-            assertTrue(filtered.searching)
-            assertEquals("country:de", filtered.rows.first().key)
-            assertEquals(
-                "matching branches open without a tap",
-                listOf("ber.example.net:443", "quarantined.example.net:443"),
-                filtered.rows.filterIsInstance<LocationRow.ServerRow>()
-                    .map { LocationTree.addressOf(it.server) },
-            )
+            viewModel.onQueryChange("  QUIC ")
+            val filtered = viewModel.state.value.rows
+            assertEquals(listOf("edge.example.net:2499"), filtered.map { LocationTree.addressOf(it.server) })
 
             viewModel.clearQuery()
-            runCurrent()
-
-            assertEquals(before, viewModel.state.value.rows.map { it.key })
+            assertEquals(5, viewModel.state.value.rows.size)
         }
 
     @Test
-    fun `a query with no match is a no-match state and not an empty tree`() =
+    fun `re-entering the screen resets speed order but keeps the latency labels`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
-
-            viewModel.onQueryChange("zzz")
-            runCurrent()
-
-            val state = viewModel.state.value
-            assertTrue(state.showNoMatch)
-            assertFalse(state.showEmpty)
-            assertTrue(state.rows.isEmpty())
-        }
-
-    // ---- ping runs -------------------------------------------------------
-
-    @Test
-    fun `nothing pings until Ping all is tapped`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-            viewModel.onQueryChange("edge")
-            runCurrent()
-            viewModel.clearQuery()
-            viewModel.select(US, NYC, EDGE_SERVER)
-            viewModel.refresh()
-            runCurrent()
-
-            assertTrue(gateway.pingCalls.isEmpty())
-            assertFalse(viewModel.state.value.pingingAll)
-            assertTrue(viewModel.state.value.latency.isEmpty())
-        }
-
-    @Test
-    fun `a null round trip is a timeout and distinct from an untested host`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.toggleCountry("us")
-            runCurrent()
-            assertEquals(LatencyState.Untested, viewModel.state.value.latencyOf(EDGE_SERVER))
-
             viewModel.pingAll()
             runCurrent()
-            gateway.emitPing(EDGE, rttMs = null)
+            gateway.emitPing(EDGE_ADDRESS, 80.0)
+            gateway.emitPing(SHARE_ADDRESS, 20.0)
+            gateway.emitPing(WEST_ADDRESS, 10.0)
+            gateway.emitPing(BER_ADDRESS, null)
+            gateway.emitPing(AUTO_ADDRESS, 50.0)
             runCurrent()
+            assertEquals(LocationSortMode.SPEED, viewModel.state.value.sortMode)
+            val speedToken = viewModel.state.value.listResetToken
 
-            assertEquals(LatencyState.Timeout, viewModel.state.value.latencyOf(EDGE_SERVER))
-            assertEquals(
-                "a host that has not answered is still untested",
-                LatencyState.Untested,
-                viewModel.state.value.latencyOf(SHARE_SERVER),
-            )
-        }
+            viewModel.beginVisit()
 
-    @Test
-    fun `a run ends when every target has answered`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-
-            gateway.emitPing(EDGE, rttMs = 42.4)
-            runCurrent()
-            assertTrue("not every host has answered yet", viewModel.state.value.pingingAll)
-
-            gateway.emitPing(SHARE.uppercase(), rttMs = 9.0)
-            gateway.emitPing(WEST, rttMs = 88.0)
-            gateway.emitPing(AUTO, rttMs = 20.0)
-            gateway.emitPing(BER_ADDRESS, rttMs = 61.0)
-            runCurrent()
-
-            assertFalse(viewModel.state.value.pingingAll)
-            assertEquals(LatencyState.Measured(42), viewModel.state.value.latencyOf(EDGE_SERVER))
-            assertEquals(LatencyState.Measured(9), viewModel.state.value.latencyOf(SHARE_SERVER))
-        }
-
-    @Test
-    fun `a run ends after the window even without answers`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-            assertTrue(viewModel.state.value.pingingAll)
-
-            advanceTimeBy(WINDOW + 1)
-            runCurrent()
-
-            assertFalse(viewModel.state.value.pingingAll)
-            assertTrue(
-                "an unanswered host stays untested, not a timeout",
-                viewModel.state.value.latency.isEmpty(),
-            )
-            assertTrue(viewModel.state.value.canPingAll)
-        }
-
-    @Test
-    fun `a new run replaces its hosts' previous results`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-            gateway.emitPing(EDGE, rttMs = 42.0)
-            gateway.emitPing(SHARE, rttMs = null)
-            gateway.emitPing(WEST, rttMs = 88.0)
-            gateway.emitPing(AUTO, rttMs = 20.0)
-            gateway.emitPing(BER_ADDRESS, rttMs = 61.0)
-            runCurrent()
-            assertFalse(viewModel.state.value.pingingAll)
-
-            viewModel.pingAll()
-            runCurrent()
-            assertEquals(2, gateway.pingCalls.size)
-            gateway.emitPing(EDGE, rttMs = 7.0)
-            runCurrent()
-
-            assertEquals(LatencyState.Measured(7), viewModel.state.value.latencyOf(EDGE_SERVER))
-            assertEquals(
-                "a host without a fresh answer keeps its last measurement",
-                LatencyState.Timeout,
-                viewModel.state.value.latencyOf(SHARE_SERVER),
-            )
-            assertEquals(LatencyState.Measured(88), viewModel.state.value.latencyOf(WEST_SERVER))
-            assertEquals(LatencyState.Measured(61), viewModel.state.value.latencyOf(BER_SERVER))
-            assertEquals(
-                LatencyState.Measured(20),
-                viewModel.state.value.latencyOf(server("auto.example.net")),
-            )
+            assertEquals(LocationSortMode.COUNTRY, viewModel.state.value.sortMode)
+            assertEquals(null, viewModel.state.value.speedOrderLatency)
+            assertTrue(viewModel.state.value.listResetToken > speedToken)
+            assertEquals(80.0, viewModel.state.value.latency[LocationTree.addressKey(EDGE_ADDRESS)])
+            assertEquals("de", viewModel.state.value.rows[1].country.code)
         }
 
     // ---- ping all --------------------------------------------------------
 
     @Test
-    fun `Ping all sends every loaded target even when the filter narrows the tree`() =
+    fun `ping all targets every usable server even when the query hides it`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
+            viewModel.onQueryChange("edge")
 
-            viewModel.onQueryChange("berlin")
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-
+            val targets = viewModel.state.value.allTargets
             assertEquals(
-                listOf(listOf(AUTO, EDGE, SHARE, WEST, BER_ADDRESS)),
-                gateway.pingCalls,
+                listOf(AUTO_ADDRESS, EDGE_ADDRESS, SHARE_ADDRESS, WEST_ADDRESS, BER_ADDRESS).toSet(),
+                targets.toSet(),
             )
+            viewModel.pingAll()
+            runCurrent()
+
+            assertEquals(listOf(targets), gateway.pingCalls)
+            assertEquals(targets.size, viewModel.state.value.pingAllCount)
             assertTrue(viewModel.state.value.pingingAll)
+            assertFalse(viewModel.state.value.canPingAll)
         }
 
     @Test
-    fun `Ping all keeps its count until the last host answers`() =
+    fun `results fill labels while the run is active and speed order applies only at completion`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
 
             viewModel.pingAll()
             runCurrent()
-
-            val running = viewModel.state.value
-            assertTrue(running.pingingAll)
-            assertEquals(5, running.pingAllCount)
-            assertFalse(running.canPingAll)
-
-            gateway.emitPing(AUTO, rttMs = 20.0)
-            gateway.emitPing(EDGE, rttMs = 42.0)
-            gateway.emitPing(SHARE, rttMs = null)
-            gateway.emitPing(WEST, rttMs = 88.0)
+            val startToken = viewModel.state.value.listResetToken
+            gateway.emitPing(EDGE_ADDRESS, 80.0)
             runCurrent()
 
-            assertTrue("one host is still pending", viewModel.state.value.pingingAll)
-            assertEquals("the count stays the run size", 5, viewModel.state.value.pingAllCount)
+            assertEquals(LocationSortMode.COUNTRY, viewModel.state.value.sortMode)
+            assertEquals("de", viewModel.state.value.rows[1].country.code)
+            assertEquals(80L, (viewModel.state.value.latencyOf(EDGE) as LatencyState.Measured).milliseconds)
 
-            gateway.emitPing(BER_ADDRESS, rttMs = 61.0)
-            runCurrent()
-
-            val stopped = viewModel.state.value
-            assertFalse(stopped.pingingAll)
-            assertEquals(0, stopped.pingAllCount)
-            assertEquals(LatencyState.Measured(61), stopped.latencyOf(BER_SERVER))
-        }
-
-    @Test
-    fun `a country's latency is its fastest measured server`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-            gateway.emitPing(EDGE, rttMs = 42.4)
-            gateway.emitPing(SHARE, rttMs = 9.0)
-            gateway.emitPing(WEST, rttMs = null)
-            gateway.emitPing(AUTO, rttMs = 20.0)
-            gateway.emitPing(BER_ADDRESS, rttMs = null)
+            gateway.emitPing(SHARE_ADDRESS, 20.0)
+            gateway.emitPing(WEST_ADDRESS, 10.0)
+            gateway.emitPing(BER_ADDRESS, null)
+            gateway.emitPing(AUTO_ADDRESS, 50.0)
             runCurrent()
 
             val state = viewModel.state.value
-            assertEquals(LatencyState.Measured(9), state.countryLatency(US))
-            assertEquals(LatencyState.Measured(20), state.countryLatency(REC))
-            assertEquals(LatencyState.Timeout, state.countryLatency(DE))
+            assertFalse(state.pingingAll)
+            assertEquals(LocationSortMode.SPEED, state.sortMode)
+            assertTrue(state.listResetToken > startToken)
             assertEquals(
-                listOf("country:rec", "country:us", "country:de"),
-                state.rows.map { it.key },
+                listOf("auto.example.net", "west.example.net", "share.example.net", "edge.example.net", "ber.example.net"),
+                state.rows.map { it.server.hostname },
+            )
+            assertEquals(
+                mapOf(
+                    LocationTree.addressKey(EDGE_ADDRESS) to 80.0,
+                    LocationTree.addressKey(SHARE_ADDRESS) to 20.0,
+                    LocationTree.addressKey(WEST_ADDRESS) to 10.0,
+                    LocationTree.addressKey(BER_ADDRESS) to null,
+                    LocationTree.addressKey(AUTO_ADDRESS) to 50.0,
+                ),
+                state.speedOrderLatency,
             )
         }
 
     @Test
-    fun `live results reorder the countries by measured speed`() =
+    fun `a run with no results stays in country order and says so`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
 
             viewModel.pingAll()
             runCurrent()
-            gateway.emitPing(AUTO, rttMs = 20.0)
-            gateway.emitPing(EDGE, rttMs = 42.0)
-            gateway.emitPing(SHARE, rttMs = null)
-            gateway.emitPing(WEST, rttMs = null)
-            gateway.emitPing(BER_ADDRESS, rttMs = 5.0)
+            advanceTimeBy(WINDOW + 1)
+            runCurrent()
+
+            val state = viewModel.state.value
+            assertFalse(state.pingingAll)
+            assertEquals(LocationSortMode.COUNTRY, state.sortMode)
+            assertTrue(state.latency.isEmpty())
+            assertEquals(
+                LocationsNoticeText.Local(LocationsMessage.PING_ALL_NO_RESULTS),
+                state.notice?.text,
+            )
+            assertEquals(LocationsNoticeAction.RETRY_PING_ALL, state.notice?.action)
+        }
+
+    @Test
+    fun `a timeout counts as a result but a failed run does not change the mode`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US, REC, DE)
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.pingAll()
+            runCurrent()
+            gateway.emitPing(EDGE_ADDRESS, null)
+            gateway.emitPing(SHARE_ADDRESS, null)
+            gateway.emitPing(WEST_ADDRESS, null)
+            gateway.emitPing(BER_ADDRESS, null)
+            gateway.emitPing(AUTO_ADDRESS, null)
+            runCurrent()
+
+            assertEquals(LocationSortMode.SPEED, viewModel.state.value.sortMode)
+
+            gateway.countries = listOf(US, REC, DE)
+            viewModel.beginVisit()
+            gateway.pingError = IllegalStateException("ping failed")
+            viewModel.pingAll()
+            runCurrent()
+
+            val failed = viewModel.state.value
+            assertEquals(LocationSortMode.COUNTRY, failed.sortMode)
+            assertEquals(LocationsNoticeAction.RETRY_PING_ALL, failed.notice?.action)
+            assertFalse(failed.pingingAll)
+        }
+
+    @Test
+    fun `a second run does not reorder until it completes`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US, REC, DE)
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.pingAll()
+            runCurrent()
+            gateway.emitPing(EDGE_ADDRESS, 80.0)
+            gateway.emitPing(SHARE_ADDRESS, 20.0)
+            gateway.emitPing(WEST_ADDRESS, 10.0)
+            gateway.emitPing(BER_ADDRESS, null)
+            gateway.emitPing(AUTO_ADDRESS, 50.0)
+            runCurrent()
+            val firstOrder = viewModel.state.value.rows.map { it.server.hostname }
+
+            viewModel.pingAll()
+            runCurrent()
+            gateway.emitPing(EDGE_ADDRESS, 1.0)
             runCurrent()
 
             assertEquals(
-                listOf("country:rec", "country:de", "country:us"),
-                viewModel.state.value.rows.map { it.key },
+                "the old speed order stays frozen while the new run is in flight",
+                firstOrder,
+                viewModel.state.value.rows.map { it.server.hostname },
+            )
+
+            gateway.emitPing(SHARE_ADDRESS, 1.0)
+            gateway.emitPing(WEST_ADDRESS, 1.0)
+            gateway.emitPing(BER_ADDRESS, 1.0)
+            gateway.emitPing(AUTO_ADDRESS, 1.0)
+            runCurrent()
+
+            assertEquals(
+                listOf("auto.example.net", "ber.example.net", "edge.example.net", "share.example.net", "west.example.net"),
+                viewModel.state.value.rows.map { it.server.hostname },
             )
         }
 
     @Test
-    fun `Expand all opens every country and Collapse all closes them`() =
+    fun `refresh clears latency and speed order and reloads`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
+            gateway.countries = listOf(US, REC, DE)
             val viewModel = viewModel()
             runCurrent()
-            assertFalse(viewModel.state.value.anyExpanded)
-            assertTrue(viewModel.state.value.canToggleAll)
-
-            viewModel.toggleAll()
+            viewModel.pingAll()
             runCurrent()
-
-            val expanded = viewModel.state.value
-            assertTrue(expanded.anyExpanded)
-            assertEquals(setOf("rec", "us", "de"), expanded.expandedCountries)
-
-            viewModel.toggleAll()
+            gateway.emitPing(EDGE_ADDRESS, 80.0)
+            gateway.emitPing(SHARE_ADDRESS, 20.0)
+            gateway.emitPing(WEST_ADDRESS, 10.0)
+            gateway.emitPing(BER_ADDRESS, null)
+            gateway.emitPing(AUTO_ADDRESS, 50.0)
             runCurrent()
+            assertEquals(LocationSortMode.SPEED, viewModel.state.value.sortMode)
+            val speedToken = viewModel.state.value.listResetToken
 
-            val collapsed = viewModel.state.value
-            assertFalse(collapsed.anyExpanded)
-            assertTrue(collapsed.expandedCountries.isEmpty())
-        }
-
-    @Test
-    fun `Expand all is a no-op while searching or without a tree`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.onQueryChange("ber")
-            runCurrent()
-            assertFalse(viewModel.state.value.canToggleAll)
-            viewModel.toggleAll()
-            runCurrent()
-            assertFalse(viewModel.state.value.anyExpanded)
-
-            viewModel.clearQuery()
-            gateway.countries = emptyList()
             viewModel.refresh()
             runCurrent()
-            assertFalse(viewModel.state.value.canToggleAll)
-            viewModel.toggleAll()
-            runCurrent()
-            assertFalse(viewModel.state.value.anyExpanded)
+
+            val state = viewModel.state.value
+            assertEquals(LocationSortMode.COUNTRY, state.sortMode)
+            assertTrue(state.listResetToken > speedToken)
+            assertTrue(state.latency.isEmpty())
+            assertNull(state.speedOrderLatency)
+            assertEquals(2, gateway.locationCalls)
+            assertEquals(listOf(false, true), gateway.refreshFlags)
         }
 
     @Test
-    fun `a failed Ping all offers a retry that repeats the whole tree`() =
+    fun `ping all is not offered with no usable targets`() =
         runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US, DE)
-            val viewModel = viewModel()
-            runCurrent()
-
-            gateway.pingError = IllegalStateException("ping unavailable")
-            viewModel.pingAll()
-            runCurrent()
-
-            val notice = viewModel.state.value.notice
-            requireNotNull(notice)
-            assertEquals(LocationsNoticeAction.RETRY_PING_ALL, notice.action)
-            assertEquals(LocationsNoticeTone.WARNING, notice.tone)
-            assertEquals(
-                LocationsNoticeText.Local(LocationsMessage.PING_ALL_FAILED, "ping unavailable"),
-                notice.text,
-            )
-            assertFalse(viewModel.state.value.pingingAll)
-            assertEquals(0, viewModel.state.value.pingAllCount)
-
-            gateway.pingError = null
-            viewModel.retryNotice()
-            runCurrent()
-
-            assertEquals(2, gateway.pingCalls.size)
-            assertEquals(listOf(AUTO, EDGE, SHARE, WEST, BER_ADDRESS), gateway.pingCalls.last())
-            assertNull(viewModel.state.value.notice)
-            assertTrue(viewModel.state.value.pingingAll)
-        }
-
-    @Test
-    fun `the ping window scales with the target count`() =
-        runTest(mainRule.testDispatcher) {
-            val cities = (1..48).map { index ->
-                City(
-                    code = "c$index",
-                    name = "City $index",
-                    servers = listOf(server("host$index.example.net")),
-                )
-            }
-            gateway.countries = listOf(Country(code = "xx", name = "Many", cities = cities))
-            val viewModel = LocationsViewModel(gateway = gateway, pingWindowMillis = 1_000L)
-            runCurrent()
-
-            viewModel.pingAll()
-            runCurrent()
-            assertEquals(1, gateway.pingCalls.size)
-            assertEquals(48, gateway.pingCalls.single().size)
-            assertTrue(viewModel.state.value.pingingAll)
-
-            advanceTimeBy(4_000)
-            runCurrent()
-            assertTrue(
-                "the base window alone must not stop 48 targets",
-                viewModel.state.value.pingingAll,
-            )
-
-            advanceTimeBy(600)
-            runCurrent()
-            assertFalse(viewModel.state.value.pingingAll)
-        }
-
-    // ---- notices and reload ---------------------------------------------
-
-    @Test
-    fun `a notice can be dismissed`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            gateway.selectError = IllegalStateException("nope")
-            val viewModel = viewModel()
-            runCurrent()
-            viewModel.select(US, NYC, EDGE_SERVER)
-            runCurrent()
-            assertNotNull(viewModel.state.value.notice)
-
-            viewModel.dismissNotice()
-            runCurrent()
-
-            assertNull(viewModel.state.value.notice)
-        }
-
-    @Test
-    fun `a reload re-resolves the selected city against the new tree`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(REC, US)
-            gateway.serviceState.value = snapshot(state = STATE_IDLE, location = "us", server = EDGE)
-            val viewModel = viewModel()
-            runCurrent()
-            assertEquals("New York", viewModel.state.value.selection?.cityName)
-
             gateway.countries = listOf(
-                REC,
-                US.copy(cities = listOf(NYC.copy(name = "New York Metro"), SFO)),
+                Country("us", "United States", listOf(City("nyc", "New York", listOf(QUARANTINED)))),
             )
-            viewModel.refresh()
-            runCurrent()
-
-            assertEquals("New York Metro", viewModel.state.value.selection?.cityName)
-            assertTrue(viewModel.state.value.isSelected(US, NYC, EDGE_SERVER))
-        }
-
-    @Test
-    fun `a recommended selection is presented as recommended`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(US, REC)
-            gateway.serviceState.value = snapshot(state = STATE_CONNECTED, location = "REC", server = null)
             val viewModel = viewModel()
             runCurrent()
 
-            val selection = viewModel.state.value.selection
-            requireNotNull(selection)
-            assertTrue(selection.recommended)
-            assertEquals("rec", selection.country?.code)
-            assertEquals(listOf("rec", "us"), viewModel.state.value.countries.map { it.code })
+            assertTrue(viewModel.state.value.rows.isEmpty())
+            assertTrue(viewModel.state.value.allTargets.isEmpty())
+            assertFalse(viewModel.state.value.canPingAll)
         }
 
     private companion object {
         const val WINDOW = 5_000L
-        const val STATE_IDLE = "IDLE"
-        const val STATE_CONNECTED = "CONNECTED"
-        const val EMAIL = "user@example.com"
-        const val EDGE = "edge.example.net:2499"
-        const val SHARE = "share.example.net:443"
-        const val WEST = "west.example.net:443"
-        const val AUTO = "auto.example.net:443"
+        const val EDGE_ADDRESS = "edge.example.net:2499"
+        const val SHARE_ADDRESS = "share.example.net:443"
+        const val WEST_ADDRESS = "west.example.net:443"
         const val BER_ADDRESS = "ber.example.net:443"
+        const val AUTO_ADDRESS = "auto.example.net:443"
 
-        fun server(host: String, port: Int = 443, quarantined: Boolean = false) = Server(
+        fun server(
+            host: String,
+            port: Int = 443,
+            quarantined: Boolean = false,
+            protocols: List<String> = listOf("connect"),
+        ) = Server(
             hostname = host,
             port = port,
             quarantined = quarantined,
-            protocols = listOf(Protocol(name = "connect", host = host, port = port, scheme = "https")),
+            protocols = protocols.map { Protocol(name = it, host = host, port = port, scheme = "https") },
         )
 
-        val EDGE_SERVER = server("edge.example.net", 2499)
-        val SHARE_SERVER = server("share.example.net")
-        val WEST_SERVER = server("west.example.net")
-        val BER_SERVER = server("ber.example.net")
-        val QUARANTINED_SERVER = server("quarantined.example.net", quarantined = true)
+        val EDGE = server("edge.example.net", 2499, protocols = listOf("connect", "quic"))
+        val SHARE = server("share.example.net")
+        val WEST = server("west.example.net")
+        val BER = server("ber.example.net")
+        val QUARANTINED = server("quarantined.example.net", quarantined = true)
+        val AUTO = server("auto.example.net")
 
+        val NYC = City("nyc", "New York", listOf(EDGE, SHARE))
+        val SFO = City("sfo", "San Francisco", listOf(WEST))
+        val US = Country("us", "United States", listOf(NYC, SFO))
+        val DE = Country("de", "Germany", listOf(City("ber", "Berlin", listOf(BER))))
         val REC = Country(
-            code = "rec",
-            name = "Recommended Location",
-            cities = listOf(
-                City(code = "rec", name = "Recommended", servers = listOf(server("auto.example.net"))),
-            ),
+            "rec",
+            "Recommended Location",
+            listOf(City("rec", "Recommended", listOf(AUTO))),
         )
-
-        val NYC = City(
-            code = "nyc",
-            name = "New York",
-            servers = listOf(EDGE_SERVER, SHARE_SERVER),
-        )
-
-        val SFO = City(
-            code = "sfo",
-            name = "San Francisco",
-            servers = listOf(SHARE_SERVER, WEST_SERVER),
-        )
-
-        val BER = City(
-            code = "ber",
-            name = "Berlin",
-            servers = listOf(BER_SERVER, QUARANTINED_SERVER),
-        )
-
-        val US = Country(code = "us", name = "United States", cities = listOf(NYC, SFO))
-
-        val DE = Country(code = "de", name = "Germany", cities = listOf(BER))
-
         fun snapshot(state: String, location: String? = null, server: String? = null) = ServiceState(
             binding = true,
             engineReady = true,
-            status = status(state = state, location = location, server = server),
-        )
-
-        fun status(state: String, location: String?, server: String?) = EngineStatus(
-            state = state,
-            authenticated = true,
-            email = EMAIL,
-            since = 0L,
-            tokenExpires = 0L,
-            passExpires = 0L,
-            killSwitch = true,
-            autoconnect = true,
-            location = location,
-            server = server,
-            proxyOnly = false,
-            quota = Quota(limit = null, remaining = null, reset = null),
-            dns = null,
-            ipv6 = null,
-            exitIp = null,
-            exitCountry = null,
-            totals = null,
-            rates = null,
+            status = EngineStatus(
+                state = state,
+                authenticated = true,
+                email = "user@example.com",
+                since = 0L,
+                tokenExpires = 0L,
+                passExpires = 0L,
+                killSwitch = true,
+                autoconnect = true,
+                location = location,
+                server = server,
+                proxyOnly = false,
+                quota = Quota(limit = null, remaining = null, reset = null),
+                dns = null,
+                ipv6 = null,
+                exitIp = null,
+                exitCountry = null,
+                totals = null,
+                rates = null,
+            ),
         )
     }
 }
 
 /**
- * The fake gateway: one mutable service mirror, a recorded ping command, and a
- * shared results flow the test drives. It has no connect method at all, which
- * is the T12 contract expressed in types.
+ * The fake gateway: one mutable service mirror, recorded calls and a shared
+ * result flow the test drives.
  */
 private class FakeGateway : LocationsGateway {
     val serviceState = MutableStateFlow(ServiceState())
@@ -874,7 +557,7 @@ private class FakeGateway : LocationsGateway {
     }
 
     override suspend fun selectLocation(countryCode: String, cityCode: String?, server: String) {
-        selections += SelectionRequest(countryCode = countryCode, cityCode = cityCode, address = server)
+        selections += SelectionRequest(countryCode, cityCode, server)
         selectGate?.await()
         selectError?.let { throw it }
     }

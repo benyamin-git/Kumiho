@@ -5,126 +5,67 @@ import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The live filter on the JVM: country name/code, city name and server hostname,
- * trimmed and case-insensitive, with the parent path kept for context. The
- * filter never touches the network and never edits the loaded tree.
- */
+/** The flat row matcher: every visible identity and protocol is searchable. */
 class LocationFilterTest {
 
+    private val row = LocationTree.rows(listOf(US)).first()
+
     @Test
-    fun `a blank query returns the same tree`() {
-        assertSame(COUNTRIES, LocationFilter.apply(COUNTRIES, "   "))
-        assertSame(COUNTRIES, LocationFilter.apply(COUNTRIES, ""))
+    fun `country name code city name and city code match case-insensitively`() {
+        assertTrue(LocationFilter.matches(row, "united states"))
+        assertTrue(LocationFilter.matches(row, "US"))
+        assertTrue(LocationFilter.matches(row, "new york"))
+        assertTrue(LocationFilter.matches(row, "NYC"))
+        assertFalse(LocationFilter.matches(row, "  germany  "))
     }
 
     @Test
-    fun `a country name matches case-insensitively and keeps every child`() {
-        val result = LocationFilter.apply(COUNTRIES, "  united STATES ")
+    fun `hostname host port and protocol names match`() {
+        assertTrue(LocationFilter.matches(row, "edge.example.net"))
+        assertTrue(LocationFilter.matches(row, "EDGE.EXAMPLE.NET:2499"))
+        assertTrue(LocationFilter.matches(row, "2499"))
+        assertTrue(LocationFilter.matches(row, "quic"))
+        assertTrue(LocationFilter.matches(row, "connect"))
+    }
 
-        assertEquals(listOf("us"), result.map { it.code })
-        assertEquals(listOf("nyc", "sfo"), result.single().cities.map { it.code })
+    @Test
+    fun `a blank query keeps every row and no match returns none`() {
+        val rows = LocationTree.rows(listOf(US))
+
+        assertEquals(rows, LocationFilter.apply(rows, "   "))
+        assertEquals(emptyList<LocationRow>(), LocationFilter.apply(rows, "not-a-server"))
+    }
+
+    @Test
+    fun `a query returns only the matching flat rows`() {
+        val rows = LocationTree.rows(listOf(US))
+
         assertEquals(
-            listOf("edge.example.net", "share.example.net", "west.example.net"),
-            result.single().cities.flatMap { city -> city.servers.map { it.hostname } },
-        )
-    }
-
-    @Test
-    fun `a country code matches`() {
-        val result = LocationFilter.apply(COUNTRIES, "us")
-
-        assertEquals(listOf("us"), result.map { it.code })
-        assertEquals(listOf("nyc", "sfo"), result.single().cities.map { it.code })
-    }
-
-    @Test
-    fun `a city name keeps that city and all of its servers`() {
-        val result = LocationFilter.apply(COUNTRIES, "new y")
-
-        assertEquals(listOf("us"), result.map { it.code })
-        assertEquals(listOf("nyc"), result.single().cities.map { it.code })
-        assertEquals(2, result.single().cities.single().servers.size)
-    }
-
-    @Test
-    fun `a server hostname keeps the server with its parent path`() {
-        val result = LocationFilter.apply(COUNTRIES, "west.example")
-
-        assertEquals(listOf("us"), result.map { it.code })
-        assertEquals(listOf("sfo"), result.single().cities.map { it.code })
-        assertEquals(
-            listOf("west.example.net"),
-            result.single().cities.single().servers.map { it.hostname },
-        )
-    }
-
-    @Test
-    fun `a city code is not a search term`() {
-        // "nyc" is the city code; the city is named "New York". The filter
-        // matches what the row shows, not the wire code.
-        assertEquals(emptyList<Country>(), LocationFilter.apply(COUNTRIES, "nyc"))
-    }
-
-    @Test
-    fun `a query with no match is an empty list`() {
-        assertEquals(emptyList<Country>(), LocationFilter.apply(COUNTRIES, "atlantis"))
-    }
-
-    @Test
-    fun `the loaded tree is never mutated`() {
-        val before = COUNTRIES.toString()
-        LocationFilter.apply(COUNTRIES, "edge")
-
-        assertEquals(before, COUNTRIES.toString())
-        assertEquals(3, COUNTRIES.size)
-        assertEquals(2, COUNTRIES.first().cities.size)
-    }
-
-    @Test
-    fun `REC stays first after a filter that keeps several countries`() {
-        val filtered = LocationTree.ordered(LocationFilter.apply(COUNTRIES, "e"))
-
-        assertTrue("REC must sort first", LocationTree.isRecommended(filtered.first()))
-        assertEquals("rec", filtered.first().code)
-    }
-
-    @Test
-    fun `a match that keeps a country keeps its empty cities too`() {
-        val withEmptyCity = Country(
-            code = "fr",
-            name = "France",
-            cities = listOf(
-                City(code = "par", name = "Paris", servers = emptyList()),
-                City(code = "mrs", name = "Marseille", servers = EMPTY_SERVERS),
+            setOf(
+                LocationTree.addressKey(EDGE_ADDRESS),
+                LocationTree.addressKey("share.example.net:443"),
             ),
+            LocationFilter.apply(rows, "quic").map {
+                LocationTree.addressKey(LocationTree.addressOf(it.server))
+            }.toSet(),
         )
-
-        assertEquals(
-            listOf("par", "mrs"),
-            LocationFilter.apply(listOf(withEmptyCity), "france").single().cities.map { it.code },
-        )
+        assertFalse(LocationFilter.matches(row, "port 2499"))
     }
 
     private companion object {
-        val EMPTY_SERVERS = emptyList<Server>()
+        const val EDGE_ADDRESS = "edge.example.net:2499"
 
-        fun server(host: String, port: Int = 443, quarantined: Boolean = false) = Server(
+        fun server(host: String, port: Int = 443) = Server(
             hostname = host,
             port = port,
-            quarantined = quarantined,
-            protocols = listOf(Protocol(name = "connect", host = host, port = port, scheme = "https")),
-        )
-
-        val REC = Country(
-            code = "rec",
-            name = "Recommended Location",
-            cities = listOf(
-                City(code = "rec", name = "Recommended", servers = listOf(server("auto.example.net"))),
+            quarantined = false,
+            protocols = listOf(
+                Protocol("connect", host, port, "https"),
+                Protocol("quic", host, port, "https"),
             ),
         )
 
@@ -137,17 +78,7 @@ class LocationFilterTest {
                     name = "New York",
                     servers = listOf(server("edge.example.net", 2499), server("share.example.net")),
                 ),
-                City(code = "sfo", name = "San Francisco", servers = listOf(server("west.example.net"))),
             ),
         )
-
-        val DE = Country(
-            code = "de",
-            name = "Germany",
-            cities = listOf(City(code = "ber", name = "Berlin", servers = listOf(server("ber.example.net")))),
-        )
-
-        /** Deliberately not in REC-first order, so ordering is the tree's job. */
-        val COUNTRIES = listOf(US, REC, DE)
     }
 }
