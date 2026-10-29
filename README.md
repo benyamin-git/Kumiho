@@ -1,7 +1,7 @@
 # Kumiho
 
-**Status:** v0.7.0 (unreleased) — working Linux and Windows 11 clients plus a
-native Android app for phones and Android TV: daemon + TUI/CLI/GUI over a Unix
+**Status:** v0.7.1 — working Linux and Windows 11 clients plus a native Android
+app for phones and Android TV: daemon + TUI/CLI/GUI over a Unix
 socket (Linux) or named pipe (Windows),
 Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
@@ -16,7 +16,9 @@ opaque browser accounts are removed. v0.7.0 adds Android TV: one APK for
 phones and televisions, a Compose for TV shell with remote-only navigation,
 full parity for setup, dashboard, locations, account, settings, split
 tunneling, logs and diagnostics, a TV launcher banner and an optional Google
-TV channel with **Open** and **Connect** cards. v0.5.2 adds
+TV channel with **Open** and **Connect** cards. v0.7.1 fixes password sign-in
+on networks where Mozilla's edge hard-blocks the primary auth host and hardens
+terminal sign-in input. v0.5.2 adds
 an opt-in Android setting that keeps LAN connections alive across a VPN
 transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
@@ -107,7 +109,22 @@ before release:
   [docs/android-tv.md](docs/android-tv.md).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
-## What's new in v0.7.0 (unreleased)
+## What's new in v0.7.1
+
+- **Password sign-in through a blocked edge** — when Fastly answers
+  `POST api.accounts.firefox.com/v1/account/login` with an empty `406` that no
+  solved challenge can clear, the shared engine now asks the sibling
+  `oauth.accounts.firefox.com/v1` auth host before spending a solve, solves
+  each challenged host once, and retries once if the sibling connection drops.
+  Every client gets the fix because it lives in the engine.
+- **Hardened terminal sign-in** — the TUI drops stray control characters that
+  Windows IME composition and unmapped keys deliver as zero runes, and the
+  engine rejects control characters or inner whitespace in an email with
+  **enter a valid email address** instead of forwarding a body FxA rejects.
+- **Development pipe override** — `KUMIHO_CONTROL_ENDPOINT` moves the Windows
+  control pipe so a development daemon can run beside the installed service.
+
+## What's new in v0.7.0
 
 - **One APK, phone and TV** — the Android app detects a television at runtime
   and swaps the phone shell for a ten-foot Compose for TV shell. Phone setup
@@ -331,7 +348,7 @@ Cross-compile from any OS with Go >= 1.27:
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
     make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
-    make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.7.1 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
     make vet
@@ -427,15 +444,14 @@ changes the daemon, CLI or TUI.
 
 ## Android app
 
-Kumiho's Android app (v0.7.0) is a native sideloaded client for phones and
+Kumiho's Android app (v0.7.1) is a native sideloaded client for phones and
 Android TV/Google TV, not a front end
 for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
 notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
 newer on `arm64-v8a` or `armeabi-v7a`, and is distributed as an APK — there is
 no Play or F-Droid build. The direct Firefox Accounts OAuth WebView described
-below is the v0.6.1 (unreleased) replacement and is not in the published
-v0.6.0 APK.
+below replaced the v0.6.0 exchange and is in the published v0.7.0 APK.
 
 The app has a four-step setup (consent, browser or password Firefox Accounts
 sign-in, VPN and notification permissions, Always-on guidance), then the same

@@ -32,7 +32,7 @@ needed to build or test.
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
     make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
-    make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.7.1 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     make android-verify # verify every release APK in dist/
     make test           # go test ./...
     make test-integration  # go test -tags integration ./... (real endpoints)
