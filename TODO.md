@@ -95,8 +95,9 @@ Android TV, Windows GUI and the TUI.
     `Kumiho-Windows-amd64.zip`, `Kumiho-Android-arm64-v8a.apk`,
     `Kumiho-Android-armeabi-v7a.apk`, `Kumiho-Android-universal.apk` and
     `SHA256SUMS`.
-  - The workflow publishes these names from v0.8.0. `scripts/install-release.sh`
-    falls back to the old versioned names for v0.7.2 and earlier.
+  - The workflow publishes these names from v0.8.0; v0.8.0 is published
+    (2026-10-30). `scripts/install-release.sh` falls back to the old versioned
+    names for v0.7.2 and earlier.
   - Full releases start at v0.8.0 so `/releases/latest/download/...` works;
     v0.7.2 and earlier remain prereleases.
 
