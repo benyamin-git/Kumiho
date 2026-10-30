@@ -10,9 +10,9 @@ permissions:
 jobs:
   release:
     # The Android release script accepts stable MAJOR.MINOR.PATCH tags only.
-    # Hyphenated tags (for example v0.5.0-rc.1) are not published. While the
-    # project is on the v0.x series, stable tags are published as GitHub
-    # prereleases.
+    # Hyphenated tags (for example v0.5.0-rc.1) are not published. Releases are
+    # full releases from v0.8.0 so /releases/latest and the stable download
+    # links in README.md resolve; v0.7.2 and earlier remain prereleases.
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -106,30 +106,64 @@ jobs:
           cp third_party/webview2-loader/LICENSE.txt "$staging/third_party/webview2-loader/LICENSE.txt"
           (cd "$staging" && zip "$GITHUB_WORKSPACE/kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" kumiho.exe kumiho-gui.exe wintun.dll install.ps1 install.cmd LICENSE NOTICE third_party/wintun/LICENSE.txt third_party/webview2-loader/LICENSE.txt)
 
-          sha256sum "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" > SHA256SUMS
-          (cd dist && sha256sum kumiho-${GITHUB_REF_NAME}-android-*.apk) >> SHA256SUMS
-          cat SHA256SUMS
+      - name: Stage stable-named release assets
+        run: |
+          mkdir -p release-assets
+          cp "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" release-assets/Kumiho-Linux-amd64.zip
+          cp "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" release-assets/Kumiho-Linux-arm64.zip
+          cp "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" release-assets/Kumiho-Windows-amd64.zip
+          cp "dist/kumiho-${GITHUB_REF_NAME}-android-arm64-v8a.apk" release-assets/Kumiho-Android-arm64-v8a.apk
+          cp "dist/kumiho-${GITHUB_REF_NAME}-android-armeabi-v7a.apk" release-assets/Kumiho-Android-armeabi-v7a.apk
+          cp "dist/kumiho-${GITHUB_REF_NAME}-android-universal.apk" release-assets/Kumiho-Android-universal.apk
+          (cd release-assets && sha256sum Kumiho-Linux-amd64.zip Kumiho-Linux-arm64.zip Kumiho-Windows-amd64.zip Kumiho-Android-arm64-v8a.apk Kumiho-Android-armeabi-v7a.apk Kumiho-Android-universal.apk > SHA256SUMS)
+          cat release-assets/SHA256SUMS
+
+      - name: Build release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="$RUNNER_TEMP/kumiho-release-notes.md"
+          awk -v version="$version" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "## [" version "]") == 1) found = 1
+            }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/changelog-section.md"
+          {
+            if [ -s "$RUNNER_TEMP/changelog-section.md" ]; then
+              cat "$RUNNER_TEMP/changelog-section.md"
+            else
+              echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md)."
+            fi
+            printf '\n## Download\n\n'
+            printf '| Platform | File |\n| --- | --- |\n'
+            printf '| Linux amd64 | [Kumiho-Linux-amd64.zip](https://github.com/%s/releases/download/%s/Kumiho-Linux-amd64.zip) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf '| Linux arm64 | [Kumiho-Linux-arm64.zip](https://github.com/%s/releases/download/%s/Kumiho-Linux-arm64.zip) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf '| Windows 11 amd64 | [Kumiho-Windows-amd64.zip](https://github.com/%s/releases/download/%s/Kumiho-Windows-amd64.zip) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf '| Android arm64-v8a | [Kumiho-Android-arm64-v8a.apk](https://github.com/%s/releases/download/%s/Kumiho-Android-arm64-v8a.apk) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf '| Android armeabi-v7a | [Kumiho-Android-armeabi-v7a.apk](https://github.com/%s/releases/download/%s/Kumiho-Android-armeabi-v7a.apk) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf '| Android universal | [Kumiho-Android-universal.apk](https://github.com/%s/releases/download/%s/Kumiho-Android-universal.apk) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+            printf '\nVerify every download against `SHA256SUMS`.\n'
+          } > "$notes"
+          cat "$notes"
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          release_args=()
-          if [[ "$GITHUB_REF_NAME" == v0.* ]]; then
-            release_args+=(--prerelease)
-          fi
           gh release create "$GITHUB_REF_NAME" \
             --title "Kumiho $GITHUB_REF_NAME" \
-            "${release_args[@]}" \
-            --generate-notes \
-            "kumiho-${GITHUB_REF_NAME}-linux-amd64.zip" \
-            "kumiho-${GITHUB_REF_NAME}-linux-arm64.zip" \
-            "kumiho-${GITHUB_REF_NAME}-windows-amd64.zip" \
-            "dist/kumiho-${GITHUB_REF_NAME}-android-arm64-v8a.apk" \
-            "dist/kumiho-${GITHUB_REF_NAME}-android-armeabi-v7a.apk" \
-            "dist/kumiho-${GITHUB_REF_NAME}-android-universal.apk" \
-            SHA256SUMS
+            --verify-tag \
+            --latest \
+            --notes-file "$RUNNER_TEMP/kumiho-release-notes.md" \
+            release-assets/Kumiho-Linux-amd64.zip \
+            release-assets/Kumiho-Linux-arm64.zip \
+            release-assets/Kumiho-Windows-amd64.zip \
+            release-assets/Kumiho-Android-arm64-v8a.apk \
+            release-assets/Kumiho-Android-armeabi-v7a.apk \
+            release-assets/Kumiho-Android-universal.apk \
+            release-assets/SHA256SUMS
 
       - name: Remove Android signing material
         if: always()

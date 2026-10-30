@@ -82,11 +82,20 @@ version="${version#v}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid version: $version"
 
 tag="v$version"
-asset="kumiho-$tag-linux-$arch.zip"
+stable_asset="Kumiho-Linux-$arch.zip"
+legacy_asset="kumiho-$tag-linux-$arch.zip"
 base="https://github.com/$repo/releases/download/$tag"
 
+# Releases from v0.8.0 use stable, version-free asset names. Older releases
+# keep the versioned names, so try the stable name first and fall back.
+asset="$stable_asset"
 echo "install-release: downloading $asset"
-curl -fsSL "$base/$asset" -o "$tmp/$asset"
+if ! curl -fsSL "$base/$asset" -o "$tmp/$asset"; then
+	rm -f "$tmp/$asset"
+	asset="$legacy_asset"
+	echo "install-release: downloading $asset"
+	curl -fsSL "$base/$asset" -o "$tmp/$asset"
+fi
 curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
 expected="$(awk -v name="$asset" '{ n = $2; sub(/^\*/, "", n); if (n == name) { print $1; exit } }' "$tmp/SHA256SUMS")"
