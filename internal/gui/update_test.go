@@ -13,9 +13,9 @@ import (
 	"github.com/benyamin-git/kumiho/internal/version"
 )
 
-// updateFeedServer serves one canned GitHub "latest release" reply and
-// records what the checker asked for. Every test uses it, so the suite never
-// touches the network.
+// updateFeedServer serves one canned GitHub release-list reply and records
+// what the checker asked for. Every test uses it, so the suite never touches
+// the network.
 type updateFeedServer struct {
 	*httptest.Server
 	status int
@@ -24,6 +24,7 @@ type updateFeedServer struct {
 
 	method string
 	path   string
+	query  string
 	agent  string
 	accept string
 }
@@ -34,6 +35,7 @@ func newUpdateFeedServer(t *testing.T, status int, body string) *updateFeedServe
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.method = r.Method
 		s.path = r.URL.Path
+		s.query = r.URL.RawQuery
 		s.agent = r.Header.Get("User-Agent")
 		s.accept = r.Header.Get("Accept")
 		if s.delay > 0 {
@@ -49,10 +51,15 @@ func newUpdateFeedServer(t *testing.T, status int, body string) *updateFeedServe
 	return s
 }
 
+// releasesJSON builds the GitHub list reply from one or more release objects.
+func releasesJSON(releases ...string) string {
+	return "[" + strings.Join(releases, ",") + "]"
+}
+
 func TestUpdateCheckerCheck(t *testing.T) {
 	const htmlURL = "https://github.com/benyamin-git/Kumiho/releases/tag/v0.4.0"
 	srv := newUpdateFeedServer(t, http.StatusOK,
-		`{"tag_name":"v0.4.0","html_url":"`+htmlURL+`","name":"Kumiho v0.4.0"}`)
+		releasesJSON(`{"tag_name":"v0.4.0","html_url":"`+htmlURL+`","name":"Kumiho v0.4.0"}`))
 
 	before := time.Now().UTC().Add(-time.Second)
 	info, err := UpdateChecker{BaseURL: srv.URL, Current: "v0.3.0"}.Check(context.Background())
@@ -69,8 +76,11 @@ func TestUpdateCheckerCheck(t *testing.T) {
 	if srv.method != http.MethodGet {
 		t.Errorf("method = %q, want GET", srv.method)
 	}
-	if srv.path != "/repos/benyamin-git/Kumiho/releases/latest" {
-		t.Errorf("path = %q, want the releases/latest endpoint", srv.path)
+	if srv.path != "/repos/benyamin-git/Kumiho/releases" {
+		t.Errorf("path = %q, want the releases list endpoint", srv.path)
+	}
+	if srv.query != "per_page=10" {
+		t.Errorf("query = %q, want per_page=10", srv.query)
 	}
 	if srv.agent != "kumiho-gui" {
 		t.Errorf("User-Agent = %q, want kumiho-gui", srv.agent)
@@ -80,8 +90,25 @@ func TestUpdateCheckerCheck(t *testing.T) {
 	}
 }
 
+func TestUpdateCheckerSkipsDrafts(t *testing.T) {
+	const htmlURL = "https://example.test/r"
+	srv := newUpdateFeedServer(t, http.StatusOK, releasesJSON(
+		`{"tag_name":"v0.5.0","html_url":"`+htmlURL+`","draft":true}`,
+		`{"tag_name":"v0.4.0","html_url":"`+htmlURL+`","prerelease":true}`,
+	))
+	info, err := UpdateChecker{BaseURL: srv.URL}.Check(context.Background())
+	if err != nil {
+		t.Fatalf("Check = %v, want nil", err)
+	}
+	if info.Latest != "v0.4.0" {
+		t.Fatalf("Latest = %q, want the first published release v0.4.0", info.Latest)
+	}
+}
+
 func TestUpdateCheckerCurrentDefaultsToVersion(t *testing.T) {
-	srv := newUpdateFeedServer(t, http.StatusOK, `{"tag_name":"v0.9.9","html_url":"https://example.test/r"}`)
+	srv := newUpdateFeedServer(t, http.StatusOK, releasesJSON(
+		`{"tag_name":"v0.9.9","html_url":"https://example.test/r"}`,
+	))
 	info, err := UpdateChecker{BaseURL: srv.URL}.Check(context.Background())
 	if err != nil {
 		t.Fatalf("Check = %v, want nil", err)
@@ -98,11 +125,13 @@ func TestUpdateCheckerErrors(t *testing.T) {
 		body   string
 		want   string
 	}{
-		{"status", http.StatusInternalServerError, `{}`, "HTTP 500"},
-		{"malformed json", http.StatusOK, `{`, "releases/latest"},
-		{"missing tag", http.StatusOK, `{"html_url":"https://example.test/r"}`, "tag_name"},
-		{"missing url", http.StatusOK, `{"tag_name":"v0.4.0"}`, "html_url"},
-		{"unsafe url", http.StatusOK, `{"tag_name":"v0.4.0","html_url":"file:///etc/passwd"}`, "html_url"},
+		{"status", http.StatusInternalServerError, `[]`, "HTTP 500"},
+		{"malformed json", http.StatusOK, `[`, "releases"},
+		{"empty list", http.StatusOK, `[]`, "no published release"},
+		{"only drafts", http.StatusOK, releasesJSON(`{"tag_name":"v0.4.0","html_url":"https://example.test/r","draft":true}`), "no published release"},
+		{"missing tag", http.StatusOK, releasesJSON(`{"html_url":"https://example.test/r"}`), "tag_name"},
+		{"missing url", http.StatusOK, releasesJSON(`{"tag_name":"v0.4.0"}`), "html_url"},
+		{"unsafe url", http.StatusOK, releasesJSON(`{"tag_name":"v0.4.0","html_url":"file:///etc/passwd"}`), "html_url"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -116,7 +145,9 @@ func TestUpdateCheckerErrors(t *testing.T) {
 }
 
 func TestUpdateCheckerTimeout(t *testing.T) {
-	srv := newUpdateFeedServer(t, http.StatusOK, `{"tag_name":"v0.4.0","html_url":"https://example.test/r"}`)
+	srv := newUpdateFeedServer(t, http.StatusOK, releasesJSON(
+		`{"tag_name":"v0.4.0","html_url":"https://example.test/r"}`,
+	))
 	srv.delay = 5 * time.Second
 	srv.status = http.StatusOK
 
@@ -131,7 +162,9 @@ func TestUpdateCheckerTimeout(t *testing.T) {
 }
 
 func TestUpdateCheckerHonorsCallerContext(t *testing.T) {
-	srv := newUpdateFeedServer(t, http.StatusOK, `{"tag_name":"v0.4.0","html_url":"https://example.test/r"}`)
+	srv := newUpdateFeedServer(t, http.StatusOK, releasesJSON(
+		`{"tag_name":"v0.4.0","html_url":"https://example.test/r"}`,
+	))
 	srv.delay = 5 * time.Second
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

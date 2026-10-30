@@ -1,6 +1,7 @@
 package dev.benyamin.kumiho.ui.settings
 
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -8,7 +9,7 @@ import org.junit.Test
 
 /**
  * The manual GitHub update check, over a fake HTTP seam: the exact endpoint and
- * User-Agent, numeric semver comparison, pre-release exclusion and every honest
+ * User-Agent, numeric semver comparison, the prerelease list and every honest
  * failure. Nothing here touches the network.
  */
 class UpdateCheckerTest {
@@ -20,10 +21,10 @@ class UpdateCheckerTest {
     // ---- the happy paths -------------------------------------------------
 
     @Test
-    fun `a newer stable release is offered with its release page`() = runBlocking {
+    fun `a newer release is offered with its release page`() = runBlocking {
         fetcher.response = UpdateHttpResponse(
             code = 200,
-            body = release(tag = "v0.6.0", htmlUrl = RELEASE_URL),
+            body = releases(release(tag = "v0.6.0", htmlUrl = RELEASE_URL)),
         )
 
         assertEquals(
@@ -31,26 +32,26 @@ class UpdateCheckerTest {
             checker().check("0.5.0"),
         )
         assertEquals(
-            listOf(GitHubUpdateChecker.LATEST_URL to GitHubUpdateChecker.USER_AGENT),
+            listOf(GitHubUpdateChecker.RELEASES_URL to GitHubUpdateChecker.USER_AGENT),
             fetcher.requests,
         )
     }
 
     @Test
     fun `an equal version is up to date`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, release("v0.5.0"))
+        fetcher.response = UpdateHttpResponse(200, releases(release("v0.5.0")))
         assertEquals(UpdateResult.UpToDate, checker().check("0.5.0"))
     }
 
     @Test
     fun `an older release is up to date`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, release("v0.4.9"))
+        fetcher.response = UpdateHttpResponse(200, releases(release("v0.4.9")))
         assertEquals(UpdateResult.UpToDate, checker().check("0.5.0"))
     }
 
     @Test
     fun `semver compares numerically not lexically`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, release("v0.10.0"))
+        fetcher.response = UpdateHttpResponse(200, releases(release("v0.10.0")))
         assertEquals(
             UpdateResult.Available(version = "0.10.0", url = DEFAULT_URL),
             checker().check("0.9.0"),
@@ -59,7 +60,7 @@ class UpdateCheckerTest {
 
     @Test
     fun `a debug version suffix is ignored when comparing`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, release("v0.5.0"))
+        fetcher.response = UpdateHttpResponse(200, releases(release("v0.5.0")))
         assertEquals(UpdateResult.UpToDate, checker().check("0.5.0-debug"))
     }
 
@@ -67,7 +68,7 @@ class UpdateCheckerTest {
     fun `a missing html url falls back to the release tag page`() = runBlocking {
         fetcher.response = UpdateHttpResponse(
             200,
-            JSONObject().put("tag_name", "v0.6.0").toString(),
+            releases(JSONObject().put("tag_name", "v0.6.0")),
         )
         assertEquals(
             UpdateResult.Available(
@@ -78,20 +79,38 @@ class UpdateCheckerTest {
         )
     }
 
-    // ---- pre-releases ----------------------------------------------------
+    // ---- prereleases and drafts -----------------------------------------
 
     @Test
-    fun `a payload marked prerelease is ignored`() = runBlocking {
+    fun `a release marked prerelease is offered`() = runBlocking {
         fetcher.response = UpdateHttpResponse(
             200,
-            release("v0.9.0", prerelease = true),
+            releases(release("v0.9.0", prerelease = true)),
         )
-        assertEquals(UpdateResult.UpToDate, checker().check("0.5.0"))
+        assertEquals(
+            UpdateResult.Available(version = "0.9.0", url = DEFAULT_URL),
+            checker().check("0.5.0"),
+        )
+    }
+
+    @Test
+    fun `a draft is skipped`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(
+            200,
+            releases(
+                release("v0.9.0", draft = true),
+                release("v0.6.0"),
+            ),
+        )
+        assertEquals(
+            UpdateResult.Available(version = "0.6.0", url = DEFAULT_URL),
+            checker().check("0.5.0"),
+        )
     }
 
     @Test
     fun `a hyphen tag is a pre-release and is ignored`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, release("v0.6.0-rc.1"))
+        fetcher.response = UpdateHttpResponse(200, releases(release("v0.6.0-rc.1")))
         assertEquals(UpdateResult.UpToDate, checker().check("0.5.0"))
     }
 
@@ -121,14 +140,20 @@ class UpdateCheckerTest {
     }
 
     @Test
+    fun `an empty release list is a failure`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(200, "[]")
+        assertTrue(checker().check("0.5.0") is UpdateResult.Failed)
+    }
+
+    @Test
     fun `a release without a tag is a failure`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, "{}")
+        fetcher.response = UpdateHttpResponse(200, releases(JSONObject()))
         assertTrue(checker().check("0.5.0") is UpdateResult.Failed)
     }
 
     @Test
     fun `a tag that is not a version is a failure`() = runBlocking {
-        fetcher.response = UpdateHttpResponse(200, release("nightly"))
+        fetcher.response = UpdateHttpResponse(200, releases(release("nightly")))
         assertTrue(checker().check("0.5.0") is UpdateResult.Failed)
     }
 
@@ -144,16 +169,24 @@ class UpdateCheckerTest {
         tag: String,
         htmlUrl: String? = DEFAULT_URL,
         prerelease: Boolean = false,
-    ): String {
+        draft: Boolean = false,
+    ): JSONObject {
         val release = JSONObject()
             .put("tag_name", tag)
             .put("prerelease", prerelease)
+            .put("draft", draft)
         htmlUrl?.let { release.put("html_url", it) }
-        return release.toString()
+        return release
+    }
+
+    private fun releases(vararg releases: JSONObject): String {
+        val array = JSONArray()
+        releases.forEach { array.put(it) }
+        return array.toString()
     }
 
     private class FakeFetcher : UpdateFetcher {
-        var response = UpdateHttpResponse(200, "{}")
+        var response = UpdateHttpResponse(200, "[]")
         var error: Exception? = null
         val requests = mutableListOf<Pair<String, String>>()
 

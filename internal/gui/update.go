@@ -22,8 +22,10 @@ const (
 	updateTimeout = 10 * time.Second
 	// updateFeedBase is the GitHub API origin.
 	updateFeedBase = "https://api.github.com"
-	// updateFeedPath is the "latest release" endpoint of the Kumiho repo.
-	updateFeedPath = "/repos/benyamin-git/Kumiho/releases/latest"
+	// updateFeedPath lists the Kumiho releases. The list endpoint includes
+	// prereleases, unlike releases/latest: every v0.x release is a prerelease,
+	// so the latest endpoint answered 404 for the whole series.
+	updateFeedPath = "/repos/benyamin-git/Kumiho/releases?per_page=10"
 	// updateUserAgent identifies the GUI to GitHub.
 	updateUserAgent = "kumiho-gui"
 	// updateMaxBody bounds the feed response body.
@@ -58,11 +60,12 @@ type UpdateChecker struct {
 	Timeout time.Duration
 }
 
-// latestRelease is the slice of the GitHub "latest release" reply the check
-// consumes: the tag and the human release page.
+// latestRelease is the slice of one GitHub release in the list the check
+// consumes: the tag and the human release page. Drafts are skipped.
 type latestRelease struct {
 	TagName string `json:"tag_name"`
 	HTMLURL string `json:"html_url"`
+	Draft   bool   `json:"draft"`
 }
 
 // Check performs one update check and returns the projection. Errors are
@@ -101,24 +104,30 @@ func (u UpdateChecker) Check(ctx context.Context) (UpdateInfo, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return UpdateInfo{}, fmt.Errorf("update check: releases/latest: HTTP %s", resp.Status)
+		return UpdateInfo{}, fmt.Errorf("update check: releases: HTTP %s", resp.Status)
 	}
-	var rel latestRelease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, updateMaxBody)).Decode(&rel); err != nil {
-		return UpdateInfo{}, fmt.Errorf("update check: releases/latest: %w", err)
+	var releases []latestRelease
+	if err := json.NewDecoder(io.LimitReader(resp.Body, updateMaxBody)).Decode(&releases); err != nil {
+		return UpdateInfo{}, fmt.Errorf("update check: releases: %w", err)
 	}
-	if rel.TagName == "" {
-		return UpdateInfo{}, fmt.Errorf("update check: releases/latest: reply has no tag_name")
+	for _, rel := range releases {
+		if rel.Draft {
+			continue
+		}
+		if rel.TagName == "" {
+			return UpdateInfo{}, fmt.Errorf("update check: releases: reply has no tag_name")
+		}
+		if err := validReleaseURL(rel.HTMLURL); err != nil {
+			return UpdateInfo{}, fmt.Errorf("update check: releases: %w", err)
+		}
+		return UpdateInfo{
+			Current:   current,
+			Latest:    rel.TagName,
+			URL:       rel.HTMLURL,
+			CheckedAt: time.Now().UTC().Format(time.RFC3339),
+		}, nil
 	}
-	if err := validReleaseURL(rel.HTMLURL); err != nil {
-		return UpdateInfo{}, fmt.Errorf("update check: releases/latest: %w", err)
-	}
-	return UpdateInfo{
-		Current:   current,
-		Latest:    rel.TagName,
-		URL:       rel.HTMLURL,
-		CheckedAt: time.Now().UTC().Format(time.RFC3339),
-	}, nil
+	return UpdateInfo{}, fmt.Errorf("update check: releases: reply has no published release")
 }
 
 // validReleaseURL rejects anything that could not be opened by the frozen
