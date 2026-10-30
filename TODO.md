@@ -80,8 +80,8 @@ Android TV, Windows GUI and the TUI.
     protocol detail stays in `PLAN.md`.
 
 - [x] **C2 — Keep only the latest release in “What's new”**
-  - Done: only **What's new in v0.7.2** (the latest published release) remains;
-    older notes stay in `CHANGELOG.md`.
+  - Done: only **What's new in v0.8.0** remains; older notes stay in
+    `CHANGELOG.md`.
 
 - [x] **C3 — Add Android phone and Android TV screenshots**
   - Done: `screenshots/android-phone/` has Dashboard, Locations and Settings;

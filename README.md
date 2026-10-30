@@ -32,10 +32,7 @@ Every file is listed in
 [SHA256SUMS](https://github.com/benyamin-git/Kumiho/releases/latest/download/SHA256SUMS).
 Android is sideload-only: there is no Play Store or F-Droid build. These links
 follow the latest full release; v0.7.2 and earlier prereleases remain on the
-[releases page](https://github.com/benyamin-git/Kumiho/releases). Until v0.8.0
-is published, use the
-[v0.7.2 release](https://github.com/benyamin-git/Kumiho/releases/tag/v0.7.2)
-for the current files.
+[releases page](https://github.com/benyamin-git/Kumiho/releases).
 
 ## Screenshots
 
@@ -69,15 +66,23 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first country list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.7.2
+## What's new in v0.8.0
 
-- **TV setup works again** — the side column no longer takes the whole row
-  width, so the consent and sign-in steps are visible, and each step starts at
-  the top instead of inheriting the previous scroll position.
-- **TV connected suite green** — the D-pad focus, dashboard picker and setup
-  tests were repaired, and the job now uploads its Gradle reports on failure.
-- **CI resilience** — a transient checksum-database drop during the gomobile
-  bind is retried once.
+- **Locations, redesigned** — Android phone and TV, the Windows GUI and the
+  TUI now show one flat server list ordered Recommended, country, city and
+  hostname, with live search, Ping all and speed ordering. No more country and
+  city header rows, carets or expand/collapse controls.
+- **Settings that read at a glance** — card surfaces on Android phone, TV and
+  the Windows GUI, semantic battery colours, a neutral override mark, and the
+  account form no longer opens below the fold.
+- **Update checks work again** — the app and GUI read the GitHub release list,
+  skip drafts and include prereleases.
+- **Stable downloads and a one-command Linux install** — version-free asset
+  names, checksums, generated release notes and a bundled installer script.
+
+**Known issue:** adding an account with **Continue in browser** still fails
+with Mozilla's *Invalid Query Parameters* page. Use password sign-in for now;
+the browser flow is the next fix.
 
 Older changes are in the [changelog](CHANGELOG.md).
 

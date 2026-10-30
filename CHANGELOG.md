@@ -6,14 +6,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2026-10-30
+
+Locations across every client, settings polish, reliable update checks and
+stable release downloads.
 
 ### Added
 
-- `scripts/install-release.sh`: one-command Linux install from the newest
-  published release. It resolves the newest tag (prereleases included),
-  verifies the asset against `SHA256SUMS` and runs the bundled `install.sh`;
+- **Flat locations lists** on Android phone, Android TV, the Windows GUI and
+  the TUI. Servers are one list ordered Recommended, country, city and
+  hostname; country and city header rows, carets and expand/collapse controls
+  are gone. Search, Ping all and deferred speed ordering work the same way on
+  every client.
+- **Real 4:3 country flags** in Android location lists and pickers and in the
+  Windows GUI. Recommended uses a star and an unknown country code a globe;
+  the TUI keeps country-flag emoji.
+- **One-command Linux install** through `scripts/install-release.sh`. It
+  resolves the newest published release (prereleases included), verifies the
+  asset against `SHA256SUMS` and runs the bundled `install.sh`;
   `--version vX.Y.Z` pins a release and `uninstall`/`--purge` are forwarded.
+- **Stable release downloads**: version-free asset names, generated release
+  notes with a download table, and full releases from v0.8.0 so
+  `/releases/latest/download/...` resolves.
+- Android phone and TV screenshots in the README.
+
+### Changed
+
+- **Settings use card surfaces** on Android phone, Android TV and the Windows
+  GUI, matching Account and Home. TUI settings keep their section headings.
+- **Battery optimisation has semantic colours**: green Unrestricted, amber
+  Optimized, red Restricted and grey Unknown, with the text label kept. An
+  overridden settings value is neutral rather than yellow.
+- **The Android account list returns to the top** when password sign-in or
+  adding an account opens the form, so the email field is visible immediately.
+- **Update checks read the GitHub release list**, skip drafts and include
+  prereleases. This fixes check-for-update on Android phone/TV and the
+  Windows GUI.
+- **README is end-user focused**: download table, screenshots, install steps
+  and the latest release notes are near the top; development material moved
+  to `docs/development.md`.
+- The Android default version is now `0.8.0` (versionCode 800); release builds
+  still take the tag version.
+
+### Fixed
+
+- **Check for updates returned HTTP 404** because every v0.x release is a
+  prerelease and `/releases/latest` had no full release to return.
+- **Diagnostics cards** have the standard gap below the VPN service card.
+- **Android location rows** use the server that will actually be connected
+  rather than a stale tree node.
+
+### Known issue
+
+- **Browser sign-in still fails** when adding an account: Mozilla returns
+  **Bad Request: Invalid Query Parameters** and the app cannot receive the
+  redirect. Password sign-in works. The fix is planned for the next release.
 
 ## [0.7.2] - 2026-10-30
 
@@ -568,12 +615,13 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
+[0.8.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.8.0
 [0.7.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2
 [0.7.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1
 [0.7.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.0
 [0.6.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0
 [0.5.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.8.0...HEAD
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
