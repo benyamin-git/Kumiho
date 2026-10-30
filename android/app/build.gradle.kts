@@ -8,9 +8,9 @@ plugins {
 
 // Release scripts pass -PkumihoVersion=<version>; local builds default to the
 // client version. The versionCode mirrors the Go build convention:
-// major*10000 + minor*100 + patch, so v0.8.1 is 801.
+// major*10000 + minor*100 + patch, so v0.8.2 is 802.
 val kumihoVersionName: String = providers.gradleProperty("kumihoVersion")
-    .getOrElse("0.8.1")
+    .getOrElse("0.8.2")
     .removePrefix("v")
 val versionMatch = Regex("""^(\d+)\.(\d+)\.(\d+)$""").find(kumihoVersionName)
     ?: throw GradleException("kumihoVersion must be MAJOR.MINOR.PATCH, was '$kumihoVersionName'")

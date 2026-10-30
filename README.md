@@ -66,12 +66,12 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first country list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.8.1
+## What's new in v0.8.2
 
-- **The keyboard no longer hides the page** — on Android, opening the on-screen
-  keyboard in Locations search or the Account email/password form used to
-  collapse the page to its background. The content now stays in view above the
-  keyboard.
+- **The bottom bar fits narrow phones** — on Android, "Locations" used to wrap
+  its last letter when the five destinations did not fit. Settings, then
+  Account, now move into **More** as the width runs out, and **More** stays
+  marked while one of them is open.
 
 **Known issue:** adding an account with **Continue in browser** still fails
 with Mozilla's *Invalid Query Parameters* page. Use password sign-in for now;

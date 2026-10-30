@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-10-30
+
+### Fixed
+
+- **The Android bottom bar no longer wraps a label on narrow phones.** The five
+  destinations shared the bar's width, so on a narrower phone — or with larger
+  system text — "Locations" broke its last letter onto a second line. The bar
+  now measures its widest label and moves **Settings**, then **Account**, into
+  the **More** sheet as the width runs out; More stays marked while one of
+  those pages is open, and the navigation rail still shows all five.
+
+### Changed
+
+- The Android default version is now `0.8.2` (versionCode 802); release builds
+  still take the tag version.
+
 ## [0.8.1] - 2026-10-30
 
 ### Fixed
