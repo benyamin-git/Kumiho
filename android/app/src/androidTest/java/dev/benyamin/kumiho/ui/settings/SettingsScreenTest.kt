@@ -347,7 +347,7 @@ class SettingsScreenTest {
         show(
             appState = appState(
                 notificationsAllowed = false,
-                batteryUnrestricted = true,
+                battery = BatteryOptimization.UNRESTRICTED,
                 alwaysOn = true,
             ),
         )
@@ -603,7 +603,7 @@ class SettingsScreenTest {
         alwaysOn: Boolean = true,
         lockdown: Boolean = false,
         notificationsAllowed: Boolean = true,
-        batteryUnrestricted: Boolean = false,
+        battery: BatteryOptimization = BatteryOptimization.UNKNOWN,
         launchError: String? = null,
         splitMode: SplitMode = SplitMode.OFF,
         splitAppCount: Int = 0,
@@ -618,7 +618,7 @@ class SettingsScreenTest {
         alwaysOn = alwaysOn,
         lockdown = lockdown,
         notificationsAllowed = notificationsAllowed,
-        batteryUnrestricted = batteryUnrestricted,
+        battery = battery,
         launchError = launchError,
         splitMode = splitMode,
         splitAppCount = splitAppCount,

@@ -3,6 +3,7 @@ package dev.benyamin.kumiho.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import dev.benyamin.kumiho.ui.theme.Dimens
 @Composable
 fun KumihoCard(
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(Dimens.Space4),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
@@ -30,7 +32,7 @@ fun KumihoCard(
         color = MaterialTheme.colorScheme.surfaceContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(modifier = Modifier.padding(Dimens.Space4), content = content)
+        Column(modifier = Modifier.padding(contentPadding), content = content)
     }
 }
 

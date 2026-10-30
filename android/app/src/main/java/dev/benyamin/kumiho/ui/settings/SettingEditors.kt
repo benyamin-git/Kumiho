@@ -230,7 +230,7 @@ private fun OverrideMark(
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
         KumihoStatusChip(
-            tone = StatusTone.Warning,
+            tone = StatusTone.Neutral,
             label = stringResource(R.string.settings_overridden),
             modifier = Modifier.testTag(SettingsTags.override(key)),
         )

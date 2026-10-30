@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +53,8 @@ import dev.benyamin.kumiho.ui.settings.SettingsRoute
 import dev.benyamin.kumiho.ui.settings.SettingsState
 import dev.benyamin.kumiho.ui.settings.SettingsTags
 import dev.benyamin.kumiho.ui.settings.UpdateState
+import dev.benyamin.kumiho.ui.settings.batteryLabelRes
+import dev.benyamin.kumiho.ui.settings.batteryStatusTone
 import dev.benyamin.kumiho.ui.settings.settingDisplayValue
 import dev.benyamin.kumiho.ui.settings.settingOptionLabel
 import dev.benyamin.kumiho.ui.settings.settingValidationText
@@ -59,6 +62,8 @@ import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.ui.components.StatusTone
+import androidx.compose.ui.graphics.Color
 import dev.benyamin.kumiho.vpn.SplitMode
 import dev.benyamin.kumiho.ui.tv.components.TvButton
 import dev.benyamin.kumiho.ui.tv.components.TvDialog
@@ -145,77 +150,79 @@ fun TvSettingsScreen(
         ) {
             GroupHeader(stringResource(R.string.settings_group_app), SettingsTags.GROUP_APP)
 
-            SectionTitle(stringResource(R.string.settings_theme_title), stringResource(R.string.settings_theme_hint))
-            Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
-                ThemeId.entries.forEach { theme ->
-                    TvButton(
-                        label = themeLabel(theme),
-                        onClick = { actions.onThemeSelected(theme) },
-                        modifier = Modifier.testTag(SettingsTags.themeOption(theme.id)),
-                        primary = appState.theme == theme,
-                    )
-                }
-            }
-
-            SectionTitle(stringResource(R.string.settings_accent_title), stringResource(R.string.settings_accent_hint))
-            KumihoAccent.entries.chunked(3).forEach { row ->
+            TvSectionCard {
+                SectionTitle(stringResource(R.string.settings_theme_title), stringResource(R.string.settings_theme_hint))
                 Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
-                    row.forEach { accent ->
-                        val preview = appState.accentPreviews[accent]
-                        TvFocusableSurface(
-                            onClick = { actions.onAccentSelected(accent) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag(SettingsTags.accentOption(accent.id)),
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
-                                verticalAlignment = Alignment.CenterVertically,
+                    ThemeId.entries.forEach { theme ->
+                        TvButton(
+                            label = themeLabel(theme),
+                            onClick = { actions.onThemeSelected(theme) },
+                            modifier = Modifier.testTag(SettingsTags.themeOption(theme.id)),
+                            primary = appState.theme == theme,
+                        )
+                    }
+                }
+
+                SectionTitle(stringResource(R.string.settings_accent_title), stringResource(R.string.settings_accent_hint))
+                KumihoAccent.entries.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+                        row.forEach { accent ->
+                            val preview = appState.accentPreviews[accent]
+                            TvFocusableSurface(
+                                onClick = { actions.onAccentSelected(accent) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag(SettingsTags.accentOption(accent.id)),
                             ) {
-                                if (preview != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .background(preview)
-                                            .border(1.dp, colors.borderVariant, MaterialTheme.shapes.small)
-                                            .padding(10.dp),
-                                    )
-                                }
-                                Text(
-                                    text = accentLabel(accent),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.onSurface,
-                                )
-                                if (appState.accent == accent) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    if (preview != null) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(preview)
+                                                .border(1.dp, colors.borderVariant, MaterialTheme.shapes.small)
+                                                .padding(10.dp),
+                                        )
+                                    }
                                     Text(
-                                        text = "✓",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = colors.primary,
+                                        text = accentLabel(accent),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.onSurface,
                                     )
+                                    if (appState.accent == accent) {
+                                        Text(
+                                            text = "✓",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = colors.primary,
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                    repeat(3 - row.size) {
-                        Box(modifier = Modifier.weight(1f))
+                        repeat(3 - row.size) {
+                            Box(modifier = Modifier.weight(1f))
+                        }
                     }
                 }
+
+                SectionTitle(stringResource(R.string.settings_version_title), stringResource(R.string.settings_version_hint))
+                Text(
+                    text = stringResource(R.string.settings_version_app, state.appVersion),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurface,
+                    modifier = Modifier.testTag(SettingsTags.VERSION_APP),
+                )
+                Text(
+                    text = stringResource(R.string.settings_version_engine, state.engineVersion),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.testTag(SettingsTags.VERSION_ENGINE),
+                )
+
+                UpdateBlock(state = state, actions = actions, onOpenRelease = { releaseUrl = it })
             }
-
-            SectionTitle(stringResource(R.string.settings_version_title), stringResource(R.string.settings_version_hint))
-            Text(
-                text = stringResource(R.string.settings_version_app, state.appVersion),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurface,
-                modifier = Modifier.testTag(SettingsTags.VERSION_APP),
-            )
-            Text(
-                text = stringResource(R.string.settings_version_engine, state.engineVersion),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.testTag(SettingsTags.VERSION_ENGINE),
-            )
-
-            UpdateBlock(state = state, actions = actions, onOpenRelease = { releaseUrl = it })
 
             SystemRow(
                 title = stringResource(R.string.settings_notifications_title),
@@ -235,17 +242,17 @@ fun TvSettingsScreen(
             SystemRow(
                 title = stringResource(R.string.settings_battery_title),
                 hint = stringResource(R.string.settings_battery_hint),
-                value = stringResource(
-                    if (appState.batteryUnrestricted) {
-                        R.string.settings_battery_unrestricted
-                    } else {
-                        R.string.settings_battery_optimized
-                    },
-                ),
+                value = stringResource(batteryLabelRes(appState.battery)),
                 action = stringResource(R.string.settings_battery_open),
                 onAction = actions.onOpenBatterySettings,
                 tag = SettingsTags.BATTERY_STATE,
                 actionTag = SettingsTags.BATTERY_OPEN,
+                valueColor = when (batteryStatusTone(appState.battery)) {
+                    StatusTone.Profit -> LocalKumihoColors.current.profit
+                    StatusTone.Loss -> LocalKumihoColors.current.loss
+                    StatusTone.Warning -> LocalKumihoColors.current.warning
+                    StatusTone.Neutral -> colors.onSurfaceVariant
+                },
             )
             SystemRow(
                 title = stringResource(R.string.settings_always_on_title),
@@ -410,8 +417,21 @@ private fun GroupHeader(title: String, tag: String) {
 }
 
 @Composable
-private fun SectionTitle(title: String, hint: String? = null) {
-    Column {
+private fun TvSectionCard(content: @Composable ColumnScope.() -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.surface)
+            .border(1.dp, colors.borderVariant, MaterialTheme.shapes.medium)
+            .padding(TvDimens.Space2),
+        verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+        content = content,
+    )
+}
+
+@Composable
+private fun SectionTitle(title: String, hint: String? = null) {    Column {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
@@ -497,6 +517,7 @@ private fun SystemRow(
     onAction: () -> Unit,
     tag: String,
     actionTag: String,
+    valueColor: Color = Color.Unspecified,
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
@@ -510,7 +531,11 @@ private fun SystemRow(
     ) {
         Text(text = title, style = MaterialTheme.typography.titleSmall, color = colors.onSurface)
         Text(text = hint, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-        Text(text = value, style = MaterialTheme.typography.labelLarge, color = colors.primary)
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (valueColor == Color.Unspecified) colors.primary else valueColor,
+        )
         TvButton(
             label = action,
             onClick = onAction,

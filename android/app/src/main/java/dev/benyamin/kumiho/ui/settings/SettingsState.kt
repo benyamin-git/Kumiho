@@ -25,6 +25,24 @@ data class SettingsNotice(
 )
 
 /**
+ * Android's app-level battery state. `Unrestricted` is the green exemption;
+ * `Optimized` is the normal amber state; `Restricted` is the red background
+ * restriction; `Unknown` is used when the platform facts cannot be read.
+ */
+enum class BatteryOptimization { UNRESTRICTED, OPTIMIZED, RESTRICTED, UNKNOWN }
+
+/** Pure mapping from the two Android facts, kept out of the Compose layer. */
+fun batteryOptimizationState(
+    ignoringOptimizations: Boolean?,
+    backgroundRestricted: Boolean?,
+): BatteryOptimization = when {
+    ignoringOptimizations == null -> BatteryOptimization.UNKNOWN
+    ignoringOptimizations -> BatteryOptimization.UNRESTRICTED
+    backgroundRestricted == true -> BatteryOptimization.RESTRICTED
+    else -> BatteryOptimization.OPTIMIZED
+}
+
+/**
  * One inline row error: either the engine's own words, or a client validation
  * the screen formats from resources. Meaning is never carried by colour alone.
  */
@@ -106,8 +124,8 @@ data class SettingsAppState(
     val alwaysOn: Boolean = false,
     val lockdown: Boolean = false,
     val notificationsAllowed: Boolean = false,
-    /** True when Kumiho is exempt from battery optimization. */
-    val batteryUnrestricted: Boolean = false,
+    /** The Android battery state, not an engine setting. */
+    val battery: BatteryOptimization = BatteryOptimization.UNKNOWN,
     /** A failed system-settings launch, shown inline so it can never crash. */
     val launchError: String? = null,
     /** The saved split-tunnel mode; Off is the safe first-run default. */

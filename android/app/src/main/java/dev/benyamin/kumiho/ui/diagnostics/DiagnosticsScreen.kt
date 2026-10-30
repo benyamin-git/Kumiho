@@ -268,7 +268,9 @@ private fun DiagnosticsList(
             SplitCard(
                 mode = splitMode,
                 count = splitAppCount,
-                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
+                modifier = Modifier
+                    .padding(horizontal = Dimens.ScreenPadding)
+                    .padding(top = Dimens.Space3),
             )
         }
         item(key = "shortcuts") {

@@ -2,12 +2,15 @@ package dev.benyamin.kumiho.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.app.ActivityManager
+import android.os.Build
 import android.os.PowerManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -17,7 +20,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
@@ -66,6 +68,7 @@ import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.permissions.PermissionController
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
+import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.theme.Dimens
@@ -166,7 +169,7 @@ fun SettingsRoute(
     var notificationsAllowed by remember {
         mutableStateOf(PermissionController.hasNotificationPermission(context))
     }
-    var batteryUnrestricted by remember { mutableStateOf(context.isIgnoringBatteryOptimizations()) }
+    var battery by remember { mutableStateOf(context.batteryOptimization()) }
     var launchError by remember { mutableStateOf<String?>(null) }
 
     // A return from any system settings page is a resume: re-read the facts the
@@ -174,7 +177,7 @@ fun SettingsRoute(
     LifecycleResumeEffect(coordinator, context) {
         coordinator.refreshPolicy()
         notificationsAllowed = PermissionController.hasNotificationPermission(context)
-        batteryUnrestricted = context.isIgnoringBatteryOptimizations()
+        battery = context.batteryOptimization()
         onPauseOrDispose { }
     }
 
@@ -194,7 +197,7 @@ fun SettingsRoute(
         alwaysOn = serviceState.alwaysOn,
         lockdown = serviceState.lockdown,
         notificationsAllowed = notificationsAllowed,
-        batteryUnrestricted = batteryUnrestricted,
+        battery = battery,
         launchError = launchError,
         splitMode = splitState.settings.mode,
         splitAppCount = splitState.settings.packages.size,
@@ -245,9 +248,16 @@ internal fun bypassReconnectRequired(
     bypass.enabled != bypass.applied &&
     splitReconnectRequired(state)
 
-private fun Context.isIgnoringBatteryOptimizations(): Boolean {
-    val power = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
-    return power.isIgnoringBatteryOptimizations(packageName)
+private fun Context.batteryOptimization(): BatteryOptimization {
+    val power = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        ?: return BatteryOptimization.UNKNOWN
+    val ignoring = power.isIgnoringBatteryOptimizations(packageName)
+    val restricted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        (getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isBackgroundRestricted
+    } else {
+        null
+    }
+    return batteryOptimizationState(ignoring, restricted)
 }
 
 /**
@@ -352,80 +362,76 @@ private fun SettingsList(
         item(key = "header_app") {
             GroupHeader(R.string.settings_group_app, SettingsTags.GROUP_APP)
         }
-        item(key = "theme") {
-            ThemeSetting(
-                theme = appState.theme,
-                onThemeSelected = actions.onThemeSelected,
-            )
-        }
-        item(key = "accent") {
-            AccentSetting(
-                accent = appState.accent,
-                previews = appState.accentPreviews,
-                onAccentSelected = actions.onAccentSelected,
-            )
-        }
-        item(key = "version") { VersionBlock(state) }
-        item(key = "update") { UpdateBlock(state, actions) }
-        item(key = "notifications") {
-            NotificationStateRow(
-                allowed = appState.notificationsAllowed,
-                onOpenSettings = actions.onOpenNotificationSettings,
-            )
-        }
-        item(key = "battery") {
-            BatteryStateRow(
-                unrestricted = appState.batteryUnrestricted,
-                onOpenSettings = actions.onOpenBatterySettings,
-            )
-        }
-        item(key = "always_on") {
-            AlwaysOnStateRow(
-                alwaysOn = appState.alwaysOn,
-                onOpenSettings = actions.onOpenVpnSettings,
-            )
-        }
-        // App-level and deliberately outside the engine snapshot: the split
-        // selection and the allow-bypass choice live in DataStore and stay
-        // reachable while engine settings load or fail.
-        item(key = "split") {
-            SplitTunnelRow(
-                appState = appState,
-                onClick = actions.onOpenSplitTunneling,
-            )
-        }
-        item(key = "bypass") {
-            BypassSettingRow(
-                appState = appState,
-                onToggle = actions.onToggleBypass,
-            )
+        item(key = "app_card") {
+            SettingsCard {
+                ThemeSetting(
+                    theme = appState.theme,
+                    onThemeSelected = actions.onThemeSelected,
+                )
+                AccentSetting(
+                    accent = appState.accent,
+                    previews = appState.accentPreviews,
+                    onAccentSelected = actions.onAccentSelected,
+                )
+                VersionBlock(state)
+                UpdateBlock(state, actions)
+                NotificationStateRow(
+                    allowed = appState.notificationsAllowed,
+                    onOpenSettings = actions.onOpenNotificationSettings,
+                )
+                BatteryStateRow(
+                    state = appState.battery,
+                    onOpenSettings = actions.onOpenBatterySettings,
+                )
+                AlwaysOnStateRow(
+                    alwaysOn = appState.alwaysOn,
+                    onOpenSettings = actions.onOpenVpnSettings,
+                )
+                // App-level and deliberately outside the engine snapshot: the split
+                // selection and the allow-bypass choice live in DataStore and stay
+                // reachable while engine settings load or fail.
+                SplitTunnelRow(
+                    appState = appState,
+                    onClick = actions.onOpenSplitTunneling,
+                )
+                BypassSettingRow(
+                    appState = appState,
+                    onToggle = actions.onToggleBypass,
+                )
+            }
         }
 
         if (state.hasSnapshot) {
             item(key = "header_connection") {
                 GroupHeader(R.string.settings_group_connection, SettingsTags.GROUP_CONNECTION)
             }
-            items(SettingsCatalog.specsIn(SettingsGroup.CONNECTION), key = { it.key }) { spec ->
-                EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+            item(key = "connection_card") {
+                SettingsCard {
+                    SettingsCatalog.specsIn(SettingsGroup.CONNECTION).forEach { spec ->
+                        EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+                    }
+                }
             }
         }
 
         item(key = "header_android") {
             GroupHeader(R.string.settings_group_android_vpn, SettingsTags.GROUP_ANDROID_VPN)
         }
-        item(key = "android_explanation") {
-            Text(
-                text = stringResource(R.string.settings_android_vpn_explanation),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space1)
-                    .testTag(SettingsTags.VPN_EXPLANATION),
-            )
-        }
-        items(SettingsCatalog.specsIn(SettingsGroup.ANDROID_VPN), key = { it.key }) { spec ->
-            AndroidVpnRow(spec = spec, appState = appState, actions = actions)
+        item(key = "android_card") {
+            SettingsCard {
+                Text(
+                    text = stringResource(R.string.settings_android_vpn_explanation),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space1)
+                        .testTag(SettingsTags.VPN_EXPLANATION),
+                )
+                SettingsCatalog.specsIn(SettingsGroup.ANDROID_VPN).forEach { spec ->
+                    AndroidVpnRow(spec = spec, appState = appState, actions = actions)
+                }
+            }
         }
 
         if (state.hasSnapshot) {
@@ -436,12 +442,28 @@ private fun SettingsList(
                 )
             }
             if (state.advancedExpanded) {
-                items(SettingsCatalog.specsIn(SettingsGroup.ADVANCED), key = { it.key }) { spec ->
-                    EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+                item(key = "advanced_card") {
+                    SettingsCard {
+                        SettingsCatalog.specsIn(SettingsGroup.ADVANCED).forEach { spec ->
+                            EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+/** One Settings section card; rows keep their own screen padding. */
+@Composable
+private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    KumihoCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding),
+        contentPadding = PaddingValues(0.dp),
+        content = content,
+    )
 }
 
 /**

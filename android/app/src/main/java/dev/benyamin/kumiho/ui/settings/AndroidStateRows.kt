@@ -128,24 +128,39 @@ fun NotificationStateRow(
     )
 }
 
+/** The label and tone for the battery-optimization row. */
+@StringRes
+fun batteryLabelRes(state: BatteryOptimization): Int = when (state) {
+    BatteryOptimization.UNRESTRICTED -> R.string.settings_battery_unrestricted
+    BatteryOptimization.OPTIMIZED -> R.string.settings_battery_optimized
+    BatteryOptimization.RESTRICTED -> R.string.settings_battery_restricted
+    BatteryOptimization.UNKNOWN -> R.string.settings_battery_unknown
+}
+
+fun batteryStatusTone(state: BatteryOptimization): StatusTone = when (state) {
+    BatteryOptimization.UNRESTRICTED -> StatusTone.Profit
+    BatteryOptimization.OPTIMIZED -> StatusTone.Warning
+    BatteryOptimization.RESTRICTED -> StatusTone.Loss
+    BatteryOptimization.UNKNOWN -> StatusTone.Neutral
+}
+
 /** The battery-optimization row; Kumiho never asks to be exempted itself. */
 @Composable
 fun BatteryStateRow(
-    unrestricted: Boolean,
+    state: BatteryOptimization,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AndroidStateRow(
         titleRes = R.string.settings_battery_title,
         hintRes = R.string.settings_battery_hint,
-        value = stringResource(
-            if (unrestricted) R.string.settings_battery_unrestricted else R.string.settings_battery_optimized,
-        ),
+        value = stringResource(batteryLabelRes(state)),
         valueTag = SettingsTags.BATTERY_STATE,
         actionLabelRes = R.string.settings_battery_open,
         actionTag = SettingsTags.BATTERY_OPEN,
         onAction = onOpenSettings,
         modifier = modifier,
+        tone = batteryStatusTone(state),
     )
 }
 

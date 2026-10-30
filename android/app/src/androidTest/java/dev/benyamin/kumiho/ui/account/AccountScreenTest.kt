@@ -4,13 +4,18 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.ui.setup.SetupTags
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
@@ -34,6 +39,11 @@ class AccountScreenTest {
     private val calls = mutableListOf<String>()
 
     private fun show(state: AccountUiState) {
+        showMutable(state)
+    }
+
+    private fun showMutable(initial: AccountUiState): MutableState<AccountUiState> {
+        val state = mutableStateOf(initial)
         rule.setContent {
             KumihoTheme(
                 colors = PaletteMapping.fromJson(
@@ -46,7 +56,7 @@ class AccountScreenTest {
                 ),
             ) {
                 AccountScreen(
-                    state = state,
+                    state = state.value,
                     actions = AccountActions(
                         onRefresh = { calls += "refresh" },
                         onRetry = { calls += "retry" },
@@ -63,6 +73,7 @@ class AccountScreenTest {
             }
         }
         rule.waitForIdle()
+        return state
     }
 
     @Test
@@ -173,6 +184,45 @@ class AccountScreenTest {
 
         rule.onNodeWithTag(AccountTags.REFRESH).assertIsNotEnabled()
         rule.onNodeWithTag(AccountTags.SIGN_OUT).assertIsNotEnabled()
+    }
+
+    @Test
+    fun choosingPasswordReturnsToTheTopOfTheAccountList() {
+        val accounts = Accounts(
+            accounts = (1..4).map { index ->
+                AccountSummary(
+                    id = "account-$index",
+                    email = "user$index@example.com",
+                    label = "Account $index",
+                    method = "password",
+                    active = index == 1,
+                    reauthRequired = false,
+                    lastUsedAt = 0,
+                    quota = null,
+                )
+            },
+            active = "account-1",
+            rotation = false,
+            threshold = 10,
+            lastMethod = "password",
+            notice = null,
+            error = null,
+        )
+        val state = showMutable(
+            AccountUiState(
+                loading = false,
+                account = account(),
+                accounts = accounts,
+            ),
+        )
+
+        rule.onNodeWithTag(AccountTags.LIST)
+            .performScrollToNode(hasTestTag(AccountTags.SIGN_OUT))
+        rule.waitForIdle()
+        state.value = state.value.copy(addingAccount = true)
+        rule.waitForIdle()
+
+        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL).assertIsDisplayed()
     }
 
     private fun account() = Account(

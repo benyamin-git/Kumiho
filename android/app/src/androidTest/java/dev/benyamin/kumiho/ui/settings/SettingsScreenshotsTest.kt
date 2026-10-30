@@ -16,7 +16,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.platform.app.InstrumentationRegistry
@@ -79,7 +78,6 @@ class SettingsScreenshotsTest {
             state = sceneState()
             app = appState(theme)
         }
-        rule.onNodeWithTag(SettingsTags.LIST).performScrollToIndex(0)
         rule.waitForIdle()
         capture(output, "app")
 
@@ -90,7 +88,8 @@ class SettingsScreenshotsTest {
                 snapshot = SETTINGS.copy(overridden = listOf("edge_address")),
             )
         }
-        rule.onNodeWithTag(SettingsTags.LIST).performScrollToIndex(ANDROID_START_INDEX)
+        rule.onNodeWithTag(SettingsTags.LIST)
+            .performScrollToNode(hasTestTag(SettingsTags.row("kill_switch")))
         rule.waitForIdle()
         capture(output, "advanced")
 
@@ -146,7 +145,7 @@ class SettingsScreenshotsTest {
         alwaysOn = true,
         lockdown = true,
         notificationsAllowed = false,
-        batteryUnrestricted = false,
+        battery = BatteryOptimization.OPTIMIZED,
         bypassLoaded = true,
     )
 
@@ -171,14 +170,6 @@ class SettingsScreenshotsTest {
     )
 
     private companion object {
-        /**
-         * The kill-switch item's index: eight app items, the Split tunneling
-         * row, the app-owned Keep connections row, the Connection header and
-         * its seven rows, the Android header and its explanation precede it.
-         * Scrolling here frames the two Android rows above the Advanced group.
-         */
-        const val ANDROID_START_INDEX = 20
-
         val SETTINGS = Settings(
             socksPort = 1080,
             mtu = 1500,

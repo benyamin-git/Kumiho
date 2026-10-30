@@ -220,7 +220,7 @@ class SplitTunnelScreenshotsTest {
         alwaysOn = true,
         lockdown = false,
         notificationsAllowed = true,
-        batteryUnrestricted = false,
+        battery = BatteryOptimization.OPTIMIZED,
         splitMode = mode,
         splitAppCount = count,
         bypassLoaded = true,

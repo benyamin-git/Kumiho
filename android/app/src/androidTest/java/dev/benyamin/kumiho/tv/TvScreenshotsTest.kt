@@ -33,6 +33,7 @@ import dev.benyamin.kumiho.ui.locations.LocationsActions
 import dev.benyamin.kumiho.ui.locations.LocationsState
 import dev.benyamin.kumiho.ui.settings.SettingsActions
 import dev.benyamin.kumiho.ui.settings.SettingsAppState
+import dev.benyamin.kumiho.ui.settings.BatteryOptimization
 import dev.benyamin.kumiho.ui.settings.SettingsState
 import dev.benyamin.kumiho.ui.settings.UpdateState
 import dev.benyamin.kumiho.ui.setup.SetupActions
@@ -100,6 +101,7 @@ class TvScreenshotsTest : TvTestBase() {
                             splitAppCount = 3,
                             bypassEnabled = true,
                             bypassLoaded = true,
+                            battery = BatteryOptimization.OPTIMIZED,
                         ),
                         actions = settingsActions(),
                     )

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -37,6 +38,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +85,7 @@ object AccountTags {
     const val NOTICE = "account_notice"
 
     const val ACCOUNTS = "account_accounts"
+    const val LIST = "account_list"
     const val ADD_ACCOUNT = "account_add"
     const val ADD_DIALOG = "account_add_dialog"
     const val ADD_BROWSER = "account_add_browser"
@@ -310,8 +313,18 @@ fun AccountScreen(
 @Composable
 private fun AccountsBody(state: AccountUiState, actions: AccountActions) {
     val loss = LocalKumihoColors.current.loss
+    val listState = rememberLazyListState()
+    // Choosing password sign-in appends the form at the top of this list. If
+    // the account list was scrolled down, the email field would open below the
+    // fold; return to the top whenever the add flow starts.
+    LaunchedEffect(state.addingAccount) {
+        if (state.addingAccount) listState.scrollToItem(0)
+    }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(AccountTags.LIST),
+        state = listState,
         contentPadding = PaddingValues(Dimens.ScreenPadding),
         verticalArrangement = Arrangement.spacedBy(Dimens.Space3),
     ) {

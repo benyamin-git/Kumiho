@@ -339,6 +339,8 @@
     <string name="settings_battery_hint">Android may stop background work while Kumiho is optimized</string>
     <string name="settings_battery_unrestricted">Unrestricted</string>
     <string name="settings_battery_optimized">Optimized</string>
+    <string name="settings_battery_restricted">Restricted</string>
+    <string name="settings_battery_unknown">Unknown</string>
     <string name="settings_battery_open">Open battery settings</string>
     <string name="settings_always_on_title">Always-on VPN</string>
     <string name="settings_always_on_hint">Android starts Kumiho\'s VPN when this is on; Kumiho never changes it itself</string>
