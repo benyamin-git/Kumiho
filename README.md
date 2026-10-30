@@ -66,19 +66,12 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first country list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.8.0
+## What's new in v0.8.1
 
-- **Locations, redesigned** — Android phone and TV, the Windows GUI and the
-  TUI now show one flat server list ordered Recommended, country, city and
-  hostname, with live search, Ping all and speed ordering. No more country and
-  city header rows, carets or expand/collapse controls.
-- **Settings that read at a glance** — card surfaces on Android phone, TV and
-  the Windows GUI, semantic battery colours, a neutral override mark, and the
-  account form no longer opens below the fold.
-- **Update checks work again** — the app and GUI read the GitHub release list,
-  skip drafts and include prereleases.
-- **Stable downloads and a one-command Linux install** — version-free asset
-  names, checksums, generated release notes and a bundled installer script.
+- **The keyboard no longer hides the page** — on Android, opening the on-screen
+  keyboard in Locations search or the Account email/password form used to
+  collapse the page to its background. The content now stays in view above the
+  keyboard.
 
 **Known issue:** adding an account with **Continue in browser** still fails
 with Mozilla's *Invalid Query Parameters* page. Use password sign-in for now;

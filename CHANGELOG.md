@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-10-30
+
+### Fixed
+
+- **The Android keyboard no longer blanks the page.** The shell and the setup
+  flow padded their bars by the keyboard inset while Locations, Account and
+  setup also padded for it, so opening the keyboard collapsed the content to
+  the background. Bars now ignore the keyboard inset and each screen pads once,
+  keeping Locations search, the Account email/password form and setup sign-in
+  in view above the keyboard.
+
+### Changed
+
+- The Android default version is now `0.8.1` (versionCode 801); release builds
+  still take the tag version.
+
 ## [0.8.0] - 2026-10-30
 
 Locations across every client, settings polish, reliable update checks and
