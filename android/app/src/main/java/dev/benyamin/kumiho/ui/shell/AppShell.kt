@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -38,8 +40,10 @@ import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
  * The shell. It owns the only [Scaffold], the 64dp top bar and navigation: a
- * bottom bar under 600dp, a navigation rail at or above it. Insets are applied
- * here once (logical start/end only); screens never add their own.
+ * bottom bar under 600dp, a navigation rail at or above it. It applies the
+ * system-bar insets once; the keyboard inset is left to the screens' own
+ * `imePadding()`, so the bars stay under the keyboard instead of counting it
+ * twice.
  */
 @Composable
 fun AppShell(
@@ -90,6 +94,7 @@ fun AppShell(
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
+        val barInsets = WindowInsets.safeDrawing.exclude(WindowInsets.ime)
         var moreSheetOpen by remember { mutableStateOf(false) }
         val back = rememberUpdatedState(onBack)
         val onNavClick: (Destination) -> Unit = { destination ->
@@ -123,7 +128,7 @@ fun AppShell(
                         selected = state.selectedTab,
                         onSelect = onNavClick,
                         modifier = Modifier.windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+                            barInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                         ),
                     )
                 }
@@ -135,7 +140,7 @@ fun AppShell(
                         selected = state.selectedTab,
                         onSelect = onNavClick,
                         modifier = Modifier.windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom),
+                            barInsets.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom),
                         ),
                     )
                 }
@@ -144,7 +149,7 @@ fun AppShell(
                         .fillMaxHeight()
                         .weight(1f)
                         .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(
+                            barInsets.only(
                                 if (mode == NavMode.Rail) {
                                     WindowInsetsSides.End + WindowInsetsSides.Bottom
                                 } else {
