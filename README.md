@@ -269,10 +269,18 @@ absolute-form plain HTTP, and starts and stops with the tunnel.
 
 ## Quick start
 
-Linux (Ubuntu 24.04):
+Linux (Ubuntu 24.04), one command (downloads the newest release and verifies
+its checksum):
+
+    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+
+From a checkout, build first and run the bundled installer:
 
     make build                  # dist/kumiho-linux-amd64 (vendored deps)
     sudo ./install.sh           # binary, systemd unit, polkit rule, config
+
+Then, on either path:
+
     sudo systemctl start kumiho
     kumiho login                # browser or password (2FA aware)
     kumiho doctor               # preflight diagnostics

@@ -18,6 +18,23 @@ Windows service and named pipe on Windows. Supported targets are **Ubuntu
 - Optional: Tailscale (Kumiho coexists with it: existing SSH and Tailscale
   sessions are never interrupted by connect/disconnect).
 
+### One-command install
+
+On Ubuntu 24.04 amd64 or arm64, this downloads the newest published release
+(prereleases included), verifies it against the release `SHA256SUMS`, and runs
+the bundled installer:
+
+    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+
+Pass a tag to install a specific release, or run the uninstaller:
+
+    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash -s -- --version v0.7.2
+    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash -s -- uninstall
+    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash -s -- uninstall --purge
+
+The script needs `curl`, `unzip` and `sha256sum` (standard on Ubuntu) and must
+run as root; it refuses unsupported architectures.
+
 ### Build
 
     make build          # dist/kumiho-linux-amd64
@@ -25,7 +42,7 @@ Windows service and named pipe on Windows. Supported targets are **Ubuntu
 
 Dependencies are vendored; no network access is needed.
 
-### Install
+### Install from the checkout
 
     sudo ./install.sh
 
@@ -53,7 +70,8 @@ the tunnel up on every start — including after a reboot.
 
 ### Upgrade
 
-Pull the new source, `make build` and re-run `sudo ./install.sh`: it replaces
+Re-run the one-command installer to move to the newest release, or pull the
+new source, `make build` and re-run `sudo ./install.sh`. Either path replaces
 the binary and unit and restarts the running service.
 
 ### Uninstall

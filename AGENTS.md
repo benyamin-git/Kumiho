@@ -65,6 +65,9 @@ them locally for any change under `android/`, `mobile/` or
 
 ## Dev scripts
 
+- `scripts/install-release.sh` — one-command Linux install of the newest
+  published release; verifies the release `SHA256SUMS` and runs the bundled
+  `install.sh`. Supports `--version vX.Y.Z` and forwards `uninstall`/`--purge`.
 - `scripts/dev-env.sh`, `scripts/dev-env.ps1` — point `KUMIHO_CONFIG`,
   `KUMIHO_STATE`, `KUMIHO_TOKENS` and `KUMIHO_RUNTIME_DIR` at a scratch dev
   directory (`~/.local/state/kumiho-dev`, `%TEMP%\kumiho-dev`); source them
