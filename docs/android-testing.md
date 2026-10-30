@@ -23,7 +23,7 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 
 | Piece | Pin | Where |
 |---|---|---|
-| App | `0.7.1`, `versionCode` 701 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
+| App | `0.7.2`, `versionCode` 702 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
 | Package | `dev.benyamin.kumiho` (debug: `.debug`) | `android/app/build.gradle.kts` |
 | minSdk | 26 (Android 8.0) | `android/app/build.gradle.kts` |
 | targetSdk | 36 | `android/app/build.gradle.kts` |
@@ -115,7 +115,7 @@ first:
     make android-debug
     make android-test                 # JVM tests + lint + debug APK
     make android-emulator-test        # connected suite; emulator must be running
-    make android-release KUMIHO_VERSION=0.7.1 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
+    make android-release KUMIHO_VERSION=0.7.2 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>
     KUMIHO_EXPECT_CERT_SHA256=<fingerprint> make android-verify
 
 Pass `GRADLE_FLAGS=--offline` to any of the Gradle-backed targets once the
@@ -150,7 +150,7 @@ before treating any release APK as shippable.
 
 You can override the version for a one-off build:
 
-    ./gradlew -PkumihoVersion=v0.7.1 :app:assembleDebug
+    ./gradlew -PkumihoVersion=v0.7.2 :app:assembleDebug
 
 ### Instrumented tests on the emulator
 
@@ -229,7 +229,7 @@ x86/x86_64 native libraries, `zipalign -c -P 16 -v 4`, the arm64 `libgojni.so`
 `p_align >= 0x4000`, the signature via `apksigner`, and the universal size cap:
 
     source scripts/android-env.sh
-    scripts/android-verify-apk.sh dist/kumiho-v0.7.1-android-universal.apk
+    scripts/android-verify-apk.sh dist/kumiho-v0.7.2-android-universal.apk
 
     # Unsigned output from a compile-check assembleRelease:
     KUMIHO_ALLOW_UNSIGNED=1 scripts/android-verify-apk.sh \
@@ -252,7 +252,7 @@ The equivalent manual commands (use the build-tools directory because
     "$BT/zipalign" -c -P 16 -v 4 "$APK"
 
 Expect `aapt2` to report `package: name='dev.benyamin.kumiho.debug'`,
-`versionCode='701'`, `versionName='0.7.1-debug'`, `minSdkVersion:'26'` and
+`versionCode='702'`, `versionName='0.7.2-debug'`, `minSdkVersion:'26'` and
 `targetSdkVersion:'36'`; `zipalign` to say `Verification successful`; and the
 archive to contain only the expected ABI(s). For a signed APK the signature
 check is:
@@ -284,7 +284,7 @@ check is:
     CERT_SHA256=$(keytool -list -v \
       -keystore ~/kumiho-android-release.jks -alias kumiho \
       | awk '/SHA256:/ { print $2; exit }' | tr -d ':')
-    make android-release KUMIHO_VERSION=0.7.1 \
+    make android-release KUMIHO_VERSION=0.7.2 \
       KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256"
     KUMIHO_EXPECT_CERT_SHA256="$CERT_SHA256" make android-verify
 
@@ -323,7 +323,7 @@ Never commit the keystore or passwords. For a local signed build, create
 
 `storeFile` is resolved with `rootProject.file(...)`: an absolute path is used
 as-is; a relative path is relative to `android/`. Then run
-`make android-release KUMIHO_VERSION=0.7.1 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
+`make android-release KUMIHO_VERSION=0.7.2 KUMIHO_EXPECT_CERT_SHA256=<fingerprint>`
 as shown above. The fingerprint is public metadata, not a secret.
 
 ### GitHub Actions secrets and tagged release
@@ -348,8 +348,9 @@ series, the GitHub release is marked as a prerelease. Hyphenated tags such as
 `v0.5.0-rc.1` are skipped because the Android release script expects a stable
 `MAJOR.MINOR.PATCH` version. Tags
 `v0.5.0` (2026-10-22), `v0.5.1` (2026-10-23), `v0.5.2` (2026-10-23),
-`v0.6.0` (2026-10-24), `v0.7.0` (2026-10-28) and `v0.7.1` (2026-10-30) ran the
-workflow successfully and published the desktop and Android assets.
+`v0.6.0` (2026-10-24), `v0.7.0` (2026-10-28), `v0.7.1` (2026-10-30) and
+`v0.7.2` (2026-10-30) ran the workflow successfully and published the desktop
+and Android assets.
 
 ### Published v0.7.1 release
 
@@ -364,8 +365,8 @@ certificate. The universal APK is 26.08 MiB (arm64-v8a 14.26 MiB, armeabi-v7a
 13.90 MiB). v0.7.1 physical acceptance is pending.
 
 The tag's main-branch CI exposed a TV setup layout bug: the side column took the
-row width and left the step content at zero width. It is fixed on main after the
-tag, together with the TV connected-test fixes, and is not in the tag's APK.
+row width and left the step content at zero width. It is fixed in v0.7.2,
+together with the TV connected-test fixes.
 
 ### Published v0.6.0 release
 

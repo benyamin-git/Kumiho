@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-10-30
+
+Android TV setup and connected-test fixes.
+
+### Fixed
+
+- **TV setup layout**: the side column used `fillMaxSize` in a `Row`, so it took
+  the whole width and left the consent and sign-in content at zero width. Both
+  halves now share the row, and the step pane resets to the top when the step
+  changes so the focus request does not hide the heading.
+- **TV connected suite**: request initial focus on the UI thread, expand the
+  dashboard picker before selecting a city, use a non-active phase when testing
+  connect from the options page, and scroll the setup controls into view before
+  clicking.
+
+### Changed
+
+- CI uploads connected-test reports on failure and retries a transient gomobile
+  module fetch.
+- The Android default version is now `0.7.2` (versionCode 702); release builds
+  still take the tag version.
+
 ## [0.7.1] - 2026-10-30
 
 Password sign-in recovery when Mozilla's edge hard-blocks the primary Firefox
@@ -537,11 +559,12 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
+[0.7.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2
 [0.7.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1
 [0.7.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.0
 [0.6.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0
 [0.5.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.7.2...HEAD
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1

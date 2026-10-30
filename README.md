@@ -1,6 +1,6 @@
 # Kumiho
 
-**Status:** v0.7.1 — working Linux and Windows 11 clients plus a native Android
+**Status:** v0.7.2 — working Linux and Windows 11 clients plus a native Android
 app for phones and Android TV: daemon + TUI/CLI/GUI over a Unix
 socket (Linux) or named pipe (Windows),
 Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
@@ -18,14 +18,16 @@ full parity for setup, dashboard, locations, account, settings, split
 tunneling, logs and diagnostics, a TV launcher banner and an optional Google
 TV channel with **Open** and **Connect** cards. v0.7.1 fixes password sign-in
 on networks where Mozilla's edge hard-blocks the primary auth host and hardens
-terminal sign-in input. v0.5.2 adds
+terminal sign-in input. v0.7.2 fixes the Android TV setup layout and the
+connected test suite. v0.5.2 adds
 an opt-in Android setting that keeps LAN connections alive across a VPN
 transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
 screen on Android, the Windows GUI and the TUI. v0.5.0 adds the
 Android client (sideload-only; physical acceptance is a partial pass with
-user-accepted exceptions). v0.6.0 and v0.7.0 physical acceptance is pending; the
-signed [v0.7.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1)
+user-accepted exceptions). v0.6.0, v0.7.0, v0.7.1 and v0.7.2 physical
+acceptance is pending; the signed
+[v0.7.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2)
 is published; see [docs/android-testing.md](docs/android-testing.md).
 v0.4.0 adds backend
 parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
@@ -108,6 +110,16 @@ before release:
   shell, a launcher banner and an optional Google TV channel; see
   [docs/android-tv.md](docs/android-tv.md).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
+
+## What's new in v0.7.2
+
+- **TV setup works again** — the side column no longer takes the whole row
+  width, so the consent and sign-in steps are visible, and each step starts at
+  the top instead of inheriting the previous scroll position.
+- **TV connected suite green** — the D-pad focus, dashboard picker and setup
+  tests were repaired, and the job now uploads its Gradle reports on failure.
+- **CI resilience** — a transient checksum-database drop during the gomobile
+  bind is retried once.
 
 ## What's new in v0.7.1
 
@@ -348,7 +360,7 @@ Cross-compile from any OS with Go >= 1.27:
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
     make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
-    make android-release KUMIHO_VERSION=0.7.1 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.7.2 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
     make vet
@@ -444,7 +456,7 @@ changes the daemon, CLI or TUI.
 
 ## Android app
 
-Kumiho's Android app (v0.7.1) is a native sideloaded client for phones and
+Kumiho's Android app (v0.7.2) is a native sideloaded client for phones and
 Android TV/Google TV, not a front end
 for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
@@ -470,12 +482,12 @@ channel with **Open** and **Connect** cards; see
 [docs/android-tv.md](docs/android-tv.md).
 
 > **Release status.** The app builds and its unit, lint and assemble gates pass;
-> the phone emulator suite passes in CI, and the TV connected suite passes in CI
-> after the post-v0.7.1 layout fixes. Physical first-connect/DNS/browsing/exit-IP
-> acceptance passed on a Galaxy S25 FE for v0.5.2; the remaining checklist items
-> are user-accepted exceptions (a partial acceptance, not a full pass), and
-> v0.6.0, v0.7.0 and v0.7.1 physical acceptance is pending. The production-signed
-> [v0.7.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1)
+> the phone emulator suite and the TV connected suite pass in CI. Physical
+> first-connect/DNS/browsing/exit-IP acceptance passed on a Galaxy S25 FE for
+> v0.5.2; the remaining checklist items are user-accepted exceptions (a partial
+> acceptance, not a full pass), and v0.6.0, v0.7.0, v0.7.1 and v0.7.2 physical
+> acceptance is pending. The production-signed
+> [v0.7.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2)
 > carries three APKs and `SHA256SUMS`. Verify a download against the release
 > checksums; a local APK is not a published release.
 

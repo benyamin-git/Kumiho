@@ -32,7 +32,7 @@ needed to build or test.
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
     make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
-    make android-release KUMIHO_VERSION=0.7.1 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.7.2 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     make android-verify # verify every release APK in dist/
     make test           # go test ./...
     make test-integration  # go test -tags integration ./... (real endpoints)
@@ -124,9 +124,9 @@ them locally for any change under `android/`, `mobile/` or
 - The Android CI job and release steps are implemented and were exercised by
   the `v0.5.0` release on 2026-10-22, the `v0.5.1` release on 2026-10-23, the
   `v0.5.2` release on 2026-10-23, the `v0.6.0` release on 2026-10-24, the
-  `v0.7.0` release on 2026-10-28 and the `v0.7.1` release on 2026-10-30; each
-  release workflow published the desktop and Android assets. See
-  [docs/android-testing.md](docs/android-testing.md).
+  `v0.7.0` release on 2026-10-28, the `v0.7.1` release on 2026-10-30 and the
+  `v0.7.2` release on 2026-10-30; each release workflow published the desktop
+  and Android assets. See [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
 
