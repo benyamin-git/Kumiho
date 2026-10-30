@@ -4,6 +4,8 @@ package fxa
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -56,4 +58,33 @@ func TestLoginIntegration(t *testing.T) {
 	}
 	t.Logf("login, oauth grant, and refresh OK; new access token expires %s",
 		time.Unix(refreshed.ExpiresAt, 0).UTC().Format(time.RFC3339))
+}
+
+// TestFallbackHostServesAuthAPI pins the assumption behind
+// DefaultFallbackBaseURL: the oauth hostname serves the same auth-server API
+// that the password flow needs. The probe is read-only (account status for a
+// fixed, nonexistent address) and never creates or modifies an account.
+func TestFallbackHostServesAuthAPI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	c := NewClient()
+	c.BaseURL = DefaultFallbackBaseURL
+	c.FallbackBaseURL = ""
+
+	raw, err := c.doJSON(ctx, http.MethodPost, "/account/status", "", map[string]string{
+		"email": "kumiho-fallback-probe@example.com",
+	})
+	if err != nil {
+		t.Fatalf("fallback host %s does not serve the auth API: %v", DefaultFallbackBaseURL, err)
+	}
+	var status struct {
+		Exists bool `json:"exists"`
+	}
+	if err := json.Unmarshal(raw, &status); err != nil {
+		t.Fatalf("account status response: %v (%s)", err, raw)
+	}
+	if status.Exists {
+		t.Fatal("probe address unexpectedly exists")
+	}
 }

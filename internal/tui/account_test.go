@@ -655,6 +655,47 @@ func TestLoginScreenOffersBrowserAndPassword(t *testing.T) {
 	}
 }
 
+func TestLoginFieldsDropControlCharacters(t *testing.T) {
+	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
+		if req.typ == ipc.TypeLoginEmail {
+			return ipc.TypeLoginState, api.LoginState{Step: "password", Email: "user@example.com"}
+		}
+		return "", nil
+	})
+	m := &Model{client: d.client, screen: screenLogin, step: "email"}
+
+	// Windows delivers IME composition and unmapped keys as zero runes, and a
+	// pasted address can carry surrounding whitespace and a newline.
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0, 0}})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("  user@example.com\n"), Paste: true})
+	if got, want := m.email, "  user@example.com"; got != want {
+		t.Fatalf("email = %q, want %q", got, want)
+	}
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should submit the email")
+	}
+	_ = cmd()
+	requests := d.requests()
+	if len(requests) != 1 || requests[0].typ != ipc.TypeLoginEmail {
+		t.Fatalf("requests = %v, want login_email", d.types())
+	}
+	var payload api.LoginEmailPayload
+	if err := envPayload(requests[0].payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Email != "user@example.com" {
+		t.Fatalf("email payload = %q, want the trimmed address", payload.Email)
+	}
+
+	m.step = "password"
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0, 'p', 0, 'w'}})
+	if m.password != "pw" {
+		t.Fatalf("password = %q, want control characters dropped", m.password)
+	}
+}
+
 func TestLoginScreenBrowserPasteFlow(t *testing.T) {
 	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-2&code=code-2"
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {

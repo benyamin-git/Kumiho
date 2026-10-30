@@ -1,7 +1,7 @@
 # Kumiho
 
-**Status:** v0.7.0 (unreleased) — working Linux and Windows 11 clients plus a
-native Android app for phones and Android TV: daemon + TUI/CLI/GUI over a Unix
+**Status:** v0.7.2 — working Linux and Windows 11 clients plus a native Android
+app for phones and Android TV: daemon + TUI/CLI/GUI over a Unix
 socket (Linux) or named pipe (Windows),
 Firefox Accounts login (2FA aware), server list with ping and an on-disk cache,
 HTTP/2 CONNECT tunnel through Mozilla's Fastly edge, full-tunnel routing with a
@@ -16,14 +16,18 @@ opaque browser accounts are removed. v0.7.0 adds Android TV: one APK for
 phones and televisions, a Compose for TV shell with remote-only navigation,
 full parity for setup, dashboard, locations, account, settings, split
 tunneling, logs and diagnostics, a TV launcher banner and an optional Google
-TV channel with **Open** and **Connect** cards. v0.5.2 adds
+TV channel with **Open** and **Connect** cards. v0.7.1 fixes password sign-in
+on networks where Mozilla's edge hard-blocks the primary auth host and hardens
+terminal sign-in input. v0.7.2 fixes the Android TV setup layout and the
+connected test suite. v0.5.2 adds
 an opt-in Android setting that keeps LAN connections alive across a VPN
 transition and reworks Locations to one level. v0.5.1
 adds country flags, Ping all and Expand all/Collapse all to the locations
 screen on Android, the Windows GUI and the TUI. v0.5.0 adds the
 Android client (sideload-only; physical acceptance is a partial pass with
-user-accepted exceptions). v0.6.0 physical acceptance is pending; the
-signed [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
+user-accepted exceptions). v0.6.0, v0.7.0, v0.7.1 and v0.7.2 physical
+acceptance is pending; the signed
+[v0.7.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2)
 is published; see [docs/android-testing.md](docs/android-testing.md).
 v0.4.0 adds backend
 parity with later FoxyVPN releases: strict DoH failover, anti-bot challenge
@@ -107,7 +111,32 @@ before release:
   [docs/android-tv.md](docs/android-tv.md).
 - **Other Linux distros/archs** — planned: pluggable network-configuration backends.
 
-## What's new in v0.7.0 (unreleased)
+## What's new in v0.7.2
+
+- **TV setup works again** — the side column no longer takes the whole row
+  width, so the consent and sign-in steps are visible, and each step starts at
+  the top instead of inheriting the previous scroll position.
+- **TV connected suite green** — the D-pad focus, dashboard picker and setup
+  tests were repaired, and the job now uploads its Gradle reports on failure.
+- **CI resilience** — a transient checksum-database drop during the gomobile
+  bind is retried once.
+
+## What's new in v0.7.1
+
+- **Password sign-in through a blocked edge** — when Fastly answers
+  `POST api.accounts.firefox.com/v1/account/login` with an empty `406` that no
+  solved challenge can clear, the shared engine now asks the sibling
+  `oauth.accounts.firefox.com/v1` auth host before spending a solve, solves
+  each challenged host once, and retries once if the sibling connection drops.
+  Every client gets the fix because it lives in the engine.
+- **Hardened terminal sign-in** — the TUI drops stray control characters that
+  Windows IME composition and unmapped keys deliver as zero runes, and the
+  engine rejects control characters or inner whitespace in an email with
+  **enter a valid email address** instead of forwarding a body FxA rejects.
+- **Development pipe override** — `KUMIHO_CONTROL_ENDPOINT` moves the Windows
+  control pipe so a development daemon can run beside the installed service.
+
+## What's new in v0.7.0
 
 - **One APK, phone and TV** — the Android app detects a television at runtime
   and swaps the phone shell for a ten-foot Compose for TV shell. Phone setup
@@ -240,10 +269,18 @@ absolute-form plain HTTP, and starts and stops with the tunnel.
 
 ## Quick start
 
-Linux (Ubuntu 24.04):
+Linux (Ubuntu 24.04), one command (downloads the newest release and verifies
+its checksum):
+
+    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+
+From a checkout, build first and run the bundled installer:
 
     make build                  # dist/kumiho-linux-amd64 (vendored deps)
     sudo ./install.sh           # binary, systemd unit, polkit rule, config
+
+Then, on either path:
+
     sudo systemctl start kumiho
     kumiho login                # browser or password (2FA aware)
     kumiho doctor               # preflight diagnostics
@@ -331,7 +368,7 @@ Cross-compile from any OS with Go >= 1.27:
     make android-test   # JVM tests + lint + debug APK
     make android-emulator-test  # connected tests (emulator running)
     make android-tv-emulator-test  # connected TV tests (Google TV AVD running)
-    make android-release KUMIHO_VERSION=0.6.0 KUMIHO_EXPECT_CERT_SHA256=<sha256>
+    make android-release KUMIHO_VERSION=0.7.2 KUMIHO_EXPECT_CERT_SHA256=<sha256>
     KUMIHO_EXPECT_CERT_SHA256=<sha256> make android-verify
     make test           # unit tests (run on any OS)
     make vet
@@ -370,7 +407,9 @@ config/state from `/etc/kumiho` and `/var/lib/kumiho` and listens on
 listens on the named pipe `\\.\pipe\kumiho\control` (see PLAN.md §8). For
 development or alternative locations on either OS, override with
 `KUMIHO_CONFIG`, `KUMIHO_STATE`, `KUMIHO_TOKENS`, and `KUMIHO_RUNTIME_DIR`
-(see `scripts/dev-env.sh` and `scripts/dev-env.ps1`).
+(see `scripts/dev-env.sh` and `scripts/dev-env.ps1`). On Windows,
+`KUMIHO_CONTROL_ENDPOINT` moves the control pipe so a development daemon can
+run beside the installed service.
 
 ## Windows GUI
 
@@ -425,15 +464,14 @@ changes the daemon, CLI or TUI.
 
 ## Android app
 
-Kumiho's Android app (v0.7.0) is a native sideloaded client for phones and
+Kumiho's Android app (v0.7.2) is a native sideloaded client for phones and
 Android TV/Google TV, not a front end
 for the daemon: the same Go engine is embedded in the app process through a
 gomobile AAR, and a `VpnService` owns the tunnel, the foreground status
 notification and the Quick Settings tile. It targets Android 8.0 (API 26) and
 newer on `arm64-v8a` or `armeabi-v7a`, and is distributed as an APK — there is
 no Play or F-Droid build. The direct Firefox Accounts OAuth WebView described
-below is the v0.6.1 (unreleased) replacement and is not in the published
-v0.6.0 APK.
+below replaced the v0.6.0 exchange and is in the published v0.7.0 APK.
 
 The app has a four-step setup (consent, browser or password Firefox Accounts
 sign-in, VPN and notification permissions, Always-on guidance), then the same
@@ -452,12 +490,12 @@ channel with **Open** and **Connect** cards; see
 [docs/android-tv.md](docs/android-tv.md).
 
 > **Release status.** The app builds and its unit, lint and assemble gates pass;
-> the phone emulator suite passed in earlier cycles, and the new TV connected
-> suite is prepared but not yet run. Physical first-connect/DNS/browsing/exit-IP
-> acceptance passed on a Galaxy S25 FE for v0.5.2; the remaining checklist items
-> are user-accepted exceptions (a partial acceptance, not a full pass), and
-> v0.6.0 and v0.7.0 physical acceptance is pending. The production-signed
-> [v0.6.0 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0)
+> the phone emulator suite and the TV connected suite pass in CI. Physical
+> first-connect/DNS/browsing/exit-IP acceptance passed on a Galaxy S25 FE for
+> v0.5.2; the remaining checklist items are user-accepted exceptions (a partial
+> acceptance, not a full pass), and v0.6.0, v0.7.0, v0.7.1 and v0.7.2 physical
+> acceptance is pending. The production-signed
+> [v0.7.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2)
 > carries three APKs and `SHA256SUMS`. Verify a download against the release
 > checksums; a local APK is not a published release.
 

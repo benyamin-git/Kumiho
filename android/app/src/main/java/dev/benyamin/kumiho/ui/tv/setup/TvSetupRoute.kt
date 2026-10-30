@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -128,7 +127,11 @@ internal fun TvSetupScreen(
 ) {
     val colors = MaterialTheme.colorScheme
     val primaryFocus = remember { FocusRequester() }
-    LaunchedEffect(state.step) { runCatching { primaryFocus.requestFocus() } }
+    val stepScroll = rememberScrollState()
+    LaunchedEffect(state.step) {
+        runCatching { primaryFocus.requestFocus() }
+        stepScroll.scrollTo(0)
+    }
 
     Row(
         modifier = modifier
@@ -171,7 +174,7 @@ internal fun TvSetupScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(stepScroll),
                 verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
             ) {
                 when (state.step) {
@@ -200,7 +203,7 @@ internal fun TvSetupScreen(
         }
         Column(
             modifier = Modifier
-                .width(360.dp)
+                .weight(1f)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),

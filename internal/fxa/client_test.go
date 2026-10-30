@@ -168,6 +168,7 @@ func TestChallengeWithoutSolver(t *testing.T) {
 
 	c := NewClient()
 	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = "" // a fixture must never reach the production fallback
 
 	_, err := c.Login(context.Background(), "test@example.com", "password")
 	var chErr *ChallengeError
@@ -204,6 +205,7 @@ func TestChallengeWithSolverRetries(t *testing.T) {
 
 	c := NewClient()
 	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = "" // a fixture must never reach the production fallback
 	solver := &fakeSolver{}
 	c.Solver = solver
 
@@ -233,6 +235,7 @@ func TestChallengeSolverFailureKeepsMarker(t *testing.T) {
 
 	c := NewClient()
 	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
 	solver := &fakeSolver{err: solverErr}
 	c.Solver = solver
 
@@ -266,6 +269,7 @@ func TestChallengeSolverDisabledReachesCaller(t *testing.T) {
 
 	c := NewClient()
 	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
 	solver := &fakeSolver{err: disabled}
 	c.Solver = solver
 
@@ -279,6 +283,257 @@ func TestChallengeSolverDisabledReachesCaller(t *testing.T) {
 	}
 	if solver.calls != 1 {
 		t.Fatalf("solver calls = %d, want 1", solver.calls)
+	}
+}
+
+// A host that stays challenged after a solve is never reached when the
+// sibling answers: Fastly can hard-block one hostname's path while the other
+// auth-server hostname keeps serving, and solving a hard block cannot
+// succeed, so the sibling is tried before any solve.
+func TestChallengeFallsBackBeforeSolving(t *testing.T) {
+	var primaryHits, fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/login" {
+			t.Errorf("fallback path = %s", r.URL.Path)
+		}
+		fallbackHits++
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+	solver := &fakeSolver{}
+	c.Solver = solver
+
+	got, err := c.Login(context.Background(), "test@example.com", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Verified || got.SessionToken != testSessionTokenHex() {
+		t.Fatalf("login result = %+v", got)
+	}
+	if solver.calls != 0 {
+		t.Fatalf("solver calls = %d, want 0 (the sibling answered first)", solver.calls)
+	}
+	if primaryHits != 1 {
+		t.Fatalf("primary hits = %d, want 1", primaryHits)
+	}
+	if fallbackHits != 1 {
+		t.Fatalf("fallback hits = %d, want 1", fallbackHits)
+	}
+}
+
+// When every host is challenged, each gets one solve and the first success
+// wins: the primary stays blocked, the fallback clears after its solve.
+func TestChallengeSolvesEachHostWhenBothFail(t *testing.T) {
+	var primaryHits, fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		if fallbackHits <= 2 {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+	solver := &fakeSolver{}
+	c.Solver = solver
+
+	got, err := c.Login(context.Background(), "test@example.com", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Verified {
+		t.Fatalf("login result = %+v", got)
+	}
+	if solver.calls != 2 {
+		t.Fatalf("solver calls = %d, want 2 (one per challenged host)", solver.calls)
+	}
+	if want := fallback.URL + "/v1/account/login"; solver.lastURL != want {
+		t.Fatalf("last challenged URL = %q, want %q", solver.lastURL, want)
+	}
+	if primaryHits != 3 || fallbackHits != 3 {
+		t.Fatalf("primary hits = %d, fallback hits = %d; want 3 and 3 (probe, challenged retry, solved retry)",
+			primaryHits, fallbackHits)
+	}
+}
+
+// A transport reset on the sibling host is retried once: the edge can drop
+// the first connection right after challenging the primary.
+func TestFallbackTransportErrorRetried(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer primary.Close()
+	var fallbackHits int
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer fallback.Close()
+
+	transport := &failOnceTransport{host: strings.TrimPrefix(fallback.URL, "http://"), base: http.DefaultTransport}
+	c := NewClient()
+	c.HTTP = &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	if _, err := c.Login(context.Background(), "test@example.com", "password"); err != nil {
+		t.Fatal(err)
+	}
+	if !transport.failed || fallbackHits != 1 {
+		t.Fatalf("dropped=%v, fallback hits=%d; want one dropped connection and one success",
+			transport.failed, fallbackHits)
+	}
+}
+
+// failOnceTransport drops the first connection to host with an EOF.
+type failOnceTransport struct {
+	base   http.RoundTripper
+	host   string
+	failed bool
+}
+
+func (f *failOnceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.URL.Host == f.host && !f.failed {
+		f.failed = true
+		return nil, io.EOF
+	}
+	return f.base.RoundTrip(r)
+}
+
+// A transport failure on the primary host does not hide a healthy sibling:
+// the fallback is tried even when the primary drops every connection.
+func TestPrimaryTransportErrorFallsBackToSibling(t *testing.T) {
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.HTTP = &http.Client{Timeout: 5 * time.Second}
+	c.BaseURL = "http://127.0.0.1:1/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	got, err := c.Login(context.Background(), "test@example.com", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Verified {
+		t.Fatalf("login result = %+v", got)
+	}
+}
+
+// Without a solver the first 406 is terminal for the primary host, but the
+// fallback still gets its chance.
+func TestChallengeFallsBackWithoutSolver(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	if _, err := c.Login(context.Background(), "test@example.com", "password"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// When the fallback is challenged too, the caller still sees the
+// *ChallengeError marker (the engine renders the anti-bot wording from it).
+func TestFallbackChallengeKeepsMarker(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1a"
+	c.FallbackBaseURL = srv.URL + "/v1b"
+
+	_, err := c.Login(context.Background(), "test@example.com", "password")
+	var chErr *ChallengeError
+	if !errors.As(err, &chErr) {
+		t.Fatalf("error = %v, want *ChallengeError", err)
+	}
+	if hits != 2 {
+		t.Fatalf("hits = %d, want 2 (one per base, no retry loop)", hits)
+	}
+}
+
+// Ordinary API errors are final: a 4xx that is not a challenge must not be
+// replayed against the fallback.
+func TestNonChallengeErrorDoesNotFallBack(t *testing.T) {
+	var fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"errno":102,"message":"Unknown account"}`)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	_, err := c.Login(context.Background(), "test@example.com", "password")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Errno != 102 {
+		t.Fatalf("error = %v, want APIError errno 102", err)
+	}
+	if fallbackHits != 0 {
+		t.Fatalf("fallback hits = %d, want 0", fallbackHits)
+	}
+}
+
+// The fallback is a last resort: a healthy primary never contacts it.
+func TestFallbackUnusedWhenPrimarySucceeds(t *testing.T) {
+	var fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	if _, err := c.Login(context.Background(), "test@example.com", "password"); err != nil {
+		t.Fatal(err)
+	}
+	if fallbackHits != 0 {
+		t.Fatalf("fallback hits = %d, want 0", fallbackHits)
 	}
 }
 

@@ -83,6 +83,7 @@ class TvSetupTest {
                 TvSetupScreen(state = state, actions = actions)
             }
         }
+        rule.waitForIdle()
     }
 
     @Test
@@ -93,10 +94,10 @@ class TvSetupTest {
         rule.onNodeWithTag(SetupTags.CONTINUE).assertIsNotEnabled()
         rule.onNodeWithTag(SetupTags.CONSENT_ACCEPT).performScrollTo().performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag(SetupTags.CONTINUE).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.CONTINUE).performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag(SetupTags.CONTINUE).performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag(SetupTags.SIGN_IN_STEP).assertExists()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_STEP).performScrollTo().assertIsDisplayed()
     }
 
     @Test

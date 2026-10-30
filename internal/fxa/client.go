@@ -18,12 +18,13 @@ const maxResponseBytes = 1 << 20
 
 // Client talks to the FxA auth server.
 type Client struct {
-	BaseURL   string
-	HTTP      *http.Client
-	Now       func() time.Time // injectable clock for tests
-	Rand      io.Reader        // injectable nonce source for tests
-	Solver    ChallengeSolver  // optional anti-bot solver (internal/fastly)
-	UserAgent string           // platform UA; empty uses the package default
+	BaseURL         string
+	FallbackBaseURL string // tried after a BaseURL 406, before solving
+	HTTP            *http.Client
+	Now             func() time.Time // injectable clock for tests
+	Rand            io.Reader        // injectable nonce source for tests
+	Solver          ChallengeSolver  // optional anti-bot solver (internal/fastly)
+	UserAgent       string           // platform UA; empty uses the package default
 
 	// Browser OAuth endpoints; empty values fall back to the package defaults.
 	AuthorizationEndpoint string
@@ -36,6 +37,7 @@ type Client struct {
 func NewClient() *Client {
 	return &Client{
 		BaseURL:               DefaultBaseURL,
+		FallbackBaseURL:       DefaultFallbackBaseURL,
 		HTTP:                  &http.Client{Timeout: 30 * time.Second},
 		Now:                   time.Now,
 		Rand:                  rand.Reader,
@@ -217,24 +219,103 @@ func (c *Client) tokensFromResponse(raw []byte, fallbackRefresh string) (*Tokens
 	}, nil
 }
 
+// fallbackRetryDelay is the pause before retrying the sibling host once after
+// a transport-level failure (a reset or EOF). The edge occasionally drops the
+// first connection after challenging the primary; the login is safe to repeat.
+const fallbackRetryDelay = 500 * time.Millisecond
+
 // doJSON sends a request to a BaseURL-relative path, signs it with Hawk when a
 // session token is given, and retries HTTP 406 through the challenge solver.
+// The sibling FallbackBaseURL (when configured and distinct) is tried before
+// any solve: Fastly can hard-block one host and path while the other hostname
+// serves the same auth server, and a solve against a hard block cannot
+// succeed. Only when every host answers 406 does each one get a solve.
 func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, payload any) ([]byte, error) {
-	endpoint := strings.TrimRight(c.baseURL(), "/") + path
-	return c.doRequest(ctx, method, endpoint, sessionToken, "", payload)
+	bases := c.baseURLs()
+	if len(bases) == 1 {
+		return c.doRequest(ctx, method, strings.TrimRight(bases[0], "/")+path, sessionToken, "", payload, true)
+	}
+
+	var lastErr error
+
+	// First pass: probe every base without solving. An HTTP answer that is
+	// not a challenge is authoritative and ends the loop; a transport failure
+	// does not, because the sibling host may still answer.
+	for _, base := range bases {
+		raw, err := c.doJSONBase(ctx, base, method, path, sessionToken, payload, false, lastErr != nil)
+		if err == nil {
+			return raw, nil
+		}
+		var chErr *ChallengeError
+		if !errors.As(err, &chErr) && !isTransportError(err) {
+			return nil, err
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		lastErr = err
+	}
+	if c.Solver == nil {
+		return nil, lastErr
+	}
+
+	// Second pass: every host stayed challenged, so each gets one solve. A
+	// transport failure on one host still lets the other host's solve run.
+	for _, base := range bases {
+		raw, err := c.doJSONBase(ctx, base, method, path, sessionToken, payload, true, lastErr != nil)
+		if err == nil {
+			return raw, nil
+		}
+		var chErr *ChallengeError
+		if !errors.As(err, &chErr) && !isTransportError(err) {
+			return nil, err
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+// doJSONBase issues one BaseURL-relative attempt. afterChallenge reports that
+// an earlier base already answered 406; in that case a transport-level failure
+// is retried once, because the edge can reset a connection right after
+// challenging the primary.
+func (c *Client) doJSONBase(ctx context.Context, base, method, path, sessionToken string, payload any, solve, afterChallenge bool) ([]byte, error) {
+	endpoint := strings.TrimRight(base, "/") + path
+	raw, err := c.doRequest(ctx, method, endpoint, sessionToken, "", payload, solve)
+	if err == nil || !afterChallenge || ctx.Err() != nil || !isTransportError(err) {
+		return raw, err
+	}
+	timer := time.NewTimer(fallbackRetryDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return raw, err
+	case <-timer.C:
+	}
+	return c.doRequest(ctx, method, endpoint, sessionToken, "", payload, solve)
+}
+
+// isTransportError reports whether err is a net/http transport failure (dial,
+// TLS, connection reset or EOF) rather than a challenge or API response.
+func isTransportError(err error) bool {
+	var urlErr *url.Error
+	return errors.As(err, &urlErr)
 }
 
 // doEndpointJSON sends a request to a full endpoint, optionally authenticated
 // with a bearer token. Browser OAuth endpoints are absolute URLs and do not
 // go through BaseURL.
 func (c *Client) doEndpointJSON(ctx context.Context, method, endpoint, bearerToken string, payload any) ([]byte, error) {
-	return c.doRequest(ctx, method, endpoint, "", bearerToken, payload)
+	return c.doRequest(ctx, method, endpoint, "", bearerToken, payload, true)
 }
 
 // doRequest sends a request to endpoint, signs it with Hawk when a session
 // token is given or with a bearer token when one is given, and retries HTTP
-// 406 through the challenge solver when one is configured.
-func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, bearerToken string, payload any) ([]byte, error) {
+// 406 through the challenge solver when one is configured and solve is set.
+func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, bearerToken string, payload any, solve bool) ([]byte, error) {
 	var body []byte
 	if payload != nil {
 		var err error
@@ -292,7 +373,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, 
 		return req, nil
 	}
 
-	challengeTries := 0
+	challengeSolves := 0
 	for {
 		req, err := buildRequest()
 		if err != nil {
@@ -309,10 +390,15 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, 
 		}
 
 		if resp.StatusCode == http.StatusNotAcceptable {
-			challengeTries++
-			if c.Solver == nil || challengeTries >= 5 {
+			// One Solve already runs up to fastly's maxPostBackRounds
+			// post-back rounds and verifies the page it solved, so a retry
+			// that still 406s means this host cannot be cleared (a Fastly
+			// hard block, for example). Stop early instead of five pointless
+			// solves; doJSON decides which host, if any, still gets a chance.
+			if !solve || c.Solver == nil || challengeSolves >= 1 {
 				return nil, &ChallengeError{StatusCode: resp.StatusCode}
 			}
+			challengeSolves++
 			// Mirror guardian's shape: the returned error is both a
 			// *ChallengeError marker and errors.Is the solver's error.
 			if err := c.Solver.Solve(ctx, req.URL.String()); err != nil {
@@ -354,6 +440,17 @@ func (c *Client) baseURL() string {
 		return c.BaseURL
 	}
 	return DefaultBaseURL
+}
+
+// baseURLs returns the ordered bases for a BaseURL-relative request: the
+// primary first, then the fallback when it is configured and distinct.
+func (c *Client) baseURLs() []string {
+	primary := c.baseURL()
+	fallback := strings.TrimRight(c.FallbackBaseURL, "/")
+	if fallback == "" || fallback == strings.TrimRight(primary, "/") {
+		return []string{primary}
+	}
+	return []string{primary, fallback}
 }
 
 func (c *Client) httpClient() *http.Client {

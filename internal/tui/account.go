@@ -269,14 +269,16 @@ func (m *Model) browserPromptKey(k tea.KeyMsg) tea.Cmd {
 		return completeBrowserLogin(m.client, ac.browserID, url)
 	}
 	if len(k.Runes) > 0 {
-		ac.browserInput = appendBrowserRunes(ac.browserInput, k.Runes)
+		ac.browserInput = appendPrintableRunes(ac.browserInput, k.Runes)
 	}
 	return nil
 }
 
-// appendBrowserRunes appends printable pasted or typed runes, dropping control
-// characters so a multi-line paste cannot inject newlines into the URL.
-func appendBrowserRunes(dst string, runes []rune) string {
+// appendPrintableRunes appends printable pasted or typed runes, dropping
+// control characters. Windows delivers IME composition and unmapped keys as a
+// zero rune, and a multi-line paste can carry newlines; neither belongs in a
+// single-line field.
+func appendPrintableRunes(dst string, runes []rune) string {
 	var b strings.Builder
 	b.WriteString(dst)
 	for _, r := range runes {

@@ -6,6 +6,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `scripts/install-release.sh`: one-command Linux install from the newest
+  published release. It resolves the newest tag (prereleases included),
+  verifies the asset against `SHA256SUMS` and runs the bundled `install.sh`;
+  `--version vX.Y.Z` pins a release and `uninstall`/`--purge` are forwarded.
+
+## [0.7.2] - 2026-10-30
+
+Android TV setup and connected-test fixes.
+
+### Fixed
+
+- **TV setup layout**: the side column used `fillMaxSize` in a `Row`, so it took
+  the whole width and left the consent and sign-in content at zero width. Both
+  halves now share the row, and the step pane resets to the top when the step
+  changes so the focus request does not hide the heading.
+- **TV connected suite**: request initial focus on the UI thread, expand the
+  dashboard picker before selecting a city, use a non-active phase when testing
+  connect from the options page, and scroll the setup controls into view before
+  clicking.
+
+### Changed
+
+- CI uploads connected-test reports on failure and retries a transient gomobile
+  module fetch.
+- The Android default version is now `0.7.2` (versionCode 702); release builds
+  still take the tag version.
+
+## [0.7.1] - 2026-10-30
+
+Password sign-in recovery when Mozilla's edge hard-blocks the primary Firefox
+Accounts host, plus hardened terminal sign-in input.
+
+### Added
+
+- `KUMIHO_CONTROL_ENDPOINT` relocates the Windows control pipe so a
+  development daemon can run beside the installed service.
+
+### Fixed
+
+- **Sibling FxA host for a hard block**: Fastly can answer
+  `POST api.accounts.firefox.com/v1/account/login` with an empty `406` that no
+  solved challenge can clear. The shared engine now probes
+  `oauth.accounts.firefox.com/v1` (the same auth server) before spending a
+  solve, gives each challenged host one solve, and retries once after a
+  dropped connection on the sibling. The daemon, CLI, TUI, Windows GUI and
+  Android app all inherit the fix.
+- **Control characters in sign-in input**: Windows terminals deliver IME
+  composition and unmapped keys as zero runes. The TUI now drops control
+  characters from the email, password and 2FA fields, trims the email before
+  submitting, and the engine rejects control characters or inner whitespace
+  with **enter a valid email address** instead of forwarding a body FxA
+  rejects with errno 107.
+
+### Changed
+
+- The Android default version is now `0.7.1` (versionCode 701); release builds
+  still take the tag version.
+
 ## [0.7.0] - 2026-10-28
 
 Android TV and Google TV support. The Android app now ships one APK for phones
@@ -506,9 +568,12 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
+[0.7.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2
+[0.7.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1
+[0.7.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.0
 [0.6.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0
 [0.5.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.7.2...HEAD
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
