@@ -86,7 +86,7 @@ home `/var/lib/kumiho`); a regular account named `kumiho` is always kept.
 
 ## Windows 11
 
-Download `kumiho-v<version>-windows-amd64.zip` from the releases page and
+Download `Kumiho-Windows-amd64.zip` from the releases page and
 extract it, or build from a checkout with `make build-windows` (the installer
 then finds the binary in `dist\`). Run everything below in PowerShell **as
 Administrator**.

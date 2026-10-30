@@ -33,7 +33,7 @@ uninstalling.
 
 ## Installing
 
-Download `kumiho-v<version>-windows-amd64.zip`, extract it, and run the
+Download `Kumiho-Windows-amd64.zip`, extract it, and run the
 installer. For a double-click install use `install.cmd`; it self-elevates and
 passes your account to the installer. From an already-administrator PowerShell,
 run:

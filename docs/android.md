@@ -59,27 +59,26 @@ instructions are in [android-testing.md](android-testing.md).
 
 ### From a release
 
-The [v0.5.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2)
-is published. Each GitHub release carries three APKs and the usual
-`SHA256SUMS`:
+The [releases page](https://github.com/benyamin-git/kumiho/releases) carries
+three APKs and `SHA256SUMS`:
 
 | Asset | ABI | Use |
 |---|---|---|
-| `kumiho-v<version>-android-arm64-v8a.apk` | arm64-v8a | Most phones |
-| `kumiho-v<version>-android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
-| `kumiho-v<version>-android-universal.apk` | both | One file if unsure |
+| `Kumiho-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
+| `Kumiho-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
+| `Kumiho-Android-universal.apk` | both | One file if unsure |
 
-Those names are produced by `scripts/android-release.sh` and attached by
-`.github/workflows/release.yml`. Download from the project's GitHub Releases
-and check the APK against the `SHA256SUMS` published with it. Never install an
-APK from an untrusted mirror.
+Those stable names are attached by `.github/workflows/release.yml` from the
+per-version builds produced by `scripts/android-release.sh`. Download from the
+project's GitHub Releases and check the APK against the `SHA256SUMS`
+published with it. Never install an APK from an untrusted mirror.
 
 ### Updating
 
 There is **no auto-update and no in-app APK installer**. Settings → Software
-updates → **Check for updates** makes one request to GitHub's latest stable
-release when you tap it, compares versions and offers **Open release page**.
-It downloads nothing.
+updates → **Check for updates** makes one request to GitHub's release list
+when you tap it, compares versions and offers **Open release page**. It
+downloads nothing.
 
 To update manually, install the newer APK over the old one with the same
 signing key; app data (sign-in, settings, split selection) is kept. Android

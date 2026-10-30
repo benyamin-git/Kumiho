@@ -1,6 +1,6 @@
 # README screenshots
 
-`capture.sh` regenerates the six committed images under `screenshots/`:
+`capture.sh` regenerates the six desktop images under `screenshots/`:
 
 - `screenshots/windows-gui/` — the real GUI assets served by the Windows
   WebView2 shell, captured in the Linux dev harness at 1280×800 in the Dark
@@ -57,7 +57,37 @@ terminal and GUI captures sit together. The TUI sample data is fixed and uses
 the reserved `example.com` domain, `user@example.com` and TEST-NET-3 addresses.
 
 The full visual-review output stays under `/tmp/opencode/captures` and is not
-committed; this script copies only the six selected images into `screenshots/`.
+committed; this script copies only the six selected desktop images into
+`screenshots/`.
+
+## Android captures
+
+Run the phone screenshots on the phone emulator and the TV screenshots on the
+TV emulator. The AGP connected task uninstalls the app after the run, which
+deletes its external files, so install the already-built APKs and run the
+instrumentation directly:
+
+    source scripts/android-env.sh
+    adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk
+    adb -s emulator-5554 install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+    adb -s emulator-5554 shell am instrument -w \
+      -e class 'dev.benyamin.kumiho.ui.dashboard.DashboardScreenshotsTest,dev.benyamin.kumiho.ui.locations.LocationsScreenshotsTest,dev.benyamin.kumiho.ui.settings.SettingsScreenshotsTest' \
+      dev.benyamin.kumiho.debug.test/androidx.test.runner.AndroidJUnitRunner
+    adb -s emulator-5554 pull \
+      /sdcard/Android/data/dev.benyamin.kumiho.debug/files/dashboard-screenshots
+    adb -s emulator-5554 pull \
+      /sdcard/Android/data/dev.benyamin.kumiho.debug/files/locations-screenshots
+    adb -s emulator-5554 pull \
+      /sdcard/Android/data/dev.benyamin.kumiho.debug/files/settings-screenshots
+
+Copy the Dark captures `t11-connected-dark.png`, `t12-tree-dark.png` and
+`t13-app-dark.png` to `screenshots/android-phone/{dashboard,locations,settings}.png`.
+For the TV, run `TvScreenshotsTest` on `emulator-5556`, pull `tv-screenshots`,
+and copy `t13-{home,locations,settings}-dark.png` to
+`screenshots/android-tv/{home,locations,settings}.png`.
+
+The tests render the real Compose screens with fixed sample data at the
+emulators' native sizes (1080×2400 phone, 1920×1080 TV).
 
 The script leaves `dist/kumiho-gui-web-linux-amd64` built with the release
 version label. Run `make build-web` to restore the normal git-describe build.
