@@ -145,10 +145,13 @@ with an inline error and does not connect.
 ## The shell
 
 Five tabs — **Home**, **Locations**, **Account**, **Settings** and **More** —
-with a bottom bar on a phone and a navigation rail from 600 dp wide. **More**
-is a sheet with **Logs** and **Diagnostics**, which open as pages with a back
-arrow. Light, Dark and OLED themes and six accents are in Settings; the first
-run follows the system's light/dark preference, and OLED is opt-in.
+with a bottom bar on a phone and a navigation rail from 600 dp wide. The bottom
+bar drops **Settings**, then **Account**, into **More** when the width cannot
+show all five labels unwrapped, and marks **More** while one of those pages is
+open; the rail always shows all five. **More** is a sheet with those pages,
+then **Logs** and **Diagnostics**, which open as pages with a back arrow. Light,
+Dark and OLED themes and six accents are in Settings; the first run follows the
+system's light/dark preference, and OLED is opt-in.
 
 ## Dashboard
 

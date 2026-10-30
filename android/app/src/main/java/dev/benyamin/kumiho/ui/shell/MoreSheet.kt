@@ -15,12 +15,14 @@ import androidx.compose.ui.res.stringResource
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoRow
 import dev.benyamin.kumiho.ui.components.KumihoSectionHeader
+import dev.benyamin.kumiho.ui.components.destinationIcon
 import dev.benyamin.kumiho.ui.components.moreRouteIcon
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
- * The More sheet. Logs and Diagnostics live here as routes rather than as
- * bottom-bar destinations; picking one closes the sheet and opens the route.
+ * The More sheet. Pages the bottom bar did not have room for sit here first, so
+ * nothing becomes unreachable on a narrow phone; Logs and Diagnostics follow as
+ * routes. Picking anything closes the sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,6 +30,8 @@ fun MoreSheet(
     onDismiss: () -> Unit,
     onOpen: (MoreRoute) -> Unit,
     modifier: Modifier = Modifier,
+    overflow: List<Destination> = emptyList(),
+    onSelectTab: (Destination) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -46,6 +50,13 @@ fun MoreSheet(
                 .padding(bottom = Dimens.Space3),
         ) {
             KumihoSectionHeader(title = stringResource(R.string.more_title))
+            overflow.forEach { destination ->
+                KumihoRow(
+                    title = destination.label,
+                    icon = destinationIcon(destination),
+                    onClick = { onSelectTab(destination) },
+                )
+            }
             MoreRoute.entries.forEach { route ->
                 KumihoRow(
                     title = route.label,

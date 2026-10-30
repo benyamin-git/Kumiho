@@ -31,6 +31,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.benyamin.kumiho.ui.components.destinationIcon
 import dev.benyamin.kumiho.ui.components.moreRouteIcon
@@ -40,10 +43,11 @@ import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
  * The shell. It owns the only [Scaffold], the 64dp top bar and navigation: a
- * bottom bar under 600dp, a navigation rail at or above it. It applies the
- * system-bar insets once; the keyboard inset is left to the screens' own
- * `imePadding()`, so the bars stay under the keyboard instead of counting it
- * twice.
+ * bottom bar under 600dp, a navigation rail at or above it. A bottom bar too
+ * narrow for all five labels hands its trailing pages to the More sheet. It
+ * applies the system-bar insets once; the keyboard inset is left to the
+ * screens' own `imePadding()`, so the bars stay under the keyboard instead of
+ * counting it twice.
  */
 @Composable
 fun AppShell(
@@ -95,6 +99,15 @@ fun AppShell(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
         val barInsets = WindowInsets.safeDrawing.exclude(WindowInsets.ime)
+        // A narrow bottom bar gives up trailing pages to the More sheet rather
+        // than wrapping their labels; the rail always shows all five.
+        val labelWidth = widestLabelWidth().value
+        val barTabs = if (mode == NavMode.Rail) {
+            Destination.tabs
+        } else {
+            bottomBarTabs(maxWidth.value, labelWidth)
+        }
+        val overflow = Destination.tabs - barTabs.toSet()
         var moreSheetOpen by remember { mutableStateOf(false) }
         val back = rememberUpdatedState(onBack)
         val onNavClick: (Destination) -> Unit = { destination ->
@@ -126,6 +139,7 @@ fun AppShell(
                 if (mode == NavMode.BottomBar) {
                     BottomBar(
                         selected = state.selectedTab,
+                        tabs = barTabs,
                         onSelect = onNavClick,
                         modifier = Modifier.windowInsetsPadding(
                             barInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
@@ -172,6 +186,11 @@ fun AppShell(
 
         if (moreSheetOpen) {
             MoreSheet(
+                overflow = overflow,
+                onSelectTab = { destination ->
+                    moreSheetOpen = false
+                    onSelectTab(destination)
+                },
                 onDismiss = { moreSheetOpen = false },
                 onOpen = { route ->
                     moreSheetOpen = false
@@ -182,16 +201,31 @@ fun AppShell(
     }
 }
 
+/**
+ * The widest bottom-bar label at the bar's own type scale, in dp. Measuring it
+ * is what lets the bar react to the system font scale, not just the width.
+ */
+@Composable
+private fun widestLabelWidth(): Dp {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelMedium
+    val widest = Destination.tabs.maxOf { measurer.measure(it.label, style).size.width }
+    return with(LocalDensity.current) { widest.toDp() }
+}
+
 @Composable
 private fun BottomBar(
     selected: Destination,
+    tabs: List<Destination>,
     onSelect: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // A page that has moved into the More sheet keeps More marked.
+    val marked = if (selected in tabs) selected else Destination.More
     NavigationBar(modifier = modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-        Destination.tabs.forEach { destination ->
+        tabs.forEach { destination ->
             NavigationBarItem(
-                selected = destination == selected,
+                selected = destination == marked,
                 onClick = { onSelect(destination) },
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
                 label = { Text(destination.label) },

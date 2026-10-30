@@ -38,6 +38,42 @@ class ShellNavigationTest {
     }
 
     @Test
+    fun `a narrow bar moves trailing pages into the More sheet`() {
+        // A "Locations" label at the bar's 12sp scale, in dp.
+        val label = 54f
+        // Five items need 322dp, four need 256dp, three need 190dp.
+        assertEquals(Destination.tabs, bottomBarTabs(widthDp = 360f, labelWidthDp = label))
+        assertEquals(
+            listOf(Destination.Home, Destination.Locations, Destination.Account, Destination.More),
+            bottomBarTabs(widthDp = 320f, labelWidthDp = label),
+        )
+        assertEquals(
+            listOf(Destination.Home, Destination.Locations, Destination.More),
+            bottomBarTabs(widthDp = 240f, labelWidthDp = label),
+        )
+        // Home, Locations and More are the floor: the bar never shrinks past them.
+        assertEquals(
+            listOf(Destination.Home, Destination.Locations, Destination.More),
+            bottomBarTabs(widthDp = 120f, labelWidthDp = label),
+        )
+
+        // The sheet lists exactly what the bar gave up, still in shell order.
+        assertEquals(
+            listOf(Destination.Settings),
+            Destination.tabs - bottomBarTabs(widthDp = 320f, labelWidthDp = label).toSet(),
+        )
+        assertEquals(
+            listOf(Destination.Account, Destination.Settings),
+            Destination.tabs - bottomBarTabs(widthDp = 240f, labelWidthDp = label).toSet(),
+        )
+        // Bigger text moves a page out sooner, even on a wide phone.
+        assertEquals(
+            listOf(Destination.Home, Destination.Locations, Destination.Account, Destination.More),
+            bottomBarTabs(widthDp = 411f, labelWidthDp = 75f),
+        )
+    }
+
+    @Test
     fun `routes are the shell routes plus the two More routes`() {
         assertEquals(
             listOf("home", "locations", "account", "settings"),

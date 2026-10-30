@@ -37,6 +37,27 @@ enum class NavMode { BottomBar, Rail }
 fun navMode(widthDp: Float): NavMode =
     if (widthDp >= 600f) NavMode.Rail else NavMode.BottomBar
 
+/** The 8dp the Material navigation bar leaves between its items. */
+private const val BarItemGapDp = 8f
+
+/** The margin a label keeps from its item's edge so it never touches. */
+private const val BarLabelMarginDp = 4f
+
+/**
+ * The bottom-bar items for [widthDp] when [labelWidthDp] is the widest label and
+ * every item gets an equal share of the bar: Home and Locations always stay,
+ * Settings and then Account move to the More sheet as the width runs out, and
+ * More is always last.
+ */
+fun bottomBarTabs(widthDp: Float, labelWidthDp: Float): List<Destination> {
+    val pages = Destination.tabs - Destination.More
+    // The kept pages plus More must fit, with one gap between each pair.
+    val keep = (2..pages.size).lastOrNull { kept ->
+        (kept + 1) * (labelWidthDp + BarLabelMarginDp) + BarItemGapDp * kept <= widthDp
+    } ?: 2
+    return pages.take(keep) + Destination.More
+}
+
 /**
  * One navigation state: the selected tab plus an optional More route stacked on
  * top. While a More route is showing, the More item stays marked.

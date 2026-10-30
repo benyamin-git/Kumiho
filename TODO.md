@@ -72,6 +72,17 @@ Android TV, Windows GUI and the TUI.
   - Done: the phone override chip is `StatusTone.Neutral`; the TV override text
     was already neutral.
 
+- [x] **B5 — Keep the bottom bar labels unwrapped on narrow phones**
+  - Problem: on a narrower phone (found on v0.8.1), the **Locations** label
+    wrapped its last letter because the five bottom-bar labels did not fit.
+  - Expected: the bar gives a page up to **More** rather than wrapping a label.
+  - Done: the phone bar measures its widest label at the bar's own type scale
+    and drops **Settings**, then **Account**, into **More** as the width or the
+    system font scale runs out. Home, Locations and More always stay, the
+    navigation rail still shows all five, the More sheet lists the moved pages
+    first, and More stays marked while one of them is open. Covered by
+    `ShellNavigationTest` and a narrow-width `ShellMoreRoutesTest` case.
+
 ## README and GitHub presentation
 
 - [x] **C1 — Shorten and restructure the README**
