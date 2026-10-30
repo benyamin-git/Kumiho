@@ -352,6 +352,22 @@ series, the GitHub release is marked as a prerelease. Hyphenated tags such as
 `v0.7.2` (2026-10-30) ran the workflow successfully and published the desktop
 and Android assets.
 
+### Published v0.7.2 release
+
+Tag `v0.7.2` points at commit `a2a45e8`. The
+[release workflow](https://github.com/benyamin-git/kumiho/actions/runs/41014756649)
+passed and the [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2)
+contains Linux amd64/arm64 and Windows amd64 zips, the three signed Android
+APKs, and `SHA256SUMS`. The workflow's APK verifier checked package
+`dev.benyamin.kumiho`, version `0.7.2`/702, min/target SDK 26/36, the exact arm
+ABIs, 16 KB alignment, the arm64 `p_align=0x4000` and the production
+certificate. The universal APK is 26.08 MiB (arm64-v8a 14.26 MiB, armeabi-v7a
+13.90 MiB). v0.7.2 physical acceptance is pending.
+
+The release includes the v0.7.1 sibling-host sign-in fix and the TV setup layout
+and connected-suite fixes. The main-branch CI run for `a2a45e8` passed all four
+jobs before the tag was created.
+
 ### Published v0.7.1 release
 
 Tag `v0.7.1` points at commit `b152f7c`. The
