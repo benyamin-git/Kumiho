@@ -7,6 +7,7 @@ doctor.json
 .tools/
 .ai-state
 .superpowers/
+/opencode.json
 
 # Editors and signing material (Gradle state lives in android/.gitignore)
 .idea/
