@@ -168,3 +168,21 @@ func (c *Controller) SelectLocation(ctx context.Context, countryCode, cityCode, 
 	c.notify()
 	return nil
 }
+
+// LocationsView builds the complete locations reply every client consumes:
+// visible countries, resolved favorites and recents, cached latency, and the
+// locked-view state.
+func (c *Controller) LocationsView(ctx context.Context, refresh bool) (api.LocationsResult, error) {
+	countries, err := c.Locations(ctx, refresh)
+	if err != nil {
+		return api.LocationsResult{}, err
+	}
+	favorites, recents := c.LocationRefs(countries)
+	return api.LocationsResult{
+		Countries:   countries,
+		Favorites:   favorites,
+		Recents:     recents,
+		Latency:     c.CachedLatency(countries),
+		AllowLocked: c.store.EffectiveConfig().AllowLocked,
+	}, nil
+}

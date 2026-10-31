@@ -74,6 +74,7 @@ func Run(ctx context.Context) error {
 		ring:     ring,
 		shutdown: cancel,
 		ping:     ctrl.PingHosts,
+		refs:     ctrl,
 		conns:    make(map[*ipc.Conn]struct{}),
 	}
 	ctrl.OnChange(h.broadcastStatus)
@@ -109,11 +110,20 @@ func Run(ctx context.Context) error {
 // completes. It is a field so daemon tests can substitute a controlled run.
 type pingRun func(context.Context, []string, func(api.PingResult)) api.PingDone
 
+// locationsAPI is the engine surface behind the locations and favorites
+// commands. The concrete controller implements it; tests substitute a fake.
+type locationsAPI interface {
+	LocationsView(context.Context, bool) (api.LocationsResult, error)
+	SetFavorite(context.Context, settings.LocationRef, bool) ([]api.LocationRef, error)
+	ClearRecents() error
+}
+
 type control struct {
 	ctrl     *engine.Controller
 	ring     *logging.Ring
 	shutdown func()
 	ping     pingRun
+	refs     locationsAPI
 
 	mu    sync.Mutex
 	conns map[*ipc.Conn]struct{}
@@ -215,15 +225,47 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
-		countries, err := h.ctrl.Locations(ctx, p.Refresh)
+		if h.refs == nil {
+			replyErr(api.CodeInternal, "locations are unavailable")
+			return
+		}
+		res, err := h.refs.LocationsView(ctx, p.Refresh)
 		if err != nil {
 			replyCtrlErr(err)
 			return
 		}
-		_ = conn.Reply(env.ID, ipc.TypeLocations, api.LocationsResult{
-			Countries: countries,
-			Latency:   h.ctrl.CachedLatency(countries),
-		})
+		_ = conn.Reply(env.ID, ipc.TypeLocations, res)
+
+	case ipc.TypeFavoriteLocation:
+		var p api.FavoriteLocationPayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		if h.refs == nil {
+			replyErr(api.CodeInternal, "locations are unavailable")
+			return
+		}
+		if _, err := h.refs.SetFavorite(ctx, settings.LocationRef{
+			CountryCode: p.CountryCode,
+			CityCode:    p.CityCode,
+			Server:      p.Server,
+		}, p.Favorite); err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
+
+	case ipc.TypeClearRecents:
+		if h.refs == nil {
+			replyErr(api.CodeInternal, "locations are unavailable")
+			return
+		}
+		if err := h.refs.ClearRecents(); err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		replyOK()
 
 	case ipc.TypeSelectLocation:
 		var p api.SelectLocationPayload

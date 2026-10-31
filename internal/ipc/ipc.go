@@ -36,6 +36,8 @@ const (
 	TypeLocations           = "locations"
 	TypePing                = "ping"
 	TypeSelectLocation      = "select_location"
+	TypeFavoriteLocation    = "favorite_location"
+	TypeClearRecents        = "clear_recents"
 	TypeSettingsGet         = "settings_get"
 	TypeSettingsSet         = "settings_set"
 	TypeRelayTest           = "relay_test"

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -366,5 +367,55 @@ func TestLocationRefsNoNetworkWhenCountriesProvided(t *testing.T) {
 	// server-list URL must not matter.
 	if favorites, recents := ctrl.LocationRefs(countries); len(favorites) != 0 || len(recents) != 0 {
 		t.Fatalf("favorites=%+v recents=%+v", favorites, recents)
+	}
+}
+
+func TestLocationsViewIncludesRefsLatencyAndLockedState(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.serverListURL = servingServerListServer(t, pingFixture(3)).URL
+	view, err := ctrl.LocationsView(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Countries) != 3 || len(view.Favorites) != 0 || len(view.Recents) != 0 {
+		t.Fatalf("initial view = %+v", view)
+	}
+	if view.AllowLocked {
+		t.Fatal("allow_locked should default off")
+	}
+	if len(view.Latency) != 0 {
+		t.Fatalf("initial latency = %+v", view.Latency)
+	}
+
+	seedPing(t, ctrl, pingHost(0), 5*time.Millisecond, true, time.Time{})
+	seedPing(t, ctrl, pingHost(1), 0, false, time.Time{})
+	if err := ctrl.store.UpdateState(func(s *settings.State) {
+		s.Favorites = []settings.LocationRef{{CountryCode: "C0", CityCode: "C1", Server: pingHost(0)}}
+		s.Recents = []settings.LocationRef{{CountryCode: "C1", CityCode: "C1", Server: pingHost(1)}}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.SetSetting("allow_locked", "on"); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err = ctrl.LocationsView(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !view.AllowLocked {
+		t.Fatal("allow_locked override not reflected")
+	}
+	if len(view.Favorites) != 1 || view.Favorites[0].Server != pingHost(0) {
+		t.Fatalf("favorites = %+v", view.Favorites)
+	}
+	if len(view.Recents) != 1 || view.Recents[0].Server != pingHost(1) {
+		t.Fatalf("recents = %+v", view.Recents)
+	}
+	if sample, ok := view.Latency[pingHost(0)]; !ok || sample.RTTMS == nil || *sample.RTTMS != 5 {
+		t.Fatalf("successful latency = %+v", sample)
+	}
+	if sample, ok := view.Latency[pingHost(1)]; !ok || sample.RTTMS != nil {
+		t.Fatalf("failed latency = %+v", sample)
 	}
 }

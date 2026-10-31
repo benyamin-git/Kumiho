@@ -77,11 +77,11 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		}
 		lctx, cancel := context.WithTimeout(ctx, locationsTimeout)
 		defer cancel()
-		countries, err := f.ctrl.Locations(lctx, p.Refresh)
+		res, err := f.ctrl.LocationsView(lctx, p.Refresh)
 		if err != nil {
 			return f.fail(err)
 		}
-		return encodeResponse("locations", api.LocationsResult{Countries: countries})
+		return encodeResponse("locations", res)
 
 	case "select_location":
 		var p api.SelectLocationPayload
