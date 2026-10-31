@@ -258,6 +258,61 @@ func TestRuntimeOverrides(t *testing.T) {
 	}
 }
 
+func TestAllowLockedOverride(t *testing.T) {
+	paths := testPaths(t)
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.EffectiveConfig().AllowLocked {
+		t.Fatal("allow_locked should default to false")
+	}
+	if err := st.SetOverride("allow_locked", "on"); err != nil {
+		t.Fatal(err)
+	}
+	if !st.EffectiveConfig().AllowLocked {
+		t.Fatal("allow_locked override not applied")
+	}
+	if !contains(st.OverriddenKeys(), "allow_locked") {
+		t.Fatalf("OverriddenKeys = %v, want allow_locked", st.OverriddenKeys())
+	}
+	if err := st.SetOverride("allow_locked", "maybe"); err == nil {
+		t.Fatal("invalid allow_locked value accepted")
+	}
+	if err := st.ClearOverride("allow_locked"); err != nil {
+		t.Fatal(err)
+	}
+	if st.EffectiveConfig().AllowLocked {
+		t.Fatal("allow_locked clear did not restore the default")
+	}
+}
+
+func TestAllowLockedConfigAndReset(t *testing.T) {
+	paths := testPaths(t)
+	if err := os.WriteFile(paths.Config, []byte("allow_locked = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.EffectiveConfig().AllowLocked {
+		t.Fatal("admin allow_locked=true was not applied")
+	}
+	if err := st.SetOverride("allow_locked", "off"); err != nil {
+		t.Fatal(err)
+	}
+	if st.EffectiveConfig().AllowLocked {
+		t.Fatal("allow_locked=off override was not applied")
+	}
+	if err := st.ClearOverride("allow_locked"); err != nil {
+		t.Fatal(err)
+	}
+	if !st.EffectiveConfig().AllowLocked {
+		t.Fatal("clearing allow_locked did not restore the admin config")
+	}
+}
+
 func TestSetOverrideValidation(t *testing.T) {
 	paths := testPaths(t)
 	st, err := Open(paths)

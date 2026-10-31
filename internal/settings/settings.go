@@ -100,6 +100,7 @@ type Config struct {
 	AccountRotation   bool     `toml:"account_rotation"`
 	RotationThreshold int      `toml:"rotation_threshold"`
 	RelayURL          string   `toml:"relay_url"`
+	AllowLocked       bool     `toml:"allow_locked"`
 }
 
 // DefaultConfig returns the built-in defaults (PLAN.md §8).
@@ -265,7 +266,8 @@ type State struct {
 	RotationThreshold *int  `json:"rotation_threshold,omitempty"`
 
 	// v0.9.0 region truth.
-	RelayURL *string `json:"relay_url,omitempty"`
+	RelayURL    *string `json:"relay_url,omitempty"`
+	AllowLocked *bool   `json:"allow_locked,omitempty"`
 }
 
 // Store owns the config/state pair and persists state atomically.
@@ -454,6 +456,9 @@ func (s *Store) effectiveConfigLocked() Config {
 	if st.RelayURL != nil {
 		cfg.RelayURL = *st.RelayURL
 	}
+	if st.AllowLocked != nil {
+		cfg.AllowLocked = *st.AllowLocked
+	}
 	return cfg
 }
 
@@ -492,6 +497,7 @@ func (s *Store) OverriddenKeys() []string {
 	add("account_rotation", st.AccountRotation != nil)
 	add("rotation_threshold", st.RotationThreshold != nil)
 	add("relay_url", st.RelayURL != nil)
+	add("allow_locked", st.AllowLocked != nil)
 	sort.Strings(keys)
 	return keys
 }
@@ -542,7 +548,7 @@ func (s *Store) SetOverride(key, value string) error {
 		s.state = st
 		return s.saveStateLocked()
 
-	case "exit_check", "redact_targets", "allow_lan", "http_proxy", "solve_challenges", "account_rotation":
+	case "exit_check", "redact_targets", "allow_lan", "http_proxy", "solve_challenges", "account_rotation", "allow_locked":
 		v, err := parseOnOff(value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", key, err)
@@ -566,6 +572,9 @@ func (s *Store) SetOverride(key, value string) error {
 		case "account_rotation":
 			cand.AccountRotation = v
 			st.AccountRotation = &v
+		case "allow_locked":
+			cand.AllowLocked = v
+			st.AllowLocked = &v
 		}
 
 	case "log_level":
@@ -668,6 +677,8 @@ func (s *Store) ClearOverride(key string) error {
 		st.UpstreamProxy = nil
 	case "relay_url":
 		st.RelayURL = nil
+	case "allow_locked":
+		st.AllowLocked = nil
 	case "exclude_cidrs":
 		st.ExcludeCIDRs = nil
 	case "allow_lan":

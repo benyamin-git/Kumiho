@@ -18,32 +18,73 @@ import (
 // a normal (non-refresh) request re-fetches it.
 const locationsCacheTTL = 30 * time.Minute
 
-// Locations returns the server list, from cache when fresh. A failed refresh
-// falls back to the in-memory list, then to the disposable disk cache.
+// filterContext snapshots the values the server-list JEXL expressions read.
+func (c *Controller) filterContext() serverlist.Context {
+	c.mu.Lock()
+	country := c.exitCountry
+	c.mu.Unlock()
+	return serverlist.Context{FirefoxVersion: c.firefoxVersion, Country: country}
+}
+
+// parseServerList evaluates the raw collection with the current context and
+// settings. It is called on cache hits too, so allow_locked and a newly known
+// exit country take effect without a network fetch.
+func (c *Controller) parseServerList(raw []byte) ([]serverlist.Country, error) {
+	opts := serverlist.Options{
+		Context:     c.filterContext(),
+		AllowLocked: c.store.EffectiveConfig().AllowLocked,
+	}
+	if c.log != nil {
+		opts.Logf = func(format string, args ...any) {
+			c.log.Logf(logging.Debug, "serverlist", format, args...)
+		}
+	}
+	return serverlist.ParseWithOptions(raw, opts)
+}
+
+// Locations returns the visible server list from a fresh raw payload, or
+// fetches it. A failed non-451 refresh falls back to the in-memory raw payload,
+// then to the disposable disk cache, re-filtering both with current options.
 func (c *Controller) Locations(ctx context.Context, refresh bool) ([]serverlist.Country, error) {
 	c.mu.Lock()
-	cached := c.locations
+	raw := c.locationsRaw
 	cachedAt := c.locationsAt
 	c.mu.Unlock()
 
-	if !refresh && cached != nil && time.Since(cachedAt) < locationsCacheTTL {
-		return cached, nil
+	if !refresh && len(raw) > 0 && time.Since(cachedAt) < locationsCacheTTL {
+		countries, err := c.parseServerList(raw)
+		if err != nil {
+			return nil, err
+		}
+		serverlist.SortCountries(countries)
+		c.mu.Lock()
+		c.locations = countries
+		c.mu.Unlock()
+		return countries, nil
 	}
 
-	raw, err := serverlist.FetchRawFrom(ctx, c.httpClient, c.serverListURL)
+	fetched, err := serverlist.FetchRawFrom(ctx, c.httpClient, c.serverListURL)
 	if err != nil {
 		// A 451 is terminal: do not mask it with a cached list that can no
 		// longer connect either.
 		if re := c.regionBlocked(err); re != nil {
 			return nil, re
 		}
-		if cached != nil {
-			c.log.Logf(logging.Warn, "serverlist", "refresh failed, keeping cached list: %v", err)
-			return cached, nil
+		if len(raw) > 0 {
+			countries, perr := c.parseServerList(raw)
+			if perr == nil {
+				serverlist.SortCountries(countries)
+				c.mu.Lock()
+				c.locations = countries
+				c.mu.Unlock()
+				c.log.Logf(logging.Warn, "serverlist", "refresh failed, keeping cached list: %v", err)
+				return countries, nil
+			}
+			c.log.Logf(logging.Warn, "serverlist", "cached server list is no longer parseable: %v", perr)
 		}
 		return c.diskCacheFallback(err)
 	}
-	countries, err := serverlist.Parse(raw)
+	countries, err := c.parseServerList(fetched)
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +92,13 @@ func (c *Controller) Locations(ctx context.Context, refresh bool) ([]serverlist.
 
 	// Cache only a payload that parsed, best effort: the disk cache is a
 	// convenience and must never fail a successful refresh.
-	if err := serverlist.SaveCache(c.serverListCache, raw); err != nil {
+	if err := serverlist.SaveCache(c.serverListCache, fetched); err != nil {
 		c.log.Logf(logging.Warn, "serverlist", "could not cache server list: %v", err)
 	}
 
 	c.mu.Lock()
 	c.locations = countries
+	c.locationsRaw = append([]byte(nil), fetched...)
 	c.locationsAt = time.Now()
 	c.mu.Unlock()
 
@@ -78,7 +120,7 @@ func (c *Controller) diskCacheFallback(fetchErr error) ([]serverlist.Country, er
 		return nil, fetchErr
 	}
 
-	countries, err := serverlist.Parse(raw)
+	countries, err := c.parseServerList(raw)
 	if err == nil && len(countries) == 0 {
 		err = errors.New("no locations")
 	}

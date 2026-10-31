@@ -222,6 +222,7 @@ type SettingsView struct {
 	RotationThreshold    int      `json:"rotation_threshold"`
 	RelayURL             string   `json:"relay_url,omitempty"`
 	RelayTokenSet        bool     `json:"relay_token_set"`
+	AllowLocked          bool     `json:"allow_locked"`
 }
 
 // RelayTestResult reports one control-plane relay health probe. LatencyMS is

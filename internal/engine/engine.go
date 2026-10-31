@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,6 +59,19 @@ const (
 	regionBlockedRelayFailed    = "Mozilla returned HTTP 451 and the configured relay failed: %s. Check the relay URL and token in Settings → Region."
 	edgeBlockedMessage          = "The VPN edge refused this region (HTTP 451). A control-plane relay cannot fix the VPN data path; connect from a supported region."
 )
+
+var firefoxVersionPattern = regexp.MustCompile(`Firefox/([0-9][^\s;)]*)`)
+
+// parseFirefoxVersion extracts the Firefox version from a browser user agent.
+// An absent or malformed version is empty, which makes filter expressions that
+// need env.version fail open.
+func parseFirefoxVersion(ua string) string {
+	m := firefoxVersionPattern.FindStringSubmatch(ua)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
 
 type pendingLogin struct {
 	email              string
@@ -110,6 +124,9 @@ type Controller struct {
 	plat                 platform.Provider
 	nc                   platform.NetConfig
 	userAgent            string
+	// firefoxVersion is the browser version used by server-list JEXL
+	// expressions. It is parsed once from the FxA browser identity.
+	firefoxVersion string
 
 	// upstreamDialer is the bypass dialer for edge connections (nil until
 	// UseBypassDialer runs, which is fine for tests).
@@ -150,8 +167,9 @@ type Controller struct {
 	pending  *pendingLogin
 	onChange []func()
 
-	locations   []serverlist.Country
-	locationsAt time.Time
+	locations    []serverlist.Country
+	locationsRaw []byte
+	locationsAt  time.Time
 
 	// Tunnel state (PLAN.md §4.1).
 	session      upstreamSession
@@ -202,6 +220,7 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		plat:            plat,
 		nc:              plat.NetConfig(),
 		userAgent:       ua,
+		firefoxVersion:  parseFirefoxVersion(fxa.BrowserUserAgent),
 		httpClient:      &http.Client{Timeout: 20 * time.Second},
 		serverListURL:   serverlist.RecordsURL,
 		serverListCache: filepath.Join(filepath.Dir(store.Paths().State), "serverlist.json"),
@@ -1676,6 +1695,7 @@ func (c *Controller) Settings() api.SettingsView {
 		RotationThreshold:    cfg.RotationThreshold,
 		RelayURL:             cfg.RelayURL,
 		RelayTokenSet:        c.store.RelayTokenSet(),
+		AllowLocked:          cfg.AllowLocked,
 		Overridden:           c.store.OverriddenKeys(),
 	}
 }
