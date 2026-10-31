@@ -219,6 +219,8 @@ type SettingsView struct {
 	KeepaliveProfile     string   `json:"keepalive_profile"`
 	AccountRotation      bool     `json:"account_rotation"`
 	RotationThreshold    int      `json:"rotation_threshold"`
+	RelayURL             string   `json:"relay_url,omitempty"`
+	RelayTokenSet        bool     `json:"relay_token_set"`
 }
 
 // SettingsSetPayload changes one runtime setting. Reset drops the persisted

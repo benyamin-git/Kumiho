@@ -436,6 +436,106 @@ func TestSetSetting(t *testing.T) {
 	}
 }
 
+func TestRelaySettings(t *testing.T) {
+	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
+
+	view := ctrl.Settings()
+	if view.RelayURL != "" || view.RelayTokenSet {
+		t.Fatalf("initial relay view = %+v", view)
+	}
+
+	if err := ctrl.SetSetting("relay_url", "https://relay.example"); err != nil {
+		t.Fatal(err)
+	}
+	view = ctrl.Settings()
+	if view.RelayURL != "https://relay.example" {
+		t.Fatalf("relay_url = %q", view.RelayURL)
+	}
+	if !containsString(view.Overridden, "relay_url") {
+		t.Fatalf("relay_url not listed as overridden: %v", view.Overridden)
+	}
+	if err := ctrl.SetSetting("relay_url", "http://relay.example"); err == nil {
+		t.Fatal("expected invalid relay URL to be rejected")
+	}
+	if got := ctrl.Settings().RelayURL; got != "https://relay.example" {
+		t.Fatalf("failed set changed relay_url to %q", got)
+	}
+
+	const token = "relay-secret-token-123"
+	ctrl.log.Clear()
+	if err := ctrl.SetSetting("relay_token", "  "+token+"  "); err != nil {
+		t.Fatal(err)
+	}
+	view = ctrl.Settings()
+	if !view.RelayTokenSet {
+		t.Fatal("RelayTokenSet = false after write")
+	}
+	if containsString(view.Overridden, "relay_token") {
+		t.Fatal("relay_token must not be a settings override")
+	}
+	tokenPath := filepath.Join(filepath.Dir(paths.Tokens), "relay.token")
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(data)); got != token {
+		t.Fatalf("token file = %q, want %q", got, token)
+	}
+	wire, err := json.Marshal(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(wire), token) {
+		t.Fatal("SettingsView JSON exposes the relay token")
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(wire, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw["relay_token_set"] != true || raw["relay_url"] != "https://relay.example" {
+		t.Fatalf("relay wire fields = %v", raw)
+	}
+	state, err := os.ReadFile(paths.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(state), token) {
+		t.Fatal("state.json exposes the relay token")
+	}
+	for _, entry := range ctrl.log.Snapshot() {
+		if strings.Contains(entry.Msg, token) {
+			t.Fatalf("relay token was logged: %q", entry.Msg)
+		}
+	}
+
+	if err := ctrl.SetSetting("relay_token", "   "); err == nil {
+		t.Fatal("expected an empty relay token to be rejected")
+	}
+	if !ctrl.Settings().RelayTokenSet {
+		t.Fatal("failed empty set cleared the token")
+	}
+	if err := ctrl.ApplySetting(api.SettingsSetPayload{Key: "relay_token", Reset: true}); err != nil {
+		t.Fatal(err)
+	}
+	if ctrl.Settings().RelayTokenSet {
+		t.Fatal("RelayTokenSet = true after reset")
+	}
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Fatalf("token file still exists after reset: %v", err)
+	}
+
+	if err := ctrl.ApplySetting(api.SettingsSetPayload{Key: "relay_url", Reset: true}); err != nil {
+		t.Fatal(err)
+	}
+	view = ctrl.Settings()
+	if view.RelayURL != "" {
+		t.Fatalf("relay_url after reset = %q", view.RelayURL)
+	}
+	if containsString(view.Overridden, "relay_url") {
+		t.Fatalf("relay_url still listed as overridden: %v", view.Overridden)
+	}
+}
+
 // The v0.4.0 keys reach the clients like every other runtime setting: the
 // view carries the effective value, the key is listed as overridden while
 // the override is persisted, and a reset restores the default.

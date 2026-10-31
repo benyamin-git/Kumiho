@@ -301,6 +301,198 @@ func TestSetOverrideValidation(t *testing.T) {
 	}
 }
 
+func TestRelayURLValidation(t *testing.T) {
+	for _, raw := range []string{
+		"",
+		"https://relay.example",
+		"https://relay.example/",
+		"https://relay.example:8443",
+	} {
+		cfg := DefaultConfig()
+		cfg.RelayURL = raw
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("RelayURL %q rejected: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{
+		"http://relay.example",
+		"https://relay.example/api",
+		"https://relay.example?x=1",
+		"https://user@relay.example",
+	} {
+		cfg := DefaultConfig()
+		cfg.RelayURL = raw
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("RelayURL %q accepted, want error", raw)
+		}
+	}
+}
+
+func TestRelaySettings(t *testing.T) {
+	paths := testPaths(t)
+	paths.Tokens = filepath.Join(filepath.Dir(paths.State), "tokens.json")
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.EffectiveConfig().RelayURL; got != "" {
+		t.Fatalf("default relay URL = %q, want empty", got)
+	}
+	if err := st.SetOverride("relay_url", "https://relay.example"); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.EffectiveConfig().RelayURL; got != "https://relay.example" {
+		t.Fatalf("effective relay URL = %q", got)
+	}
+	if st.Config().RelayURL != "" {
+		t.Fatal("admin config must stay untouched")
+	}
+	if !contains(st.OverriddenKeys(), "relay_url") {
+		t.Fatal("relay_url not listed as overridden")
+	}
+
+	if err := st.SetOverride("relay_url", "http://relay.example"); err == nil {
+		t.Fatal("expected invalid relay URL to be rejected")
+	}
+	if got := st.EffectiveConfig().RelayURL; got != "https://relay.example" {
+		t.Fatalf("failed set changed relay URL to %q", got)
+	}
+
+	reopened, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.EffectiveConfig().RelayURL; got != "https://relay.example" {
+		t.Fatalf("relay URL did not persist: %q", got)
+	}
+	if err := reopened.SetOverride("relay_url", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.EffectiveConfig().RelayURL; got != "" {
+		t.Fatalf("relay URL after empty set = %q, want empty", got)
+	}
+	if contains(reopened.OverriddenKeys(), "relay_url") {
+		t.Fatal("empty set did not clear the relay_url override")
+	}
+
+	if err := os.WriteFile(paths.Config, []byte("relay_url = \"https://admin.example\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := admin.EffectiveConfig().RelayURL; got != "https://admin.example" {
+		t.Fatalf("admin relay URL = %q", got)
+	}
+	if err := admin.SetOverride("relay_url", "https://override.example"); err != nil {
+		t.Fatal(err)
+	}
+	if got := admin.EffectiveConfig().RelayURL; got != "https://override.example" {
+		t.Fatalf("override relay URL = %q", got)
+	}
+	if err := admin.ClearOverride("relay_url"); err != nil {
+		t.Fatal(err)
+	}
+	if got := admin.EffectiveConfig().RelayURL; got != "https://admin.example" {
+		t.Fatalf("relay URL after clear = %q, want admin value", got)
+	}
+}
+
+func TestRelayTokenFile(t *testing.T) {
+	paths := testPaths(t)
+	paths.Tokens = filepath.Join(filepath.Dir(paths.State), "tokens.json")
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(filepath.Dir(paths.Tokens), "relay.token")
+	if got := st.RelayTokenPath(); got != wantPath {
+		t.Fatalf("RelayTokenPath = %q, want %q", got, wantPath)
+	}
+	if st.RelayTokenSet() {
+		t.Fatal("RelayTokenSet = true for a missing file")
+	}
+	if _, err := st.RelayToken(); !os.IsNotExist(err) {
+		t.Fatalf("RelayToken missing error = %v, want not-exist", err)
+	}
+
+	if err := st.SetRelayToken("  token-one  "); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.RelayToken(); err != nil || got != "token-one" {
+		t.Fatalf("RelayToken = %q, %v; want token-one", got, err)
+	}
+	if !st.RelayTokenSet() {
+		t.Fatal("RelayTokenSet = false after write")
+	}
+	if runtime.GOOS == "linux" {
+		fi, err := os.Stat(wantPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := fi.Mode().Perm(); perm != 0o600 {
+			t.Errorf("token file mode = %o, want 600", perm)
+		}
+		di, err := os.Stat(filepath.Dir(wantPath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := di.Mode().Perm(); perm != 0o700 {
+			t.Errorf("token directory mode = %o, want 700", perm)
+		}
+	}
+
+	if err := st.SetRelayToken("token-two"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.RelayToken(); err != nil || got != "token-two" {
+		t.Fatalf("replaced RelayToken = %q, %v; want token-two", got, err)
+	}
+	if err := os.WriteFile(wantPath, []byte("token-two\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.RelayToken(); err != nil || got != "token-two" {
+		t.Fatalf("trailing-whitespace RelayToken = %q, %v; want token-two", got, err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(wantPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "relay.token.tmp-") {
+			t.Fatalf("temporary file left behind: %s", entry.Name())
+		}
+	}
+
+	reopened, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := reopened.RelayToken(); err != nil || got != "token-two" {
+		t.Fatalf("reopened RelayToken = %q, %v; want token-two", got, err)
+	}
+
+	if err := st.SetRelayToken("   "); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(wantPath); !os.IsNotExist(err) {
+		t.Fatalf("token file still exists after empty set: %v", err)
+	}
+	if st.RelayTokenSet() {
+		t.Fatal("RelayTokenSet = true after delete")
+	}
+	if err := st.ClearRelayToken(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(wantPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if st.RelayTokenSet() {
+		t.Fatal("RelayTokenSet = true for an empty file")
+	}
+}
+
 func contains(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {

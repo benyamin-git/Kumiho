@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -23,6 +24,8 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/benyamin-git/kumiho/internal/relay"
 )
 
 // Paths resolves the on-disk locations kumiho uses.
@@ -96,6 +99,7 @@ type Config struct {
 	KeepaliveProfile  string   `toml:"keepalive_profile"` // standard|slow
 	AccountRotation   bool     `toml:"account_rotation"`
 	RotationThreshold int      `toml:"rotation_threshold"`
+	RelayURL          string   `toml:"relay_url"`
 }
 
 // DefaultConfig returns the built-in defaults (PLAN.md §8).
@@ -158,6 +162,11 @@ func (c Config) Validate() error {
 	if c.UpstreamProxy != "" {
 		if err := validateUpstreamProxy(c.UpstreamProxy); err != nil {
 			return err
+		}
+	}
+	if c.RelayURL != "" {
+		if _, err := relay.ValidateURL(c.RelayURL); err != nil {
+			return fmt.Errorf("relay_url: %w", err)
 		}
 	}
 	for _, cidr := range c.ExcludeCIDRs {
@@ -254,6 +263,9 @@ type State struct {
 	// v0.6.0 account rotation overrides.
 	AccountRotation   *bool `json:"account_rotation,omitempty"`
 	RotationThreshold *int  `json:"rotation_threshold,omitempty"`
+
+	// v0.9.0 region truth.
+	RelayURL *string `json:"relay_url,omitempty"`
 }
 
 // Store owns the config/state pair and persists state atomically.
@@ -439,6 +451,9 @@ func (s *Store) effectiveConfigLocked() Config {
 	if st.RotationThreshold != nil {
 		cfg.RotationThreshold = *st.RotationThreshold
 	}
+	if st.RelayURL != nil {
+		cfg.RelayURL = *st.RelayURL
+	}
 	return cfg
 }
 
@@ -476,6 +491,7 @@ func (s *Store) OverriddenKeys() []string {
 	add("keepalive_profile", st.KeepaliveProfile != nil)
 	add("account_rotation", st.AccountRotation != nil)
 	add("rotation_threshold", st.RotationThreshold != nil)
+	add("relay_url", st.RelayURL != nil)
 	sort.Strings(keys)
 	return keys
 }
@@ -573,6 +589,13 @@ func (s *Store) SetOverride(key, value string) error {
 	case "upstream_proxy":
 		cand.UpstreamProxy = value
 		st.UpstreamProxy = &value
+	case "relay_url":
+		if value == "" {
+			st.RelayURL = nil
+		} else {
+			cand.RelayURL = value
+			st.RelayURL = &value
+		}
 	case "exclude_cidrs":
 		var list []string
 		for _, part := range strings.Split(value, ",") {
@@ -643,6 +666,8 @@ func (s *Store) ClearOverride(key string) error {
 		st.EdgeAddress = nil
 	case "upstream_proxy":
 		st.UpstreamProxy = nil
+	case "relay_url":
+		st.RelayURL = nil
 	case "exclude_cidrs":
 		st.ExcludeCIDRs = nil
 	case "allow_lan":
@@ -672,6 +697,57 @@ func (s *Store) ClearOverride(key string) error {
 	}
 	s.state = st
 	return s.saveStateLocked()
+}
+
+const relayTokenFile = "relay.token"
+
+// RelayTokenPath returns the write-only relay token file beside tokens.json.
+func (s *Store) RelayTokenPath() string {
+	return filepath.Join(filepath.Dir(s.paths.Tokens), relayTokenFile)
+}
+
+// RelayToken reads the relay token. A missing file returns the underlying
+// not-exist error untouched.
+func (s *Store) RelayToken() (string, error) {
+	data, err := os.ReadFile(s.RelayTokenPath())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(data), " \t\r\n"), nil
+}
+
+// RelayTokenSet reports whether a non-empty token is readable. It never
+// exposes the token.
+func (s *Store) RelayTokenSet() bool {
+	token, err := s.RelayToken()
+	return err == nil && token != ""
+}
+
+// SetRelayToken writes the token atomically with mode 0600 and ensures the
+// parent directory is 0700. An empty or whitespace-only token deletes the
+// file.
+func (s *Store) SetRelayToken(token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return s.ClearRelayToken()
+	}
+	dir := filepath.Dir(s.RelayTokenPath())
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return err
+	}
+	return WriteFileAtomic(s.RelayTokenPath(), []byte(token), 0o600)
+}
+
+// ClearRelayToken removes the token file; a missing file is not an error.
+func (s *Store) ClearRelayToken() error {
+	err := os.Remove(s.RelayTokenPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func parseOnOff(value string) (bool, error) {

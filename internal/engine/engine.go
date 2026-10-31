@@ -1578,6 +1578,8 @@ func (c *Controller) Settings() api.SettingsView {
 		KeepaliveProfile:     cfg.KeepaliveProfile,
 		AccountRotation:      cfg.AccountRotation,
 		RotationThreshold:    cfg.RotationThreshold,
+		RelayURL:             cfg.RelayURL,
+		RelayTokenSet:        c.store.RelayTokenSet(),
 		Overridden:           c.store.OverriddenKeys(),
 	}
 }
@@ -1593,6 +1595,27 @@ func (c *Controller) SetSetting(key, value string) error {
 // the override so the admin config applies again.
 func (c *Controller) ApplySetting(p api.SettingsSetPayload) error {
 	key := strings.TrimSpace(p.Key)
+	if key == "relay_token" {
+		if p.Reset {
+			if err := c.store.ClearRelayToken(); err != nil {
+				return &api.RemoteError{Code: api.CodeInternal, Message: fmt.Sprintf("relay_token: %v", err)}
+			}
+		} else {
+			token := strings.TrimSpace(p.Value)
+			if token == "" {
+				return &api.RemoteError{
+					Code:    api.CodeBadRequest,
+					Message: "relay_token: must not be empty; reset to clear",
+				}
+			}
+			if err := c.store.SetRelayToken(token); err != nil {
+				return &api.RemoteError{Code: api.CodeInternal, Message: fmt.Sprintf("relay_token: %v", err)}
+			}
+		}
+		c.reloadRelayToken()
+		c.notify()
+		return nil
+	}
 	// Snapshot the prior kill_switch override before it is mutated, so a failed
 	// live re-apply can be rolled back instead of leaving the persisted setting
 	// describing a policy the running tunnel never adopted.
@@ -1633,6 +1656,10 @@ func (c *Controller) ApplySetting(p api.SettingsSetPayload) error {
 	c.notify()
 	return nil
 }
+
+// reloadRelayToken refreshes the cached relay token. A3 populates the cache;
+// writing the file is enough until then.
+func (c *Controller) reloadRelayToken() {}
 
 // revertKillSwitchOverride restores the kill_switch override captured before a
 // failed live re-apply. It is best effort: a revert failure is logged, not
