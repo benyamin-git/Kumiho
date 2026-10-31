@@ -138,7 +138,18 @@ func (c *Controller) diskCacheFallback(fetchErr error) ([]serverlist.Country, er
 }
 
 // SelectLocation persists a location choice without connecting.
-func (c *Controller) SelectLocation(countryCode, cityCode, server string) error {
+func (c *Controller) SelectLocation(ctx context.Context, countryCode, cityCode, server string, fastest bool) error {
+	if fastest {
+		countries, err := c.Locations(ctx, false)
+		if err != nil {
+			return err
+		}
+		cand, err := c.fastestCandidate(countries)
+		if err != nil {
+			return err
+		}
+		countryCode, cityCode, server = cand.CountryCode, cand.CityCode, cand.Address()
+	}
 	if countryCode == "" || server == "" {
 		return &api.RemoteError{Code: api.CodeBadRequest, Message: "country_code and server are required"}
 	}
@@ -149,7 +160,11 @@ func (c *Controller) SelectLocation(countryCode, cityCode, server string) error 
 	}); err != nil {
 		return fmt.Errorf("persist selection: %w", err)
 	}
-	c.log.Logf(logging.Info, "serverlist", "selected %s/%s via %s", countryCode, cityCode, server)
+	if fastest {
+		c.log.Logf(logging.Info, "serverlist", "selected fastest -> %s", server)
+	} else {
+		c.log.Logf(logging.Info, "serverlist", "selected %s/%s via %s", countryCode, cityCode, server)
+	}
 	c.notify()
 	return nil
 }

@@ -222,3 +222,61 @@ func (c *Controller) cachedLatency(countries []serverlist.Country) map[string]pi
 	}
 	return out
 }
+
+// CachedLatency exposes the fresh samples on the wire, keyed by the canonical
+// visible address. A measured failure carries a nil RTT; a server that was
+// never measured has no entry.
+func (c *Controller) CachedLatency(countries []serverlist.Country) map[string]api.CachedPing {
+	samples := c.cachedLatency(countries)
+	out := make(map[string]api.CachedPing, len(samples))
+	for addr, sample := range samples {
+		var rtt *float64
+		if sample.OK {
+			ms := float64(sample.RTT) / float64(time.Millisecond)
+			rtt = &ms
+		}
+		out[addr] = api.CachedPing{RTTMS: rtt, MeasuredAt: sample.MeasuredAt}
+	}
+	return out
+}
+
+// fastestCandidate picks the lowest fresh finite RTT among visible servers.
+// Ties break by country, city and host so the choice is deterministic.
+func (c *Controller) fastestCandidate(countries []serverlist.Country) (serverlist.Candidate, error) {
+	samples := c.cachedLatency(countries)
+	var best serverlist.Candidate
+	var bestRTT time.Duration
+	found := false
+	for _, cand := range serverlist.Candidates(countries, "", "") {
+		sample, ok := samples[cand.Address()]
+		if !ok || !sample.OK {
+			continue
+		}
+		if !found || sample.RTT < bestRTT ||
+			(sample.RTT == bestRTT && candidateTieLess(cand, best)) {
+			best = cand
+			bestRTT = sample.RTT
+			found = true
+		}
+	}
+	if !found {
+		return serverlist.Candidate{}, &api.RemoteError{
+			Code:    api.CodeBadRequest,
+			Message: "Fastest needs a completed Ping all",
+		}
+	}
+	return best, nil
+}
+
+func candidateTieLess(a, b serverlist.Candidate) bool {
+	if ac, bc := strings.ToLower(a.CountryCode), strings.ToLower(b.CountryCode); ac != bc {
+		return ac < bc
+	}
+	if ac, bc := strings.ToLower(a.CityCode), strings.ToLower(b.CityCode); ac != bc {
+		return ac < bc
+	}
+	if ah, bh := strings.ToLower(a.Host), strings.ToLower(b.Host); ah != bh {
+		return ah < bh
+	}
+	return a.Port < b.Port
+}

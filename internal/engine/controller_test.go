@@ -308,7 +308,7 @@ func TestStartWithoutTokens(t *testing.T) {
 func TestSelectLocationPersists(t *testing.T) {
 	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
 
-	if err := ctrl.SelectLocation("DE", "FRA", "fra1.example.net:2499"); err != nil {
+	if err := ctrl.SelectLocation(context.Background(), "DE", "FRA", "fra1.example.net:2499", false); err != nil {
 		t.Fatal(err)
 	}
 	st := ctrl.Snapshot()
@@ -328,7 +328,7 @@ func TestSelectLocationPersists(t *testing.T) {
 		t.Fatalf("state = %v", raw)
 	}
 
-	if err := ctrl.SelectLocation("", "", "x:1"); err == nil {
+	if err := ctrl.SelectLocation(context.Background(), "", "", "x:1", false); err == nil {
 		t.Fatal("expected validation error")
 	}
 }

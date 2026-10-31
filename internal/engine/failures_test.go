@@ -14,7 +14,7 @@ import (
 
 func TestDialFailuresClearSelection(t *testing.T) {
 	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
-	if err := ctrl.SelectLocation("DE", "FRA", "fra1.example.net:2499"); err != nil {
+	if err := ctrl.SelectLocation(context.Background(), "DE", "FRA", "fra1.example.net:2499", false); err != nil {
 		t.Fatal(err)
 	}
 	ctrl.noteServerFailure("fra1.example.net:2499")
@@ -47,7 +47,7 @@ func TestConnectNotesDialFailures(t *testing.T) {
 	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
 		t.Fatalf("login = %+v", st)
 	}
-	if err := ctrl.SelectLocation("DE", "FRA", "fra1.example.net:2499"); err != nil {
+	if err := ctrl.SelectLocation(context.Background(), "DE", "FRA", "fra1.example.net:2499", false); err != nil {
 		t.Fatal(err)
 	}
 	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL

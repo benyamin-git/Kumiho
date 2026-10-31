@@ -13,6 +13,23 @@ import (
 	"github.com/benyamin-git/kumiho/internal/api"
 )
 
+func TestSelectLocationFastestIsAdditive(t *testing.T) {
+	var old api.SelectLocationPayload
+	if err := json.Unmarshal([]byte(`{"country_code":"DE","city_code":"FRA","server":"fra1.example.net:2499"}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.Fastest {
+		t.Fatal("old payload decoded as fastest")
+	}
+	var next api.SelectLocationPayload
+	if err := json.Unmarshal([]byte(`{"fastest":true}`), &next); err != nil {
+		t.Fatal(err)
+	}
+	if !next.Fastest {
+		t.Fatal("fastest payload did not decode")
+	}
+}
+
 func TestPingDoneEnvelope(t *testing.T) {
 	env, err := NewEnvelope("", TypePingDone, api.PingDone{Total: 3, Answered: 2})
 	if err != nil {

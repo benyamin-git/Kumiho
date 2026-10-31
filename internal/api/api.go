@@ -5,6 +5,7 @@ package api
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
@@ -272,11 +273,21 @@ type ConnectPayload struct {
 	CityCode     string `json:"city_code,omitempty"`
 	Server       string `json:"server,omitempty"`
 	ProxyOnly    bool   `json:"proxy_only,omitempty"`
+	Fastest      bool   `json:"fastest,omitempty"`
+}
+
+// CachedPing is one fresh latency sample. A nil RTTMS means the server was
+// measured and did not answer; an absent map entry means it was never
+// measured.
+type CachedPing struct {
+	RTTMS      *float64  `json:"rtt_ms"`
+	MeasuredAt time.Time `json:"measured_at"`
 }
 
 // LocationsResult is the reply to a locations request.
 type LocationsResult struct {
-	Countries []serverlist.Country `json:"countries"`
+	Countries []serverlist.Country  `json:"countries"`
+	Latency   map[string]CachedPing `json:"latency,omitempty"`
 }
 
 // SelectLocationPayload persists a location choice without connecting yet.
@@ -284,6 +295,7 @@ type SelectLocationPayload struct {
 	CountryCode string `json:"country_code"`
 	CityCode    string `json:"city_code,omitempty"`
 	Server      string `json:"server"`
+	Fastest     bool   `json:"fastest,omitempty"`
 }
 
 // LogsSubscribePayload selects the minimum log level to stream.

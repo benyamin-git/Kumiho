@@ -88,7 +88,7 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		if err := decodePayload(req, &p); err != nil {
 			return f.fail(err)
 		}
-		if err := f.ctrl.SelectLocation(p.CountryCode, p.CityCode, p.Server); err != nil {
+		if err := f.ctrl.SelectLocation(ctx, p.CountryCode, p.CityCode, p.Server, p.Fastest); err != nil {
 			return f.fail(err)
 		}
 		f.pushStatus()

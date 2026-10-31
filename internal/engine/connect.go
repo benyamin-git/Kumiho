@@ -129,6 +129,16 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		c.connectFailed(err)
 		return err
 	}
+	if req.Fastest {
+		fastest, ferr := c.fastestCandidate(countries)
+		if ferr != nil {
+			c.connectFailed(ferr)
+			return ferr
+		}
+		req.LocationCode = fastest.CountryCode
+		req.CityCode = fastest.CityCode
+		req.Server = fastest.Address()
+	}
 	cand, err := resolveCandidate(countries, req, c.store.State())
 	if err != nil {
 		c.connectFailed(err)

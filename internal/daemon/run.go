@@ -220,7 +220,10 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 			replyCtrlErr(err)
 			return
 		}
-		_ = conn.Reply(env.ID, ipc.TypeLocations, api.LocationsResult{Countries: countries})
+		_ = conn.Reply(env.ID, ipc.TypeLocations, api.LocationsResult{
+			Countries: countries,
+			Latency:   h.ctrl.CachedLatency(countries),
+		})
 
 	case ipc.TypeSelectLocation:
 		var p api.SelectLocationPayload
@@ -228,7 +231,7 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
-		if err := h.ctrl.SelectLocation(p.CountryCode, p.CityCode, p.Server); err != nil {
+		if err := h.ctrl.SelectLocation(ctx, p.CountryCode, p.CityCode, p.Server, p.Fastest); err != nil {
 			var re *api.RemoteError
 			if errors.As(err, &re) {
 				replyErr(re.Code, re.Message)
