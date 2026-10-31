@@ -193,6 +193,54 @@ func TestWatchdogFatalStopsTunnel(t *testing.T) {
 	}
 }
 
+func TestWatchdogEdge451IsFatal(t *testing.T) {
+	compressWatchdog(t)
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	ctrl.exitCheckURL = ""
+	ctrl.socksPortOverride = freePort(t)
+
+	first := newFakeSession()
+	var dials atomic.Int32
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		if dials.Add(1) == 1 {
+			return first, nil
+		}
+		return nil, &upstream.ConnectRejected{
+			Status:    http.StatusUnavailableForLegalReasons,
+			Authority: "fra1.example.net:2499",
+		}
+	}
+	loginProxyOnly(t, ctrl)
+	defer stopWatchdogTunnel(t, ctrl)
+
+	_ = first.Close()
+
+	waitFor(t, 3*time.Second, func() bool {
+		return ctrl.Snapshot().State == string(StateFatal)
+	}, "watchdog did not park on an edge 451")
+	ctrl.mu.Lock()
+	done := ctrl.watchdogDone
+	ctrl.mu.Unlock()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("watchdog did not stop after the edge 451")
+		}
+	}
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("edge dials = %d, want 2 (initial + one blocked redial)", got)
+	}
+	if sess := ctrl.currentSession(); sess != nil {
+		t.Fatal("session not torn down after the fatal edge 451")
+	}
+	if failures := ctrl.store.State().Failures; len(failures) != 0 {
+		t.Fatalf("edge 451 recorded as a server failure: %v", failures)
+	}
+}
+
 // altServerListServer serves one city with two edges (for rotation tests).
 func altServerListServer(t *testing.T) *httptest.Server {
 	t.Helper()

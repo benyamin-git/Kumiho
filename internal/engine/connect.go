@@ -70,6 +70,13 @@ type fatalError struct{ msg string }
 
 func (e *fatalError) Error() string { return e.msg }
 
+// isEdgeBlocked reports whether the VPN edge refused the CONNECT with 451.
+// This is a data-path refusal: the control-plane relay cannot fix it.
+func isEdgeBlocked(err error) bool {
+	var rejected *upstream.ConnectRejected
+	return errors.As(err, &rejected) && rejected.Status == http.StatusUnavailableForLegalReasons
+}
+
 // Dial retry backoff for the initial connect sequence (PLAN.md §2.4); vars
 // so tests can compress it.
 var (
@@ -157,6 +164,11 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 			break
 		}
 		lastErr = err
+		if isEdgeBlocked(err) {
+			// A 451 is a regional refusal of the data path, not a flaky
+			// edge: do not try alternates or count the server as failed.
+			break
+		}
 		if c.routeProbe() {
 			c.noteServerFailure(next.Address())
 		}
@@ -174,6 +186,11 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		}
 	}
 	if isNilSession(sess) {
+		if isEdgeBlocked(lastErr) {
+			re := &api.RemoteError{Code: api.CodeRegionBlocked, Message: edgeBlockedMessage}
+			c.connectFailed(re)
+			return re
+		}
 		if lastErr == nil {
 			lastErr = errors.New("upstream: dial returned a nil session")
 		}

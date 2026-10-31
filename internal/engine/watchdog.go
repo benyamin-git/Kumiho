@@ -225,6 +225,11 @@ func (c *Controller) redialOnce(stop <-chan struct{}) (upstreamSession, error) {
 		return nil, err
 	}
 	sess, err := c.dialUpstream(ctx, opts)
+	if isEdgeBlocked(err) {
+		// The edge refuses this region's data path. Parking in FATAL is
+		// terminal for this session; retrying or rotating edges cannot help.
+		return nil, &fatalError{edgeBlockedMessage}
+	}
 	if err == nil && isNilSession(sess) {
 		return nil, errors.New("upstream: dial returned a nil session")
 	}

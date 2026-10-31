@@ -222,6 +222,86 @@ func TestConnectTypedNilDialerFailsCleanly(t *testing.T) {
 	}
 }
 
+func TestConnectEdge451IsTerminal(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	ctrl.exitCheckURL = ""
+
+	var dials atomic.Int32
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		dials.Add(1)
+		return nil, &upstream.ConnectRejected{
+			Status:    http.StatusUnavailableForLegalReasons,
+			Authority: "vpn.mozilla.org:443",
+		}
+	}
+
+	err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true})
+	var re *api.RemoteError
+	if !errors.As(err, &re) {
+		t.Fatalf("Connect error = %v, want *api.RemoteError", err)
+	}
+	if re.Code != api.CodeRegionBlocked || re.Message != edgeBlockedMessage {
+		t.Fatalf("region error = %+v", re)
+	}
+	if got := dials.Load(); got != 1 {
+		t.Fatalf("edge dials = %d, want 1", got)
+	}
+	if st := ctrl.Snapshot(); st.State != string(StateIdle) {
+		t.Fatalf("state = %q, want IDLE", st.State)
+	}
+	if failures := ctrl.store.State().Failures; len(failures) != 0 {
+		t.Fatalf("edge 451 recorded as a server failure: %v", failures)
+	}
+}
+
+func TestConnectRetriesNon451EdgeRejection(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctx := context.Background()
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
+		t.Fatalf("login = %+v", st)
+	}
+	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
+	ctrl.serverListURL = serverListServer(t).URL
+	ctrl.exitCheckURL = ""
+	ctrl.socksPortOverride = freePort(t)
+
+	oldMin, oldMax := dialRetryBackoffMin, dialRetryBackoffMax
+	dialRetryBackoffMin, dialRetryBackoffMax = time.Millisecond, 2*time.Millisecond
+	defer func() { dialRetryBackoffMin, dialRetryBackoffMax = oldMin, oldMax }()
+
+	fake := newFakeSession()
+	var dials atomic.Int32
+	ctrl.dialUpstream = func(context.Context, upstream.Options) (upstreamSession, error) {
+		if dials.Add(1) == 1 {
+			return nil, &upstream.ConnectRejected{Status: http.StatusServiceUnavailable, Authority: "fra1.example.net:2499"}
+		}
+		return fake, nil
+	}
+
+	if err := ctrl.Connect(ctx, api.ConnectPayload{ProxyOnly: true}); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer ctrl.stopTunnel("test cleanup")
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("edge dials = %d, want 2", got)
+	}
+	if st := ctrl.Snapshot(); st.State != string(StateProxyOnly) {
+		t.Fatalf("state = %q, want PROXY_ONLY", st.State)
+	}
+}
+
 func guardianPassServer(t *testing.T, token string, quota *atomic.Int32) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
