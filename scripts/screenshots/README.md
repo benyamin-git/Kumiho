@@ -14,7 +14,7 @@ Run from the repository root:
 
     scripts/screenshots/capture.sh
 
-The script rebuilds the web harness with the v0.8.0 UI target label (override
+The script rebuilds the web harness with the v0.9.0 UI target label (override
 with `KUMIHO_CAPTURE_VERSION`), starts it on `0.0.0.0:7407`, and restarts it
 before each screen so a notice from one state cannot leak into the next. It
 stops the harness when done. The label is a screenshot target, not an app
@@ -46,7 +46,7 @@ The GUI images come from the existing visual-review manifest:
 | --- | --- |
 | `windows-gui/dashboard.png` | `dashboard/dark-connected.png` |
 | `windows-gui/locations.png` | `locations/dark-speed-order.png` |
-| `windows-gui/settings.png` | `settings/dark.png` |
+| `windows-gui/settings.png` | `settings/dark-settings-region.png` |
 
 The TUI side runs the normal test package with `KUMIHO_TUI_CAPTURE_DIR` set,
 which makes `TestCaptureViews` write raw ANSI for the dashboard, locations and

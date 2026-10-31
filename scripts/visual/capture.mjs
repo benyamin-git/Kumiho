@@ -382,6 +382,15 @@ const STATES = [
     prefs: { onboarded: false },
   },
   {
+    // The v0.9.0 Region group centered in the pane: the group sits below the
+    // fold, and the README settings capture must show the new relay controls.
+    // The pane draws no scrollbar, so the capture scrolls it directly.
+    name: "settings-region",
+    screen: "settings",
+    theme: "dark",
+    scrollInto: ".set__section:last-child",
+  },
+  {
     // The settings rows pane scrolled to its bottom (T0.4): the five v0.4.0
     // rows live at the end of the list, and the pane draws no scrollbar, so
     // the capture scrolls it directly. One per theme. They run before the
@@ -895,6 +904,42 @@ async function main() {
       }
     };
 
+    // Center a target element in its scrollable pane (the settings Region
+    // group), then verify the whole element is inside the pane box. Same
+    // failure policy as scrollToBottom: report, keep the capture.
+    const scrollInto = async (selector) => {
+      try {
+        await page.waitForSelector(selector, {
+          state: "visible",
+          timeout: WAIT_TIMEOUT_MS,
+        });
+      } catch {
+        const why = `${selector} never became visible`;
+        problems.push(`[${currentLabel}] ${why}`);
+        console.error(`  ! [${currentLabel}] ${why}`);
+        return;
+      }
+      const result = await page.evaluate((sel) => {
+        const target = document.querySelector(sel);
+        if (!target) return { ok: false, why: "the element is gone" };
+        target.scrollIntoView({ block: "center", inline: "nearest" });
+        const pane = target.closest(".set__rows");
+        if (!pane) return { ok: false, why: "no scrollable settings pane" };
+        const paneBox = pane.getBoundingClientRect();
+        const box = target.getBoundingClientRect();
+        const inView = box.top >= paneBox.top - 1 && box.bottom <= paneBox.bottom + 1;
+        return {
+          ok: inView,
+          why: inView ? "" : "the element is not fully in view after scrolling",
+        };
+      }, selector);
+      if (!result.ok) {
+        const why = `${selector}: ${result.why}`;
+        problems.push(`[${currentLabel}] ${why}`);
+        console.error(`  ! [${currentLabel}] ${why}`);
+      }
+    };
+
     const resetDevState = async () => {
       await postJSON("dev/latency", { ms: 0 });
       await postJSON("dev/fail", { on: false });
@@ -949,6 +994,9 @@ async function main() {
         }
         if (state.scrollBottom) {
           await scrollToBottom(state.scrollBottom);
+        }
+        if (state.scrollInto) {
+          await scrollInto(state.scrollInto);
         }
         await capture(item);
         if (state.prefs) {

@@ -42,17 +42,17 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: server rows with real flags, search and ping times](screenshots/windows-gui/locations.png) |
+| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: pinned Fastest, Favorites and Recent sections above flagged server rows with search and real-edge ping times](screenshots/windows-gui/locations.png) |
 
-![Windows GUI settings: theme and accent controls, version, and background service rows](screenshots/windows-gui/settings.png)
+![Windows GUI settings: the Region relay controls and the background service rows](screenshots/windows-gui/settings.png)
 
 ### Linux TUI
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: flagged server rows, Recommended first and ping times](screenshots/linux-tui/locations.png) |
+| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: Fastest, Favorites and Recent sections above flagged rows, a locked badge and ping times](screenshots/linux-tui/locations.png) |
 
-![Linux TUI settings: all settings rows and the TLS split hint](screenshots/linux-tui/settings.png)
+![Linux TUI settings: the Region relay rows with their region-only hint](screenshots/linux-tui/settings.png)
 
 ### Android phone
 

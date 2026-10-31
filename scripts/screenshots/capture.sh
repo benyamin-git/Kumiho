@@ -6,10 +6,9 @@
 # port) and is restarted before each screen so no notice leaks between
 # captures. The script stops it when done.
 #
-# The GUI binary is rebuilt with the v0.8.0 UI target label (override with
-# KUMIHO_CAPTURE_VERSION) so the Settings screenshot shows the redesign's
-# release label, not the git-describe development label. This does not bump
-# the app version.
+# The GUI binary is rebuilt with the v0.9.0 UI target label (override with
+# KUMIHO_CAPTURE_VERSION) so the Settings screenshot shows the release label,
+# not the git-describe development label. This does not bump the app version.
 #
 # Prerequisites: Go, Node 22+, a primed Playwright cache (see
 # scripts/visual/README.md), the real served GUI SVG flags, and Noto Color
@@ -22,7 +21,7 @@ cd "$repo"
 
 captures="${KUMIHO_CAPTURES_DIR:-/tmp/opencode/captures}"
 tui_tmp="${KUMIHO_TUI_CAPTURE_DIR:-/tmp/opencode/kumiho-tui-capture}"
-version="${KUMIHO_CAPTURE_VERSION:-v0.8.0}"
+version="${KUMIHO_CAPTURE_VERSION:-v0.9.0}"
 commit="$(git rev-parse --short HEAD)"
 date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -58,7 +57,7 @@ done
 
 cp "$captures/dashboard/dark-connected.png" "$repo/screenshots/windows-gui/dashboard.png"
 cp "$captures/locations/dark-speed-order.png" "$repo/screenshots/windows-gui/locations.png"
-cp "$captures/settings/dark.png" "$repo/screenshots/windows-gui/settings.png"
+cp "$captures/settings/dark-settings-region.png" "$repo/screenshots/windows-gui/settings.png"
 
 echo "capturing the TUI views"
 KUMIHO_TUI_CAPTURE_DIR="$tui_tmp" go test ./internal/tui -run TestCaptureViews -count=1
