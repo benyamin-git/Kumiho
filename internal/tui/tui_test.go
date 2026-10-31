@@ -99,8 +99,11 @@ func TestLocationsView(t *testing.T) {
 			t.Errorf("flat locations view still contains %q:\n%s", unwanted, view)
 		}
 	}
-	if rows := m.locationRows(); len(rows) != 6 {
-		t.Fatalf("rows = %d, want 6", len(rows))
+	if rows := m.locationRows(); len(rows) != 7 {
+		t.Fatalf("rows = %d, want 7 (Fastest + six servers)", len(rows))
+	}
+	if rows := m.locationRows(); !rows[0].disabled || !rows[0].fastest {
+		t.Fatalf("first row = %+v, want disabled Fastest", rows[0])
 	}
 }
 
@@ -163,9 +166,11 @@ func testLocationsModel() *Model {
 
 func locationAddresses(m *Model) []string {
 	rows := m.locationRows()
-	addresses := make([]string, len(rows))
-	for i, row := range rows {
-		addresses[i] = row.address
+	addresses := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.address != "" && row.section == sectionLocations {
+			addresses = append(addresses, row.address)
+		}
 	}
 	return addresses
 }
@@ -206,8 +211,8 @@ func TestLocationFilterMatchesEveryField(t *testing.T) {
 	}
 	for _, query := range []string{"http", "zzz"} {
 		m.loc.filter = query
-		if rows := m.locationRows(); len(rows) != 0 {
-			t.Errorf("filter %q = %v, want no rows", query, locationAddresses(m))
+		if rows := locationAddresses(m); len(rows) != 0 {
+			t.Errorf("filter %q = %v, want no rows", query, rows)
 		}
 	}
 }
@@ -262,8 +267,11 @@ func TestLocationSpeedOrderDoesNotReorderDuringARun(t *testing.T) {
 	}
 	before := locationAddresses(m)
 	m.loc.ping = &pingRun{
-		total:   5,
-		pending: map[string]bool{"p.m1.fastly-masque.net:2499": true, "fra1.example.net:443": true},
+		total: 5,
+		hosts: map[string]bool{
+			locationAddressKey("p.m1.fastly-masque.net:2499"): true,
+			locationAddressKey("fra1.example.net:443"):        true,
+		},
 	}
 	m.loc.rtts = map[string]*float64{
 		"p.m1.fastly-masque.net:2499": floatPtr(99),
@@ -283,7 +291,7 @@ func TestLocationsPingAllOnly(t *testing.T) {
 		t.Fatal("P should start a ping command")
 	}
 	run := m.loc.ping
-	if run == nil || run.total != 5 || len(run.pending) != 5 {
+	if run == nil || run.total != 5 || len(run.hosts) != 5 {
 		t.Fatalf("ping run = %+v, want 5/5", run)
 	}
 	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")}); cmd != nil {
@@ -296,14 +304,16 @@ func TestLocationsPingAllOnly(t *testing.T) {
 		t.Fatal("x must be a no-op")
 	}
 	m.ackPing("not-requested.example.net:2499")
+	if m.loc.ping == nil || m.loc.ping.answered {
+		t.Fatal("an unrequested result must not count as an answer")
+	}
+	m.ackPing("fra1.example.net:443")
 	if m.loc.ping == nil {
-		t.Fatal("an unrequested result must not clear the run")
+		t.Fatal("one early result must not clear the run")
 	}
-	for host := range run.pending {
-		m.ackPing(host)
-	}
+	m.finishPing(api.PingDone{Total: 5, Answered: 1})
 	if m.loc.ping != nil {
-		t.Fatalf("run not cleared after every host acked: %+v", m.loc.ping)
+		t.Fatalf("run not cleared after ping_done: %+v", m.loc.ping)
 	}
 	if !m.loc.sortSpeed {
 		t.Fatal("a completed run with answers should switch to speed order")
@@ -330,7 +340,7 @@ func TestLocationsRefreshResetsSpeedOrderAndLatency(t *testing.T) {
 	m.loc.speedOrderRTTs = map[string]*float64{"a.example.net:2499": floatPtr(10)}
 	m.loc.rtts = map[string]*float64{"a.example.net:2499": floatPtr(10)}
 	m.loc.cursor = 3
-	m.loc.ping = &pingRun{total: 1, pending: map[string]bool{"a.example.net:2499": true}}
+	m.loc.ping = &pingRun{total: 1, hosts: map[string]bool{locationAddressKey("a.example.net:2499"): true}}
 	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}); cmd == nil {
 		t.Fatal("r should reload the list")
 	}
@@ -366,17 +376,17 @@ func TestLocationsNoMatchAndEmptyCopy(t *testing.T) {
 
 func TestLocationsFooterAndHelp(t *testing.T) {
 	m := testLocationsModel()
-	m.loc.ping = &pingRun{total: 35, pending: map[string]bool{"a": true}}
+	m.loc.ping = &pingRun{total: 35}
 	view := m.View()
 	if !strings.Contains(view, "pinging 35 servers...") {
 		t.Fatalf("ping count footer missing:\n%s", view)
 	}
-	if !strings.Contains(view, "enter select • P ping all • / filter • r refresh • esc back • ? help • q quit") {
+	if !strings.Contains(view, "enter select • f favorite • c clear recents • L show/hide locked • P ping all • / filter • r refresh • esc back • ? help • q quit") {
 		t.Fatalf("locations footer missing:\n%s", view)
 	}
 	help := &strings.Builder{}
 	m.renderHelp(help)
-	if !strings.Contains(help.String(), "locations    arrows/hjkl move • enter select • P ping all • / filter • r refresh • esc back") {
+	if !strings.Contains(help.String(), "locations    arrows/hjkl move • enter select/Fastest • f favorite • c clear recents • L show/hide locked • P ping all • / filter • r refresh • esc back") {
 		t.Fatalf("locations help line missing:\n%s", help.String())
 	}
 	for _, gone := range []string{"expand/select", "ping shown", "expand/collapse"} {
@@ -470,8 +480,8 @@ func assertViewport(t *testing.T, m *Model) {
 }
 
 func TestSettingsShortHeightShowsCues(t *testing.T) {
-	if len(settingItems) != 19 {
-		t.Fatalf("settingItems = %d rows, want 19", len(settingItems))
+	if len(settingItems) != 23 {
+		t.Fatalf("settingItems = %d rows, want 23", len(settingItems))
 	}
 	m := testSettingsModel()
 	m.screen = screenSettings
@@ -549,7 +559,7 @@ func TestSettingsAllRowsReachable(t *testing.T) {
 			if m.st.cursor != len(settingItems)-1 {
 				t.Fatalf("down stops at cursor %d, want %d", m.st.cursor, len(settingItems)-1)
 			}
-			if view := m.View(); !strings.Contains(view, "keepalive profile") {
+			if view := m.View(); !strings.Contains(view, "test relay") {
 				t.Fatalf("last row not rendered:\n%s", view)
 			}
 
@@ -647,8 +657,10 @@ func TestSettingsViewportResize(t *testing.T) {
 // fakeSettingsDaemon serves settings_get/settings_set over the real control
 // protocol so the TUI round-trip exercises the IPC client and JSON mapping.
 type fakeSettingsDaemon struct {
-	view      api.SettingsView
-	overrides map[string]bool
+	view       api.SettingsView
+	overrides  map[string]bool
+	relay      api.RelayTestResult
+	relayCalls int
 }
 
 func (d *fakeSettingsDaemon) overrideKeys() []string {
@@ -673,6 +685,12 @@ func (d *fakeSettingsDaemon) set(p api.SettingsSetPayload) error {
 			d.view.SolveChallenges = true
 		case "keepalive_profile":
 			d.view.KeepaliveProfile = "standard"
+		case "allow_locked":
+			d.view.AllowLocked = false
+		case "relay_url":
+			d.view.RelayURL = ""
+		case "relay_token":
+			d.view.RelayTokenSet = false
 		default:
 			return fmt.Errorf("unsupported setting %q", p.Key)
 		}
@@ -707,6 +725,19 @@ func (d *fakeSettingsDaemon) set(p api.SettingsSetPayload) error {
 			return fmt.Errorf("solve_challenges: %w", err)
 		}
 		d.view.SolveChallenges = v
+	case "allow_locked":
+		v, err := fakeOnOff(p.Value)
+		if err != nil {
+			return fmt.Errorf("allow_locked: %w", err)
+		}
+		d.view.AllowLocked = v
+	case "relay_url":
+		d.view.RelayURL = p.Value
+	case "relay_token":
+		if p.Value == "" {
+			return fmt.Errorf("relay_token: empty")
+		}
+		d.view.RelayTokenSet = true
 	case "http_proxy_port":
 		n, err := strconv.Atoi(p.Value)
 		if err != nil {
@@ -745,6 +776,7 @@ func startFakeSettingsDaemon(t *testing.T) *ipc.Client {
 			KeepaliveProfile: "standard",
 		},
 		overrides: map[string]bool{},
+		relay:     api.RelayTestResult{OK: true, Status: 200, LatencyMS: floatPtr(7)},
 	}
 
 	path := filepath.Join(t.TempDir(), "control.sock")
@@ -779,6 +811,9 @@ func startFakeSettingsDaemon(t *testing.T) *ipc.Client {
 					continue
 				}
 				_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
+			case ipc.TypeRelayTest:
+				daemon.relayCalls++
+				_ = conn.Reply(env.ID, ipc.TypeRelayTest, daemon.relay)
 			}
 		}
 	})

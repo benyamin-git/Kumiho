@@ -188,6 +188,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loc.rtts[pr.Host] = pr.RTTMS
 				m.ackPing(pr.Host)
 			}
+		case ipc.TypePingDone:
+			var done api.PingDone
+			if err := msg.env.DecodePayload(&done); err == nil {
+				m.finishPing(done)
+			}
 		case ipc.TypeLog:
 			var e logging.Entry
 			if err := msg.env.DecodePayload(&e); err == nil {
@@ -205,13 +210,44 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loc.ping = nil
 		m.notice = "ping: " + msg.err.Error()
 		return m, nil
+	case pingDoneMsg:
+		m.finishPing(msg.done)
+		return m, nil
 	case selectDoneMsg:
 		if msg.err != nil {
 			m.notice = "selection failed: " + msg.err.Error()
 		} else {
 			m.notice = "location saved"
 		}
+		if msg.refreshLocations && msg.err == nil {
+			return m, tea.Batch(fetchStatus(m.client), fetchLocations(m.client, false))
+		}
 		return m, fetchStatus(m.client)
+	case favoriteDoneMsg:
+		if msg.err != nil {
+			m.notice = "favorite failed: " + msg.err.Error()
+		} else {
+			m.notice = "favorite updated"
+		}
+		return m, fetchLocations(m.client, false)
+	case clearRecentsDoneMsg:
+		if msg.err != nil {
+			m.notice = "clear recents failed: " + msg.err.Error()
+			return m, fetchLocations(m.client, false)
+		}
+		m.notice = "recents cleared"
+		return m, nil
+	case lockedDoneMsg:
+		if msg.err != nil {
+			m.notice = "locked locations failed: " + msg.err.Error()
+			return m, nil
+		}
+		if msg.on {
+			m.notice = "showing locked locations"
+		} else {
+			m.notice = "hiding locked locations"
+		}
+		return m, fetchLocations(m.client, false)
 	case tunnelDoneMsg:
 		switch {
 		case msg.err != nil:
@@ -251,6 +287,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.st.err = ""
 		return m, fetchSettings(m.client)
+	case relayTestMsg:
+		m.st.err = ""
+		if msg.err != nil {
+			m.st.err = "relay test: " + msg.err.Error()
+			m.st.notice = ""
+		} else {
+			m.st.notice = relayTestNotice(msg.result)
+		}
+		return m, nil
 	case logsSnapshotMsg:
 		m.lg.loading = false
 		if msg.err != nil {

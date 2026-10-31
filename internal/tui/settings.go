@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -21,6 +22,8 @@ const (
 	settingEnum
 	settingInt
 	settingText
+	settingSecret
+	settingAction
 )
 
 // settingItem describes one row of the Settings screen (PLAN.md §6).
@@ -74,6 +77,14 @@ var settingItems = []settingItem{
 	{key: "keepalive_profile", label: "keepalive profile", kind: settingEnum,
 		options: []string{"standard", "slow"},
 		hint:    "keepalive ping timeout profile; next connect"},
+	{key: "allow_locked", label: "allow locked", kind: settingBool,
+		hint: "show servers the Firefox version filter marks locked; next locations refresh"},
+	{key: "relay_url", label: "relay URL", kind: settingText,
+		hint: "HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page"},
+	{key: "relay_token", label: "relay token", kind: settingSecret,
+		hint: "write-only secret used only after HTTP 451; does not proxy the browser sign-in page"},
+	{key: "relay_test", label: "test relay", kind: settingAction,
+		hint: "send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page"},
 }
 
 // settingsState is the Settings screen state (PLAN.md §6).
@@ -98,6 +109,11 @@ type settingDoneMsg struct {
 	key   string
 	reset bool
 	err   error
+}
+
+type relayTestMsg struct {
+	result api.RelayTestResult
+	err    error
 }
 
 func fetchSettings(c *ipc.Client) tea.Cmd {
@@ -125,6 +141,42 @@ func applySetting(c *ipc.Client, key, value string, reset bool) tea.Cmd {
 	}
 }
 
+func testRelay(c *ipc.Client) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		env, err := c.Call(ctx, ipc.TypeRelayTest, nil)
+		if err != nil {
+			return relayTestMsg{err: err}
+		}
+		var res api.RelayTestResult
+		if err := env.DecodePayload(&res); err != nil {
+			return relayTestMsg{err: err}
+		}
+		return relayTestMsg{result: res}
+	}
+}
+
+func relayTestNotice(res api.RelayTestResult) string {
+	if res.OK {
+		if res.LatencyMS != nil {
+			return fmt.Sprintf("Relay OK — %.0f ms", *res.LatencyMS)
+		}
+		return "Relay OK"
+	}
+	if res.Status == 401 || res.Status == 403 {
+		return "Relay rejected the token"
+	}
+	if res.Error == "relay_url is not set" {
+		return res.Error
+	}
+	detail := res.Error
+	if detail == "" {
+		detail = fmt.Sprintf("HTTP %d", res.Status)
+	}
+	return "Relay unreachable: " + detail
+}
+
 func (m *Model) handleSettingsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := &m.st
 	if s.editing {
@@ -140,6 +192,15 @@ func (m *Model) handleSettingsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.editing = false
 			item := settingItems[s.cursor]
 			val := strings.TrimSpace(s.editBuf)
+			s.editBuf = ""
+			if item.kind == settingSecret {
+				if val == "" {
+					// Empty cancels: a secret is never cleared by pressing enter.
+					s.notice = "relay token unchanged"
+					return m, nil
+				}
+				return m, applySetting(m.client, item.key, val, false)
+			}
 			// An empty value drops the override, restoring the default.
 			return m, applySetting(m.client, item.key, val, val == "")
 		case "backspace":
@@ -185,6 +246,12 @@ func (m *Model) handleSettingsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		s.cursor = len(settingItems) - 1
 	case "d":
 		item := settingItems[s.cursor]
+		switch item.kind {
+		case settingSecret:
+			return m, applySetting(m.client, item.key, "", true)
+		case settingAction:
+			return m, nil
+		}
 		return m, applySetting(m.client, item.key, "", true)
 	case "enter", " ":
 		return m, m.activateSetting()
@@ -313,6 +380,12 @@ func (m *Model) activateSetting() tea.Cmd {
 		return applySetting(m.client, item.key, onoff(!s.boolValue(item.key)), false)
 	case settingEnum:
 		return applySetting(m.client, item.key, s.nextEnum(item), false)
+	case settingSecret:
+		s.editing = true
+		s.editBuf = "" // never prefill a secret into the editable buffer
+		return nil
+	case settingAction:
+		return testRelay(m.client)
 	default:
 		s.editing = true
 		s.editBuf = s.currentValue(item.key)
@@ -336,6 +409,8 @@ func (s *settingsState) boolValue(key string) bool {
 		return s.view.HTTPProxy
 	case "solve_challenges":
 		return s.view.SolveChallenges
+	case "allow_locked":
+		return s.view.AllowLocked
 	}
 	return false
 }
@@ -344,7 +419,7 @@ func (s *settingsState) boolValue(key string) bool {
 func (s *settingsState) currentValue(key string) string {
 	switch key {
 	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan",
-		"http_proxy", "solve_challenges":
+		"http_proxy", "solve_challenges", "allow_locked":
 		return onoff(s.boolValue(key))
 	case "log_level":
 		return s.view.LogLevel
@@ -370,6 +445,8 @@ func (s *settingsState) currentValue(key string) string {
 		return strconv.Itoa(s.view.HTTPProxyPort)
 	case "quota_poll_minutes":
 		return strconv.Itoa(s.view.QuotaPollMinutes)
+	case "relay_url":
+		return s.view.RelayURL
 	}
 	return ""
 }
@@ -396,8 +473,19 @@ func (s *settingsState) displayValue(key string) string {
 		if raw == "" {
 			return dimStyle.Render("(none)")
 		}
+	case "relay_url":
+		if raw == "" {
+			return dimStyle.Render("(not set)")
+		}
+	case "relay_token":
+		if s.view.RelayTokenSet {
+			return "set"
+		}
+		return dimStyle.Render("(not set)")
+	case "relay_test":
+		return dimStyle.Render("enter to test")
 	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan",
-		"http_proxy", "solve_challenges":
+		"http_proxy", "solve_challenges", "allow_locked":
 		return onoffLabel(s.boolValue(key))
 	}
 	return raw
@@ -444,7 +532,11 @@ func (m *Model) renderSettings(b *strings.Builder) {
 		}
 		val := s.displayValue(item.key)
 		if s.editing && i == s.cursor {
-			val = s.editBuf + "_"
+			if item.kind == settingSecret {
+				val = strings.Repeat("*", utf8.RuneCountInString(s.editBuf)) + "_"
+			} else {
+				val = s.editBuf + "_"
+			}
 		}
 		fmt.Fprintf(b, "%s%s %-17s %s\n", cursor, mark, item.label, val)
 	}
@@ -454,7 +546,11 @@ func (m *Model) renderSettings(b *strings.Builder) {
 
 	fmt.Fprintln(b)
 	if s.editing {
-		fmt.Fprintln(b, dimStyle.Render("type a value, enter save, esc cancel; empty resets to the default"))
+		if settingItems[s.cursor].kind == settingSecret {
+			fmt.Fprintln(b, dimStyle.Render("type a token, enter save, esc cancel; empty cancels, d clears"))
+		} else {
+			fmt.Fprintln(b, dimStyle.Render("type a value, enter save, esc cancel; empty resets to the default"))
+		}
 	} else {
 		fmt.Fprintln(b, dimStyle.Render(settingItems[s.cursor].hint))
 	}

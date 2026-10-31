@@ -56,6 +56,7 @@ func captureStatus(now time.Time) api.Status {
 func captureLocations() locationsState {
 	rtt := 42.0
 	recommended := 58.0
+	jp := 120.0
 	return locationsState{
 		countries: []serverlist.Country{
 			{
@@ -82,7 +83,7 @@ func captureLocations() locationsState {
 				},
 			},
 			{
-				Code: "JP", Name: "Japan",
+				Code: "JP", Name: "Japan", Locked: true,
 				Cities: []serverlist.City{{
 					Code: "TYO", Name: "Tokyo",
 					Servers: []serverlist.Server{{Hostname: "jp1.edge.example", Port: 443}},
@@ -96,11 +97,21 @@ func captureLocations() locationsState {
 				}},
 			},
 		},
-		cursor: 0,
+		favorites: []api.LocationRef{
+			{CountryCode: "DE", CityCode: "BER", Server: "de1.edge.example:443"},
+			{CountryCode: "JP", CityCode: "TYO", Server: "jp1.edge.example:443"},
+		},
+		recents: []api.LocationRef{
+			{CountryCode: "US", CityCode: "NYC", Server: "us1.edge.example:443"},
+			{CountryCode: "DE", CityCode: "FRA", Server: "fra1.edge.example:443"},
+		},
+		allowLocked: true,
+		cursor:      0,
 		rtts: map[string]*float64{
 			"p.m1.fastly-masque.net:2499": &recommended,
 			"de1.edge.example:443":        &rtt,
 			"de2.edge.example:443":        nil,
+			"jp1.edge.example:443":        &jp,
 		},
 	}
 }
@@ -125,9 +136,13 @@ func captureSettings() settingsState {
 			HTTPProxyPort:    8080,
 			SolveChallenges:  true,
 			KeepaliveProfile: "standard",
+			AllowLocked:      true,
+			RelayURL:         "https://relay.example.test",
+			RelayTokenSet:    true,
 		},
 		pinned: map[string]bool{"kill_switch": true},
-		cursor: settingIndex("tls_split"),
+		cursor: settingIndex("relay_url"),
+		offset: settingIndex("allow_locked") - 4,
 	}
 }
 

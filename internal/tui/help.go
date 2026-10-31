@@ -11,8 +11,8 @@ func (m *Model) renderHelp(b *strings.Builder) {
 	lines := []string{
 		"global       ? help • q / ctrl+c quit",
 		"dashboard    space connect/disconnect • l login • o locations • s settings • a account • g logs • r refresh",
-		"locations    arrows/hjkl move • enter select • P ping all • / filter • r refresh • esc back",
-		"settings     arrows move • enter change • d reset to default • r refresh • esc back",
+		"locations    arrows/hjkl move • enter select/Fastest • f favorite • c clear recents • L show/hide locked • P ping all • / filter • r refresh • esc back",
+		"settings     arrows move • enter change/test relay • d reset/clear • r refresh • esc back",
 		"logs         f follow • v level • / search • c clear • e export • esc back",
 		"account      ↑/↓ select • u use • d remove • a add browser • p add password • R sign in again",
 		"             n rename • t rotation • +/- threshold • r refresh • x sign out • esc back",
