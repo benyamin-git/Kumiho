@@ -20,13 +20,15 @@ Commands:
   version       Print version information
   doctor        Run preflight diagnostics (--json for machine output)
   daemon        Run the daemon in the foreground (systemd runs this)
+  locations     List VPN locations (--ping for latency, --json)
   connect       Connect the tunnel (--proxy-only keeps system routing untouched)
   disconnect    Tear the tunnel down
   cleanup       Remove stale routes/rules/nftables/DNS state (crash recovery)
   login         Sign in to Firefox Accounts through the daemon
   accounts      List and manage up to five accounts
   logout        Sign out of every account and clear stored tokens
-  locations     List VPN locations (--ping for latency, --json)
+  settings      Print or change runtime settings (relay token is write-only)
+  relay         Manage the control-plane relay ("relay test")
   logs          Print daemon logs (-f follows, --level filters)
   status        Show daemon status (--json for machine output)
   help          Show this help
@@ -67,6 +69,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runCleanup(rest, stdout, stderr)
 	case "locations":
 		return runLocations(rest, stdout, stderr)
+	case "settings":
+		return runSettings(rest, stdout, stderr)
+	case "relay":
+		return runRelay(rest, stdout, stderr)
 	case "logs":
 		return runLogs(rest, stdout, stderr)
 	case "status":
