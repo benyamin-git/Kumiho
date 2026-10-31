@@ -123,6 +123,29 @@ Android TV, Windows GUI and the TUI.
   - Added [docs/releasing.md](docs/releasing.md) to the release checklist so
     the About panel is reviewed whenever capabilities change.
 
+## Engineering follow-ups
+
+- [ ] **D1 — Harden `TestEngineForwardsTCPFlowToDialer` against CI flakes**
+  - Observed: the `build-test` race job failed at `d6f7c5c`
+    ([run 41077607903](https://github.com/benyamin-git/Kumiho/actions/runs/41077607903),
+    job `124137849026`) with
+    `--- FAIL: TestEngineForwardsTCPFlowToDialer (10.01s)` /
+    `stack_test.go:204: the TCP flow never reached the proxy dialer`.
+  - Detail: no packets were logged from `scriptedDevice.wrote`, so the
+    SYN-ACK never arrived within the 10-second deadline.
+  - Action: make the handshake deterministic instead of timing-based — feed
+    the SYN once the stack's reader is confirmed running, retry the SYN-ACK
+    answer, and log the fed packet plus device state on timeout. A longer
+    deadline is a last resort.
+  - Passed locally and on the v0.8.2 tag (`fb0e5fd`).
+
+- [ ] **D2 — Investigate the `android-tv` connected-test flake**
+  - Observed: the `android-tv` job failed at `5b72aba`
+    ([run 41106804477](https://github.com/benyamin-git/Kumiho/actions/runs/41106804477));
+    `build-test`, `windows` and `android` passed on the same commit.
+  - Action: pull the connected-test report artifact and classify the failure
+    as a real test bug or emulator/boot timing before adding any retry.
+
 ## Decisions captured on 2026-10-29
 
 - Target the next release, **v0.8.0**.
