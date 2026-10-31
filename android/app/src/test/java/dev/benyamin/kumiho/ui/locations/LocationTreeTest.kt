@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.locations
 
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
+import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
 import org.junit.Assert.assertEquals
@@ -345,6 +346,113 @@ class LocationTreeTest {
         assertEquals(LatencyState.Timeout, LocationTree.latencyOf(mapOf(key to null), EDGE_ADDRESS))
         assertEquals(LatencyState.Measured(42), LocationTree.latencyOf(mapOf(key to 42.4), EDGE_ADDRESS))
         assertEquals(LatencyState.Timeout, LocationTree.latencyOf(mapOf(key to -1.0), EDGE_ADDRESS))
+    }
+
+    // ---- sections, refs and locked rows ----------------------------------
+
+    @Test
+    fun `locked rows are hidden from the list and the ping targets until revealed`() {
+        val locked = Country(
+            "zz",
+            "Lockedland",
+            listOf(City("z", "Locked City", listOf(server("locked.example.net")))),
+            locked = true,
+        )
+
+        assertTrue(LocationTree.rows(listOf(US, locked)).none { it.country.code == "zz" })
+        assertTrue(LocationTree.pingAllTargets(listOf(US, locked)).none { it.contains("locked.example.net") })
+        assertTrue(LocationTree.rows(listOf(US, locked), allowLocked = true).any { it.country.code == "zz" })
+        assertTrue(
+            LocationTree.pingAllTargets(listOf(US, locked), allowLocked = true)
+                .contains("locked.example.net:443"),
+        )
+        assertEquals(
+            null,
+            LocationTree.fastest(
+                countries = listOf(locked),
+                latency = mapOf("locked.example.net:443" to 1.0),
+            ),
+        )
+    }
+
+    @Test
+    fun `sections expose fastest favorites recent and the full list in order`() {
+        val favorites = listOf(
+            LocationRef("us", "sfo", WEST_ADDRESS),
+            LocationRef("us", "nyc", EDGE_ADDRESS),
+        )
+        val recents = listOf(
+            LocationRef("de", "ber", BER_ADDRESS),
+            LocationRef("us", "nyc", EDGE_ADDRESS),
+        )
+        val latency = mapOf(
+            LocationTree.addressKey(EDGE_ADDRESS) to 40.0,
+            LocationTree.addressKey(SHARE_ADDRESS) to 10.0,
+            LocationTree.addressKey(WEST_ADDRESS) to null,
+        )
+
+        val sections = LocationTree.sections(
+            countries = listOf(US, DE),
+            favorites = favorites,
+            recents = recents,
+            latency = latency,
+        )
+
+        assertEquals(SHARE_ADDRESS, sections.fastest?.row?.address)
+        assertEquals(10L, sections.fastest?.milliseconds)
+        assertEquals(
+            listOf("us/nyc/edge.example.net:2499", "us/sfo/west.example.net:443"),
+            sections.favorites.map { it.key },
+        )
+        assertEquals(
+            listOf("de/ber/ber.example.net:443", "us/nyc/edge.example.net:2499"),
+            sections.recents.map { it.key },
+        )
+        assertEquals(4, sections.rows.size)
+    }
+
+    @Test
+    fun `favorite refs fall back to the first server in the city and drop when gone`() {
+        val favorite = LocationRef("US", "nyc", "gone.example.net:443")
+        val recent = LocationRef("us", "sfo", "")
+        val missing = LocationRef("xx", "gone", "gone.example.net:443")
+
+        val resolved = LocationTree.sections(
+            countries = listOf(US, DE),
+            favorites = listOf(favorite, recent, missing),
+            recents = listOf(missing),
+        )
+
+        assertEquals(
+            listOf("us/nyc/edge.example.net:2499", "us/sfo/west.example.net:443"),
+            resolved.favorites.map { it.key },
+        )
+        assertTrue(resolved.recents.isEmpty())
+        assertTrue(LocationTree.isFavorite(listOf(favorite), LocationTree.rows(listOf(US)).first()))
+        assertEquals(
+            LocationRef("us", "nyc", EDGE_ADDRESS),
+            LocationTree.refOf(LocationTree.rows(listOf(US)).first()),
+        )
+    }
+
+    @Test
+    fun `fastest ignores timeouts and ties by country city host`() {
+        val tie = Country(
+            "aa",
+            "Aland",
+            listOf(City("a", "A", listOf(server("a.example.net")))),
+        )
+        val latency = mapOf(
+            LocationTree.addressKey(EDGE_ADDRESS) to null,
+            LocationTree.addressKey(SHARE_ADDRESS) to 5.0,
+            LocationTree.addressKey(WEST_ADDRESS) to 5.0,
+            "aa.example.net:443" to 5.0,
+        )
+
+        val fastest = LocationTree.fastest(listOf(US, tie), latency)
+
+        assertEquals("aa/a/a.example.net:443", fastest?.row?.key)
+        assertEquals(5L, fastest?.milliseconds)
     }
 
     private companion object {

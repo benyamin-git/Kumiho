@@ -8,6 +8,8 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
+import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
@@ -198,6 +201,58 @@ class LocationsScreenTest {
     }
 
     @Test
+    fun fastestIsDisabledWithThePingHint() {
+        show(state())
+
+        rule.onNodeWithTag(LocationsTags.FASTEST).assertIsNotEnabled()
+        rule.onNodeWithText(text(R.string.locations_fastest_hint)).assertExists()
+    }
+
+    @Test
+    fun fastestShowsItsRttAndSelectsWhenMeasured() {
+        show(
+            state(
+                latency = mapOf(
+                    LocationTree.addressKey(EDGE_ADDRESS) to 80.0,
+                    LocationTree.addressKey(BER_ADDRESS) to 10.0,
+                ),
+            ),
+        )
+
+        rule.onNodeWithTag(LocationsTags.FASTEST).performClick()
+        assertTrue(calls.contains("fastest"))
+        rule.onNodeWithText("Fastest").assertExists()
+    }
+
+    @Test
+    fun favoritesAndRecentSectionsCarryTheirHeadingsStarsAndClearAction() {
+        show(
+            state(
+                favorites = listOf(LocationRef("us", "nyc", EDGE_ADDRESS)),
+                recents = listOf(LocationRef("de", "ber", BER_ADDRESS)),
+            ),
+        )
+
+        rule.onNodeWithTag(LocationsTags.FAVORITES_HEADING).assertExists()
+        rule.onNodeWithTag(LocationsTags.RECENT_HEADING).assertExists()
+        val edge = LocationTree.rows(COUNTRIES).first { it.address == EDGE_ADDRESS }
+        rule.onAllNodesWithTag(LocationsTags.favorite(edge)).onFirst().performClick()
+        rule.onNodeWithTag(LocationsTags.CLEAR_RECENTS).performClick()
+
+        assertTrue(calls.contains("favorite-$EDGE_ADDRESS"))
+        assertTrue(calls.contains("clear-recents"))
+    }
+
+    @Test
+    fun theLockedFooterOffersTheRevealAction() {
+        show(state())
+
+        scrollTo(LocationsTags.LOCKED_TOGGLE)
+        rule.onNodeWithTag(LocationsTags.LOCKED_TOGGLE).performClick()
+        assertTrue(calls.contains("toggle-locked"))
+    }
+
+    @Test
     fun rowTouchTargetsStayAtLeast48dp() {
         show(state())
 
@@ -287,6 +342,10 @@ class LocationsScreenTest {
         onPingAll = { calls += "ping-all" },
         onDismissNotice = { calls += "dismiss-notice" },
         onRetryNotice = { calls += "retry-notice" },
+        onSelectFastest = { calls += "fastest" },
+        onToggleFavorite = { calls += "favorite-${it.address}" },
+        onClearRecents = { calls += "clear-recents" },
+        onToggleLocked = { calls += "toggle-locked" },
     )
 
     private fun state(
@@ -303,6 +362,9 @@ class LocationsScreenTest {
         pingAllCount: Int = 0,
         savingServer: String? = null,
         notice: LocationsNotice? = null,
+        favorites: List<LocationRef> = emptyList(),
+        recents: List<LocationRef> = emptyList(),
+        allowLocked: Boolean = false,
     ) = LocationsState(
         loading = loading,
         refreshing = false,
@@ -318,6 +380,9 @@ class LocationsScreenTest {
         pingingAll = pingingAll,
         pingAllCount = pingAllCount,
         savingServer = savingServer,
+        favorites = favorites,
+        recents = recents,
+        allowLocked = allowLocked,
     )
 
     private companion object {

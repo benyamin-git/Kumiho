@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.benyamin.kumiho.engine.RelayTest
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CancellationException
@@ -27,6 +28,9 @@ interface SettingsGateway {
 
     /** One `settings_set`; [reset] drops the runtime override instead. */
     suspend fun setSetting(key: String, value: String, reset: Boolean = false)
+
+    /** Probes the configured relay once; never touches the data plane. */
+    suspend fun relayTest(): RelayTest
 }
 
 /** The production gateway over the same engine the other screens use. */
@@ -38,6 +42,8 @@ class CoordinatorSettingsGateway(
     override suspend fun setSetting(key: String, value: String, reset: Boolean) {
         coordinator.awaitEngine().setSetting(key, value, reset)
     }
+
+    override suspend fun relayTest(): RelayTest = coordinator.awaitEngine().relayTest()
 }
 
 /**
@@ -145,7 +151,7 @@ class SettingsViewModel(
      */
     fun apply(key: String, raw: String) {
         val spec = SettingsCatalog.byKey(key) ?: return
-        if (spec.readOnly) return
+        if (spec.readOnly || spec.kind == SettingKind.ACTION) return
         if (mutableState.value.applying) return
         when (val input = SettingsMapper.serialize(spec, raw)) {
             is SettingInput.Invalid -> {
@@ -160,7 +166,7 @@ class SettingsViewModel(
     /** Drops the engine override; read-only rows are refused. */
     fun reset(key: String) {
         val spec = SettingsCatalog.byKey(key) ?: return
-        if (spec.readOnly) return
+        if (spec.readOnly || spec.kind == SettingKind.ACTION) return
         if (mutableState.value.applying) return
         val change = SettingsMapper.reset(spec) ?: return
         mutate(change)
@@ -174,6 +180,11 @@ class SettingsViewModel(
                 rowError = null,
                 notice = null,
                 loadError = null,
+                relayTest = if (change.key == "relay_url" || change.key == "relay_token") {
+                    RelayTestState.Idle
+                } else {
+                    it.relayTest
+                },
             )
         }
         viewModelScope.launch {
@@ -246,6 +257,37 @@ class SettingsViewModel(
     fun retryNotice() {
         if (mutableState.value.notice?.retry != true) return
         refresh()
+    }
+
+    // ---- relay test ------------------------------------------------------
+
+    /**
+     * One explicit probe of the configured relay. It never writes a setting
+     * and never exposes the token: the result carries only a status, latency
+     * or a transport-level error.
+     */
+    fun testRelay() {
+        if (mutableState.value.relayTest is RelayTestState.Running) return
+        mutableState.update { it.copy(relayTest = RelayTestState.Running) }
+        viewModelScope.launch {
+            val next = try {
+                relayState(gateway.relayTest())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                RelayTestState.Unreachable(messageOf(error))
+            }
+            mutableState.update { it.copy(relayTest = next) }
+        }
+    }
+
+    private fun relayState(result: RelayTest): RelayTestState = when {
+        result.ok -> RelayTestState.Ok(result.latencyMs)
+        result.status == 401 || result.status == 403 -> RelayTestState.Rejected
+        else -> RelayTestState.Unreachable(
+            result.error?.takeIf { it.isNotBlank() }
+                ?: if (result.status != 0) "HTTP ${result.status}" else "",
+        )
     }
 
     // ---- update check ----------------------------------------------------

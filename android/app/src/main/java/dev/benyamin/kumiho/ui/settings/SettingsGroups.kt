@@ -4,16 +4,21 @@ import androidx.annotation.StringRes
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.Settings
 
-/** The four sections of the Settings list, in display order. */
+/** The settings sections in display order. */
 enum class SettingsGroup(@StringRes val titleRes: Int) {
     APP(R.string.settings_group_app),
     CONNECTION(R.string.settings_group_connection),
+    REGION(R.string.settings_group_region),
     ANDROID_VPN(R.string.settings_group_android_vpn),
     ADVANCED(R.string.settings_group_advanced),
 }
 
-/** How a row is edited. [READ_ONLY] rows render Android state, never engine values. */
-enum class SettingKind { BOOLEAN, ENUM, INTEGER, TEXT, CIDR_LIST, READ_ONLY }
+/**
+ * How a row is edited. [READ_ONLY] rows render Android state, [SECRET] rows
+ * open a masked write-only editor, and [ACTION] rows run a command such as
+ * Test relay instead of writing a setting.
+ */
+enum class SettingKind { BOOLEAN, ENUM, INTEGER, TEXT, CIDR_LIST, SECRET, ACTION, READ_ONLY }
 
 /**
  * When a change takes effect. It is user-visible copy (the hint says it), but
@@ -77,9 +82,10 @@ sealed interface SettingInput {
 }
 
 /**
- * The single ordered catalog of all twenty-one engine rows plus their exact
- * groups. Every key appears once; [SettingsMapperTest] enforces that, and the
- * screen renders [specsIn] so a duplicate would be visible immediately.
+ * The single ordered catalog of the engine rows plus their exact groups, the
+ * three Region keys and the Test relay action. Every key appears once;
+ * [SettingsMapperTest] enforces that, and the screen renders [specsIn] so a
+ * duplicate would be visible immediately.
  */
 object SettingsCatalog {
 
@@ -157,6 +163,42 @@ object SettingsCatalog {
             range = SettingRange(1, 50),
             applyTiming = ApplyTiming.NEXT_CONNECT,
             dependsOn = "account_rotation",
+        ),
+
+        // Region: the HTTP 451 relay and the locked server-list reveal.
+        SettingSpec(
+            key = "allow_locked",
+            group = SettingsGroup.REGION,
+            kind = SettingKind.BOOLEAN,
+            labelRes = R.string.settings_label_allow_locked,
+            hintRes = R.string.settings_hint_allow_locked,
+            applyTiming = ApplyTiming.IMMEDIATE,
+        ),
+        SettingSpec(
+            key = "relay_url",
+            group = SettingsGroup.REGION,
+            kind = SettingKind.TEXT,
+            labelRes = R.string.settings_label_relay_url,
+            hintRes = R.string.settings_hint_relay_url,
+            placeholderRes = R.string.settings_placeholder_relay_url,
+            applyTiming = ApplyTiming.IMMEDIATE,
+        ),
+        SettingSpec(
+            key = "relay_token",
+            group = SettingsGroup.REGION,
+            kind = SettingKind.SECRET,
+            labelRes = R.string.settings_label_relay_token,
+            hintRes = R.string.settings_hint_relay_token,
+            placeholderRes = R.string.settings_relay_token_not_set,
+            applyTiming = ApplyTiming.IMMEDIATE,
+        ),
+        SettingSpec(
+            key = "relay_test",
+            group = SettingsGroup.REGION,
+            kind = SettingKind.ACTION,
+            labelRes = R.string.settings_label_relay_test,
+            hintRes = R.string.settings_hint_relay_test,
+            applyTiming = ApplyTiming.IMMEDIATE,
         ),
 
         // Android VPN: read-only OS state, never the engine values (A10).
@@ -267,11 +309,13 @@ object SettingsCatalog {
 
     fun specsIn(group: SettingsGroup): List<SettingSpec> = specs.filter { it.group == group }
 
-    /** The twenty-one engine keys, in catalog order; the read-only two included. */
+    /** Every catalog key, in display order; the action row included. */
     val engineKeys: List<String> = specs.map { it.key }
 
-    /** Every key that can be sent through `settings_set`. */
-    val settableKeys: List<String> = specs.filterNot { it.readOnly }.map { it.key }
+    /** Every key that can be sent through `settings_set` (never the action row). */
+    val settableKeys: List<String> = specs
+        .filter { !it.readOnly && it.kind != SettingKind.ACTION }
+        .map { it.key }
 
     /** The two Android-owned rows. They are never serialized. */
     val readOnlyKeys: List<String> = specs.filter { it.readOnly }.map { it.key }
@@ -336,6 +380,7 @@ object SettingsMapper {
             "solve_challenges" -> onOff(settings.solveChallenges)
             "redact_targets" -> onOff(settings.redactTargets)
             "account_rotation" -> onOff(settings.accountRotation)
+            "allow_locked" -> onOff(settings.allowLocked)
             else -> ""
         }
         SettingKind.ENUM -> when (spec.key) {
@@ -357,18 +402,29 @@ object SettingsMapper {
             "dns_upstream" -> settings.dnsUpstream.orEmpty()
             "edge_address" -> settings.edgeAddress.orEmpty()
             "upstream_proxy" -> settings.upstreamProxy.orEmpty()
+            "relay_url" -> settings.relayUrl.orEmpty()
+            else -> ""
+        }
+        SettingKind.SECRET -> when (spec.key) {
+            "relay_token" -> if (settings.relayTokenSet) "set" else ""
             else -> ""
         }
         SettingKind.CIDR_LIST -> settings.excludeCidrs.joinToString(", ")
+        SettingKind.ACTION -> ""
     }
 
     /** Whether the engine snapshot carries a runtime override for [spec]. */
     fun isOverridden(spec: SettingSpec, settings: Settings): Boolean =
-        !spec.readOnly && settings.overridden.contains(spec.key)
+        !spec.readOnly && spec.kind != SettingKind.ACTION &&
+            settings.overridden.contains(spec.key)
 
-    /** The reset request: an empty value plus `reset = true`, never sent for read-only rows. */
+    /** The reset request; never sent for read-only and action rows. */
     fun reset(spec: SettingSpec): SettingChange? =
-        if (spec.readOnly) null else SettingChange(spec.key, value = "", reset = true)
+        if (spec.readOnly || spec.kind == SettingKind.ACTION) {
+            null
+        } else {
+            SettingChange(spec.key, value = "", reset = true)
+        }
 
     /** Validates [raw] and returns the exact string `settings_set` should carry. */
     fun serialize(spec: SettingSpec, raw: String): SettingInput {
@@ -382,8 +438,17 @@ object SettingsMapper {
             SettingKind.ENUM -> enumValue(spec, raw)
             SettingKind.INTEGER -> integerValue(spec, raw)
             SettingKind.TEXT -> SettingInput.Valid(raw.trim())
+            SettingKind.SECRET -> {
+                val token = raw.trim()
+                if (token.isEmpty()) {
+                    SettingInput.Invalid(SettingError.NOT_AN_OPTION)
+                } else {
+                    SettingInput.Valid(token)
+                }
+            }
             SettingKind.CIDR_LIST -> cidrList(raw)
-            SettingKind.READ_ONLY -> SettingInput.Invalid(SettingError.READ_ONLY)
+            SettingKind.ACTION, SettingKind.READ_ONLY ->
+                SettingInput.Invalid(SettingError.READ_ONLY)
         }
     }
 

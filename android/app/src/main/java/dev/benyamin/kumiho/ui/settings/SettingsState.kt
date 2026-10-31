@@ -52,6 +52,19 @@ data class SettingsRowError(
     val validation: SettingInput.Invalid? = null,
 )
 
+/** The Test relay action's inline result. */
+sealed interface RelayTestState {
+    data object Idle : RelayTestState
+
+    data object Running : RelayTestState
+
+    data class Ok(val latencyMs: Double?) : RelayTestState
+
+    data object Rejected : RelayTestState
+
+    data class Unreachable(val detail: String) : RelayTestState
+}
+
 /** The manual update check's visible state. Nothing runs until the user taps. */
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -89,6 +102,8 @@ data class SettingsState(
     val update: UpdateState = UpdateState.Idle,
     val appVersion: String = "",
     val engineVersion: String = "",
+    /** The last Test relay result; token values never enter this state. */
+    val relayTest: RelayTestState = RelayTestState.Idle,
 ) {
     val hasSnapshot: Boolean get() = snapshot != null
 
@@ -99,9 +114,12 @@ data class SettingsState(
     /** One change at a time: every engine row is disabled while this is true. */
     val applying: Boolean get() = applyingKey != null
 
-    fun isOverridden(key: String): Boolean =
-        snapshot?.overridden?.contains(key) == true &&
-            SettingsCatalog.byKey(key)?.readOnly != true
+    fun isOverridden(key: String): Boolean {
+        val spec = SettingsCatalog.byKey(key) ?: return false
+        return snapshot?.overridden?.contains(key) == true &&
+            !spec.readOnly &&
+            spec.kind != SettingKind.ACTION
+    }
 
     fun errorFor(key: String): SettingsRowError? = rowError?.takeIf { it.key == key }
 
@@ -166,6 +184,7 @@ data class SettingsActions(
     val onDismissLaunchError: () -> Unit,
     val onToggleBypass: (Boolean) -> Unit,
     val onOpenSplitTunneling: (() -> Unit)? = null,
+    val onTestRelay: () -> Unit = {},
 )
 
 /** Stable test tags for the Compose tests; all live under `settings_`. */
@@ -182,9 +201,15 @@ object SettingsTags {
 
     const val GROUP_APP = "settings_group_app"
     const val GROUP_CONNECTION = "settings_group_connection"
+    const val GROUP_REGION = "settings_group_region"
     const val GROUP_ANDROID_VPN = "settings_group_android_vpn"
     const val GROUP_ADVANCED = "settings_group_advanced"
     const val ADVANCED_TOGGLE = "settings_advanced_toggle"
+
+    const val RELAY_TEST = "settings_relay_test"
+    const val RELAY_RESULT = "settings_relay_result"
+    const val RELAY_TOKEN_SET = "settings_relay_token_set"
+    const val RELAY_TOKEN_CLEAR = "settings_relay_token_clear"
 
     const val THEME_CONTROL = "settings_theme_control"
     const val VERSION_APP = "settings_version_app"

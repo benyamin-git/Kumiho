@@ -24,9 +24,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +54,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -120,6 +126,10 @@ fun LocationsRoute(
         onPingAll = locationsViewModel::pingAll,
         onDismissNotice = locationsViewModel::dismissNotice,
         onRetryNotice = locationsViewModel::retryNotice,
+        onSelectFastest = locationsViewModel::selectFastest,
+        onToggleFavorite = locationsViewModel::toggleFavorite,
+        onClearRecents = locationsViewModel::clearRecents,
+        onToggleLocked = locationsViewModel::toggleLocked,
     )
     content(state, actions)
 }
@@ -134,6 +144,10 @@ data class LocationsActions(
     val onPingAll: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onRetryNotice: () -> Unit,
+    val onSelectFastest: () -> Unit = {},
+    val onToggleFavorite: (LocationRow) -> Unit = {},
+    val onClearRecents: () -> Unit = {},
+    val onToggleLocked: () -> Unit = {},
 )
 
 /**
@@ -396,7 +410,7 @@ internal fun selectionText(selection: LocationSelection?): String {
     return parts.joinToString(separator)
 }
 
-// ---- flat server list ---------------------------------------------------
+// ---- sections and flat server list --------------------------------------
 
 @Composable
 private fun ServerList(
@@ -404,6 +418,7 @@ private fun ServerList(
     actions: LocationsActions,
     listState: LazyListState,
 ) {
+    val sections = state.sections
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -416,13 +431,231 @@ private fun ServerList(
             bottom = Dimens.Space4,
         ),
     ) {
-        items(items = state.rows, key = { it.key }) { row ->
+        item(key = "fastest") {
+            FastestRow(
+                fastest = sections.fastest,
+                saving = state.savingFastest,
+                enabled = state.canSelectFastest,
+                onSelect = actions.onSelectFastest,
+            )
+        }
+        if (sections.favorites.isNotEmpty()) {
+            item(key = "favorites_heading") {
+                SectionHeading(
+                    text = stringResource(R.string.locations_favorites),
+                    tag = LocationsTags.FAVORITES_HEADING,
+                )
+            }
+            items(items = sections.favorites, key = { "favorite_${it.key}" }) { row ->
+                ServerRow(
+                    row = row,
+                    latency = state.latencyOf(row),
+                    selected = state.isSelected(row.country, row.city, row.server),
+                    saved = state.isSaving(row.server),
+                    favorite = true,
+                    onSelect = actions.onSelect,
+                    onFavorite = { actions.onToggleFavorite(row) },
+                )
+            }
+        }
+        if (sections.recents.isNotEmpty()) {
+            item(key = "recent_heading") {
+                RecentHeading(onClear = actions.onClearRecents)
+            }
+            items(items = sections.recents, key = { "recent_${it.key}" }) { row ->
+                ServerRow(
+                    row = row,
+                    latency = state.latencyOf(row),
+                    selected = state.isSelected(row.country, row.city, row.server),
+                    saved = state.isSaving(row.server),
+                    favorite = state.isFavorite(row),
+                    onSelect = actions.onSelect,
+                    onFavorite = { actions.onToggleFavorite(row) },
+                )
+            }
+        }
+        item(key = "locations_heading") {
+            SectionHeading(
+                text = stringResource(R.string.locations_full_list),
+                tag = LocationsTags.LIST_HEADING,
+            )
+        }
+        items(items = sections.rows, key = { "row_${it.key}" }) { row ->
             ServerRow(
                 row = row,
                 latency = state.latencyOf(row),
                 selected = state.isSelected(row.country, row.city, row.server),
-                saving = state.isSaving(row.server),
+                saved = state.isSaving(row.server),
+                favorite = state.isFavorite(row),
                 onSelect = actions.onSelect,
+                onFavorite = { actions.onToggleFavorite(row) },
+            )
+        }
+        item(key = "locked_footer") {
+            LockedFooter(
+                allowLocked = state.allowLocked,
+                saving = state.savingLocked,
+                onToggle = actions.onToggleLocked,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionHeading(text: String, tag: String? = null) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.Space3, bottom = Dimens.Space1)
+            .semantics { heading() }
+            .then(if (tag != null) Modifier.testTag(tag) else Modifier),
+    )
+}
+
+@Composable
+private fun RecentHeading(onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.Space3, bottom = Dimens.Space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.locations_recent),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() }
+                .testTag(LocationsTags.RECENT_HEADING),
+        )
+        TextButton(
+            onClick = onClear,
+            modifier = Modifier
+                .heightIn(min = Dimens.TouchTarget)
+                .testTag(LocationsTags.CLEAR_RECENTS),
+        ) {
+            Text(stringResource(R.string.locations_clear_recents))
+        }
+    }
+}
+
+/**
+ * The pinned Fastest shortcut: the lowest fresh finite RTT, or an honest
+ * disabled hint until a Ping all has produced one.
+ */
+@Composable
+private fun FastestRow(
+    fastest: FastestLocation?,
+    saving: Boolean,
+    enabled: Boolean,
+    onSelect: () -> Unit,
+) {
+    Surface(
+        color = if (fastest != null) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+        } else {
+            MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = Dimens.RowHeight)
+            .then(
+                if (enabled) {
+                    Modifier.clickable(role = Role.Button, onClick = onSelect)
+                } else {
+                    Modifier
+                },
+            )
+            .semantics { if (!enabled) disabled() }
+            .testTag(LocationsTags.FASTEST),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
+        ) {
+            if (fastest != null) {
+                CountryFlags.Flag(
+                    code = fastest.row.country.code,
+                    recommended = LocationTree.isRecommended(fastest.row.country),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.locations_fastest),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = if (fastest != null) {
+                        fastest.row.title + LocationTree.SEPARATOR + fastest.row.address
+                    } else {
+                        stringResource(R.string.locations_fastest_hint)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            when {
+                saving -> CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                fastest != null -> Text(
+                    text = stringResource(R.string.locations_latency, fastest.milliseconds),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LockedFooter(
+    allowLocked: Boolean,
+    saving: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.Space3),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(
+            onClick = onToggle,
+            enabled = !saving,
+            modifier = Modifier
+                .heightIn(min = Dimens.TouchTarget)
+                .testTag(LocationsTags.LOCKED_TOGGLE),
+        ) {
+            if (saving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.size(Dimens.Space1))
+            }
+            Text(
+                stringResource(
+                    if (allowLocked) {
+                        R.string.locations_hide_locked
+                    } else {
+                        R.string.locations_show_locked
+                    },
+                ),
             )
         }
     }
@@ -430,86 +663,138 @@ private fun ServerList(
 
 /**
  * One server: the flag, the full `Country · City`, the second line
- * `hostname:port · protocols`, and the latency/check trailing. The row is
- * intentionally a single tap target; there is nothing to expand.
+ * `hostname:port · protocols`, the locked badge, the latency/check trailing,
+ * and the separate 48 dp favorite star. The row body remains single-tap.
  */
 @Composable
 private fun ServerRow(
     row: LocationRow,
     latency: LatencyState,
     selected: Boolean,
-    saving: Boolean,
+    saved: Boolean,
+    favorite: Boolean,
     onSelect: (Country, City, Server) -> Unit,
+    onFavorite: () -> Unit,
 ) {
     val server = row.server
-    val enabled = !saving
     val background = if (selected) {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     } else {
         MaterialTheme.colorScheme.surface.copy(alpha = 0f)
     }
-    Surface(
-        color = background,
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = Dimens.RowHeight)
-            .semantics(mergeDescendants = true) { this.selected = selected }
-            .then(
-                if (enabled) {
-                    Modifier.clickable(role = Role.Button) { onSelect(row.country, row.city, server) }
-                } else {
-                    Modifier
-                },
-            )
-            .testTag(serverRowTag(row.country.code, row.city.code, row.address)),
-    ) {
+    val favoriteDescription = stringResource(
+        if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
+        row.title,
+    )
+    Surface(color = background, modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = Dimens.Space2, end = Dimens.Space4, top = Dimens.Space1, bottom = Dimens.Space1),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
         ) {
-            CountryFlags.Flag(
-                code = row.country.code,
-                recommended = LocationTree.isRecommended(row.country),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = row.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = row.detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (saving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Text(
-                    text = latencyText(latency),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (selected) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .defaultMinSize(minHeight = Dimens.RowHeight)
+                    .semantics(mergeDescendants = true) { this.selected = selected }
+                    .then(
+                        if (!saved) {
+                            Modifier.clickable(role = Role.Button) {
+                                onSelect(row.country, row.city, server)
+                            }
+                        } else {
+                            Modifier
+                        },
                     )
+                    .testTag(serverRowTag(row.country.code, row.city.code, row.address))
+                    .padding(
+                        start = Dimens.Space2,
+                        end = Dimens.Space2,
+                        top = Dimens.Space1,
+                        bottom = Dimens.Space1,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+            ) {
+                CountryFlags.Flag(
+                    code = row.country.code,
+                    recommended = LocationTree.isRecommended(row.country),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = row.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = row.detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (row.country.locked) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.locations_locked),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
+                if (saved) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Text(
+                        text = latencyText(latency),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (selected) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+            IconButton(
+                onClick = onFavorite,
+                enabled = !saved,
+                modifier = Modifier
+                    .size(Dimens.TouchTarget)
+                    .semantics {
+                        contentDescription = favoriteDescription
+                        this.selected = favorite
+                    }
+                    .testTag(LocationsTags.favorite(row)),
+            ) {
+                Icon(
+                    imageVector = if (favorite) Icons.Filled.Star else Icons.Outlined.Star,
+                    contentDescription = null,
+                    tint = if (favorite) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
         }
     }

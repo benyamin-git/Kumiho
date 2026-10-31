@@ -1,14 +1,19 @@
 package dev.benyamin.kumiho.ui.locations
 
+import dev.benyamin.kumiho.engine.CachedPing
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
+import dev.benyamin.kumiho.engine.LocationRef
+import dev.benyamin.kumiho.engine.LocationsResult
+import dev.benyamin.kumiho.engine.PingDone
 import dev.benyamin.kumiho.engine.PingResult
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.test.MainDispatcherRule
 import dev.benyamin.kumiho.vpn.ServiceState
+import java.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -16,7 +21,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -38,8 +42,7 @@ class LocationsViewModelTest {
 
     private val gateway = FakeGateway()
 
-    private fun viewModel(): LocationsViewModel =
-        LocationsViewModel(gateway = gateway, pingWindowMillis = WINDOW)
+    private fun viewModel(): LocationsViewModel = LocationsViewModel(gateway = gateway)
 
     // ---- loading ---------------------------------------------------------
 
@@ -274,6 +277,7 @@ class LocationsViewModelTest {
             gateway.emitPing(WEST_ADDRESS, 10.0)
             gateway.emitPing(BER_ADDRESS, null)
             gateway.emitPing(AUTO_ADDRESS, 50.0)
+            gateway.emitPingDone(answered = 5)
             runCurrent()
             assertEquals(LocationSortMode.SPEED, viewModel.state.value.sortMode)
             val speedToken = viewModel.state.value.listResetToken
@@ -333,6 +337,7 @@ class LocationsViewModelTest {
             gateway.emitPing(WEST_ADDRESS, 10.0)
             gateway.emitPing(BER_ADDRESS, null)
             gateway.emitPing(AUTO_ADDRESS, 50.0)
+            gateway.emitPingDone(answered = 5)
             runCurrent()
 
             val state = viewModel.state.value
@@ -364,7 +369,7 @@ class LocationsViewModelTest {
 
             viewModel.pingAll()
             runCurrent()
-            advanceTimeBy(WINDOW + 1)
+            gateway.emitPingDone(answered = 0)
             runCurrent()
 
             val state = viewModel.state.value
@@ -392,6 +397,7 @@ class LocationsViewModelTest {
             gateway.emitPing(WEST_ADDRESS, null)
             gateway.emitPing(BER_ADDRESS, null)
             gateway.emitPing(AUTO_ADDRESS, null)
+            gateway.emitPingDone(answered = 5)
             runCurrent()
 
             assertEquals(LocationSortMode.SPEED, viewModel.state.value.sortMode)
@@ -421,6 +427,7 @@ class LocationsViewModelTest {
             gateway.emitPing(WEST_ADDRESS, 10.0)
             gateway.emitPing(BER_ADDRESS, null)
             gateway.emitPing(AUTO_ADDRESS, 50.0)
+            gateway.emitPingDone(answered = 5)
             runCurrent()
             val firstOrder = viewModel.state.value.rows.map { it.server.hostname }
 
@@ -439,6 +446,7 @@ class LocationsViewModelTest {
             gateway.emitPing(WEST_ADDRESS, 1.0)
             gateway.emitPing(BER_ADDRESS, 1.0)
             gateway.emitPing(AUTO_ADDRESS, 1.0)
+            gateway.emitPingDone(answered = 5)
             runCurrent()
 
             assertEquals(
@@ -460,6 +468,7 @@ class LocationsViewModelTest {
             gateway.emitPing(WEST_ADDRESS, 10.0)
             gateway.emitPing(BER_ADDRESS, null)
             gateway.emitPing(AUTO_ADDRESS, 50.0)
+            gateway.emitPingDone(answered = 5)
             runCurrent()
             assertEquals(LocationSortMode.SPEED, viewModel.state.value.sortMode)
             val speedToken = viewModel.state.value.listResetToken
@@ -490,8 +499,112 @@ class LocationsViewModelTest {
             assertFalse(viewModel.state.value.canPingAll)
         }
 
+    // ---- sections, favorites and locked rows -----------------------------
+
+    @Test
+    fun `cached latency builds Fastest and selecting it persists then reloads`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US, DE)
+            gateway.cachedLatency = mapOf(
+                EDGE_ADDRESS to 80.0,
+                SHARE_ADDRESS to 20.0,
+            )
+            val viewModel = viewModel()
+            runCurrent()
+
+            assertEquals(SHARE_ADDRESS, viewModel.state.value.fastest?.row?.address)
+            assertEquals(20L, viewModel.state.value.fastest?.milliseconds)
+            assertTrue(viewModel.state.value.canSelectFastest)
+
+            viewModel.selectFastest()
+            runCurrent()
+
+            assertEquals(1, gateway.fastestSelections)
+            assertEquals(2, gateway.locationCalls)
+            assertFalse(viewModel.state.value.savingFastest)
+        }
+
+    @Test
+    fun `a favorite star flips optimistically and clear recent empties immediately`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            gateway.recents = listOf(LocationRef("us", "nyc", EDGE_ADDRESS))
+            val viewModel = viewModel()
+            runCurrent()
+            val edge = viewModel.state.value.rows.first { it.server === EDGE }
+            val ref = LocationRef("us", "nyc", EDGE_ADDRESS)
+
+            viewModel.toggleFavorite(edge)
+            assertTrue(viewModel.state.value.isFavorite(edge))
+            assertTrue(viewModel.state.value.favorites.any { LocationTree.sameRef(it, ref) })
+            runCurrent()
+            assertEquals(listOf(ref to true), gateway.favoriteCalls)
+
+            viewModel.clearRecents()
+            assertTrue(viewModel.state.value.recents.isEmpty())
+            runCurrent()
+            assertEquals(1, gateway.clearRecentsCalls)
+        }
+
+    @Test
+    fun `a failed favorite restores the previous stars and shows the engine detail`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            val edge = viewModel.state.value.rows.first { it.server === EDGE }
+            gateway.favoriteError = IllegalStateException("favorite failed")
+
+            viewModel.toggleFavorite(edge)
+            runCurrent()
+
+            assertFalse(viewModel.state.value.isFavorite(edge))
+            assertEquals("favorite failed", (viewModel.state.value.notice?.text as LocationsNoticeText.Raw).detail)
+            assertEquals(2, gateway.locationCalls)
+        }
+
+    @Test
+    fun `the locked footer writes allow_locked and reloads the filtered tree`() =
+        runTest(mainRule.testDispatcher) {
+            val locked = Country(
+                "zz",
+                "Lockedland",
+                listOf(City("z", "Locked City", listOf(server("locked.example.net")))),
+            )
+            gateway.countries = listOf(US, locked)
+            val viewModel = viewModel()
+            runCurrent()
+            assertTrue(viewModel.state.value.rows.none { it.country.code == "zz" })
+            assertFalse(viewModel.state.value.allowLocked)
+
+            viewModel.toggleLocked()
+            runCurrent()
+
+            assertTrue(gateway.allowLocked)
+            assertEquals(listOf(true), gateway.lockedWrites)
+            assertTrue(viewModel.state.value.allowLocked)
+            assertTrue(viewModel.state.value.rows.any { it.country.code == "zz" })
+            assertEquals(2, gateway.locationCalls)
+        }
+
+    @Test
+    fun `ping done with a run error keeps country order and offers retry`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            viewModel.pingAll()
+            runCurrent()
+            gateway.emitPing(EDGE_ADDRESS, 20.0)
+            gateway.emitPingDone(answered = 1, error = "ping failed")
+            runCurrent()
+
+            assertFalse(viewModel.state.value.pingingAll)
+            assertEquals(LocationSortMode.COUNTRY, viewModel.state.value.sortMode)
+            assertEquals(LocationsNoticeAction.RETRY_PING_ALL, viewModel.state.value.notice?.action)
+        }
+
     private companion object {
-        const val WINDOW = 5_000L
         const val EDGE_ADDRESS = "edge.example.net:2499"
         const val SHARE_ADDRESS = "share.example.net:443"
         const val WEST_ADDRESS = "west.example.net:443"
@@ -566,28 +679,74 @@ private class FakeGateway : LocationsGateway {
 
     override val pings: Flow<PingResult> = pingSource
 
+    private val pingDoneSource = MutableSharedFlow<PingDone>(extraBufferCapacity = 64)
+
+    override val pingDone: Flow<PingDone> = pingDoneSource
+
     var countries: List<Country> = emptyList()
+    var favorites: List<LocationRef> = emptyList()
+    var recents: List<LocationRef> = emptyList()
+    var allowLocked: Boolean = false
+    var cachedLatency: Map<String, Double?> = emptyMap()
     var locationsError: Exception? = null
     var selectError: Exception? = null
     var selectGate: CompletableDeferred<Unit>? = null
+    var favoriteError: Exception? = null
+    var favoriteGate: CompletableDeferred<Unit>? = null
+    var clearRecentsError: Exception? = null
+    var fastestError: Exception? = null
+    var lockedError: Exception? = null
     var pingError: Exception? = null
 
     var locationCalls = 0
     val refreshFlags = mutableListOf<Boolean>()
     val selections = mutableListOf<SelectionRequest>()
     val pingCalls = mutableListOf<List<String>>()
+    val favoriteCalls = mutableListOf<Pair<LocationRef, Boolean>>()
+    val lockedWrites = mutableListOf<Boolean>()
+    var fastestSelections = 0
+    var clearRecentsCalls = 0
 
-    override suspend fun locations(refresh: Boolean): List<Country> {
+    override suspend fun locations(refresh: Boolean): LocationsResult {
         locationCalls++
         refreshFlags += refresh
         locationsError?.let { throw it }
-        return countries
+        return LocationsResult(
+            countries = countries,
+            favorites = favorites,
+            recents = recents,
+            latency = cachedLatency.mapValues { CachedPing(it.value, Instant.EPOCH) },
+            allowLocked = allowLocked,
+        )
     }
 
     override suspend fun selectLocation(countryCode: String, cityCode: String?, server: String) {
         selections += SelectionRequest(countryCode, cityCode, server)
         selectGate?.await()
         selectError?.let { throw it }
+    }
+
+    override suspend fun selectFastest() {
+        fastestSelections++
+        fastestError?.let { throw it }
+    }
+
+    override suspend fun favorite(ref: LocationRef, favorite: Boolean) {
+        favoriteCalls += ref to favorite
+        favoriteGate?.await()
+        favoriteError?.let { throw it }
+    }
+
+    override suspend fun clearRecents() {
+        clearRecentsCalls++
+        clearRecentsError?.let { throw it }
+        recents = emptyList()
+    }
+
+    override suspend fun setAllowLocked(enabled: Boolean) {
+        lockedWrites += enabled
+        lockedError?.let { throw it }
+        allowLocked = enabled
     }
 
     override suspend fun ping(hosts: List<String>) {
@@ -597,5 +756,9 @@ private class FakeGateway : LocationsGateway {
 
     suspend fun emitPing(host: String, rttMs: Double?) {
         pingSource.emit(PingResult(host = host, rttMs = rttMs))
+    }
+
+    suspend fun emitPingDone(answered: Int = 1, error: String? = null, total: Int = answered) {
+        pingDoneSource.emit(PingDone(total = total, answered = answered, error = error))
     }
 }

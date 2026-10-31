@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
@@ -370,10 +371,15 @@ fun SettingEditorDialog(
                         maxLines = 1,
                         enabled = !locked,
                         isError = invalid != null,
-                        keyboardOptions = if (spec.kind == SettingKind.INTEGER) {
-                            KeyboardOptions(keyboardType = KeyboardType.Number)
+                        visualTransformation = if (spec.kind == SettingKind.SECRET) {
+                            PasswordVisualTransformation()
                         } else {
-                            KeyboardOptions.Default
+                            androidx.compose.ui.text.input.VisualTransformation.None
+                        },
+                        keyboardOptions = when (spec.kind) {
+                            SettingKind.INTEGER -> KeyboardOptions(keyboardType = KeyboardType.Number)
+                            SettingKind.SECRET -> KeyboardOptions(keyboardType = KeyboardType.Password)
+                            else -> KeyboardOptions.Default
                         },
                         placeholder = spec.placeholderRes?.let { placeholder ->
                             { Text(stringResource(placeholder)) }
@@ -466,6 +472,11 @@ private fun EnumOptions(
 /** The label shown for a value, or the honest placeholder when it is empty. */
 @Composable
 fun settingDisplayValue(spec: SettingSpec, value: String): String = when {
+    spec.kind == SettingKind.SECRET -> if (value.isBlank()) {
+        stringResource(R.string.settings_relay_token_not_set)
+    } else {
+        stringResource(R.string.settings_relay_token_set)
+    }
     value.isBlank() -> spec.placeholderRes?.let { stringResource(it) }
         ?: stringResource(R.string.settings_placeholder_none)
     spec.kind == SettingKind.ENUM -> settingOptionLabel(value)

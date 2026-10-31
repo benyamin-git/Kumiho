@@ -14,6 +14,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,12 +24,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -92,10 +95,6 @@ fun TvLocationsScreen(
             listScroll.scrollTo(0)
         }
     }
-    val downToList = Modifier.focusProperties {
-        if (state.rows.isNotEmpty()) down = firstFocus
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -118,7 +117,7 @@ fun TvLocationsScreen(
             TvButton(
                 label = stringResource(R.string.locations_refresh),
                 onClick = actions.onRefresh,
-                modifier = Modifier.testTag(LocationsTags.REFRESH).then(downToList),
+                modifier = Modifier.testTag(LocationsTags.REFRESH),
                 enabled = !state.refreshing,
             )
             TvButton(
@@ -128,7 +127,7 @@ fun TvLocationsScreen(
                     stringResource(R.string.locations_ping_all)
                 },
                 onClick = actions.onPingAll,
-                modifier = Modifier.testTag(LocationsTags.PING_ALL).then(downToList),
+                modifier = Modifier.testTag(LocationsTags.PING_ALL),
                 enabled = state.canPingAll,
             )
         }
@@ -217,26 +216,92 @@ fun TvLocationsScreen(
                     modifier = Modifier.testTag(LocationsTags.NO_MATCH_CLEAR),
                 )
             }
-            else -> Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(listScroll)
-                    .testTag(LocationsTags.LIST),
-                verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
-            ) {
-                state.rows.forEachIndexed { index, row ->
-                    ServerRow(
-                        row = row,
-                        latency = state.latencyOf(row),
-                        selected = state.isSelected(row.country, row.city, row.server),
-                        saving = state.isSaving(row.server),
-                        onSelect = actions.onSelect,
-                        modifier = if (index == 0) {
-                            Modifier.focusRequester(firstFocus)
-                        } else {
-                            Modifier
-                        },
+            else -> {
+                val sections = state.sections
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(listScroll)
+                        .testTag(LocationsTags.LIST),
+                    verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+                ) {
+                    FastestRow(
+                        fastest = sections.fastest,
+                        saving = state.savingFastest,
+                        enabled = state.canSelectFastest,
+                        onSelect = actions.onSelectFastest,
+                    )
+                    if (sections.favorites.isNotEmpty()) {
+                        TvSectionHeading(stringResource(R.string.locations_favorites))
+                        sections.favorites.forEach { row ->
+                            ServerRow(
+                                row = row,
+                                latency = state.latencyOf(row),
+                                selected = state.isSelected(row.country, row.city, row.server),
+                                saving = state.isSaving(row.server),
+                                favorite = true,
+                                onSelect = actions.onSelect,
+                                onFavorite = { actions.onToggleFavorite(row) },
+                            )
+                        }
+                    }
+                    if (sections.recents.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+                        ) {
+                            TvSectionHeading(
+                                text = stringResource(R.string.locations_recent),
+                                modifier = Modifier.weight(1f),
+                            )
+                            TvButton(
+                                label = stringResource(R.string.locations_clear_recents),
+                                onClick = actions.onClearRecents,
+                                modifier = Modifier.testTag(LocationsTags.CLEAR_RECENTS),
+                            )
+                        }
+                        sections.recents.forEach { row ->
+                            ServerRow(
+                                row = row,
+                                latency = state.latencyOf(row),
+                                selected = state.isSelected(row.country, row.city, row.server),
+                                saving = state.isSaving(row.server),
+                                favorite = state.isFavorite(row),
+                                onSelect = actions.onSelect,
+                                onFavorite = { actions.onToggleFavorite(row) },
+                            )
+                        }
+                    }
+                    TvSectionHeading(stringResource(R.string.locations_full_list))
+                    sections.rows.forEachIndexed { index, row ->
+                        ServerRow(
+                            row = row,
+                            latency = state.latencyOf(row),
+                            selected = state.isSelected(row.country, row.city, row.server),
+                            saving = state.isSaving(row.server),
+                            favorite = state.isFavorite(row),
+                            onSelect = actions.onSelect,
+                            onFavorite = { actions.onToggleFavorite(row) },
+                            modifier = if (index == 0) {
+                                Modifier.focusRequester(firstFocus)
+                            } else {
+                                Modifier
+                            },
+                        )
+                    }
+                    TvButton(
+                        label = stringResource(
+                            if (state.allowLocked) {
+                                R.string.locations_hide_locked
+                            } else {
+                                R.string.locations_show_locked
+                            },
+                        ),
+                        onClick = actions.onToggleLocked,
+                        modifier = Modifier.testTag(LocationsTags.LOCKED_TOGGLE),
+                        enabled = !state.savingLocked,
                     )
                 }
             }
@@ -326,75 +391,194 @@ private fun SelectionSummary(state: LocationsState) {
     }
 }
 
-/** One server in the flat ten-foot list; there is no disclosure or expansion. */
 @Composable
-private fun ServerRow(
-    row: LocationRow,
-    latency: LatencyState,
-    selected: Boolean,
+private fun TvSectionHeading(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = TvDimens.Space1),
+    )
+}
+
+@Composable
+private fun FastestRow(
+    fastest: dev.benyamin.kumiho.ui.locations.FastestLocation?,
     saving: Boolean,
-    onSelect: (dev.benyamin.kumiho.engine.Country, City, Server) -> Unit,
-    modifier: Modifier = Modifier,
+    enabled: Boolean,
+    onSelect: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     TvFocusableSurface(
-        onClick = { onSelect(row.country, row.city, row.server) },
-        enabled = !saving,
-        containerColor = if (selected) colors.primary.copy(alpha = 0.16f) else colors.surface,
-        modifier = modifier
+        onClick = onSelect,
+        enabled = enabled && !saving,
+        containerColor = if (fastest != null) colors.primary.copy(alpha = 0.10f) else colors.surface,
+        modifier = Modifier
             .fillMaxWidth()
-            .semantics(mergeDescendants = true) { this.selected = selected }
-            .testTag(
-                serverRowTag(
-                    row.country.code,
-                    row.city.code,
-                    row.address,
-                ),
-            ),
+            .testTag(LocationsTags.FASTEST),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
         ) {
-            CountryFlags.Flag(
-                code = row.country.code,
-                recommended = LocationTree.isRecommended(row.country),
-                width = 32.dp,
-                height = 24.dp,
-            )
+            if (fastest != null) {
+                CountryFlags.Flag(
+                    code = fastest.row.country.code,
+                    recommended = LocationTree.isRecommended(fastest.row.country),
+                    width = 32.dp,
+                    height = 24.dp,
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = row.title,
+                    text = stringResource(R.string.locations_fastest),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = row.detail,
+                    text = if (fastest != null) {
+                        fastest.row.title + LocationTree.SEPARATOR + fastest.row.address
+                    } else {
+                        stringResource(R.string.locations_fastest_hint)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = latencyText(latency),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-            )
-            Text(
-                text = when {
-                    saving -> "…"
-                    selected -> "✓"
-                    else -> " "
-                },
-                style = MaterialTheme.typography.titleSmall,
-                color = colors.primary,
-                modifier = Modifier.clearAndSetSemantics { },
-            )
+            if (saving) {
+                Text(
+                    text = "…",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.primary,
+                )
+            } else if (fastest != null) {
+                Text(
+                    text = stringResource(R.string.locations_latency, fastest.milliseconds),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
         }
+    }
+}
+
+/**
+ * One server in the ten-foot list. The row body and the trailing star are two
+ * separate focus targets: D-pad right reaches the star without selecting.
+ */
+@Composable
+private fun ServerRow(
+    row: LocationRow,
+    latency: LatencyState,
+    selected: Boolean,
+    saving: Boolean,
+    favorite: Boolean,
+    onSelect: (dev.benyamin.kumiho.engine.Country, City, Server) -> Unit,
+    onFavorite: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    val favoriteDescription = stringResource(
+        if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
+        row.title,
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) colors.primary.copy(alpha = 0.16f) else colors.surface)
+            .border(1.dp, colors.borderVariant, MaterialTheme.shapes.medium)
+            .padding(TvDimens.Space1),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+    ) {
+        TvFocusableSurface(
+            onClick = { onSelect(row.country, row.city, row.server) },
+            enabled = !saving,
+            containerColor = colors.surface.copy(alpha = 0f),
+            modifier = modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) { this.selected = selected }
+                .testTag(serverRowTag(row.country.code, row.city.code, row.address)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+            ) {
+                CountryFlags.Flag(
+                    code = row.country.code,
+                    recommended = LocationTree.isRecommended(row.country),
+                    width = 32.dp,
+                    height = 24.dp,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = row.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = row.detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (row.country.locked) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier.padding(end = 2.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.locations_locked),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = latencyText(latency),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                Text(
+                    text = when {
+                        saving -> "…"
+                        selected -> "✓"
+                        else -> " "
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.primary,
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+            }
+        }
+        TvButton(
+            label = if (favorite) "★" else "☆",
+            onClick = onFavorite,
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .semantics {
+                    contentDescription = favoriteDescription
+                    this.selected = favorite
+                }
+                .testTag(LocationsTags.favorite(row)),
+            enabled = !saving,
+        )
     }
 }
 

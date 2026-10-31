@@ -5,13 +5,15 @@ import androidx.lifecycle.viewModelScope
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
+import dev.benyamin.kumiho.engine.LocationRef
+import dev.benyamin.kumiho.engine.LocationsResult
+import dev.benyamin.kumiho.engine.PingDone
 import dev.benyamin.kumiho.engine.PingResult
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.vpn.ServiceState
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,9 +35,22 @@ interface LocationsGateway {
     /** Results arrive independently of the [ping] call's return. */
     val pings: Flow<PingResult>
 
-    suspend fun locations(refresh: Boolean): List<Country>
+    /** Exactly one run-level completion event per Ping all. */
+    val pingDone: Flow<PingDone>
+
+    suspend fun locations(refresh: Boolean): LocationsResult
 
     suspend fun selectLocation(countryCode: String, cityCode: String?, server: String)
+
+    /** Resolves and persists the lowest fresh finite RTT server. */
+    suspend fun selectFastest()
+
+    suspend fun favorite(ref: LocationRef, favorite: Boolean)
+
+    suspend fun clearRecents()
+
+    /** Writes `allow_locked`; the next locations read is re-filtered. */
+    suspend fun setAllowLocked(enabled: Boolean)
 
     suspend fun ping(hosts: List<String>)
 }
@@ -56,11 +71,33 @@ class CoordinatorLocationsGateway(
         }
     }
 
-    override suspend fun locations(refresh: Boolean): List<Country> =
-        coordinator.awaitEngine().locations(refresh)
+    override val pingDone: Flow<PingDone> = channelFlow {
+        coordinator.engine.filterNotNull().collectLatest { client ->
+            client.pingDone.collect { send(it) }
+        }
+    }
+
+    override suspend fun locations(refresh: Boolean): LocationsResult =
+        coordinator.awaitEngine().locationsResult(refresh)
 
     override suspend fun selectLocation(countryCode: String, cityCode: String?, server: String) {
         coordinator.awaitEngine().selectLocation(countryCode, cityCode, server)
+    }
+
+    override suspend fun selectFastest() {
+        coordinator.awaitEngine().selectLocation(fastest = true)
+    }
+
+    override suspend fun favorite(ref: LocationRef, favorite: Boolean) {
+        coordinator.awaitEngine().favoriteLocation(ref, favorite)
+    }
+
+    override suspend fun clearRecents() {
+        coordinator.awaitEngine().clearRecents()
+    }
+
+    override suspend fun setAllowLocked(enabled: Boolean) {
+        coordinator.awaitEngine().setSetting("allow_locked", if (enabled) "on" else "off")
     }
 
     override suspend fun ping(hosts: List<String>) {
@@ -170,26 +207,47 @@ data class LocationsState(
     val pingAllCount: Int = 0,
     /** The address key of the server whose save is in flight. */
     val savingServer: String? = null,
+    /** A Fastest selection is being resolved and saved. */
+    val savingFastest: Boolean = false,
+    /** The allow-locked write is in flight. */
+    val savingLocked: Boolean = false,
+    /** The engine-shared favorites and recents, newest recent first. */
+    val favorites: List<LocationRef> = emptyList(),
+    val recents: List<LocationRef> = emptyList(),
+    /** Whether the locked rows are revealed. */
+    val allowLocked: Boolean = false,
 ) {
     val hasTree: Boolean get() = countries.isNotEmpty()
 
     val searching: Boolean get() = query.isNotBlank()
 
-    /** The visible flat server rows for the current query and sort order. */
-    val rows: List<LocationRow>
-        get() = LocationTree.rows(
+    private val pinnedLatency: Map<String, Double?>
+        get() = if (sortMode == LocationSortMode.SPEED) {
+            speedOrderLatency ?: latency
+        } else {
+            latency
+        }
+
+    /** The pinned sections and the full list, in display order. */
+    val sections: LocationSections
+        get() = LocationTree.sections(
             countries = countries,
+            favorites = favorites,
+            recents = recents,
             query = query,
-            latency = if (sortMode == LocationSortMode.SPEED) {
-                speedOrderLatency ?: latency
-            } else {
-                latency
-            },
+            latency = pinnedLatency,
             sortMode = sortMode,
+            allowLocked = allowLocked,
         )
 
+    /** The visible flat server rows for the current query and sort order. */
+    val rows: List<LocationRow> get() = sections.rows
+
+    /** The pinned Fastest shortcut; null disables it with the hint. */
+    val fastest: FastestLocation? get() = sections.fastest
+
     /** Every usable loaded server, independent of the filter. */
-    val allTargets: List<String> get() = LocationTree.pingAllTargets(countries)
+    val allTargets: List<String> get() = LocationTree.pingAllTargets(countries, allowLocked)
 
     /** Honest screen states, each true only when it is the only thing to show. */
     val showLoading: Boolean get() = loading && !hasTree
@@ -211,6 +269,14 @@ data class LocationsState(
 
     fun isSaving(server: Server): Boolean =
         savingServer == LocationTree.connectTarget(server)?.let(LocationTree::addressKey)
+
+    fun isFavorite(row: LocationRow): Boolean = LocationTree.isFavorite(favorites, row)
+
+    val canSelectFastest: Boolean
+        get() = fastest != null && !savingFastest && savingServer == null && !savingLocked
+
+    fun isFastestRow(row: LocationRow): Boolean =
+        fastest?.row?.key == row.key
 }
 
 /**
@@ -220,7 +286,6 @@ data class LocationsState(
  */
 class LocationsViewModel(
     private val gateway: LocationsGateway,
-    private val pingWindowMillis: Long = DEFAULT_PING_WINDOW_MS,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(LocationsState())
@@ -234,21 +299,15 @@ class LocationsViewModel(
     private var loadJob: Job? = null
     private var pingJob: Job? = null
 
-    /** Address keys of the current run that have not answered yet. Main-confined. */
-    private val pendingPings = mutableSetOf<String>()
-
-    /** Whether the active run produced at least one result, including a timeout. */
-    private var runHadResult = false
-
-    /** Whether the active run failed at the transport level. */
-    private var runFailed = false
-
     init {
         viewModelScope.launch {
             gateway.service.collect(::onService)
         }
         viewModelScope.launch {
             gateway.pings.collect(::onPing)
+        }
+        viewModelScope.launch {
+            gateway.pingDone.collect(::onPingDone)
         }
         load(refresh = false)
     }
@@ -307,8 +366,7 @@ class LocationsViewModel(
         }
         loadJob = viewModelScope.launch {
             try {
-                val countries = gateway.locations(refresh)
-                applyTree(countries)
+                applyTree(gateway.locations(refresh))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -317,10 +375,14 @@ class LocationsViewModel(
         }
     }
 
-    private fun applyTree(countries: List<Country>) {
+    private fun applyTree(result: LocationsResult) {
         mutableState.update { current ->
             current.copy(
-                countries = countries,
+                countries = result.countries,
+                favorites = result.favorites,
+                recents = result.recents,
+                allowLocked = result.allowLocked,
+                latency = cachedLatency(result),
                 loaded = true,
                 loading = false,
                 refreshing = false,
@@ -333,6 +395,27 @@ class LocationsViewModel(
             )
         }
         refreshSelection()
+    }
+
+    private fun cachedLatency(result: LocationsResult): Map<String, Double?> =
+        result.latency.entries.associate { (address, sample) ->
+            LocationTree.addressKey(address) to sample.rttMs
+        }
+
+    /**
+     * Re-reads the tree after a mutation without blanking it or committing a
+     * fresh speed order. Pinned refs and allow-locked come from the engine.
+     */
+    private suspend fun reloadTree() {
+        try {
+            applyTree(gateway.locations(refresh = false))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            mutableState.update {
+                it.copy(notice = LocationsNotice.refreshFailed(messageOf(error)))
+            }
+        }
     }
 
     private fun applyFailure(detail: String) {
@@ -401,7 +484,7 @@ class LocationsViewModel(
      * the engine pushes the new status and the mark follows that.
      */
     fun select(request: SelectionRequest) {
-        if (mutableState.value.savingServer != null) return
+        if (mutableState.value.savingServer != null || mutableState.value.savingFastest) return
         mutableState.update { current ->
             current.copy(
                 savingServer = LocationTree.addressKey(request.address),
@@ -429,6 +512,123 @@ class LocationsViewModel(
         }
     }
 
+    /** The pinned Fastest row: resolve, persist the actual server, then re-read. */
+    fun selectFastest() {
+        val current = mutableState.value
+        if (!current.canSelectFastest) return
+        mutableState.update { it.copy(savingFastest = true) }
+        viewModelScope.launch {
+            try {
+                gateway.selectFastest()
+                reloadTree()
+                mutableState.update { it.copy(savingFastest = false) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update {
+                    it.copy(
+                        savingFastest = false,
+                        notice = LocationsNotice(
+                            text = LocationsNoticeText.Raw(messageOf(error)),
+                            tone = LocationsNoticeTone.ERROR,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Toggles one favorite optimistically; a failure restores and re-reads. */
+    fun toggleFavorite(row: LocationRow) {
+        val ref = LocationTree.refOf(row)
+        favorite(ref, !mutableState.value.isFavorite(row))
+    }
+
+    fun favorite(ref: LocationRef, favorite: Boolean) {
+        val previous = mutableState.value.favorites
+        val next = if (favorite) {
+            if (previous.any { LocationTree.sameRef(it, ref) }) {
+                previous
+            } else {
+                previous + ref
+            }
+        } else {
+            previous.filterNot { LocationTree.sameRef(it, ref) }
+        }
+        if (next == previous) return
+        mutableState.update { it.copy(favorites = next) }
+        viewModelScope.launch {
+            try {
+                gateway.favorite(ref, favorite)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update {
+                    it.copy(
+                        favorites = previous,
+                        notice = LocationsNotice(
+                            text = LocationsNoticeText.Raw(messageOf(error)),
+                            tone = LocationsNoticeTone.ERROR,
+                        ),
+                    )
+                }
+                reloadTree()
+            }
+        }
+    }
+
+    /** Empties Recent immediately; a failure restores the old list. */
+    fun clearRecents() {
+        val previous = mutableState.value.recents
+        if (previous.isEmpty()) return
+        mutableState.update { it.copy(recents = emptyList()) }
+        viewModelScope.launch {
+            try {
+                gateway.clearRecents()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update {
+                    it.copy(
+                        recents = previous,
+                        notice = LocationsNotice(
+                            text = LocationsNoticeText.Raw(messageOf(error)),
+                            tone = LocationsNoticeTone.ERROR,
+                        ),
+                    )
+                }
+                reloadTree()
+            }
+        }
+    }
+
+    /** The locked-list footer action; the daemon re-filters its raw cache. */
+    fun toggleLocked() = setAllowLocked(!mutableState.value.allowLocked)
+
+    fun setAllowLocked(enabled: Boolean) {
+        if (mutableState.value.savingLocked) return
+        mutableState.update { it.copy(savingLocked = true) }
+        viewModelScope.launch {
+            try {
+                gateway.setAllowLocked(enabled)
+                reloadTree()
+                mutableState.update { it.copy(savingLocked = false) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update {
+                    it.copy(
+                        savingLocked = false,
+                        notice = LocationsNotice(
+                            text = LocationsNoticeText.Raw(messageOf(error)),
+                            tone = LocationsNoticeTone.ERROR,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     // ---- ping runs -------------------------------------------------------
 
     /** Ping all: every usable server in the loaded tree, whatever the filter shows. */
@@ -443,10 +643,6 @@ class LocationsViewModel(
         val current = mutableState.value
         if (targets.isEmpty() || current.pingingAll) return
 
-        pendingPings.clear()
-        targets.mapTo(pendingPings, LocationTree::addressKey)
-        runHadResult = false
-        runFailed = false
         mutableState.update {
             it.copy(
                 pingingAll = true,
@@ -460,36 +656,18 @@ class LocationsViewModel(
         }
         pingJob?.cancel()
         pingJob = viewModelScope.launch {
-            // serverlist.PingTCP gives each host 1.5 s; the window also covers
-            // the engine's 24-way worker pool, and it bounds the run when a
-            // host never answers at all.
-            delay(pingWindowFor(targets.size))
-            stopPing()
-        }
-        viewModelScope.launch {
             try {
                 gateway.ping(targets)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (!mutableState.value.pingingAll) return@launch
-                runFailed = true
-                stopPing()
-                mutableState.update {
-                    it.copy(notice = LocationsNotice.pingAllFailed(messageOf(error)))
-                }
+                finishPing(notice = LocationsNotice.pingAllFailed(messageOf(error)))
             }
         }
     }
 
-    /** The run window: the base, scaled by the engine's 24-way probe batches. */
-    private fun pingWindowFor(count: Int): Long =
-        maxOf(pingWindowMillis, ((count + 23) / 24).toLong() * 1_500L + 1_500L)
-
     private fun onPing(result: PingResult) {
         val key = LocationTree.addressKey(result.host)
-        val wasPending = pendingPings.remove(key)
-        if (wasPending) runHadResult = true
         mutableState.update { current ->
             if (current.pingingAll) {
                 current.copy(latency = current.latency + (key to result.rttMs))
@@ -497,27 +675,35 @@ class LocationsViewModel(
                 current
             }
         }
-        if (wasPending && pendingPings.isEmpty()) stopPing()
+    }
+
+    /**
+     * `ping_done` is the only completion signal. A run-level error or no
+     * answered hosts never commits speed order; a successful run does so once.
+     */
+    private fun onPingDone(done: PingDone) {
+        if (!mutableState.value.pingingAll) return
+        val notice = when {
+            !done.error.isNullOrBlank() -> LocationsNotice.pingAllFailed(done.error)
+            done.answered <= 0 -> LocationsNotice.pingAllNoResults()
+            else -> null
+        }
+        finishPing(notice = notice)
     }
 
     /**
      * Ends the active run. Only a completed, non-failed run with at least one
-     * result commits speed order, and it commits the whole run's latency once.
+     * answer commits speed order, and it freezes the whole run's latency once.
      */
-    private fun stopPing() {
+    private fun finishPing(notice: LocationsNotice?) {
         if (!mutableState.value.pingingAll) {
-            pendingPings.clear()
             pingJob?.cancel()
             pingJob = null
             return
         }
-        val switchToSpeed = runHadResult && !runFailed
-        val noResults = !runHadResult && !runFailed
-        pendingPings.clear()
+        val switchToSpeed = notice == null
         pingJob?.cancel()
         pingJob = null
-        runHadResult = false
-        runFailed = false
         mutableState.update { current ->
             current.copy(
                 pingingAll = false,
@@ -529,18 +715,15 @@ class LocationsViewModel(
                     current.listResetToken
                 },
                 speedOrderLatency = if (switchToSpeed) current.latency else current.speedOrderLatency,
-                notice = if (noResults) LocationsNotice.pingAllNoResults() else current.notice,
+                notice = notice ?: current.notice,
             )
         }
     }
 
     /** Stops a run without letting it change the order, for a fresh load. */
     private fun cancelPing() {
-        pendingPings.clear()
         pingJob?.cancel()
         pingJob = null
-        runHadResult = false
-        runFailed = false
         mutableState.update { it.copy(pingingAll = false, pingAllCount = 0) }
     }
 
@@ -575,13 +758,4 @@ class LocationsViewModel(
         error.message?.takeIf { it.isNotBlank() }
             ?: error::class.simpleName
             ?: "unknown error"
-
-    private companion object {
-        /**
-         * The floor for a ping run: the engine probes 24 hosts at a time with a
-         * 1.5 s per-host timeout, and this window bounds the run when answers
-         * never arrive at all.
-         */
-        const val DEFAULT_PING_WINDOW_MS = 12_000L
-    }
 }

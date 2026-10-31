@@ -218,6 +218,7 @@ fun SettingsRoute(
         onThemeSelected = container.themeRepository::setTheme,
         onAccentSelected = container.themeRepository::setAccent,
         onCheckForUpdates = settingsViewModel::checkForUpdates,
+        onTestRelay = settingsViewModel::testRelay,
         onOpenRelease = { url ->
             if (url.startsWith("https://")) {
                 open(Intent(Intent.ACTION_VIEW, url.toUri()))
@@ -333,7 +334,8 @@ fun SettingsScreen(
     editing?.let { spec ->
         SettingEditorDialog(
             spec = spec,
-            initialValue = state.valueOf(spec.key),
+            // A relay token is write-only: it is never read back into the editor.
+            initialValue = if (spec.kind == SettingKind.SECRET) "" else state.valueOf(spec.key),
             locked = state.applying,
             onApply = { value ->
                 actions.onApply(spec.key, value)
@@ -409,6 +411,27 @@ private fun SettingsList(
                 SettingsCard {
                     SettingsCatalog.specsIn(SettingsGroup.CONNECTION).forEach { spec ->
                         EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+                    }
+                }
+            }
+
+            item(key = "header_region") {
+                GroupHeader(R.string.settings_group_region, SettingsTags.GROUP_REGION)
+            }
+            item(key = "region_card") {
+                SettingsCard {
+                    SettingsCatalog.specsIn(SettingsGroup.REGION).forEach { spec ->
+                        RegionRow(
+                            spec = spec,
+                            state = state,
+                            actions = actions,
+                            onEdit = onEdit,
+                            onReset = {
+                                actions.onClearError(spec.key)
+                                actions.onReset(spec.key)
+                            },
+                            onTestRelay = actions.onTestRelay,
+                        )
                     }
                 }
             }
@@ -741,6 +764,220 @@ private fun EngineRow(
             actions.onReset(spec.key)
         },
     )
+}
+
+@Composable
+private fun RegionRow(
+    spec: SettingSpec,
+    state: SettingsState,
+    actions: SettingsActions,
+    onEdit: (SettingSpec) -> Unit,
+    onReset: () -> Unit,
+    onTestRelay: () -> Unit,
+) {
+    when (spec.kind) {
+        SettingKind.SECRET -> SecretRelayRow(
+            spec = spec,
+            state = state,
+            onEdit = { onEdit(spec) },
+            onReset = onReset,
+        )
+        SettingKind.ACTION -> RelayTestRow(
+            spec = spec,
+            state = state,
+            onTest = onTestRelay,
+        )
+        else -> EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
+    }
+}
+
+/**
+ * The write-only relay token row. The stored value is never shown; the only
+ * visible state is Set/Not set, and Clear drops the runtime override.
+ */
+@Composable
+private fun SecretRelayRow(
+    spec: SettingSpec,
+    state: SettingsState,
+    onEdit: () -> Unit,
+    onReset: () -> Unit,
+) {
+    val set = state.valueOf(spec.key).isNotBlank()
+    val applying = state.applyingKey == spec.key
+    val error = state.errorFor(spec.key)
+    Surface(
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(SettingsTags.row(spec.key)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = Dimens.TouchTarget),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(spec.labelRes),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(spec.hintRes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (applying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .testTag(SettingsTags.value(spec.key)),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(
+                        text = settingDisplayValue(spec, state.valueOf(spec.key)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag(SettingsTags.value(spec.key)),
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                if (set) {
+                    TextButton(
+                        onClick = onReset,
+                        enabled = !state.applying,
+                        modifier = Modifier
+                            .heightIn(min = Dimens.TouchTarget)
+                            .testTag(SettingsTags.RELAY_TOKEN_CLEAR),
+                    ) {
+                        Text(stringResource(R.string.settings_clear))
+                    }
+                }
+                TextButton(
+                    onClick = onEdit,
+                    enabled = !state.applying,
+                    modifier = Modifier
+                        .heightIn(min = Dimens.TouchTarget)
+                        .testTag(SettingsTags.RELAY_TOKEN_SET),
+                ) {
+                    Text(stringResource(R.string.settings_relay_token_set_action))
+                }
+            }
+            if (error != null) {
+                Text(
+                    text = if (error.validation != null) {
+                        settingValidationText(error.validation)
+                    } else {
+                        error.text ?: stringResource(R.string.settings_validation_apply_failed)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalKumihoColors.current.loss,
+                    modifier = Modifier.testTag(SettingsTags.error(spec.key)),
+                )
+            }
+        }
+    }
+}
+
+/** The Test relay action and its inline result; never a setting write. */
+@Composable
+private fun RelayTestRow(
+    spec: SettingSpec,
+    state: SettingsState,
+    onTest: () -> Unit,
+) {
+    val running = state.relayTest is RelayTestState.Running
+    Surface(
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(SettingsTags.row(spec.key)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = Dimens.TouchTarget),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(spec.labelRes),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(spec.hintRes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    onClick = onTest,
+                    enabled = !running,
+                    modifier = Modifier
+                        .heightIn(min = Dimens.TouchTarget)
+                        .testTag(SettingsTags.RELAY_TEST),
+                ) {
+                    if (running) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(stringResource(R.string.settings_relay_test_action))
+                    }
+                }
+            }
+            relayTestText(state.relayTest)?.let { result ->
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (state.relayTest) {
+                        is RelayTestState.Rejected, is RelayTestState.Unreachable ->
+                            LocalKumihoColors.current.loss
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier
+                        .padding(top = Dimens.Space1)
+                        .testTag(SettingsTags.RELAY_RESULT),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun relayTestText(result: RelayTestState): String? = when (result) {
+    RelayTestState.Idle -> null
+    RelayTestState.Running -> stringResource(R.string.settings_relay_testing)
+    is RelayTestState.Ok -> result.latencyMs?.let { latency ->
+        stringResource(R.string.settings_relay_ok_latency, latency)
+    } ?: stringResource(R.string.settings_relay_ok)
+    RelayTestState.Rejected -> stringResource(R.string.settings_relay_rejected)
+    is RelayTestState.Unreachable -> if (result.detail.isBlank()) {
+        stringResource(R.string.settings_relay_unreachable)
+    } else {
+        stringResource(R.string.settings_relay_unreachable_detail, result.detail)
+    }
 }
 
 /**

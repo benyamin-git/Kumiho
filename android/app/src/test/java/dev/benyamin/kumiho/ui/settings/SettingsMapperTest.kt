@@ -9,9 +9,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The settings catalog and the pure mapping: all twenty-one engine keys exactly
- * once, their groups and kinds, the current values, override marks, Reset and
- * the exact strings `settings_set` receives.
+ * The settings catalog and the pure mapping: every key exactly once, their
+ * groups and kinds, the current values, override marks, Reset and the exact
+ * strings `settings_set` receives.
  *
  * No Android and no engine: [SettingsMapper] is a pure function of the snapshot.
  */
@@ -20,7 +20,7 @@ class SettingsMapperTest {
     // ---- the catalog -----------------------------------------------------
 
     @Test
-    fun `the catalog lists all twenty-one engine keys exactly once`() {
+    fun `the catalog lists every key exactly once`() {
         val expected = setOf(
             "socks_port", "mtu", "exit_check", "doh_provider", "dns_upstream",
             "edge_address", "upstream_proxy", "exclude_cidrs", "allow_lan",
@@ -28,11 +28,12 @@ class SettingsMapperTest {
             "quota_poll_minutes", "account_rotation", "rotation_threshold",
             "tls_split", "http_proxy", "http_proxy_port",
             "solve_challenges", "keepalive_profile",
+            "allow_locked", "relay_url", "relay_token", "relay_test",
         )
-        assertEquals(21, SettingsCatalog.specs.size)
+        assertEquals(25, SettingsCatalog.specs.size)
         assertEquals(expected, SettingsCatalog.engineKeys.toSet())
-        assertEquals(21, SettingsCatalog.engineKeys.size)
-        assertEquals(19, SettingsCatalog.settableKeys.size)
+        assertEquals(25, SettingsCatalog.engineKeys.size)
+        assertEquals(22, SettingsCatalog.settableKeys.size)
         assertEquals(setOf("kill_switch", "autoconnect"), SettingsCatalog.readOnlyKeys.toSet())
     }
 
@@ -45,6 +46,10 @@ class SettingsMapperTest {
                 "rotation_threshold",
             ),
             SettingsCatalog.specsIn(SettingsGroup.CONNECTION).map { it.key },
+        )
+        assertEquals(
+            listOf("allow_locked", "relay_url", "relay_token", "relay_test"),
+            SettingsCatalog.specsIn(SettingsGroup.REGION).map { it.key },
         )
         assertEquals(
             listOf("kill_switch", "autoconnect"),
@@ -83,6 +88,10 @@ class SettingsMapperTest {
         assertEquals(SettingKind.TEXT, kinds["edge_address"])
         assertEquals(SettingKind.TEXT, kinds["upstream_proxy"])
         assertEquals(SettingKind.CIDR_LIST, kinds["exclude_cidrs"])
+        assertEquals(SettingKind.BOOLEAN, kinds["allow_locked"])
+        assertEquals(SettingKind.TEXT, kinds["relay_url"])
+        assertEquals(SettingKind.SECRET, kinds["relay_token"])
+        assertEquals(SettingKind.ACTION, kinds["relay_test"])
         assertEquals(SettingKind.READ_ONLY, kinds["kill_switch"])
         assertEquals(SettingKind.READ_ONLY, kinds["autoconnect"])
     }
@@ -93,7 +102,13 @@ class SettingsMapperTest {
             .filter { it.applyTiming == ApplyTiming.IMMEDIATE }
             .map { it.key }
             .toSet()
-        assertEquals(setOf("solve_challenges", "log_level", "redact_targets"), immediate)
+        assertEquals(
+            setOf(
+                "solve_challenges", "log_level", "redact_targets",
+                "allow_locked", "relay_url", "relay_token", "relay_test",
+            ),
+            immediate,
+        )
         assertEquals(
             ApplyTiming.OS_MANAGED,
             SettingsCatalog.byKey("kill_switch")?.applyTiming,
@@ -127,6 +142,10 @@ class SettingsMapperTest {
             "keepalive_profile" to "slow",
             "log_level" to "debug",
             "redact_targets" to "on",
+            "allow_locked" to "off",
+            "relay_url" to "",
+            "relay_token" to "",
+            "relay_test" to "",
             "kill_switch" to "",
             "autoconnect" to "",
         )
@@ -142,6 +161,20 @@ class SettingsMapperTest {
         assertEquals("", SettingsMapper.valueOf(SettingsCatalog.byKey("dns_upstream")!!, snapshot))
         assertEquals("", SettingsMapper.valueOf(SettingsCatalog.byKey("edge_address")!!, snapshot))
         assertEquals("", SettingsMapper.valueOf(SettingsCatalog.byKey("upstream_proxy")!!, snapshot))
+    }
+
+    @Test
+    fun `the relay token maps only to a set marker and never a value`() {
+        val unset = sample()
+        val set = sample(relayUrl = "https://relay.example.com", relayTokenSet = true)
+        val token = SettingsCatalog.byKey("relay_token")!!
+
+        assertEquals("", SettingsMapper.valueOf(token, unset))
+        assertEquals("set", SettingsMapper.valueOf(token, set))
+        assertEquals(
+            "https://relay.example.com",
+            SettingsMapper.valueOf(SettingsCatalog.byKey("relay_url")!!, set),
+        )
     }
 
     // ---- overrides and reset --------------------------------------------
@@ -306,6 +339,21 @@ class SettingsMapperTest {
                 SettingsMapper.serialize(SettingsCatalog.byKey(key)!!, "on"),
             )
         }
+        assertEquals(
+            SettingInput.Invalid(SettingError.READ_ONLY),
+            SettingsMapper.serialize(SettingsCatalog.byKey("relay_test")!!, ""),
+        )
+    }
+
+    @Test
+    fun `the relay token is trimmed and may not be blank`() {
+        val token = SettingsCatalog.byKey("relay_token")!!
+
+        assertEquals(SettingInput.Valid("secret-token"), SettingsMapper.serialize(token, " secret-token "))
+        assertEquals(
+            SettingInput.Invalid(SettingError.NOT_AN_OPTION),
+            SettingsMapper.serialize(token, "   "),
+        )
     }
 
     @Test
@@ -339,6 +387,8 @@ class SettingsMapperTest {
         edgeAddress: String? = "203.0.113.7",
         upstreamProxy: String? = "http://proxy.example:3128",
         overridden: List<String> = emptyList(),
+        relayUrl: String? = null,
+        relayTokenSet: Boolean = false,
     ) = Settings(
         socksPort = 1080,
         mtu = 1400,
@@ -364,5 +414,8 @@ class SettingsMapperTest {
         httpProxyPort = 8080,
         solveChallenges = false,
         keepaliveProfile = "slow",
+        allowLocked = false,
+        relayUrl = relayUrl,
+        relayTokenSet = relayTokenSet,
     )
 }

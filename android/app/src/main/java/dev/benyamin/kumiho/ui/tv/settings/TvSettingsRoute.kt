@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -40,6 +42,7 @@ import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.ui.settings.ApplyTiming
+import dev.benyamin.kumiho.ui.settings.RelayTestState
 import dev.benyamin.kumiho.ui.settings.SettingKind
 import dev.benyamin.kumiho.ui.settings.SettingSpec
 import dev.benyamin.kumiho.ui.settings.SettingInput
@@ -282,6 +285,32 @@ fun TvSettingsScreen(
                         onReset = actions.onReset,
                     )
                 }
+
+                GroupHeader(stringResource(R.string.settings_group_region), SettingsTags.GROUP_REGION)
+                SettingsCatalog.specsIn(SettingsGroup.REGION).forEach { spec ->
+                    when (spec.kind) {
+                        SettingKind.SECRET -> TvSecretRow(
+                            spec = spec,
+                            state = state,
+                            onEdit = { editing = spec },
+                            onReset = { actions.onReset(spec.key) },
+                        )
+                        SettingKind.ACTION -> TvRelayTestRow(
+                            spec = spec,
+                            state = state,
+                            onTest = actions.onTestRelay,
+                        )
+                        else -> EngineRow(
+                            spec = spec,
+                            state = state,
+                            appState = appState,
+                            onToggle = actions.onToggle,
+                            onEdit = { editing = it },
+                            onChoose = { choosing = it },
+                            onReset = actions.onReset,
+                        )
+                    }
+                }
             }
 
             GroupHeader(stringResource(R.string.settings_group_android_vpn), SettingsTags.GROUP_ANDROID_VPN)
@@ -332,7 +361,7 @@ fun TvSettingsScreen(
     editing?.let { spec ->
         TvSettingEditor(
             spec = spec,
-            initialValue = state.valueOf(spec.key),
+            initialValue = if (spec.kind == SettingKind.SECRET) "" else state.valueOf(spec.key),
             locked = state.applying,
             onApply = { value ->
                 actions.onApply(spec.key, value)
@@ -670,6 +699,157 @@ private fun BypassRow(appState: SettingsAppState, onToggle: (Boolean) -> Unit) {
     }
 }
 
+/** The write-only relay token on TV: Set opens the masked editor, Clear resets. */
+@Composable
+private fun TvSecretRow(
+    spec: SettingSpec,
+    state: SettingsState,
+    onEdit: () -> Unit,
+    onReset: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val set = state.valueOf(spec.key).isNotBlank()
+    val error = state.errorFor(spec.key)
+    Column(verticalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+        TvFocusableSurface(
+            onClick = onEdit,
+            enabled = !state.applying,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(SettingsTags.row(spec.key)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(spec.labelRes),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onSurface,
+                    )
+                    Text(
+                        text = stringResource(spec.hintRes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = when {
+                        state.applyingKey == spec.key -> stringResource(R.string.settings_applying)
+                        set -> stringResource(R.string.settings_relay_token_set)
+                        else -> stringResource(R.string.settings_relay_token_not_set)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.primary,
+                    modifier = Modifier.testTag(SettingsTags.value(spec.key)),
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+            TvButton(
+                label = stringResource(R.string.settings_relay_token_set_action),
+                onClick = onEdit,
+                enabled = !state.applying,
+                modifier = Modifier.testTag(SettingsTags.RELAY_TOKEN_SET),
+            )
+            if (set) {
+                TvButton(
+                    label = stringResource(R.string.settings_clear),
+                    onClick = onReset,
+                    enabled = !state.applying,
+                    modifier = Modifier.testTag(SettingsTags.RELAY_TOKEN_CLEAR),
+                )
+            }
+        }
+        if (error != null) {
+            Text(
+                text = if (error.validation != null) {
+                    settingValidationText(error.validation)
+                } else {
+                    error.text ?: stringResource(R.string.settings_validation_apply_failed)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalKumihoColors.current.loss,
+                modifier = Modifier.testTag(SettingsTags.error(spec.key)),
+            )
+        }
+    }
+}
+
+/** The Test relay action and its inline result on TV. */
+@Composable
+private fun TvRelayTestRow(
+    spec: SettingSpec,
+    state: SettingsState,
+    onTest: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val running = state.relayTest is RelayTestState.Running
+    Column(verticalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+        TvFocusableSurface(
+            onClick = onTest,
+            enabled = !running,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(SettingsTags.row(spec.key)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(spec.labelRes),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onSurface,
+                    )
+                    Text(
+                        text = stringResource(spec.hintRes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                TvButton(
+                    label = stringResource(R.string.settings_relay_test_action),
+                    onClick = onTest,
+                    enabled = !running,
+                    modifier = Modifier.testTag(SettingsTags.RELAY_TEST),
+                )
+            }
+        }
+        relayTestText(state.relayTest)?.let { result ->
+            Text(
+                text = result,
+                style = MaterialTheme.typography.bodySmall,
+                color = when (state.relayTest) {
+                    is RelayTestState.Rejected, is RelayTestState.Unreachable ->
+                        LocalKumihoColors.current.loss
+                    else -> colors.onSurfaceVariant
+                },
+                modifier = Modifier.testTag(SettingsTags.RELAY_RESULT),
+            )
+        }
+    }
+}
+
+@Composable
+private fun relayTestText(result: RelayTestState): String? = when (result) {
+    RelayTestState.Idle -> null
+    RelayTestState.Running -> stringResource(R.string.settings_relay_testing)
+    is RelayTestState.Ok -> result.latencyMs?.let { latency ->
+        stringResource(R.string.settings_relay_ok_latency, latency)
+    } ?: stringResource(R.string.settings_relay_ok)
+    RelayTestState.Rejected -> stringResource(R.string.settings_relay_rejected)
+    is RelayTestState.Unreachable -> if (result.detail.isBlank()) {
+        stringResource(R.string.settings_relay_unreachable)
+    } else {
+        stringResource(R.string.settings_relay_unreachable_detail, result.detail)
+    }
+}
+
 @Composable
 private fun EngineRow(
     spec: SettingSpec,
@@ -906,7 +1086,12 @@ private fun TvSettingEditor(
                     text = it
                     invalid = null
                 },
-                keyboardType = if (spec.kind == SettingKind.INTEGER) KeyboardType.Number else KeyboardType.Text,
+                keyboardType = when (spec.kind) {
+                    SettingKind.INTEGER -> KeyboardType.Number
+                    SettingKind.SECRET -> KeyboardType.Password
+                    else -> KeyboardType.Text
+                },
+                masked = spec.kind == SettingKind.SECRET,
                 modifier = Modifier.testTag(SettingsTags.DIALOG_FIELD),
             )
             invalid?.let {
@@ -983,6 +1168,7 @@ private fun TvInput(
     onValueChange: (String) -> Unit,
     keyboardType: KeyboardType,
     modifier: Modifier = Modifier,
+    masked: Boolean = false,
 ) {
     val house = LocalKumihoColors.current
     androidx.compose.material3.MaterialTheme(
@@ -995,6 +1181,11 @@ private fun TvInput(
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+            visualTransformation = if (masked) {
+                PasswordVisualTransformation()
+            } else {
+                VisualTransformation.None
+            },
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             modifier = modifier
                 .fillMaxWidth()

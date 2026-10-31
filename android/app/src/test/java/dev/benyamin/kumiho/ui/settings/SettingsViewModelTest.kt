@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.settings
 
+import dev.benyamin.kumiho.engine.RelayTest
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.test.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
@@ -401,6 +402,69 @@ class SettingsViewModelTest {
             assertEquals(2, checker.calls)
         }
 
+    // ---- relay test ------------------------------------------------------
+
+    @Test
+    fun `the relay test exposes only its status and latency and never writes`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.relayResult = RelayTest(
+                ok = true,
+                status = 204,
+                latencyMs = 42.0,
+                error = null,
+            )
+
+            viewModel.testRelay()
+            runCurrent()
+
+            assertEquals(RelayTestState.Ok(42.0), viewModel.state.value.relayTest)
+            assertTrue(gateway.changes.isEmpty())
+            assertEquals(1, gateway.relayCalls)
+        }
+
+    @Test
+    fun `relay rejection and unreachable results are distinct inline states`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+
+            gateway.relayResult = RelayTest(ok = false, status = 401, latencyMs = null, error = null)
+            viewModel.testRelay()
+            runCurrent()
+            assertEquals(RelayTestState.Rejected, viewModel.state.value.relayTest)
+
+            gateway.relayResult = RelayTest(
+                ok = false,
+                status = 0,
+                latencyMs = null,
+                error = "no route to relay",
+            )
+            viewModel.testRelay()
+            runCurrent()
+            assertEquals(
+                RelayTestState.Unreachable("no route to relay"),
+                viewModel.state.value.relayTest,
+            )
+        }
+
+    @Test
+    fun `a relay url change clears the old test result`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.relayResult = RelayTest(ok = true, status = 204, latencyMs = 10.0, error = null)
+            viewModel.testRelay()
+            runCurrent()
+            assertEquals(RelayTestState.Ok(10.0), viewModel.state.value.relayTest)
+
+            viewModel.apply("relay_url", "https://relay.example.com")
+            runCurrent()
+
+            assertEquals(RelayTestState.Idle, viewModel.state.value.relayTest)
+        }
+
     // ---- fakes -----------------------------------------------------------
 
     private class FakeGateway : SettingsGateway {
@@ -410,6 +474,9 @@ class SettingsViewModelTest {
         var setError: Exception? = null
         var setGate: CompletableDeferred<Unit>? = null
         var settingsCalls = 0
+        var relayResult = RelayTest(ok = true, status = 204, latencyMs = 1.0, error = null)
+        var relayError: Exception? = null
+        var relayCalls = 0
         val changes = mutableListOf<Triple<String, String, Boolean>>()
 
         override suspend fun settings(): Settings {
@@ -425,6 +492,12 @@ class SettingsViewModelTest {
             changes += Triple(key, value, reset)
             setGate?.await()
             setError?.let { throw it }
+        }
+
+        override suspend fun relayTest(): RelayTest {
+            relayCalls += 1
+            relayError?.let { throw it }
+            return relayResult
         }
     }
 
