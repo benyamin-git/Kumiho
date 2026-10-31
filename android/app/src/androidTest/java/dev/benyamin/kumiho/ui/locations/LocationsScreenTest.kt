@@ -233,10 +233,13 @@ class LocationsScreenTest {
             ),
         )
 
+        scrollTo(LocationsTags.FAVORITES_HEADING)
         rule.onNodeWithTag(LocationsTags.FAVORITES_HEADING).assertExists()
-        rule.onNodeWithTag(LocationsTags.RECENT_HEADING).assertExists()
         val edge = LocationTree.rows(COUNTRIES).first { it.address == EDGE_ADDRESS }
         rule.onAllNodesWithTag(LocationsTags.favorite(edge)).onFirst().performClick()
+        scrollTo(LocationsTags.RECENT_HEADING)
+        rule.onNodeWithTag(LocationsTags.RECENT_HEADING).assertExists()
+        scrollTo(LocationsTags.CLEAR_RECENTS)
         rule.onNodeWithTag(LocationsTags.CLEAR_RECENTS).performClick()
 
         assertTrue(calls.contains("favorite-$EDGE_ADDRESS"))
