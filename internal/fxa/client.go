@@ -350,7 +350,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, 
 		}
 		ua := c.UserAgent
 		if ua == "" {
-			ua = UserAgent
+			ua = BrowserUserAgent
 		}
 		req.Header.Set("User-Agent", ua)
 		req.Header.Set("Accept", "application/json")

@@ -81,7 +81,8 @@ All facts below were read directly from `Vauth/FoxyVPN` (Kotlin, MIT) and its cr
 | Guardian errors | 401/403 → refresh access token, if still rejected → activate, retry once; 429 → quota exhausted (fatal until reset); 406 → Fastly challenge |
 | Server list | `GET https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/vpn-serverlist/records`; records contain country (nested or direct); skip empty code/cities and `CatchAll Anycast`; `REC` = recommended |
 | Server → proxy | per server take protocol `name=="connect"` → `host:port`; if protocols empty use `hostname:port`; skip `quarantined` |
-| UA (all Mozilla APIs) | `MozillaVPN/2.35.0 (sys:linux; iap:true)` + `Accept: application/json` |
+| UA (FxA) | desktop Firefox UA (`Mozilla/5.0 (X11; Linux x86_64; rv:158.0) … Firefox/158.0`) + `Accept: application/json`; Fastly hard-blocks the MozillaVPN UA on `/v1/oauth/token` and `/v1/token` |
+| UA (Guardian, Remote Settings, exit check) | `MozillaVPN/2.35.0 (sys:linux; iap:true)`; Guardian rejects browser UAs |
 
 ### 2.2 Fastly anti-bot solver (on HTTP 406)
 
@@ -121,8 +122,9 @@ no interactive captcha UI.
   read per control-plane request, so it applies immediately; off restores the
   immediate, clearly worded failure on the primary host, and the fallback is
   still tried.
-- The solver sends a Chrome 126 (Windows) UA while Mozilla API requests keep the
-  MozillaVPN UA (§2.1).
+- The solver sends a Chrome 126 (Windows) UA. FxA requests send the desktop
+  Firefox UA and Guardian/Remote Settings keep the MozillaVPN UA (§2.1); the
+  per-host split follows Fastly's 2026-10-31 UA rules.
 
 ### 2.3 Data plane (HTTP/2 CONNECT)
 

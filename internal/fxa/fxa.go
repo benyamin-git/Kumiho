@@ -24,8 +24,15 @@ const (
 	ClientID = "5882386c6d801776"
 	// Scope requests the VPN entitlement plus profile.
 	Scope = "profile https://identity.mozilla.com/apps/vpn"
-	// UserAgent identifies as the official Mozilla VPN client (Linux).
+	// UserAgent identifies as the official Mozilla VPN client (Linux). It is
+	// required by Guardian and Remote Settings; Fastly's FxA edge now hard
+	// blocks it (empty HTTP 406, no challenge page) on the OAuth endpoints,
+	// so the FxA client sends BrowserUserAgent instead.
 	UserAgent = "MozillaVPN/2.35.0 (sys:linux; iap:true)"
+	// BrowserUserAgent is desktop Firefox's identity, which Firefox's
+	// built-in VPN sends to Firefox Accounts. Fastly accepts it on
+	// /v1/oauth/token and /v1/token, where the MozillaVPN UA is blocked.
+	BrowserUserAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0"
 
 	// DefaultAuthorizationEndpoint is the FxA browser consent page.
 	DefaultAuthorizationEndpoint = "https://accounts.firefox.com/authorization"

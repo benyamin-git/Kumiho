@@ -67,8 +67,8 @@ func TestLoginRetriesWithoutVerificationMethod(t *testing.T) {
 			t.Errorf("login attempt %d must not be Hawk-signed, got %q", i, h)
 		}
 	}
-	if userAgents[0] != UserAgent {
-		t.Errorf("User-Agent = %q, want %q", userAgents[0], UserAgent)
+	if userAgents[0] != BrowserUserAgent {
+		t.Errorf("User-Agent = %q, want %q", userAgents[0], BrowserUserAgent)
 	}
 }
 

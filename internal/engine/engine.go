@@ -179,7 +179,9 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		panic("engine: nil platform provider")
 	}
 	ua := plat.UserAgent()
-	client.UserAgent = ua
+	// FxA's edge blocks the MozillaVPN UA on its OAuth endpoints; Guardian
+	// still requires it, so the two control planes keep separate identities.
+	client.UserAgent = fxa.BrowserUserAgent
 	c := &Controller{
 		store:           store,
 		log:             ring,

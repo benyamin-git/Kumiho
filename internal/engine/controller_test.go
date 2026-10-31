@@ -66,6 +66,18 @@ func newTestControllerWithProvider(t *testing.T, handler http.HandlerFunc, plat 
 	return New(store, ring, client, plat), paths
 }
 
+// TestControlPlaneUserAgents pins the per-host identities: Fastly blocks the
+// MozillaVPN UA on the FxA OAuth endpoints and browser UAs on Guardian.
+func TestControlPlaneUserAgents(t *testing.T) {
+	c, _ := newTestController(t, loginOKHandler(t))
+	if c.fxa.UserAgent != fxa.BrowserUserAgent {
+		t.Errorf("FxA User-Agent = %q, want %q", c.fxa.UserAgent, fxa.BrowserUserAgent)
+	}
+	if c.guardian.UserAgent != fxa.UserAgent {
+		t.Errorf("Guardian User-Agent = %q, want %q", c.guardian.UserAgent, fxa.UserAgent)
+	}
+}
+
 // loginOKHandler completes a login without 2FA.
 func loginOKHandler(t *testing.T) http.HandlerFunc {
 	t.Helper()

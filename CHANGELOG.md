@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Signing in works again when Fastly blocks the Mozilla VPN client name.**
+  Fastly's Firefox Accounts edge now answers the `MozillaVPN` User-Agent with
+  an empty HTTP 406 on `/v1/oauth/token` and `/v1/token`, which no solved
+  challenge can clear — the account email arrived but the app reported "could
+  not solve the anti-bot challenge". FxA requests now send desktop Firefox's
+  User-Agent (the identity Firefox's built-in VPN uses); Guardian and Remote
+  Settings keep the Mozilla VPN one, which Guardian still requires.
+
 ## [0.8.2] - 2026-10-30
 
 ### Fixed
