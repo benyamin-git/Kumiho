@@ -77,9 +77,11 @@ type City struct {
 
 // Country groups cities (also the REC pseudo-country).
 type Country struct {
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	Cities []City `json:"cities"`
+	Code             string `json:"code"`
+	Name             string `json:"name"`
+	Cities           []City `json:"cities"`
+	Locked           bool   `json:"locked,omitempty"`
+	FilterExpression string `json:"filter_expression,omitempty"`
 }
 
 // Candidate is a connectable proxy target.
@@ -159,9 +161,17 @@ func LoadCache(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// Parse decodes a Remote Settings records response. Records may carry the
-// country directly or nested under a "country" object (PLAN.md §2.1).
+// Parse decodes a Remote Settings records response with no filter context.
+// Records may carry the country directly or nested under a "country" object
+// (PLAN.md §2.1).
 func Parse(data []byte) ([]Country, error) {
+	return ParseWithOptions(data, Options{})
+}
+
+// ParseWithOptions decodes the records, evaluates each record's
+// filter_expression, and applies the locked filter. A filter error never hides
+// a record: it is logged and the record is included (D16).
+func ParseWithOptions(data []byte, opts Options) ([]Country, error) {
 	var doc struct {
 		Data []json.RawMessage `json:"data"`
 	}
@@ -171,17 +181,8 @@ func Parse(data []byte) ([]Country, error) {
 
 	countries := make([]Country, 0, len(doc.Data))
 	for _, raw := range doc.Data {
-		record := raw
-		var wrapper struct {
-			Country json.RawMessage `json:"country"`
-		}
-		if err := json.Unmarshal(raw, &wrapper); err == nil &&
-			len(wrapper.Country) > 0 && string(wrapper.Country) != "null" {
-			record = wrapper.Country
-		}
-
-		var c Country
-		if err := json.Unmarshal(record, &c); err != nil {
+		c, ok := parseRecord(raw)
+		if !ok {
 			continue // skip malformed records like the reference client
 		}
 		if c.Code == "" || len(c.Cities) == 0 {
@@ -190,9 +191,62 @@ func Parse(data []byte) ([]Country, error) {
 		if isExcludedName(c.Name) {
 			continue
 		}
+		if c.FilterExpression != "" {
+			include, err := evalFilter(c.FilterExpression, opts.Context)
+			if err != nil {
+				if opts.Logf != nil {
+					opts.Logf("record %s filter_expression %q: %v; including it", c.Code, c.FilterExpression, err)
+				}
+			} else if !include {
+				continue
+			}
+		}
+		if !opts.AllowLocked && c.Locked {
+			continue
+		}
 		countries = append(countries, c)
 	}
 	return countries, nil
+}
+
+type recordMeta struct {
+	FilterExpression string `json:"filter_expression"`
+	Locked           bool   `json:"locked"`
+}
+
+// parseRecord returns one record's country and metadata. A wrapped record's
+// metadata is taken from the wrapper when present, otherwise from the inner
+// country object.
+func parseRecord(raw []byte) (Country, bool) {
+	record := raw
+	var wrapper struct {
+		Country json.RawMessage `json:"country"`
+		recordMeta
+	}
+	wrapperOK := json.Unmarshal(raw, &wrapper) == nil
+	if wrapperOK && len(wrapper.Country) > 0 && string(wrapper.Country) != "null" {
+		record = wrapper.Country
+	}
+
+	var c Country
+	if err := json.Unmarshal(record, &c); err != nil {
+		return Country{}, false
+	}
+	var inner recordMeta
+	if err := json.Unmarshal(record, &inner); err != nil {
+		return Country{}, false
+	}
+	if wrapperOK {
+		if wrapper.FilterExpression != "" {
+			inner.FilterExpression = wrapper.FilterExpression
+		}
+		if wrapper.Locked {
+			inner.Locked = true
+		}
+	}
+	c.FilterExpression = inner.FilterExpression
+	c.Locked = inner.Locked
+	return c, true
 }
 
 func isExcludedName(name string) bool {
