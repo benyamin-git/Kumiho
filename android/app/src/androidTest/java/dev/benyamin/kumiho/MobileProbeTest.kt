@@ -68,6 +68,8 @@ class MobileProbeTest {
 
         override fun onPing(resultJSON: String) = Unit
 
+        override fun onPingDone(doneJSON: String) = Unit
+
         override fun onNotice(noticeJSON: String) = Unit
 
         fun awaitFirstStatus(timeout: Long, unit: TimeUnit): Boolean = firstStatus.await(timeout, unit)
