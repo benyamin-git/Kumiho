@@ -8,6 +8,55 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-31
+
+Region and location truth across every client: blocked-region handling with an
+optional control-plane relay, the real server list behind Firefox's filters,
+real-edge latency, Fastest, favorites and recents.
+
+### Added
+
+- **Control-plane relay for HTTP 451.** Kumiho reports a regional block
+  honestly and retries a control-plane request exactly once through a
+  user-operated HTTPS relay. A Cloudflare Worker template, `kumiho relay test`,
+  a write-only token and a **Test relay** action ship on the CLI, TUI, Windows
+  GUI, Android phone and Android TV. The relay never carries VPN traffic or the
+  browser sign-in page.
+- **Settings → Region on every client** with `allow_locked`, `relay_url`, the
+  write-only `relay_token` (stored as `relay.token` beside `tokens.json`), and
+  Test relay.
+- **Server-list truth.** The engine evaluates the Firefox version and the
+  JEXL subset Mozilla uses (`versionCompare`, `env.country`), honors
+  `filter_expression`, fails open on an unknown expression, and hides `locked`
+  records until **Show locked locations** / `allow_locked` reveals them with a
+  badge.
+- **Real-edge Ping all.** Each candidate is measured through a temporary edge
+  session (4 concurrent, 10 s each), cached for 30 minutes, and the run ends on
+  a `ping_done` event instead of a timer. Hidden locked servers are never
+  probed.
+- **Fastest, Favorites and Recent** pinned above the flat list in the TUI, GUI,
+  Android phone and Android TV. Favorites survive server rotation through a
+  `{country, city, server}` ref, recents cap at five and Clear recents sits in
+  the Recent header.
+- **CLI parity:** `kumiho locations --favorites`, `--recent`, the new
+  `kumiho settings get/set/reset` commands, `kumiho connect --fastest`, and
+  `kumiho relay test`.
+
+### Changed
+
+- **Ping all is slower and truthful.** The old direct TCP probes and fixed
+  completion windows are gone. Clients follow `ping_done`; a run can take
+  longer because every candidate opens a real edge path.
+- **`kumiho locations --json` now prints the complete `LocationsResult`**
+  object (`countries`, `favorites`, `recents`, `latency`, `allow_locked`)
+  instead of only the raw countries array. Scripts that read the top-level
+  array must read `.countries`.
+- **Locations order** keeps Fastest, Favorites and Recent pinned; only the full
+  list switches to speed order, and a refresh restores country order while
+  reloading fresh cached RTTs.
+- **Settings rows** now include the Region group, and the TUI, GUI, Android
+  phone and Android TV catalogs gained the same four controls.
+
 ### Fixed
 
 - **Browser sign-in works again when adding an account.** Mozilla's page
