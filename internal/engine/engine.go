@@ -171,6 +171,15 @@ type Controller struct {
 	locationsRaw []byte
 	locationsAt  time.Time
 
+	// Real-delay ping cache. Samples are keyed by the lower-cased canonical
+	// candidate address; pingMu guards the map independently of mu so a run
+	// never blocks status or connect reads.
+	pingConcurrency int
+	pingTimeout     time.Duration
+	pingCacheTTL    time.Duration
+	pingMu          sync.Mutex
+	pings           map[string]pingSample
+
 	// Tunnel state (PLAN.md §4.1).
 	session      upstreamSession
 	socksSrv     *socks.Server
@@ -239,6 +248,11 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 		redialJitterMin:  defaultRedialJitterMin,
 		redialJitterMax:  defaultRedialJitterMax,
 		routeProbe:       plat.HasDefaultRoute,
+
+		pingConcurrency: pingProbeConcurrency,
+		pingTimeout:     pingProbeTimeout,
+		pingCacheTTL:    pingCacheTTL,
+		pings:           make(map[string]pingSample),
 	}
 	c.guardian.UserAgent = ua
 	if ls, ok := c.nc.(netcfgLogfSetter); ok {

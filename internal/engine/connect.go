@@ -151,7 +151,7 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	var lastErr error
 	for attempt := 1; attempt <= 4; attempt++ {
 		next := sequence[(attempt-1)%len(sequence)]
-		opts, optErr := c.upstreamOptions(ctx, next, pass)
+		opts, optErr := c.upstreamOptions(ctx, next, c.passFor(pass))
 		if optErr != nil {
 			// A proxy misconfiguration cannot heal by retrying; surface it
 			// without burning attempts or backing off.
@@ -829,7 +829,27 @@ func keepaliveTimeoutFor(profile string) time.Duration {
 // literal while TLS SNI and the HTTP/2 :authority keep cand.Host. A malformed
 // proxy URL (validation should already reject it) returns a *proxyConfigError
 // instead of dialing direct or panicking; callers surface it.
-func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candidate, pass *guardian.Pass) (upstream.Options, error) {
+// passFor returns the pass token source for one dial. The live pass wins so a
+// renewal is visible to long-lived sessions; the freshly acquired initial pass
+// covers the window before it is published on the controller.
+func (c *Controller) passFor(initial *guardian.Pass) func() string {
+	return func() string {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.pass != nil {
+			return c.pass.Token
+		}
+		if initial != nil {
+			return initial.Token
+		}
+		return ""
+	}
+}
+
+func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candidate, passFn func() string) (upstream.Options, error) {
+	if passFn == nil {
+		passFn = c.passFor(nil)
+	}
 	// Read the effective config on every call so a keepalive profile change
 	// applies to the next connect or watchdog redial without a restart
 	// (D31).
@@ -853,14 +873,7 @@ func (c *Controller) upstreamOptions(ctx context.Context, cand serverlist.Candid
 			// before the TLS handshake (T2.2 handoff).
 			return tlsplit.Wrap(conn, mode)
 		},
-		Pass: func() string {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			if c.pass != nil {
-				return c.pass.Token
-			}
-			return ""
-		},
+		Pass: passFn,
 		Logf: c.log.Logf,
 	}
 

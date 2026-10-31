@@ -258,6 +258,14 @@ type PingResult struct {
 	RTTMS *float64 `json:"rtt_ms"`
 }
 
+// PingDone closes one ping run; Error is set for a run-level preflight
+// failure.
+type PingDone struct {
+	Total    int    `json:"total"`
+	Answered int    `json:"answered"`
+	Error    string `json:"error,omitempty"`
+}
+
 // ConnectPayload is the connect request (used from M3 on).
 type ConnectPayload struct {
 	LocationCode string `json:"location_code,omitempty"`

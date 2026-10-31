@@ -218,7 +218,7 @@ func (c *Controller) redialOnce(stop <-chan struct{}) (upstreamSession, error) {
 	cand := c.cand
 	c.mu.Unlock()
 
-	opts, err := c.upstreamOptions(ctx, cand, pass)
+	opts, err := c.upstreamOptions(ctx, cand, c.passFor(pass))
 	if err != nil {
 		// Proxy misconfiguration: surfaced to the watchdog loop, which logs
 		// it on every cycle rather than swallowing it.
