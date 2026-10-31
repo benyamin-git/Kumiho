@@ -323,6 +323,21 @@ func (c *Controller) regionBlocked(err error) *api.RemoteError {
 	return nil
 }
 
+// TestRelay probes the configured relay through the allowlisted server-list
+// head. It is the only path that contacts the relay without a preceding 451.
+func (c *Controller) TestRelay(ctx context.Context) api.RelayTestResult {
+	cfg := c.relayConfig()
+	if strings.TrimSpace(cfg.URL) == "" {
+		return api.RelayTestResult{Error: "relay_url is not set"}
+	}
+	res, err := relay.Test(ctx, c.httpClient, cfg)
+	if err != nil {
+		return api.RelayTestResult{Status: res.Status, Error: err.Error()}
+	}
+	ms := float64(res.Latency) / float64(time.Millisecond)
+	return api.RelayTestResult{OK: true, Status: res.Status, LatencyMS: &ms}
+}
+
 func ringLogf(ring *logging.Ring) func(format string, args ...any) {
 	if ring == nil {
 		return nil

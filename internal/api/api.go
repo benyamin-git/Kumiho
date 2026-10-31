@@ -224,6 +224,15 @@ type SettingsView struct {
 	RelayTokenSet        bool     `json:"relay_token_set"`
 }
 
+// RelayTestResult reports one control-plane relay health probe. LatencyMS is
+// only set on success; Status is set when the relay answered.
+type RelayTestResult struct {
+	OK        bool     `json:"ok"`
+	Status    int      `json:"status,omitempty"`
+	LatencyMS *float64 `json:"latency_ms,omitempty"`
+	Error     string   `json:"error,omitempty"`
+}
+
 // SettingsSetPayload changes one runtime setting. Reset drops the persisted
 // override so the admin config (or built-in default) applies again.
 type SettingsSetPayload struct {

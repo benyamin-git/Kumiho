@@ -280,6 +280,66 @@ func TestConnectRegionBlockedNoRelay(t *testing.T) {
 	}
 }
 
+func TestRelayTestCommand(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	if res := ctrl.TestRelay(context.Background()); res.OK || res.Error != "relay_url is not set" {
+		t.Fatalf("unset relay test = %+v", res)
+	}
+
+	const token = "relay-test-token"
+	gotToken := ""
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken = r.Header.Get("X-Kumiho-Relay-Token")
+		if r.URL.Path != "/firefox.settings.services.mozilla.com/v1/buckets/main/collections/vpn-serverlist/records" {
+			t.Errorf("relay test path = %q", r.URL.Path)
+		}
+		if r.URL.Query().Get("limit") != "1" {
+			t.Errorf("relay test query = %q", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	if err := ctrl.SetSetting("relay_url", srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.SetSetting("relay_token", token); err != nil {
+		t.Fatal(err)
+	}
+	ctrl.httpClient = srv.Client()
+	res := ctrl.TestRelay(context.Background())
+	if !res.OK || res.Status != http.StatusOK || res.LatencyMS == nil || *res.LatencyMS < 0 {
+		t.Fatalf("successful relay test = %+v", res)
+	}
+	if gotToken != token {
+		t.Fatalf("relay token header = %q, want %q", gotToken, token)
+	}
+
+	blocked := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "blocked", http.StatusUnavailableForLegalReasons)
+	}))
+	defer blocked.Close()
+	if err := ctrl.SetSetting("relay_url", blocked.URL); err != nil {
+		t.Fatal(err)
+	}
+	ctrl.httpClient = blocked.Client()
+	res = ctrl.TestRelay(context.Background())
+	if res.OK || res.Status != http.StatusUnavailableForLegalReasons || res.LatencyMS != nil ||
+		!strings.Contains(res.Error, "HTTP 451") {
+		t.Fatalf("blocked relay test = %+v", res)
+	}
+
+	if err := ctrl.SetSetting("relay_url", "https://relay.example"); err != nil {
+		t.Fatal(err)
+	}
+	ctrl.httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network down")
+	})}
+	res = ctrl.TestRelay(context.Background())
+	if res.OK || res.Status != 0 || !strings.Contains(res.Error, "network down") {
+		t.Fatalf("failed relay test = %+v", res)
+	}
+}
+
 func TestBrowserLoginRegionBlocked(t *testing.T) {
 	t.Run("exchange", func(t *testing.T) {
 		ctrl, srv := newBrowserTestController(t)

@@ -46,6 +46,45 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRelayTestEnvelope(t *testing.T) {
+	ms := 12.5
+	env, err := NewEnvelope("7", TypeRelayTest, api.RelayTestResult{
+		OK:        true,
+		Status:    200,
+		LatencyMS: &ms,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Envelope
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != TypeRelayTest {
+		t.Fatalf("type = %q, want %q", got.Type, TypeRelayTest)
+	}
+	var result api.RelayTestResult
+	if err := got.DecodePayload(&result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.OK || result.Status != 200 || result.LatencyMS == nil || *result.LatencyMS != ms {
+		t.Fatalf("result = %+v", result)
+	}
+
+	// The additive command does not change the existing v1 envelope shape.
+	var old Envelope
+	if err := json.Unmarshal([]byte(`{"v":1,"id":"1","type":"status"}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.V != ProtocolVersion || old.Type != TypeStatus {
+		t.Fatalf("old envelope = %+v", old)
+	}
+}
+
 // testServer starts a socket server for tests; unsupported platforms skip.
 func testServer(t *testing.T, handler func(context.Context, *Conn) error) (*Server, string) {
 	t.Helper()

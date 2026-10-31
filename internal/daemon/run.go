@@ -410,6 +410,11 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		replyOK()
 		h.broadcastStatus()
 
+	case ipc.TypeRelayTest:
+		rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		_ = conn.Reply(env.ID, ipc.TypeRelayTest, h.ctrl.TestRelay(rctx))
+
 	case ipc.TypeLogsSubscribe:
 		var p api.LogsSubscribePayload
 		if err := env.DecodePayload(&p); err != nil {
