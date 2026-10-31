@@ -100,6 +100,9 @@ object EngineJson {
         keepaliveProfile = stringOrEmpty(fields, "keepalive_profile"),
         accountRotation = boolean(fields, "account_rotation"),
         rotationThreshold = int(fields, "rotation_threshold"),
+        allowLocked = boolean(fields, "allow_locked"),
+        relayUrl = string(fields, "relay_url"),
+        relayTokenSet = boolean(fields, "relay_token_set"),
     )
 
     fun loginState(json: String): LoginState = loginState(parseObject(json, "login state"))
@@ -205,7 +208,57 @@ object EngineJson {
         code = stringOrEmpty(fields, "code"),
         name = stringOrEmpty(fields, "name"),
         cities = objectsIn(arrayOrNull(fields, "cities")).map(::city),
+        locked = boolean(fields, "locked"),
     )
+
+    /** The complete locations reply, with old engines' omissions defaulted. */
+    fun locationsResult(json: String): LocationsResult =
+        locationsResult(parseObject(json, "locations"))
+
+    fun locationsResult(fields: JSONObject): LocationsResult = LocationsResult(
+        countries = countries(fields),
+        favorites = objectsIn(arrayOrNull(fields, "favorites")).map(::locationRef),
+        recents = objectsIn(arrayOrNull(fields, "recents")).map(::locationRef),
+        latency = cachedLatency(objectOrNull(fields, "latency")),
+        allowLocked = boolean(fields, "allow_locked"),
+    )
+
+    fun locationRef(fields: JSONObject): LocationRef = LocationRef(
+        countryCode = stringOrEmpty(fields, "country_code"),
+        cityCode = string(fields, "city_code"),
+        server = stringOrEmpty(fields, "server"),
+    )
+
+    fun cachedPing(fields: JSONObject): CachedPing = CachedPing(
+        rttMs = doubleOrNull(fields, "rtt_ms"),
+        measuredAt = instantOrNull(string(fields, "measured_at")) ?: Instant.EPOCH,
+    )
+
+    fun pingDone(json: String): PingDone = pingDone(parseObject(json, "ping done"))
+
+    fun pingDone(fields: JSONObject): PingDone = PingDone(
+        total = int(fields, "total"),
+        answered = int(fields, "answered"),
+        error = string(fields, "error"),
+    )
+
+    fun relayTest(json: String): RelayTest = relayTest(parseObject(json, "relay test"))
+
+    fun relayTest(fields: JSONObject): RelayTest = RelayTest(
+        ok = boolean(fields, "ok"),
+        status = int(fields, "status"),
+        latencyMs = doubleOrNull(fields, "latency_ms"),
+        error = string(fields, "error"),
+    )
+
+    private fun cachedLatency(fields: JSONObject?): Map<String, CachedPing> {
+        if (fields == null) return emptyMap()
+        val out = LinkedHashMap<String, CachedPing>()
+        for (key in fields.keys()) {
+            fields.optJSONObject(key)?.let { out[key] = cachedPing(it) }
+        }
+        return out
+    }
 
     private fun city(fields: JSONObject): City = City(
         code = stringOrEmpty(fields, "code"),

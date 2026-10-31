@@ -232,7 +232,10 @@ class EngineJsonTest {
               "http_proxy": true,
               "http_proxy_port": 8080,
               "solve_challenges": true,
-              "keepalive_profile": "aggressive"
+              "keepalive_profile": "aggressive",
+              "allow_locked": true,
+              "relay_url": "https://relay.example.test",
+              "relay_token_set": true
             }
             """.trimIndent(),
         )
@@ -261,6 +264,9 @@ class EngineJsonTest {
         assertEquals(8080, settings.httpProxyPort)
         assertTrue(settings.solveChallenges)
         assertEquals("aggressive", settings.keepaliveProfile)
+        assertTrue(settings.allowLocked)
+        assertEquals("https://relay.example.test", settings.relayUrl)
+        assertTrue(settings.relayTokenSet)
     }
 
     @Test
@@ -285,6 +291,9 @@ class EngineJsonTest {
         assertTrue(settings.overridden.isEmpty())
         assertEquals("", settings.tlsSplit)
         assertEquals("", settings.keepaliveProfile)
+        assertFalse(settings.allowLocked)
+        assertNull(settings.relayUrl)
+        assertFalse(settings.relayTokenSet)
     }
 
     @Test
@@ -482,6 +491,7 @@ class EngineJsonTest {
                     {
                       "code": "de",
                       "name": "Germany",
+                      "locked": true,
                       "cities": [
                         {
                           "code": "ber",
@@ -509,6 +519,8 @@ class EngineJsonTest {
         assertEquals("rec", countries[0].code)
         assertTrue(countries[0].cities.isEmpty())
         assertEquals("Germany", countries[1].name)
+        assertTrue(countries[1].locked)
+        assertFalse(countries[0].locked)
         val city = countries[1].cities.single()
         assertEquals("ber", city.code)
         val server = city.servers.single()
@@ -531,6 +543,91 @@ class EngineJsonTest {
         assertEquals("", partial[0].name)
         assertTrue(partial[0].cities.isEmpty())
         assertEquals("", partial[1].code)
+    }
+
+    @Test
+    fun `locations result parses pinned refs latency and locked state`() {
+        val result = EngineJson.locationsResult(
+            """
+            {
+              "countries": [{"code":"DE","name":"Germany","locked":true,"cities":[]}],
+              "favorites": [
+                {"country_code":"DE","city_code":"ber","server":"de1.example:443"}
+              ],
+              "recents": [
+                {"country_code":"US","server":"us1.example:443"}
+              ],
+              "latency": {
+                "de1.example:443": {"rtt_ms":42.5,"measured_at":"2026-10-31T12:00:00Z"},
+                "jp1.example:443": {"rtt_ms":null,"measured_at":"2026-10-31T12:00:00Z"}
+              },
+              "allow_locked": true
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(1, result.countries.size)
+        assertTrue(result.countries.single().locked)
+        assertEquals(
+            listOf(LocationRef("DE", "ber", "de1.example:443")),
+            result.favorites,
+        )
+        assertEquals(listOf(LocationRef("US", null, "us1.example:443")), result.recents)
+        assertEquals(42.5, result.latency.getValue("de1.example:443").rttMs)
+        assertEquals(
+            Instant.parse("2026-10-31T12:00:00Z"),
+            result.latency.getValue("de1.example:443").measuredAt,
+        )
+        assertNull(result.latency.getValue("jp1.example:443").rttMs)
+        assertTrue(result.allowLocked)
+    }
+
+    @Test
+    fun `locations result defaults every additive field for an older engine`() {
+        val result = EngineJson.locationsResult("""{"countries":[{"code":"rec","name":"Recommended"}]}""")
+
+        assertEquals("rec", result.countries.single().code)
+        assertTrue(result.favorites.isEmpty())
+        assertTrue(result.recents.isEmpty())
+        assertTrue(result.latency.isEmpty())
+        assertFalse(result.allowLocked)
+    }
+
+    @Test
+    fun `ping done parses totals and run errors`() {
+        val done = EngineJson.pingDone("""{"total":3,"answered":2}""")
+        assertEquals(3, done.total)
+        assertEquals(2, done.answered)
+        assertNull(done.error)
+
+        val failed = EngineJson.pingDone("""{"error":"Ping all needs a signed-in account"}""")
+        assertEquals(0, failed.total)
+        assertEquals(0, failed.answered)
+        assertEquals("Ping all needs a signed-in account", failed.error)
+
+        val empty = EngineJson.pingDone("{}")
+        assertEquals(0, empty.total)
+        assertEquals(0, empty.answered)
+        assertNull(empty.error)
+    }
+
+    @Test
+    fun `relay test parses success rejection and transport errors`() {
+        val ok = EngineJson.relayTest("""{"ok":true,"status":200,"latency_ms":12.4}""")
+        assertTrue(ok.ok)
+        assertEquals(200, ok.status)
+        assertEquals(12.4, ok.latencyMs)
+        assertNull(ok.error)
+
+        val rejected = EngineJson.relayTest("""{"ok":false,"status":403}""")
+        assertFalse(rejected.ok)
+        assertEquals(403, rejected.status)
+        assertNull(rejected.latencyMs)
+
+        val unreachable = EngineJson.relayTest("""{"error":"dial refused"}""")
+        assertFalse(unreachable.ok)
+        assertEquals(0, unreachable.status)
+        assertEquals("dial refused", unreachable.error)
     }
 
     @Test

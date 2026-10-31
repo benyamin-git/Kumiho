@@ -204,8 +204,10 @@ class EngineClientTest {
             val transport = FakeTransport()
             val client = client(transport, dispatcher)
             val pings = mutableListOf<PingResult>()
+            val pingDones = mutableListOf<PingDone>()
             val notices = mutableListOf<Notice>()
             backgroundScope.launch(dispatcher) { client.pings.collect { pings += it } }
+            backgroundScope.launch(dispatcher) { client.pingDone.collect { pingDones += it } }
             backgroundScope.launch(dispatcher) { client.notices.collect { notices += it } }
             client.start(paths(), FakeBridge())
             val listener = requireNotNull(transport.listener)
@@ -224,6 +226,7 @@ class EngineClientTest {
                 """{"ts":"2026-10-21T00:00:00Z","level":"warn","tag":"engine","msg":"hello"}""",
             )
             listener.onPing("""{"host":"edge.example:443","rtt_ms":42.5}""")
+            listener.onPingDone("""{"total":2,"answered":1}""")
             listener.onNotice("""{"type":"signed_out","message":"signed out"}""")
 
             val status = requireNotNull(client.status.value)
@@ -240,6 +243,10 @@ class EngineClientTest {
             assertEquals(1, pings.size)
             assertEquals("edge.example:443", pings.single().host)
             assertEquals(42.5, pings.single().rttMs)
+            assertEquals(1, pingDones.size)
+            assertEquals(2, pingDones.single().total)
+            assertEquals(1, pingDones.single().answered)
+            assertNull(pingDones.single().error)
 
             assertEquals(1, notices.size)
             assertEquals("signed_out", notices.single().type)
@@ -345,8 +352,13 @@ class EngineClientTest {
             client.ping(listOf("a.example:443", "b.example:443"))
             client.selectLocation("de", "ber", "de1")
             client.selectLocation("fr", null, "fr1")
+            client.selectLocation(fastest = true)
             client.connect("de", "ber", "de1", proxyOnly = true)
             client.connect()
+            client.connect(fastest = true)
+            client.favoriteLocation(LocationRef("de", "ber", "de1"), true)
+            client.clearRecents()
+            client.relayTest()
             client.setSetting("mtu", "1500", reset = true)
             client.logsSubscribe("warn")
             client.logAppend("info", "app", "hello from the app")
@@ -367,6 +379,10 @@ class EngineClientTest {
             assertEquals("ber", selections[0].getJSONObject("payload").getString("city_code"))
             assertEquals("de1", selections[0].getJSONObject("payload").getString("server"))
             assertFalse(selections[1].getJSONObject("payload").has("city_code"))
+            val fastestSelection = selections[2].getJSONObject("payload")
+            assertTrue(fastestSelection.getBoolean("fastest"))
+            assertFalse(fastestSelection.has("country_code"))
+            assertFalse(fastestSelection.has("server"))
 
             val connects = byType.getValue("connect")
             val full = connects[0].getJSONObject("payload")
@@ -379,6 +395,18 @@ class EngineClientTest {
             assertFalse(bare.has("location_code"))
             assertFalse(bare.has("city_code"))
             assertFalse(bare.has("server"))
+            val fastestConnect = connects[2].getJSONObject("payload")
+            assertTrue(fastestConnect.getBoolean("fastest"))
+            assertFalse(fastestConnect.has("location_code"))
+            assertFalse(fastestConnect.has("server"))
+
+            val favorite = byType.getValue("favorite_location").single().getJSONObject("payload")
+            assertEquals("de", favorite.getString("country_code"))
+            assertEquals("ber", favorite.getString("city_code"))
+            assertEquals("de1", favorite.getString("server"))
+            assertTrue(favorite.getBoolean("favorite"))
+            assertEquals(1, byType.getValue("clear_recents").size)
+            assertEquals(1, byType.getValue("relay_test").size)
 
             val setting = byType.getValue("settings_set").single().getJSONObject("payload")
             assertEquals("mtu", setting.getString("key"))
@@ -562,7 +590,7 @@ class EngineClientTest {
                     "account" ->
                         """{"type":"account_info","payload":{"email":"a@b.example","subscribed":true}}"""
                     "locations" ->
-                        """{"type":"locations","payload":{"countries":[{"code":"rec","name":"Recommended"}]}}"""
+                        """{"type":"locations","payload":{"countries":[{"code":"rec","name":"Recommended"}],"favorites":[{"country_code":"DE","city_code":"ber","server":"de1:443"}],"recents":[{"country_code":"US","server":"us1:443"}],"latency":{"de1:443":{"rtt_ms":12.5,"measured_at":"2026-10-31T12:00:00Z"}},"allow_locked":true}}"""
                     "doctor" ->
                         """
                         {"type":"doctor","payload":{
@@ -590,6 +618,12 @@ class EngineClientTest {
             val countries = client.locations(refresh = true)
             assertEquals("rec", countries.single().code)
 
+            val result = client.locationsResult(refresh = true)
+            assertEquals(LocationRef("DE", "ber", "de1:443"), result.favorites.single())
+            assertEquals(LocationRef("US", null, "us1:443"), result.recents.single())
+            assertEquals(12.5, result.latency.getValue("de1:443").rttMs)
+            assertTrue(result.allowLocked)
+
             val report = client.doctor()
             assertEquals("v0.5.0", report.version)
             assertEquals(DoctorStatus.OK, report.checks.single().status)
@@ -601,10 +635,10 @@ class EngineClientTest {
             assertEquals("connected", status.state)
             assertEquals("connected", client.status.value?.state)
 
-            val locationsRequest = transport.requests
-                .single { it.getString("type") == "locations" }
-                .getJSONObject("payload")
-            assertTrue(locationsRequest.getBoolean("refresh"))
+            val locationsRequests = transport.requests
+                .filter { it.getString("type") == "locations" }
+            assertEquals(2, locationsRequests.size)
+            assertTrue(locationsRequests.all { it.getJSONObject("payload").getBoolean("refresh") })
         }
 
     @Test

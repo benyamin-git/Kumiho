@@ -221,6 +221,52 @@ func TestSelectLocationCommand(t *testing.T) {
 	requireErrorCode(t, out, api.CodeBadRequest)
 }
 
+func TestClearRecentsCommand(t *testing.T) {
+	p := testPaths(t)
+	if err := os.MkdirAll(filepath.Dir(p.State), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	state := `{"favorites":[{"country_code":"DE","server":"de1.example:443"}],"recents":[{"country_code":"US","server":"us1.example:443"}]}`
+	if err := os.WriteFile(p.State, []byte(state), 0o600); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+	startTest(t, p, nil, newTestListener())
+
+	out := mustCommand(t, "clear_recents", nil)
+	if env := decodeEnvelope(t, out); env.Type != "result" {
+		t.Fatalf("type = %q, want result", env.Type)
+	}
+	raw, err := os.ReadFile(p.State)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var got settings.State
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if len(got.Recents) != 0 {
+		t.Fatalf("recents = %+v, want cleared", got.Recents)
+	}
+	if len(got.Favorites) != 1 || got.Favorites[0].Server != "de1.example:443" {
+		t.Fatalf("favorites = %+v, want untouched", got.Favorites)
+	}
+}
+
+func TestRelayTestCommandReportsAMissingRelay(t *testing.T) {
+	startTest(t, testPaths(t), nil, newTestListener())
+
+	out := mustCommand(t, "relay_test", nil)
+	env := decodeEnvelope(t, out)
+	if env.Type != "relay_test" {
+		t.Fatalf("type = %q, want relay_test", env.Type)
+	}
+	var result api.RelayTestResult
+	decodeTestPayload(t, out, &result)
+	if result.OK || result.Error != "relay_url is not set" {
+		t.Fatalf("relay_test = %+v", result)
+	}
+}
+
 func TestUnknownCommandIsBadRequest(t *testing.T) {
 	startTest(t, testPaths(t), nil, newTestListener())
 	out, err := command(t, "no_such_command", nil)

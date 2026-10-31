@@ -76,6 +76,53 @@ data class Settings(
     val keepaliveProfile: String,
     val accountRotation: Boolean = false,
     val rotationThreshold: Int = 10,
+    val allowLocked: Boolean = false,
+    val relayUrl: String? = null,
+    val relayTokenSet: Boolean = false,
+)
+
+/** One persisted favorite or recent location (`api.LocationRef`). */
+data class LocationRef(
+    val countryCode: String,
+    val cityCode: String?,
+    val server: String,
+)
+
+/**
+ * One fresh latency sample (`api.CachedPing`). A null [rttMs] means the probe
+ * ran and the server did not answer; an absent entry means it was never
+ * measured.
+ */
+data class CachedPing(
+    val rttMs: Double?,
+    val measuredAt: Instant,
+)
+
+/**
+ * The complete locations reply (`api.LocationsResult`), including the pinned
+ * refs, cached latency and the locked-list view state.
+ */
+data class LocationsResult(
+    val countries: List<Country>,
+    val favorites: List<LocationRef>,
+    val recents: List<LocationRef>,
+    val latency: Map<String, CachedPing>,
+    val allowLocked: Boolean,
+)
+
+/** One completed ping run (`api.PingDone`); [error] is a run-level failure. */
+data class PingDone(
+    val total: Int,
+    val answered: Int,
+    val error: String?,
+)
+
+/** One control-plane relay probe (`api.RelayTestResult`). */
+data class RelayTest(
+    val ok: Boolean,
+    val status: Int,
+    val latencyMs: Double?,
+    val error: String?,
 )
 
 /**
@@ -86,6 +133,7 @@ data class Country(
     val code: String,
     val name: String,
     val cities: List<City>,
+    val locked: Boolean = false,
 )
 
 /** One city inside a [Country]. */

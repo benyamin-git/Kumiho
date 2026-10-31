@@ -24,6 +24,7 @@ const (
 	connectTimeout        = 120 * time.Second
 	disconnectTimeout     = 20 * time.Second
 	settingsSetTimeout    = 20 * time.Second
+	relayTimeout          = 20 * time.Second
 	accountTimeout        = 35 * time.Second
 	accountsTimeout       = 10 * time.Second
 	accountCommandTimeout = 10 * time.Second
@@ -93,6 +94,33 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		}
 		f.pushStatus()
 		return okResponse()
+
+	case "favorite_location":
+		var p api.FavoriteLocationPayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		if _, err := f.ctrl.SetFavorite(ctx, settings.LocationRef{
+			CountryCode: p.CountryCode,
+			CityCode:    p.CityCode,
+			Server:      p.Server,
+		}, p.Favorite); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
+	case "clear_recents":
+		if err := f.ctrl.ClearRecents(); err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return okResponse()
+
+	case "relay_test":
+		rctx, cancel := context.WithTimeout(ctx, relayTimeout)
+		defer cancel()
+		return encodeResponse("relay_test", f.ctrl.TestRelay(rctx))
 
 	case "ping":
 		var p api.PingPayload

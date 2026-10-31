@@ -86,6 +86,14 @@ class EngineClient(
     /** One event per requested ping host; a slow collector drops the oldest. */
     val pings: SharedFlow<PingResult> = pingEvents.asSharedFlow()
 
+    private val pingDoneEvents = MutableSharedFlow<PingDone>(
+        extraBufferCapacity = PING_DONE_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** Exactly one event when a ping run finishes, including run-level errors. */
+    val pingDone: SharedFlow<PingDone> = pingDoneEvents.asSharedFlow()
+
     private val noticeEvents = MutableSharedFlow<Notice>(
         extraBufferCapacity = NOTICE_BUFFER,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -161,14 +169,49 @@ class EngineClient(
 
     /** The server-list tree, optionally forcing a refresh. */
     suspend fun locations(refresh: Boolean = false): List<Country> =
-        EngineJson.countries(command("locations", JSONObject().put("refresh", refresh)))
+        locationsResult(refresh).countries
+
+    /**
+     * The complete locations reply: the tree plus pinned favorites/recents,
+     * cached latency and the locked-list view state.
+     */
+    suspend fun locationsResult(refresh: Boolean = false): LocationsResult =
+        EngineJson.locationsResult(command("locations", JSONObject().put("refresh", refresh)))
 
     /** Persists a location choice; it never connects by itself. */
-    suspend fun selectLocation(countryCode: String, cityCode: String?, server: String) {
-        val payload = JSONObject().put("country_code", countryCode).put("server", server)
-        if (!cityCode.isNullOrEmpty()) payload.put("city_code", cityCode)
+    suspend fun selectLocation(
+        countryCode: String = "",
+        cityCode: String? = null,
+        server: String = "",
+        fastest: Boolean = false,
+    ) {
+        val payload = JSONObject()
+        if (!fastest) {
+            payload.put("country_code", countryCode).put("server", server)
+            if (!cityCode.isNullOrEmpty()) payload.put("city_code", cityCode)
+        } else {
+            payload.put("fastest", true)
+        }
         command("select_location", payload)
     }
+
+    /** Toggles one favorite and lets the next locations read be authoritative. */
+    suspend fun favoriteLocation(ref: LocationRef, favorite: Boolean) {
+        val payload = JSONObject()
+            .put("country_code", ref.countryCode)
+            .put("server", ref.server)
+            .put("favorite", favorite)
+        if (!ref.cityCode.isNullOrEmpty()) payload.put("city_code", ref.cityCode)
+        command("favorite_location", payload)
+    }
+
+    /** Drops every recent location; favorites are untouched. */
+    suspend fun clearRecents() {
+        command("clear_recents")
+    }
+
+    /** Probes the configured control-plane relay once (HTTP 451 fallback). */
+    suspend fun relayTest(): RelayTest = EngineJson.relayTest(command("relay_test"))
 
     /** Starts 24-way latency probes; results stream through [pings]. */
     suspend fun ping(hosts: List<String>) {
@@ -181,11 +224,16 @@ class EngineClient(
         cityCode: String? = null,
         server: String? = null,
         proxyOnly: Boolean = false,
+        fastest: Boolean = false,
     ) {
         val payload = JSONObject().put("proxy_only", proxyOnly)
-        if (!locationCode.isNullOrEmpty()) payload.put("location_code", locationCode)
-        if (!cityCode.isNullOrEmpty()) payload.put("city_code", cityCode)
-        if (!server.isNullOrEmpty()) payload.put("server", server)
+        if (fastest) {
+            payload.put("fastest", true)
+        } else {
+            if (!locationCode.isNullOrEmpty()) payload.put("location_code", locationCode)
+            if (!cityCode.isNullOrEmpty()) payload.put("city_code", cityCode)
+            if (!server.isNullOrEmpty()) payload.put("server", server)
+        }
         command("connect", payload)
     }
 
@@ -396,6 +444,10 @@ class EngineClient(
             pingEvents.tryEmit(EngineJson.pingResult(resultJSON))
         }
 
+        override fun onPingDone(doneJSON: String) = guarded("ping done") {
+            pingDoneEvents.tryEmit(EngineJson.pingDone(doneJSON))
+        }
+
         override fun onNotice(noticeJSON: String) = guarded("notice") {
             noticeEvents.tryEmit(EngineJson.notice(noticeJSON))
         }
@@ -478,6 +530,7 @@ class EngineClient(
         const val MAX_LOG_ENTRIES = 2000
         const val ACCOUNT_TIMEOUT_MS = 10_000L
         const val PING_BUFFER = 512
+        const val PING_DONE_BUFFER = 16
         const val NOTICE_BUFFER = 64
         const val WARNING_INTERVAL_MS = 1_000L
         const val NOTICE_PROTOCOL = "protocol_error"
