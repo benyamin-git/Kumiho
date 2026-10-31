@@ -63,11 +63,15 @@ func NewPKCE(r io.Reader) (PKCE, error) {
 // AuthorizationURL builds the browser consent URL for the authorization-code
 // flow. Email and force_auth are optional; no client secret is included.
 func (c *Client) AuthorizationURL(email string, forceAuth bool, state, challenge string) string {
+	// redirect_uri is deliberately omitted. FxA's content-server validator
+	// rejects the registered WebChannel URN in this parameter (only
+	// pair-auth-webchannel is allowed), while the auth server fills in the
+	// client's registered redirect when it is absent. Firefox's own flow does
+	// the same.
 	q := url.Values{
 		"client_id":             {ClientID},
 		"scope":                 {Scope},
 		"response_type":         {"code"},
-		"redirect_uri":          {OAuthRedirectURI},
 		"state":                 {state},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},

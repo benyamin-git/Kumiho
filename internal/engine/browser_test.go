@@ -231,7 +231,6 @@ func TestBrowserLoginStartBuildsAuthorizationURL(t *testing.T) {
 	q := u.Query()
 	want := map[string]string{
 		"client_id":             fxa.ClientID,
-		"redirect_uri":          fxa.OAuthRedirectURI,
 		"response_type":         "code",
 		"scope":                 fxa.Scope,
 		"access_type":           "offline",
@@ -241,6 +240,9 @@ func TestBrowserLoginStartBuildsAuthorizationURL(t *testing.T) {
 		if got := q.Get(key); got != value {
 			t.Errorf("%s = %q, want %q", key, got, value)
 		}
+	}
+	if q.Has("redirect_uri") {
+		t.Errorf("authorization URL must omit redirect_uri, got %q", q.Get("redirect_uri"))
 	}
 	if q.Get("state") == "" || q.Get("code_challenge") == "" {
 		t.Fatalf("authorization URL lacks state or PKCE challenge: %s", ls.URL)

@@ -3,8 +3,8 @@
 Source: manual testing of the **v0.7.0 Android pre-release** on a phone.
 Captured: 2026-10-29.
 
-Status: **implemented in the v0.8.0 work except A2**, which stays open.
-A2 remains out of scope for this pass; do not treat it as fixed.
+Status: implemented in the v0.8.0 work; A2 (browser sign-in) is fixed after
+v0.8.3 and needs one live sign-in to confirm. D1 and D2 remain open.
 UI polish applies to all clients where the surface exists: Android phone,
 Android TV, Windows GUI and the TUI.
 
@@ -23,19 +23,27 @@ Android TV, Windows GUI and the TUI.
     clients. Android TV and desktop use different account surfaces without
     this account-list scroll.
 
-- [ ] **A2 — Fix browser sign-in when adding an account**
+- [x] **A2 — Fix browser sign-in when adding an account**
   - Problem: the browser flow still does not complete on the v0.7.0 Android
     pre-release downloaded from GitHub.
   - Observed: Mozilla's page shows **Bad Request: Invalid Query Parameters**
     (error ID `3bcf11f926a940ab99778fcb728efaef`) and reports that
     `redirectUri` failed the `IsFxaRedirectUri` constraint. The failure happens
     before the app can receive a redirect.
-  - Expected: **Continue in browser** completes the Firefox Accounts flow and
-    returns to the app with the account added.
-  - Investigate: the configured FxA OAuth client and its allowed redirect URI
-    (including whether the WebChannel `urn:` redirect is accepted), and capture
-    `adb logcat` plus the complete authorization URL if the page error
-    persists.
+  - Cause: the authorization URL sent
+    `redirect_uri=urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel`. FxA's
+    content-server validator (`IsFxaRedirectUri`) runs `isURL()` on that
+    parameter, which accepts only the `pair-auth-webchannel` URN — every other
+    `urn:` value fails. Firefox's own OAuth flow omits `redirect_uri` and lets
+    the auth server fill in the client's registered redirect, which is exactly
+    that URN.
+  - Fixed: `fxa.AuthorizationURL` now omits `redirect_uri`; the token exchange
+    is unchanged. `TestAuthorizationURL` and
+    `TestBrowserLoginStartBuildsAuthorizationURL` assert the parameter is
+    absent. The registered URN and the Android WebView interception are
+    unchanged, so the browser still ends at the paste/redirect page.
+  - Live check: complete one browser sign-in on the phone; unit tests cover
+    the URL contract, not the real Mozilla consent page.
 
 - [x] **A3 — Fix “Check for update” returning HTTP 404**
   - Problem: update check reports `github answered HTTP 404` on **every

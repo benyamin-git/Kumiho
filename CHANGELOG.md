@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Browser sign-in works again when adding an account.** Mozilla's page
+  returned **Bad Request: Invalid Query Parameters** because the authorization
+  URL sent the registered `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel`
+  redirect as a `redirect_uri` parameter, and FxA's content-server validator
+  accepts only the `pair-auth-webchannel` URN there. The parameter is now
+  omitted, as in Firefox's own OAuth flow; the auth server fills in the
+  client's registered redirect, so the browser still ends at the same URN and
+  the app still completes the flow. Password sign-in was unaffected.
+
 ## [0.8.3] - 2026-10-31
 
 ### Fixed

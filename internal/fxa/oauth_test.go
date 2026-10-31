@@ -35,7 +35,6 @@ func TestAuthorizationURL(t *testing.T) {
 		"client_id":             ClientID,
 		"scope":                 Scope,
 		"response_type":         "code",
-		"redirect_uri":          OAuthRedirectURI,
 		"state":                 "test-state",
 		"code_challenge":        "test-challenge",
 		"code_challenge_method": "S256",
@@ -55,6 +54,11 @@ func TestAuthorizationURL(t *testing.T) {
 	}
 	if q.Has("client_secret") {
 		t.Error("authorization URL must not include a client secret")
+	}
+	// FxA rejects the registered URN as a redirect_uri query parameter; the
+	// auth server fills it in from the client registration.
+	if q.Has("redirect_uri") {
+		t.Errorf("authorization URL must omit redirect_uri, got %q", q.Get("redirect_uri"))
 	}
 
 	// Email and force_auth are optional.
