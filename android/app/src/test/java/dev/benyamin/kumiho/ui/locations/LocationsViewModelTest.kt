@@ -559,7 +559,7 @@ class LocationsViewModelTest {
             runCurrent()
 
             assertFalse(viewModel.state.value.isFavorite(edge))
-            assertEquals("favorite failed", (viewModel.state.value.notice?.text as LocationsNoticeText.Raw).detail)
+            assertEquals("favorite failed", (viewModel.state.value.notice?.text as LocationsNoticeText.Raw).text)
             assertEquals(2, gateway.locationCalls)
         }
 
