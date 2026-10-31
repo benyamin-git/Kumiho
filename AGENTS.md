@@ -134,8 +134,9 @@ them locally for any change under `android/`, `mobile/` or
   `v0.5.2` release on 2026-10-23, the `v0.6.0` release on 2026-10-24, the
   `v0.7.0` release on 2026-10-28, the `v0.7.1` release on 2026-10-30, the
   `v0.7.2` release on 2026-10-30, the `v0.8.0` release on 2026-10-30, the
-  `v0.8.1` release on 2026-10-30 and the `v0.8.2` release on 2026-10-30; each
-  release workflow published the desktop and Android assets. See
+  `v0.8.1` release on 2026-10-30, the `v0.8.2` release on 2026-10-30 and the
+  `v0.8.3` release on 2026-10-31; each release workflow published the desktop
+  and Android assets. See
   [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
