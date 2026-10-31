@@ -16,6 +16,7 @@ const (
 	CodeNotImplemented     = "not_implemented"
 	CodeNotAuthenticated   = "not_authenticated"
 	CodeForbidden          = "forbidden"
+	CodeRegionBlocked      = "region_blocked"
 	CodeUnsupportedSetting = "unsupported_setting"
 	CodeInternal           = "internal"
 )

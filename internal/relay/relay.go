@@ -120,6 +120,10 @@ func NewTransport(base http.RoundTripper, cfg func() Config, logf func(string, .
 	return &Transport{base: base, cfg: cfg, logFn: logf}
 }
 
+// Unwrap exposes the wrapped transport for callers that need the underlying
+// dialer (tests and transport inspection).
+func (t *Transport) Unwrap() http.RoundTripper { return t.base }
+
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req)
 	if err != nil || resp == nil || resp.StatusCode != http.StatusUnavailableForLegalReasons {

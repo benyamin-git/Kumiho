@@ -533,3 +533,11 @@ func TestTestRequiresRelayURL(t *testing.T) {
 		t.Fatal("Test() with nil client error = nil, want error")
 	}
 }
+
+func TestTransportUnwrap(t *testing.T) {
+	base := &http.Transport{}
+	tr := NewTransport(base, nil, nil)
+	if got := tr.Unwrap(); got != base {
+		t.Fatalf("Unwrap() = %T, want the base transport", got)
+	}
+}

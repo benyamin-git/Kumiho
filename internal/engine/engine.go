@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -23,6 +24,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/platform"
+	"github.com/benyamin-git/kumiho/internal/relay"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/socks"
@@ -49,6 +51,11 @@ const (
 	// errnoAccountUnverified is FxA's login error for an account that needs
 	// an emailed unblock code.
 	errnoAccountUnverified = 125
+)
+
+const (
+	regionBlockedNoRelayMessage = "This region is blocking Mozilla's servers (HTTP 451). Set a control-plane relay in Settings → Region, or deploy the relay from docs/relay.md, then retry."
+	regionBlockedRelayFailed    = "Mozilla returned HTTP 451 and the configured relay failed: %s. Check the relay URL and token in Settings → Region."
 )
 
 type pendingLogin struct {
@@ -89,6 +96,11 @@ type Controller struct {
 	// solver is the Fastly anti-bot challenge solver, wired as fxa.Solver
 	// and guardian.OnChallenge.
 	solver *fastly.Solver
+
+	// relayToken caches the write-only relay secret read from disk; relayMu
+	// guards it because control-plane transports read it off the request path.
+	relayMu    sync.RWMutex
+	relayToken string
 
 	guardian             *guardian.Client
 	rotationBudget       time.Duration
@@ -242,7 +254,72 @@ func New(store *settings.Store, ring *logging.Ring, client *fxa.Client, plat pla
 	}
 	c.fxa.Solver = c.solver
 	c.guardian.OnChallenge = c.solver.Solve
+	c.reloadRelayToken()
 	return c
+}
+
+// relayConfig is read by the relay transport on every request so settings
+// changes apply without rebuilding the control-plane clients.
+func (c *Controller) relayConfig() relay.Config {
+	c.relayMu.RLock()
+	token := c.relayToken
+	c.relayMu.RUnlock()
+	return relay.Config{
+		URL:   c.store.EffectiveConfig().RelayURL,
+		Token: token,
+	}
+}
+
+// reloadRelayToken refreshes the in-memory relay secret from disk. Missing
+// files mean no token; other read errors are logged without the value.
+func (c *Controller) reloadRelayToken() {
+	token, err := c.store.RelayToken()
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) && c.log != nil {
+			c.log.Logf(logging.Warn, "relay", "could not read relay token: %v", err)
+		}
+		token = ""
+	}
+	c.relayMu.Lock()
+	c.relayToken = token
+	c.relayMu.Unlock()
+}
+
+// regionBlocked maps a control-plane HTTP 451 (direct or through the relay) to
+// the client-facing region code. It returns nil for every other error.
+func (c *Controller) regionBlocked(err error) *api.RemoteError {
+	if err == nil {
+		return nil
+	}
+	var existing *api.RemoteError
+	if errors.As(err, &existing) && existing.Code == api.CodeRegionBlocked {
+		return existing
+	}
+	var blocked *relay.BlockedError
+	if errors.As(err, &blocked) {
+		message := regionBlockedNoRelayMessage
+		if blocked.RelayConfigured {
+			reason := "the relay also returned HTTP 451"
+			if blocked.RelayErr != nil {
+				reason = blocked.RelayErr.Error()
+			}
+			message = fmt.Sprintf(regionBlockedRelayFailed, reason)
+		}
+		return &api.RemoteError{Code: api.CodeRegionBlocked, Message: message}
+	}
+	var fxaErr *fxa.APIError
+	if errors.As(err, &fxaErr) && fxaErr.StatusCode == http.StatusUnavailableForLegalReasons {
+		return &api.RemoteError{Code: api.CodeRegionBlocked, Message: regionBlockedNoRelayMessage}
+	}
+	var guardianErr *guardian.HTTPError
+	if errors.As(err, &guardianErr) && guardianErr.Status == http.StatusUnavailableForLegalReasons {
+		return &api.RemoteError{Code: api.CodeRegionBlocked, Message: regionBlockedNoRelayMessage}
+	}
+	var serverListErr *serverlist.HTTPError
+	if errors.As(err, &serverListErr) && serverListErr.Status == http.StatusUnavailableForLegalReasons {
+		return &api.RemoteError{Code: api.CodeRegionBlocked, Message: regionBlockedNoRelayMessage}
+	}
+	return nil
 }
 
 func ringLogf(ring *logging.Ring) func(format string, args ...any) {
@@ -652,6 +729,9 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 
 	refreshed, err := c.fxa.Refresh(ctx, tokens.RefreshToken)
 	if err != nil {
+		if re := c.regionBlocked(err); re != nil {
+			return re
+		}
 		var apiErr *fxa.APIError
 		if errors.As(err, &apiErr) && apiErr.PermanentRefreshRejection() {
 			if method == MethodBrowser {
@@ -1657,10 +1737,6 @@ func (c *Controller) ApplySetting(p api.SettingsSetPayload) error {
 	return nil
 }
 
-// reloadRelayToken refreshes the cached relay token. A3 populates the cache;
-// writing the file is enough until then.
-func (c *Controller) reloadRelayToken() {}
-
 // revertKillSwitchOverride restores the kill_switch override captured before a
 // failed live re-apply. It is best effort: a revert failure is logged, not
 // returned, because the caller is already reporting the apply failure.
@@ -1713,6 +1789,7 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 	info.TokenExpires = tokens.ExpiresAt
 
 	ent, err := c.guardian.Account(ctx, tokens.AccessToken)
+	var refreshErr error
 	if err != nil && guardian.IsUnauthorized(err) {
 		// Every method now uses the same FxA refresh path. A permanent
 		// browser rejection sets the durable re-auth flag inside the refresh.
@@ -1721,6 +1798,8 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 				info.TokenExpires = t.ExpiresAt
 				ent, err = c.guardian.Account(ctx, t.AccessToken)
 			}
+		} else {
+			refreshErr = rerr
 		}
 	}
 	if err != nil {
@@ -1733,7 +1812,13 @@ func (c *Controller) Account(ctx context.Context) api.AccountInfo {
 			}
 			c.mu.Unlock()
 		}
-		info.Error = err.Error()
+		if re := c.regionBlocked(err); re != nil {
+			info.Error = re.Message
+		} else if re := c.regionBlocked(refreshErr); re != nil {
+			info.Error = re.Message
+		} else {
+			info.Error = err.Error()
+		}
 		return info
 	}
 	info.UID = ent.UID

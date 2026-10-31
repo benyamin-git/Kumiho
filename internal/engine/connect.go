@@ -21,6 +21,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/httpproxy"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/platform"
+	"github.com/benyamin-git/kumiho/internal/relay"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/socks"
@@ -102,11 +103,17 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	c.notify()
 
 	if err := c.selectAccount(ctx); err != nil {
+		if re := c.regionBlocked(err); re != nil {
+			err = re
+		}
 		c.connectFailed(err)
 		return err
 	}
 	if err := c.EnsureFreshToken(ctx); err != nil {
 		c.connectFailed(fmt.Errorf("refresh access token: %w", err))
+		if re := c.regionBlocked(err); re != nil {
+			return re
+		}
 		return err
 	}
 
@@ -123,6 +130,9 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 
 	pass, err := c.acquirePass(ctx)
 	if err != nil {
+		if re := c.regionBlocked(err); re != nil {
+			err = re
+		}
 		c.connectFailed(err)
 		return err
 	}
@@ -510,15 +520,22 @@ func (c *Controller) controlPlaneDial(base func(context.Context, string, string)
 // policy-routing mark chain never routes control-plane traffic into the
 // tunnel (PLAN.md §3.2). Called once at engine start.
 func (c *Controller) UseBypassDialer() {
+	c.reloadRelayToken()
 	dial := c.plat.BypassDialer()
 	dialContext := c.controlPlaneDial(dial.DialContext)
+	relayLogf := func(format string, args ...any) {
+		if c.log != nil {
+			c.log.Logf(logging.Info, "relay", format, args...)
+		}
+	}
 	newClient := func(timeout time.Duration) *http.Client {
+		base := &http.Transport{
+			DialContext:       dialContext,
+			ForceAttemptHTTP2: true,
+		}
 		return &http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{
-				DialContext:       dialContext,
-				ForceAttemptHTTP2: true,
-			},
+			Timeout:   timeout,
+			Transport: relay.NewTransport(base, c.relayConfig, relayLogf),
 		}
 	}
 	c.httpClient = newClient(20 * time.Second)

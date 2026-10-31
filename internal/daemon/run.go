@@ -165,6 +165,17 @@ func (h *control) handle(ctx context.Context, conn *ipc.Conn) error {
 	}
 }
 
+// controlErrorReply maps an engine error to the control-protocol reply. A
+// RemoteError's code and message reach the client unchanged; everything else
+// stays an internal error.
+func controlErrorReply(err error) (code, msg string) {
+	var re *api.RemoteError
+	if errors.As(err, &re) {
+		return re.Code, re.Message
+	}
+	return api.CodeInternal, err.Error()
+}
+
 func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, env *ipc.Envelope) {
 	replyErr := func(code, msg string) {
 		_ = conn.Reply(env.ID, ipc.TypeError, api.RemoteError{Code: code, Message: msg})
@@ -173,12 +184,8 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
 	}
 	replyCtrlErr := func(err error) {
-		var re *api.RemoteError
-		if errors.As(err, &re) {
-			replyErr(re.Code, re.Message)
-		} else {
-			replyErr(api.CodeInternal, err.Error())
-		}
+		code, msg := controlErrorReply(err)
+		replyErr(code, msg)
 	}
 
 	switch env.Type {
@@ -201,7 +208,7 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		}
 		countries, err := h.ctrl.Locations(ctx, p.Refresh)
 		if err != nil {
-			replyErr(api.CodeInternal, err.Error())
+			replyCtrlErr(err)
 			return
 		}
 		_ = conn.Reply(env.ID, ipc.TypeLocations, api.LocationsResult{Countries: countries})

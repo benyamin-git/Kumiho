@@ -32,6 +32,11 @@ func (c *Controller) Locations(ctx context.Context, refresh bool) ([]serverlist.
 
 	raw, err := serverlist.FetchRawFrom(ctx, c.httpClient, c.serverListURL)
 	if err != nil {
+		// A 451 is terminal: do not mask it with a cached list that can no
+		// longer connect either.
+		if re := c.regionBlocked(err); re != nil {
+			return nil, re
+		}
 		if cached != nil {
 			c.log.Logf(logging.Warn, "serverlist", "refresh failed, keeping cached list: %v", err)
 			return cached, nil

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -311,5 +313,24 @@ func TestLoadCacheMissingFile(t *testing.T) {
 	_, err := LoadCache(filepath.Join(t.TempDir(), "absent.json"))
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("err = %v, want fs.ErrNotExist", err)
+	}
+}
+
+func TestFetchRawFromHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "blocked", http.StatusUnavailableForLegalReasons)
+	}))
+	defer srv.Close()
+
+	_, err := FetchRawFrom(t.Context(), srv.Client(), srv.URL)
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("err = %v, want *HTTPError", err)
+	}
+	if httpErr.Status != http.StatusUnavailableForLegalReasons {
+		t.Fatalf("status = %d, want 451", httpErr.Status)
+	}
+	if got, want := err.Error(), "server list: HTTP 451"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
 	}
 }

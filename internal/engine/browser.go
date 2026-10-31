@@ -146,6 +146,13 @@ func (c *Controller) LoginComplete(id, redirectURL string) error {
 			// A concurrent completion may already have exchanged the same
 			// code; its token set wins.
 			if b.tokens == nil {
+				if re := c.regionBlocked(exchangeErr); re != nil {
+					message := c.failBrowserLocked(b, "error", re.Message)
+					c.mu.Unlock()
+					c.log.Logf(logging.Warn, "auth", "browser sign-in failed: %s", message)
+					c.notify()
+					return nil
+				}
 				if browserExchangeRetryable(exchangeErr) {
 					c.mu.Unlock()
 					return badRequestError(browserExchangeRetryMessage)
@@ -186,6 +193,14 @@ func (c *Controller) LoginComplete(id, redirectURL string) error {
 		}
 		if profileErr != nil {
 			if b.profile == nil {
+				if re := c.regionBlocked(profileErr); re != nil {
+					b.profileErr = profileErr
+					message := c.failBrowserLocked(b, "error", re.Message)
+					c.mu.Unlock()
+					c.log.Logf(logging.Warn, "auth", "browser sign-in failed: %s", message)
+					c.notify()
+					return nil
+				}
 				if browserProfileRetryable(profileErr) {
 					b.profileErr = profileErr
 					c.mu.Unlock()

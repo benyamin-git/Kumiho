@@ -25,6 +25,7 @@ import (
 	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/platform"
+	"github.com/benyamin-git/kumiho/internal/relay"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/tlsplit"
@@ -958,9 +959,13 @@ func TestUseBypassDialerWrapsEveryControlPlaneClient(t *testing.T) {
 	}
 	for _, tc := range clients {
 		t.Run(tc.name, func(t *testing.T) {
-			tr, ok := tc.client.Transport.(*http.Transport)
+			relayTr, ok := tc.client.Transport.(*relay.Transport)
 			if !ok {
-				t.Fatalf("transport = %T, want *http.Transport", tc.client.Transport)
+				t.Fatalf("transport = %T, want *relay.Transport", tc.client.Transport)
+			}
+			tr, ok := relayTr.Unwrap().(*http.Transport)
+			if !ok {
+				t.Fatalf("wrapped transport = %T, want *http.Transport", relayTr.Unwrap())
 			}
 			conn, err := tr.DialContext(context.Background(), "tcp", ln.Addr().String())
 			if err != nil {
@@ -1006,9 +1011,13 @@ func TestUseBypassDialerTLSSplitControlPlane(t *testing.T) {
 			if err := ctrl.store.SetOverride("tls_split", mode); err != nil {
 				t.Fatal(err)
 			}
-			tr, ok := ctrl.httpClient.Transport.(*http.Transport)
+			relayTr, ok := ctrl.httpClient.Transport.(*relay.Transport)
 			if !ok {
-				t.Fatalf("transport = %T", ctrl.httpClient.Transport)
+				t.Fatalf("transport = %T, want *relay.Transport", ctrl.httpClient.Transport)
+			}
+			tr, ok := relayTr.Unwrap().(*http.Transport)
+			if !ok {
+				t.Fatalf("wrapped transport = %T, want *http.Transport", relayTr.Unwrap())
 			}
 			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // test server certificate
 			defer tr.CloseIdleConnections()

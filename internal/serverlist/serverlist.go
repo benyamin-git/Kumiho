@@ -110,6 +110,13 @@ func FetchFrom(ctx context.Context, client *http.Client, url string) ([]Country,
 	return Parse(body)
 }
 
+// HTTPError reports a non-200 server list response.
+type HTTPError struct{ Status int }
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("server list: HTTP %d", e.Status)
+}
+
 // FetchRawFrom retrieves the unparsed Remote Settings response from url. The
 // raw payload is what the disk cache stores, so a restart can parse it again
 // without a network round trip.
@@ -129,7 +136,7 @@ func FetchRawFrom(ctx context.Context, client *http.Client, url string) ([]byte,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server list: HTTP %d", resp.StatusCode)
+		return nil, &HTTPError{Status: resp.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
