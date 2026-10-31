@@ -172,6 +172,62 @@ func TestStateRoundTripAndFirstInstallDefaults(t *testing.T) {
 	}
 }
 
+func TestStateLocationRefsRoundTrip(t *testing.T) {
+	paths := testPaths(t)
+	// An older state file has neither list.
+	if err := os.WriteFile(paths.State, []byte(`{"selected_location":"DE"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State().Favorites != nil || st.State().Recents != nil {
+		t.Fatalf("old state decoded refs: %+v", st.State())
+	}
+
+	favorites := []LocationRef{
+		{CountryCode: "DE", CityCode: "FRA", Server: "fra1.example.net:2499"},
+		{CountryCode: "AR", CityCode: "EZE", Server: "eze1.example.net:2499"},
+	}
+	recents := []LocationRef{{CountryCode: "DE", CityCode: "FRA", Server: "fra2.example.net:2499"}}
+	if err := st.UpdateState(func(s *State) {
+		s.Favorites = favorites
+		s.Recents = recents
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := reopened.State()
+	if !reflect.DeepEqual(got.Favorites, favorites) {
+		t.Fatalf("favorites = %+v, want %+v", got.Favorites, favorites)
+	}
+	if !reflect.DeepEqual(got.Recents, recents) {
+		t.Fatalf("recents = %+v, want %+v", got.Recents, recents)
+	}
+	if got.SelectedLocation != "DE" {
+		t.Fatalf("selected location = %q, want the preserved DE", got.SelectedLocation)
+	}
+
+	if err := reopened.UpdateState(func(s *State) {
+		s.Favorites = nil
+		s.Recents = nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(paths.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"favorites"`) || strings.Contains(string(data), `"recents"`) {
+		t.Fatalf("empty ref lists were not omitted: %s", data)
+	}
+}
+
 func TestConfigOverridesState(t *testing.T) {
 	paths := testPaths(t)
 	if err := os.WriteFile(paths.Config, []byte("kill_switch = \"off\"\n"), 0o600); err != nil {

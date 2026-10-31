@@ -286,8 +286,26 @@ type CachedPing struct {
 
 // LocationsResult is the reply to a locations request.
 type LocationsResult struct {
-	Countries []serverlist.Country  `json:"countries"`
-	Latency   map[string]CachedPing `json:"latency,omitempty"`
+	Countries   []serverlist.Country  `json:"countries"`
+	Favorites   []LocationRef         `json:"favorites,omitempty"`
+	Recents     []LocationRef         `json:"recents,omitempty"`
+	Latency     map[string]CachedPing `json:"latency,omitempty"`
+	AllowLocked bool                  `json:"allow_locked"`
+}
+
+// FavoriteLocationPayload toggles one favorite location.
+type FavoriteLocationPayload struct {
+	CountryCode string `json:"country_code"`
+	CityCode    string `json:"city_code,omitempty"`
+	Server      string `json:"server"`
+	Favorite    bool   `json:"favorite"`
+}
+
+// LocationRef is one favorite or recent location on the wire.
+type LocationRef struct {
+	CountryCode string `json:"country_code"`
+	CityCode    string `json:"city_code,omitempty"`
+	Server      string `json:"server"`
 }
 
 // SelectLocationPayload persists a location choice without connecting yet.

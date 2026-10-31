@@ -230,6 +230,14 @@ func validateUpstreamProxy(raw string) error {
 // fields distinguish "never set" (apply config or first-install defaults)
 // from an explicit false. The *override* fields carry runtime settings
 // changed from the TUI/CLI on top of the admin config.
+// LocationRef is one persisted favorite or recent location. Server is the
+// canonical edge address at the time it was stored.
+type LocationRef struct {
+	CountryCode string `json:"country_code"`
+	CityCode    string `json:"city_code,omitempty"`
+	Server      string `json:"server"`
+}
+
 type State struct {
 	SelectedLocation string         `json:"selected_location,omitempty"`
 	SelectedCity     string         `json:"selected_city,omitempty"`
@@ -266,8 +274,10 @@ type State struct {
 	RotationThreshold *int  `json:"rotation_threshold,omitempty"`
 
 	// v0.9.0 region truth.
-	RelayURL    *string `json:"relay_url,omitempty"`
-	AllowLocked *bool   `json:"allow_locked,omitempty"`
+	RelayURL    *string       `json:"relay_url,omitempty"`
+	AllowLocked *bool         `json:"allow_locked,omitempty"`
+	Favorites   []LocationRef `json:"favorites,omitempty"`
+	Recents     []LocationRef `json:"recents,omitempty"`
 }
 
 // Store owns the config/state pair and persists state atomically.

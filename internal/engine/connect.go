@@ -284,6 +284,13 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		cand.Address(), cand.CountryCode, cand.CityCode, mode, socksAddr)
 	c.notify()
 
+	c.mu.Lock()
+	connected := c.state == StateConnected || c.state == StateProxyOnly
+	c.mu.Unlock()
+	if connected {
+		c.recordRecent(cand)
+	}
+
 	cfg := c.store.EffectiveConfig()
 	c.startMetrics(stop)
 	c.startPassRenewal(stop, pass)
