@@ -570,6 +570,7 @@ class LocationsViewModelTest {
                 "zz",
                 "Lockedland",
                 listOf(City("z", "Locked City", listOf(server("locked.example.net")))),
+                locked = true,
             )
             gateway.countries = listOf(US, locked)
             val viewModel = viewModel()
