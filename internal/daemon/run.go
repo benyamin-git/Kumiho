@@ -6,9 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
@@ -18,7 +16,6 @@ import (
 	"github.com/benyamin-git/kumiho/internal/ipc"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/platform/auto"
-	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
@@ -76,6 +73,7 @@ func Run(ctx context.Context) error {
 		ctrl:     ctrl,
 		ring:     ring,
 		shutdown: cancel,
+		ping:     ctrl.PingHosts,
 		conns:    make(map[*ipc.Conn]struct{}),
 	}
 	ctrl.OnChange(h.broadcastStatus)
@@ -107,10 +105,15 @@ func Run(ctx context.Context) error {
 	return nil
 }
 
+// pingRun measures the named visible candidates and reports each result as it
+// completes. It is a field so daemon tests can substitute a controlled run.
+type pingRun func(context.Context, []string, func(api.PingResult)) api.PingDone
+
 type control struct {
 	ctrl     *engine.Controller
 	ring     *logging.Ring
 	shutdown func()
+	ping     pingRun
 
 	mu    sync.Mutex
 	conns map[*ipc.Conn]struct{}
@@ -118,6 +121,9 @@ type control struct {
 
 type connState struct {
 	cancelLog func()
+
+	pingMu  sync.Mutex
+	pinging bool
 }
 
 func (h *control) addConn(c *ipc.Conn) {
@@ -146,6 +152,9 @@ func (h *control) broadcastStatus() {
 }
 
 func (h *control) handle(ctx context.Context, conn *ipc.Conn) error {
+	connCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	h.addConn(conn)
 	defer h.removeConn(conn)
 
@@ -161,7 +170,7 @@ func (h *control) handle(ctx context.Context, conn *ipc.Conn) error {
 		if err != nil {
 			return nil
 		}
-		h.dispatch(ctx, conn, cs, env)
+		h.dispatch(connCtx, conn, cs, env)
 	}
 }
 
@@ -237,8 +246,32 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
+		cs.pingMu.Lock()
+		if cs.pinging {
+			cs.pingMu.Unlock()
+			replyErr(api.CodeBadRequest, "a ping run is already in progress")
+			return
+		}
+		cs.pinging = true
+		cs.pingMu.Unlock()
 		replyOK()
-		h.pingHosts(ctx, conn, p.Hosts)
+		if h.ping == nil {
+			cs.pingMu.Lock()
+			cs.pinging = false
+			cs.pingMu.Unlock()
+			return
+		}
+		go func() {
+			defer func() {
+				cs.pingMu.Lock()
+				cs.pinging = false
+				cs.pingMu.Unlock()
+			}()
+			done := h.ping(ctx, p.Hosts, func(result api.PingResult) {
+				_ = conn.Event(ipc.TypePingResult, result)
+			})
+			_ = conn.Event(ipc.TypePingDone, done)
+		}()
 
 	case ipc.TypeLoginEmail:
 		var p api.LoginEmailPayload
@@ -546,31 +579,4 @@ func filterLogs(entries []logging.Entry, min logging.Level) []logging.Entry {
 		}
 	}
 	return out
-}
-
-// pingConcurrency caps parallel TCP probes.
-const pingConcurrency = 24
-
-// pingHosts measures TCP latency to each host:port target and streams one
-// ping_result event per target to the requesting connection.
-func (h *control) pingHosts(ctx context.Context, conn *ipc.Conn, hosts []string) {
-	sem := make(chan struct{}, pingConcurrency)
-	for _, addr := range hosts {
-		addr := addr
-		go func() {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			result := api.PingResult{Host: addr}
-			if host, portStr, err := net.SplitHostPort(addr); err == nil {
-				if port, perr := strconv.Atoi(portStr); perr == nil {
-					if d, derr := serverlist.PingTCP(ctx, host, port, 0); derr == nil {
-						ms := float64(d.Microseconds()) / 1000.0
-						result.RTTMS = &ms
-					}
-				}
-			}
-			_ = conn.Event(ipc.TypePingResult, result)
-		}()
-	}
 }

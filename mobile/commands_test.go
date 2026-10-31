@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -278,6 +279,12 @@ func TestRevokeCommand(t *testing.T) {
 
 func TestPingCommandAcksImmediately(t *testing.T) {
 	startTest(t, testPaths(t), nil, newTestListener())
+	if current == nil {
+		t.Fatal("facade is not started")
+	}
+	current.pingFn = func(context.Context, []string, func(api.PingResult)) api.PingDone {
+		return api.PingDone{}
+	}
 	out := mustCommand(t, "ping", map[string]any{"hosts": []string{}})
 	var result api.Result
 	decodeTestPayload(t, out, &result)

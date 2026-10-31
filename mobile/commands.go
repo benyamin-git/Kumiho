@@ -5,17 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/logging"
-	"github.com/benyamin-git/kumiho/internal/serverlist"
 	"github.com/benyamin-git/kumiho/internal/settings"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
@@ -40,10 +37,6 @@ const (
 	doctorTimeout        = 30 * time.Second
 	revokeTimeout        = 10 * time.Second
 
-	// pingTimeout is the per-host TCP probe deadline.
-	pingTimeout = 10 * time.Second
-	// pingConcurrency caps parallel TCP probes.
-	pingConcurrency = 24
 	// maxPingHosts bounds one ping request.
 	maxPingHosts = 512
 )
@@ -109,7 +102,9 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		if len(p.Hosts) > maxPingHosts {
 			return f.fail(badRequest("too many ping hosts: %d (limit %d)", len(p.Hosts), maxPingHosts))
 		}
-		f.pingHosts(p.Hosts)
+		if err := f.startPing(p.Hosts); err != nil {
+			return f.fail(err)
+		}
 		return okResponse()
 
 	case "connect":
@@ -470,39 +465,47 @@ func (f *facade) callBridgeConfigure(raw string) (err error) {
 	return f.bridge.Configure(raw)
 }
 
-// pingHosts acks first and streams one OnPing per host. The engine roots the
-// probe context, so Close cancels outstanding probes.
-func (f *facade) pingHosts(hosts []string) {
-	sem := make(chan struct{}, pingConcurrency)
-	for _, addr := range hosts {
-		addr := addr
-		go func() {
-			select {
-			case sem <- struct{}{}:
-			case <-f.ctx.Done():
-				return
-			}
-			defer func() { <-sem }()
+// startPing starts one run off the command path and streams one OnPing per
+// result followed by exactly one OnPingDone. The facade root context is the
+// run context, so Close stops outstanding probes.
+func (f *facade) startPing(hosts []string) error {
+	if f.pingFn == nil {
+		return &api.RemoteError{Code: api.CodeInternal, Message: "ping is unavailable"}
+	}
+	f.pingMu.Lock()
+	if f.pinging {
+		f.pingMu.Unlock()
+		return badRequest("a ping run is already in progress")
+	}
+	f.pinging = true
+	f.pingMu.Unlock()
 
-			result := api.PingResult{Host: addr}
-			ctx, cancel := context.WithTimeout(f.ctx, pingTimeout)
-			defer cancel()
-			if host, portStr, err := net.SplitHostPort(addr); err == nil {
-				if port, perr := strconv.Atoi(portStr); perr == nil {
-					if d, derr := serverlist.PingTCP(ctx, host, port, 0); derr == nil {
-						ms := float64(d.Microseconds()) / 1000.0
-						result.RTTMS = &ms
-					}
-				}
-			}
+	f.wg.Add(1)
+	go func() {
+		defer f.wg.Done()
+		defer func() {
+			f.pingMu.Lock()
+			f.pinging = false
+			f.pingMu.Unlock()
+		}()
+		done := f.pingFn(f.ctx, hosts, func(result api.PingResult) {
 			raw, err := json.Marshal(result)
 			if err != nil {
+				f.logf(logging.Warn, "mobile", "encode ping result: %v", err)
 				return
 			}
 			text := string(raw)
 			f.emit(func() { f.listener.OnPing(text) })
-		}()
-	}
+		})
+		raw, err := json.Marshal(done)
+		if err != nil {
+			f.logf(logging.Warn, "mobile", "encode ping done: %v", err)
+			return
+		}
+		text := string(raw)
+		f.emit(func() { f.listener.OnPingDone(text) })
+	}()
+	return nil
 }
 
 // resetState drops the disposable server-list cache, the per-server failure

@@ -1,8 +1,9 @@
 package mobile
 
 import (
+	"context"
 	"encoding/json"
-	"net"
+	"fmt"
 	"testing"
 	"time"
 
@@ -83,27 +84,25 @@ func decodePingPayload(t *testing.T, raw string) (host string, rttMS *float64) {
 }
 
 func TestPingEmitsOneCallbackPerHost(t *testing.T) {
-	reachableLn, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer reachableLn.Close()
-	reachable := reachableLn.Addr().String()
-
-	// Bind and close a port so the refusal is immediate and the address is
-	// known to have been free a moment ago.
-	closedLn, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	unreachable := closedLn.Addr().String()
-	if err := closedLn.Close(); err != nil {
-		t.Fatalf("close unreachable listener: %v", err)
-	}
-
 	l := newTestListener()
-	startTest(t, testPaths(t), nil, l)
-	mustCommand(t, "ping", map[string]any{"hosts": []string{reachable, unreachable}})
+	f := newBareFacade(t, l)
+	reachable, unreachable := "edge-a.example.net:443", "edge-b.example.net:443"
+	f.pingFn = func(_ context.Context, hosts []string, emit func(api.PingResult)) api.PingDone {
+		ms := 4.2
+		emit(api.PingResult{Host: hosts[0], RTTMS: &ms})
+		emit(api.PingResult{Host: hosts[1], RTTMS: nil})
+		return api.PingDone{Total: 2, Answered: 1}
+	}
+
+	out, err := f.command(fmt.Sprintf(`{"type":"ping","payload":{"hosts":["%s","%s"]}}`, reachable, unreachable))
+	if err != nil {
+		t.Fatalf("ping: %v", err)
+	}
+	var ack api.Result
+	decodeTestPayload(t, out, &ack)
+	if !ack.OK {
+		t.Fatal("ping ack is not ok")
+	}
 
 	got := map[string]*float64{}
 	for i := 0; i < 2; i++ {
@@ -117,28 +116,82 @@ func TestPingEmitsOneCallbackPerHost(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d hosts, want 2: %v", len(got), got)
 	}
-	rtt, ok := got[reachable]
-	if !ok {
-		t.Fatalf("no OnPing for the reachable host %s: %v", reachable, got)
+	if rtt := got[reachable]; rtt == nil || *rtt != 4.2 {
+		t.Fatalf("reachable result = %v, want 4.2", rtt)
 	}
-	if rtt == nil {
-		t.Errorf("rtt_ms for the reachable host %s is null", reachable)
-	} else if *rtt < 0 {
-		t.Errorf("rtt_ms for %s = %v, want a non-negative duration", reachable, *rtt)
-	}
-	rtt, ok = got[unreachable]
-	if !ok {
-		t.Fatalf("no OnPing for the unreachable host %s: %v", unreachable, got)
-	}
-	if rtt != nil {
-		t.Errorf("rtt_ms for the unreachable host %s = %v, want null", unreachable, *rtt)
+	if rtt := got[unreachable]; rtt != nil {
+		t.Fatalf("unreachable result = %v, want null", *rtt)
 	}
 
-	// No third callback: exactly one per requested host.
+	rawDone := l.waitPingDone(t)
+	var done api.PingDone
+	if err := json.Unmarshal([]byte(rawDone), &done); err != nil {
+		t.Fatalf("OnPingDone is not JSON: %v\n%s", err, rawDone)
+	}
+	if done.Total != 2 || done.Answered != 1 || done.Error != "" {
+		t.Fatalf("ping_done = %+v", done)
+	}
+
+	// No third result and exactly one completion callback.
 	select {
 	case raw := <-l.pingCh:
 		t.Fatalf("unexpected extra OnPing: %s", raw)
 	case <-time.After(150 * time.Millisecond):
+	}
+	select {
+	case raw := <-l.pingDoneCh:
+		t.Fatalf("unexpected extra OnPingDone: %s", raw)
+	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+func TestPingPreflightFailureEmitsDone(t *testing.T) {
+	l := newTestListener()
+	f := newBareFacade(t, l)
+	f.pingFn = func(context.Context, []string, func(api.PingResult)) api.PingDone {
+		return api.PingDone{Error: "Ping all needs a signed-in account"}
+	}
+	if _, err := f.command(`{"type":"ping","payload":{"hosts":["edge.example.net:443"]}}`); err != nil {
+		t.Fatal(err)
+	}
+	var done api.PingDone
+	if err := json.Unmarshal([]byte(l.waitPingDone(t)), &done); err != nil {
+		t.Fatal(err)
+	}
+	if done.Error != "Ping all needs a signed-in account" {
+		t.Fatalf("ping_done = %+v", done)
+	}
+	select {
+	case raw := <-l.pingCh:
+		t.Fatalf("unexpected OnPing on a preflight failure: %s", raw)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestPingRejectsASecondRunWhileBusy(t *testing.T) {
+	l := newTestListener()
+	f := newBareFacade(t, l)
+	release := make(chan struct{})
+	f.pingFn = func(ctx context.Context, _ []string, _ func(api.PingResult)) api.PingDone {
+		select {
+		case <-release:
+			return api.PingDone{Total: 1, Answered: 1}
+		case <-ctx.Done():
+			return api.PingDone{Error: ctx.Err().Error()}
+		}
+	}
+	if _, err := f.command(`{"type":"ping","payload":{"hosts":["edge.example.net:443"]}}`); err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.command(`{"type":"ping","payload":{"hosts":["edge.example.net:443"]}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireErrorCode(t, out, api.CodeBadRequest)
+	requireErrorMessage(t, out, "a ping run is already in progress")
+	close(release)
+	if done := l.waitPingDone(t); done == "" {
+		t.Fatal("first run did not finish")
 	}
 }
 

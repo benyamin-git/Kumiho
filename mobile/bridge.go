@@ -24,6 +24,7 @@ type Listener interface {
 	OnStatus(statusJSON string)
 	OnLog(entryJSON string)
 	OnPing(resultJSON string)
+	OnPingDone(doneJSON string)
 	OnNotice(noticeJSON string)
 }
 

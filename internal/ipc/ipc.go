@@ -58,6 +58,7 @@ const (
 	TypeLogSnapshot  = "log_snapshot"
 	TypeAccountInfo  = "account_info"
 	TypePingResult   = "ping_result"
+	TypePingDone     = "ping_done"
 )
 
 // Envelope wraps every request, response, and event. Requests and responses

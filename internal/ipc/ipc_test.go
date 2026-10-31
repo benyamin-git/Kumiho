@@ -13,6 +13,31 @@ import (
 	"github.com/benyamin-git/kumiho/internal/api"
 )
 
+func TestPingDoneEnvelope(t *testing.T) {
+	env, err := NewEnvelope("", TypePingDone, api.PingDone{Total: 3, Answered: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Envelope
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != "ping_done" {
+		t.Fatalf("type = %q, want ping_done", got.Type)
+	}
+	var done api.PingDone
+	if err := got.DecodePayload(&done); err != nil {
+		t.Fatal(err)
+	}
+	if done.Total != 3 || done.Answered != 2 || done.Error != "" {
+		t.Fatalf("ping_done = %+v", done)
+	}
+}
+
 func TestEnvelopeRoundTrip(t *testing.T) {
 	env, err := NewEnvelope("42", TypeSettingsSet, api.SettingsSetPayload{Key: "kill_switch", Value: "off"})
 	if err != nil {

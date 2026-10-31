@@ -19,6 +19,10 @@ import (
 )
 
 // facade owns one engine instance and everything Kotlin can observe.
+// pingRun measures the named visible candidates through temporary edge
+// sessions. It is a field so facade tests can substitute a controlled run.
+type pingRun func(context.Context, []string, func(api.PingResult)) api.PingDone
+
 type facade struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -30,6 +34,10 @@ type facade struct {
 	ctrl     *engine.Controller
 	bridge   DeviceBridge
 	listener Listener
+	pingFn   pingRun
+
+	pingMu  sync.Mutex
+	pinging bool
 
 	// statusSignal coalesces status pushes: a burst of engine changes becomes
 	// one snapshot, so the engine callback never blocks on Kotlin.
@@ -94,6 +102,7 @@ func newFacade(pathsJSON string, bridge DeviceBridge, listener Listener) (*facad
 		statusSignal: make(chan struct{}, 1),
 	}
 	f.ctrl = engine.New(store, ring, fxa.NewClient(), newProvider(p.settings(), bridge))
+	f.pingFn = f.ctrl.PingHosts
 	if err := f.ctrl.Start(ctx); err != nil {
 		cancel()
 		ring.Close()

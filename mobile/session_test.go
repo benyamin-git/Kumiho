@@ -15,23 +15,26 @@ import (
 type testListener struct {
 	mu sync.Mutex
 
-	statuses []string
-	logs     []string
-	pings    []string
-	notices  []string
+	statuses  []string
+	logs      []string
+	pings     []string
+	pingDones []string
+	notices   []string
 
-	statusCh chan string
-	logCh    chan string
-	pingCh   chan string
-	noticeCh chan string
+	statusCh   chan string
+	logCh      chan string
+	pingCh     chan string
+	pingDoneCh chan string
+	noticeCh   chan string
 }
 
 func newTestListener() *testListener {
 	return &testListener{
-		statusCh: make(chan string, 128),
-		logCh:    make(chan string, 128),
-		pingCh:   make(chan string, 128),
-		noticeCh: make(chan string, 32),
+		statusCh:   make(chan string, 128),
+		logCh:      make(chan string, 128),
+		pingCh:     make(chan string, 128),
+		pingDoneCh: make(chan string, 128),
+		noticeCh:   make(chan string, 32),
 	}
 }
 
@@ -48,6 +51,7 @@ func (l *testListener) record(dst *[]string, ch chan string, raw string) {
 func (l *testListener) OnStatus(statusJSON string) { l.record(&l.statuses, l.statusCh, statusJSON) }
 func (l *testListener) OnLog(entryJSON string)     { l.record(&l.logs, l.logCh, entryJSON) }
 func (l *testListener) OnPing(resultJSON string)   { l.record(&l.pings, l.pingCh, resultJSON) }
+func (l *testListener) OnPingDone(doneJSON string) { l.record(&l.pingDones, l.pingDoneCh, doneJSON) }
 func (l *testListener) OnNotice(noticeJSON string) { l.record(&l.notices, l.noticeCh, noticeJSON) }
 
 func (l *testListener) countLogs() int {
@@ -73,6 +77,9 @@ func (l *testListener) waitStatus(t *testing.T) string {
 }
 func (l *testListener) waitLog(t *testing.T) string  { return waitOn(t, l.logCh, "a log callback") }
 func (l *testListener) waitPing(t *testing.T) string { return waitOn(t, l.pingCh, "a ping callback") }
+func (l *testListener) waitPingDone(t *testing.T) string {
+	return waitOn(t, l.pingDoneCh, "a ping_done callback")
+}
 func (l *testListener) waitNotice(t *testing.T) string {
 	return waitOn(t, l.noticeCh, "a notice callback")
 }
