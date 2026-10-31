@@ -173,6 +173,17 @@ them locally for any change under `android/`, `mobile/` or
   before-connect quota rotation and the connected quota poller; it never
   rotates mid-session. `logout` best-effort destroys every stored FxA refresh
   token, then always clears local state.
+- **v0.9.0 region truth**: `internal/relay` is an `http.RoundTripper` that
+  sends a control-plane request through the user's Worker only after HTTP 451,
+  with exactly one retry, the five-host allowlist and
+  `X-Kumiho-Relay-Token`; `relay.token` lives beside `tokens.json` (0600) and
+  is write-only across IPC. `internal/serverlist` evaluates the Firefox
+  version and a JEXL subset (`versionCompare`, `env.country`), fails open and
+  marks `locked` records; the engine hides them unless `allow_locked` is on.
+  Real-edge ping opens a temporary CONNECT session per candidate (4 in flight,
+  10 s each), caches RTTs for 30 minutes and closes each run with `ping_done`.
+  Favorites and recents are `{country, city, server}` refs in `state.json`;
+  Fastest resolves the minimum fresh RTT once and persists the actual server.
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
   `windows/` (Wintun device, IP Helper routes + interface DNS, dynamic WFP
@@ -190,7 +201,12 @@ them locally for any change under `android/`, `mobile/` or
   `accounts_update`, `accounts_set_rotation` and `accounts_info`; existing
   envelopes and fields are unchanged. v0.6.1 additively adds `redirect_url` to
   `LoginCompletePayload`; `code` stays in the struct for protocol shape, but
-  the browser flow rejects it. `ipc.DefaultTransport()` selects the
+  the browser flow rejects it. v0.9.0 additively adds `favorite_location`,
+  `clear_recents`, `settings_set` keys `allow_locked`/`relay_url`/
+  `relay_token`, `relay_test`, the `fastest` connect/select field, cached
+  `latency` and `allow_locked` in the locations reply, and the `ping_done`
+  event; existing envelopes stay byte-compatible.
+  `ipc.DefaultTransport()` selects the
   platform transport (`default_unix.go` / `default_windows.go`): Unix socket
   vs a `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is
   administrators-only (Linux root parity).
@@ -226,6 +242,11 @@ them locally for any change under `android/`, `mobile/` or
   `ui/tv/` is the additive ten-foot shell (rail, focus surfaces, TV-native
   screens, setup and account reuse); `tv/TvEnvironment` selects it and
   `tv/TvChannelPublisher` publishes the best-effort Google TV channel.
+  Settings has 25 catalog rows (23 engine rows, 22 writes plus the Test relay
+  action, and 2 Android-owned read-only rows); the Region group owns
+  `allow_locked`, `relay_url`, the write-only `relay_token` and `relay_test`,
+  and Favorites/Recent/Fastest/locked are shared engine state rendered by
+  `LocationTree.sections`.
   `res/xml/network_security_config.xml` permits cleartext only for
   `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android
   provider adopts the detached

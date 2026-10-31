@@ -759,28 +759,33 @@ never persisted).
 
 - [ ] Open `Locations`, and open **Options** on the Dashboard.
 
-  Expect: the Locations screen is one flat server-only list, with no country
-  or city headers, carets or expand/collapse controls. **Refresh** and **Ping
-  all** are the only actions. The search box is labelled `Search locations`
-  and its placeholder is `Country, city, server, or protocol`. Rows show a
-  real 4:3 country flag, `Country · City` on line 1 and
-  `host:port · protocols` on line 2, with latency or the selection check
-  trailing. Quarantined and targetless servers are absent. The Dashboard
-  Location picker is a native select whose options are text-only
-  `Name (CC)`; a real flag beside it follows the chosen country, and `Saved
-  selection` shows a globe.
+  Expect: the Locations screen has pinned **Fastest**, **Favorites** and
+  **Recent** sections above one flat server-only list, with no country or city
+  headers, carets or expand/collapse controls. Empty pinned sections are
+  hidden. **Refresh**, **Ping all** and a **Show/Hide locked locations**
+  action are present. The search box is labelled `Search locations` and its
+  placeholder is `Country, city, server, or protocol`. Rows show a real 4:3
+  country flag, `Country · City` on line 1 and `host:port · protocols` on line
+  2, with latency or the selection check trailing, a star favorite button and
+  a **Locked** badge on locked rows. Quarantined and targetless servers are
+  absent. The Dashboard Location picker is a native select whose options are
+  text-only `Name (CC)`; a real flag beside it follows the chosen country, and
+  `Saved selection` shows a globe.
 
 - [ ] Exercise search and Ping all.
 
   Expect: search matches country name/code, city name/code, hostname,
   `host:port` and protocol names; a miss shows `No locations match the
-  filter.` while keeping the action row. **Ping all** probes every usable
-  server even while a search is active, streams `42 ms`/`timeout` labels
-  without reordering rows, then switches once to speed order when the run
-  completes (finite RTTs ascending, failures/untested last, Recommended
-  first). A timeout counts as a result; a refresh resets the list to country
-  order and clears the labels. Clicking a server row saves it (status
-  `Location saved`) **without** connecting; nothing expands.
+  filter.` while keeping the action row. Pinned sections stay visible.
+  **Ping all** probes every visible server even while a search is active,
+  streams `42 ms`/`timeout` labels without reordering rows, then switches the
+  full list once to speed order when `ping_done` arrives (finite RTTs
+  ascending, failures/untested last, Recommended first). A timeout counts as a
+  result; a refresh resets the full list to country order and reloads fresh
+  cached labels. Clicking a server row saves it (status `Location saved`)
+  **without** connecting; nothing expands. Clicking a star toggles a favorite,
+  **Clear** empties Recent, and Fastest stays disabled with `Run Ping all to
+  enable Fastest` until a fresh result exists.
 
 ### 16.5 Settings
 
@@ -829,6 +834,13 @@ and a **Refresh** action.
 > `Solve challenges` and `Keepalive profile` to the `Background service` rows
 > and makes `Upstream proxy` functional. They are exercised in section 18.2;
 > the steps above stay the v0.3.0 script.
+
+> **v0.9.0 Region group.** The `Background service` pane ends with
+> `Allow locked locations`, `Control-plane relay`, write-only `Relay token`
+> and **Test relay**. Toggle locked locations and confirm Locations reloads;
+> set a malformed URL and see the validation error; store a token, confirm
+> only `set`/`not set` is rendered, then **Clear** it. **Test relay** without a
+> URL shows `relay_url is not set`; a valid Worker shows `Relay OK — N ms`.
 
 ### 16.6 Logs
 

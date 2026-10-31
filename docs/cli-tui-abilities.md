@@ -179,10 +179,15 @@ Global CLI mechanics (apply to every subcommand):
   on success. Failure `kumiho logout: <err>`, exit 1. Removing one account
   (`accounts remove`) is not a logout: the other accounts stay signed in.
 
-## `kumiho connect [--to CODE|CITY|HOST] [--proxy-only] [--kill-switch=on|off|last]`
-- Invocation example: `kumiho connect --to DE --proxy-only --kill-switch=last`.
+## `kumiho connect [--to CODE|CITY|HOST | --fastest] [--proxy-only] [--kill-switch=on|off|last]`
+- Invocation examples: `kumiho connect --to DE --proxy-only --kill-switch=last`,
+  `kumiho connect --fastest`.
 - Daemon required. 90 s client timeout ("Connect can spend up to four dial
   attempts with backoff").
+- `--fastest` sends `fastest: true`; the engine uses the minimum finite RTT
+  from the last real-edge Ping all, resolves it once and persists the actual
+  server. It is mutually exclusive with `--to` (exit 2), and fails with the
+  daemon's no-fresh-cache/selection error when no usable measurement exists.
 - `--kill-switch=on|off|last`: applied first via `settings_set`
   (`kill_switch`); a failure aborts with `kumiho connect: kill-switch: <err>`,
   exit 1. (`last` pins the current effective value.)
@@ -227,21 +232,53 @@ Global CLI mechanics (apply to every subcommand):
   must spawn the CLI elevated (UAC) or a new privileged `cleanup` request must
   be added.
 
-## `kumiho locations [--ping] [--refresh] [--json]`
-- Invocation examples: `kumiho locations`, `kumiho locations --ping --refresh`.
+## `kumiho locations [--ping] [--refresh] [--json] [--favorites] [--recent]`
+- Invocation examples: `kumiho locations`, `kumiho locations --ping --refresh`,
+  `kumiho locations --favorites --recent`, `kumiho locations --json`.
 - Daemon required (`locations` request; daemon caches the list for 30 min and
   a failed refresh falls back to the cache).
-- `--refresh`: force re-fetch from Remote Settings. `--json`: prints the raw
-  countries array (indent 2, not wrapped). `--json` wins over `--ping`.
-- Default output: one line per country `%-4s %-22s %d cities` → e.g.
-  `REC  Recommended Location  3 cities`.
-- `--ping`: collects every non-quarantined server's connect `host:port`,
-  sends one `ping` request, then waits up to 6 s for streamed `ping_result`
-  events and prints per target:
-  - `%-4s %-6s %-45s %.0f ms` on success
-  - `... unreachable` (nil RTT) or `... no result` (no event in time)
-  - Daemon probes TCP, max 24 concurrent.
-- Exit: 0 success; 1 daemon/list/decode/ping failure; 2 flag parse.
+- `--refresh`: force re-fetch from Remote Settings. `--json`: prints the full
+  `LocationsResult` object (indent 2, not wrapped): `countries`, `favorites`,
+  `recents`, `latency` (`{"host:port":{"rtt_ms":N|null,"measured_at":...}}`)
+  and `allow_locked`; omitted empty arrays/maps use `omitempty`.
+- Default summary: an optional first line `fastest: CC CITY host:port · N ms`
+  when a fresh finite RTT exists, then one country line
+  `%-4s %-22s %d cities` with a leading `*` for a favorite country or `~` for
+  a recent one. Example: `REC  Recommended Location  3 cities`.
+- `--favorites` and `--recent`: print only those resolved rows, unioned and
+  deduplicated by address, in favorites/country order then recents/newest
+  order. Each row is `marker CC CITY host:port rtt` with `-`, `timeout` or
+  `N ms`. The star/clock markers remain `*` and `~`.
+- `--ping`: pings every usable visible server (or only the selected
+  favorites/recents when those flags are present), sends one `ping` request,
+  then waits for the daemon's `ping_done` event; it does not use a fixed
+  window. Per target it prints `... N ms`, `... unreachable` (nil RTT) or
+  `... no result` (no event), in target order. With `--json`, after
+  `ping_done` it refetches and prints the updated full object.
+- Exit: 0 success; 1 daemon/list/decode/ping failure or a `ping_done` error;
+  2 flag parse.
+
+## `kumiho settings [get [key] [--json]] | set <key> [value] | reset <key>`
+- Daemon required. `get` without a key prints every effective key as
+  `key = value`; `get --json` prints the complete `SettingsView` object.
+  `relay_token` in `set` is write-only: omit the value (or pass `-`) to enter
+  it without echo; `relay_token_set` is read-only; `reset relay_token` deletes
+  the file. `reset` prints `<key> = reset` (or the token set marker).
+- Boolean keys accept `true`/`false` (`on`/`off` are normalized); integer
+  ranges and enum values are validated by the daemon. Unknown keys and
+  read-only writes exit 2. A daemon validation failure prints
+  `kumiho settings: <err>` and exits 1.
+- The keys are the TUI setting rows (including the Region rows) plus the
+  read-only `relay_token_set`; `relay_token` is accepted on `set`/`reset`.
+
+## `kumiho relay test`
+- Daemon required. Sends a `relay_test` request; the engine performs one
+  direct request through the configured relay to the server-list head
+  (`.../vpn-serverlist/records?limit=1`), never through the tunnel.
+- Success: `Relay OK — N ms` (exit 0). A 401/403 prints `Relay rejected the
+  token`; no URL prints `relay_url is not set`; other failures print
+  `Relay unreachable: <detail>` — all exit 1. No argument is accepted besides
+  `test`; extra arguments exit 2.
 
 ## `kumiho logs [-f] [--level debug|info|warn|error]`
 - Invocation examples: `kumiho logs`, `kumiho logs -f --level debug`.
@@ -352,40 +389,57 @@ the password flow. Steps in the password flow are `email` → `password` → `2f
   new account on completion; only an in-flight flow blocks a second start.
 
 ## Locations screen
-Shows one flat server-only list. There are no country or city header rows,
-carets or expansion state. Each row is one line:
+Shows pinned **Fastest**, **Favorites**, **Recent** and the full flat
+server-only list. There are no country or city header rows, carets or
+expansion state. Each row is one line:
 `<flag> CC · City · host:port` (Recommended is `★ REC · host:port`; a normal
 row omits the city when it adds nothing), followed by `  <n> ms` in green or
-`  timeout` dimmed when pinged. There are no protocols on the row. `*` marks
-the persisted selection by address. `no locations loaded` when empty;
-`loading locations...` while fetching; error line on failure. A filter line
-`filter: <text>_` appears while filtering or when a filter is set.
+`  timeout` dimmed when pinged. A locked row also carries the word `locked`.
+There are no protocols on the row. The leading mark is `*` when the row is
+the persisted selection; after the address, `*` also marks a favorite and `~`
+a recent. `Fastest` is
+one pinned row, disabled with `Run Ping all to enable Fastest` until a fresh
+finite RTT exists; its label carries the minimum RTT. Empty Favorites/Recent
+sections are omitted. `no locations loaded` when empty; `loading locations...`
+while fetching; error line on failure. A filter line `filter: <text>_`
+appears while filtering or when a filter is set.
 
 Keys:
-- arrows / `k` `j` — move the cursor over visible rows.
+- arrows / `k` `j` — move the cursor over visible rows, including the pinned
+  sections.
 - `enter` — persist the current server via `select_location` (country code,
-  city code, connect target) — **does not connect**; success notice
-  `location saved`, failure `selection failed: <err>` (status refreshed either
-  way).
-- `P` — Ping all: TCP-ping every usable server in the loaded list regardless
-  of the filter, deduped by address and skipping quarantined/targetless
-  records. Results stream in and update labels without reordering rows. When
-  the run completes with at least one result, the list switches once to speed
-  order: finite RTTs ascending, failures and untested last, Recommended first;
-  the cursor returns to the top. A timeout counts as a result. `p` and `x` are
-  no-ops.
+  city code, connect target; Fastest sends `fastest: true` and resolves once)
+  — **does not connect**; success notice `location saved`, failure
+  `selection failed: <err>` (status refreshed either way). Selecting disabled
+  Fastest is a no-op with the run-Ping-all notice.
+- `f` — toggle the cursor row as a favorite (`favorite_location`), optimistic
+  and refetched on error. Fastest and disabled rows cannot be favorited.
+- `c` — clear all recents from the Recent header (no confirmation); hidden
+  when the section is empty.
+- `L` — toggle `allow_locked`; the list refreshes and locked rows appear with
+  a `locked` badge. The footer action mirrors Settings → Region.
+- `P` — Ping all: real-edge probes every usable visible server in the loaded
+  list regardless of the filter, deduped by address and skipping
+  quarantined/targetless and hidden-locked records. Results stream in and
+  update labels without reordering rows. The run ends on the daemon's
+  `ping_done` event; with at least one result the **full list** switches once
+  to speed order: finite RTTs ascending, failures and untested last,
+  Recommended first; the cursor returns to the top. Pinned sections keep
+  their order. A timeout counts as a result.
 - `/` — filter mode: matches country name/code, city name/code, hostname,
   `host:port` or protocol name, case-insensitively; `backspace` edits, `enter`
   keeps the filter and leaves filter mode, `esc` clears the filter, `ctrl+c`
   quits. Filtering never resets the order.
-- `r` — force server-list refresh (`--refresh`); clears speed order, latency
-  labels and the cursor and returns to country order.
-- `esc` — back to Dashboard. Footer: `enter select • P ping all • / filter •
-  r refresh • esc back • ? help • q quit`.
+- `r` — force server-list refresh (`--refresh`); clears speed order and the
+  cursor and returns to country order, then reloads the engine's fresh cached
+  latency labels.
+- `esc` — back to Dashboard. Footer: `enter select • f favorite • c clear
+  recents • L show/hide locked • P ping all • / filter • r refresh • esc back
+  • ? help • q quit`.
 - Leaving and re-entering through `o` resets speed order and the cursor.
 
 ## Settings screen
-Shows 19 rows (label, value; `*` marks a key whose effective value comes from
+Shows 23 rows (label, value; `*` marks a key whose effective value comes from
 a persisted runtime override, i.e. differs from `config.toml`), with the
 cursor `>`, and the current row's hint line. The list is a viewport over the
 terminal content height (height − 9 lines of header/title/hint/footer, minus
@@ -421,10 +475,15 @@ line shown under the list for the focused row, verbatim):
 | `http_proxy_port` | HTTP proxy port | inline number edit | 1–65535 | loopback HTTP proxy listener; next connect |
 | `solve_challenges` | solve challenges | bool toggle | on/off | solve FxA and edge challenges automatically; applies immediately |
 | `keepalive_profile` | keepalive profile | enum cycles standard→slow | standard/slow | keepalive ping timeout profile; next connect |
+| `allow_locked` | allow locked | bool toggle | on/off | show servers the Firefox version filter marks locked; next locations refresh |
+| `relay_url` | relay URL | inline text edit | HTTPS origin; empty = none | HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page |
+| `relay_token` | relay token | masked inline edit, empty cancels | any non-empty token; `d` deletes it | write-only secret used only after HTTP 451; does not proxy the browser sign-in page |
+| `relay_test` | test relay | action (`enter`/`space`) | — | send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page |
 
 Display specials: empty `dns_upstream` → `(provider default)`, empty
 `edge_address` → `(resolve)`, empty `upstream_proxy` → `(direct)`, empty
-`exclude_cidrs` → `(none)`.
+`exclude_cidrs` → `(none)`, empty `relay_url` → `(not set)`, a missing token →
+`(not set)` and a stored one → `set`; `relay_test` shows `enter to test`.
 Keys:
 - arrows / `k` `j` — move cursor one row; the viewport scrolls to keep the
   cursor visible.
@@ -437,11 +496,18 @@ Keys:
   edits, `enter` saves — an empty value sends `reset: true` (drops the
   override, restoring the admin config/built-in default) with notice
   `<key> reset to default`; non-empty sends the value with notice
-  `<key> updated`; `esc` cancels without applying; `ctrl+c` quits.
+  `<key> updated`; `esc` cancels without applying; `ctrl+c` quits. The
+  `relay_token` editor starts blank and masks input; empty `enter` cancels
+  (`relay token unchanged`) rather than clearing, so use `d` or
+  `settings reset relay_token` to delete it.
+- `enter`/`space` on `relay_test` runs one probe and shows `Relay OK — N ms`,
+  `Relay rejected the token`, `relay_url is not set` or
+  `Relay unreachable: <detail>` in the notice; it never writes a setting.
 - `d` — reset the focused row to default immediately (no edit mode).
 - `r` — re-fetch settings; `esc` — back.
 - Apply timing (hint text and behavior): `kill_switch`, `log_level`,
-  `redact_targets` apply immediately; toggling `kill_switch` on a connected
+  `redact_targets`, `solve_challenges`, `allow_locked`, `relay_url` and
+  `relay_token` apply immediately; toggling `kill_switch` on a connected
   full tunnel re-applies the live netcfg, and if that fails the change is
   rejected (`<err>` shown) with the previous value kept. `solve_challenges` is
   consulted per control-plane request, so it applies immediately too.
@@ -531,10 +597,10 @@ Full-screen replacement listing:
 - `global       ? help • q / ctrl+c quit`
 - `dashboard    space connect/disconnect • l login • o locations • s settings
   • a account • g logs • r refresh`
-- `locations    arrows/hjkl move • enter select • P ping all • / filter •
-  r refresh • esc back`
-- `settings     arrows move • enter change • d reset to default • r refresh •
-  esc back`
+- `locations    arrows/hjkl move • enter select/Fastest • f favorite • c clear
+  recents • L show/hide locked • P ping all • / filter • r refresh • esc back`
+- `settings     arrows move • enter change/test relay • d reset/clear • r
+  refresh • esc back`
 - `logs         f follow • v level • / search • c clear • e export • esc back`
 - `account      r refresh • x sign out • esc back`
 - `login        enter submits each step (password masked); esc back`
@@ -576,16 +642,19 @@ Requests (client → daemon), one line each:
 |---|---|---|
 | `hello` | `{client_version?}` → `{version, protocol, os, arch}` | handshake; **no CLI/TUI client uses it** |
 | `status` | (none) → `Status{state, authenticated, email?, since, token_expires?, kill_switch, autoconnect, location?, server?, proxy_only?, pass_expires?, quota?{limit?,remaining?,reset?}, dns?, ipv6?, exit_ip?, exit_country?, totals?{up,down}, rates?{up,down}}` | full dashboard snapshot |
-| `locations` | `{refresh?}` → `{countries:[{code,name,cities:[{code,name,servers:[{hostname,port,quarantined,protocols:[{name,host,port,scheme}]}]}]}]}` | daemon cache TTL 30 min; failed refresh falls back to cache; error `internal` if no cache |
-| `select_location` | `{country_code, city_code?, server}` → `{ok}` | persists without connecting; `bad_request` if country/server empty; broadcast status |
-| `ping` | `{hosts:[...]}` → `{ok}` immediately, then one `ping_result{host, rtt_ms|null}` event per host **to the requesting connection only** | TCP probes, 24 concurrent; no batch completion event |
+| `locations` | `{refresh?}` → `{countries:[{code,name,locked?,cities:[{code,name,servers:[{hostname,port,quarantined,protocols:[{name,host,port,scheme}]}]}]}], favorites?:[{country_code,city_code?,server}], recents?:[...], latency?:{"host:port":{rtt_ms?,measured_at}}, allow_locked}` | daemon cache TTL 30 min; failed refresh falls back to cache; error `internal` if no cache; hidden locked rows appear only with `allow_locked`; latency is the fresh 30-minute real-edge cache |
+| `select_location` | `{country_code, city_code?, server, fastest?}` → `{ok}` | persists without connecting; `fastest:true` resolves the minimum fresh cache once and persists the actual server; `bad_request` if country/server empty; broadcast status |
+| `favorite_location` | `{country_code, city_code?, server, favorite}` → `{ok}` | persists one favorite; broadcast status |
+| `clear_recents` | (none) → `{ok}` | empties recents; broadcast status |
+| `ping` | `{hosts:[...]}` → `{ok}` immediately, then one `ping_result{host, rtt_ms|null}` event per host **to the requesting connection only**, and one `ping_done{total, answered, error?}` | real-edge CONNECT probes, 4 concurrent, 10 s each; cached 30 min; hidden locked/targetless servers are never probed |
+| `relay_test` | (none) → `{ok, status?, latency_ms?, error?}` | one control-plane request through the relay to the server-list head; never touches the data-plane |
+| `settings_get` | (none) → `SettingsView{socks_port, mtu, exit_check, doh_provider, dns_upstream?, edge_address?, upstream_proxy?, exclude_cidrs?, allow_lan, log_level, redact_targets, kill_switch("last\|on\|off"), autoconnect("last\|on\|off"), kill_switch_effective, autoconnect_effective, quota_poll_minutes, tls_split("off\|first-byte\|sni"), http_proxy, http_proxy_port, solve_challenges, keepalive_profile("standard\|slow"), allow_locked, relay_url?, relay_token_set, overridden?[]}` | no `socks_bind`; no `proxy_only` field; the token itself is never returned |
 | `login_email` | `{email}` → `login_state{step: email\|password\|2fa\|done, email?, verification_method?, verification_reason?, error?}` | starts the auth state machine |
 | `login_password` | `{password}` → `login_state` | derive authPW server-side |
 | `login_2fa` | `{code}` → `login_state` | empty code re-checks the email-link flow via session status |
 | `logout` | (none) → `{ok}` | clears tokens + disconnects; broadcast status |
-| `connect` | `{location_code?, city_code?, server?, proxy_only?}` → `{ok}` | can take ~30 s+; errors `bad_request` / `not_authenticated` / `internal`; broadcast status |
+| `connect` | `{location_code?, city_code?, server?, proxy_only?, fastest?}` → `{ok}` | can take ~30 s+; `fastest:true` resolves the minimum fresh cache once; errors `bad_request` / `not_authenticated` / `internal`; broadcast status |
 | `disconnect` | (none) → `{ok}` | `bad_request "not connected"` when idle; broadcast status |
-| `settings_get` | (none) → `SettingsView{socks_port, mtu, exit_check, doh_provider, dns_upstream?, edge_address?, upstream_proxy?, exclude_cidrs?, allow_lan, log_level, redact_targets, kill_switch("last\|on\|off"), autoconnect("last\|on\|off"), kill_switch_effective, autoconnect_effective, quota_poll_minutes, tls_split("off\|first-byte\|sni"), http_proxy, http_proxy_port, solve_challenges, keepalive_profile("standard\|slow"), overridden?[]}` | no `socks_bind`; no `proxy_only` field |
 | `settings_set` | `{key, value, reset?}` → `{ok}` | keys/values below; `unsupported_setting` for unknown keys (e.g. `socks_bind`); `bad_request` on validation; `internal` if a `kill_switch` live re-apply fails (change rolled back); broadcast status |
 | `logs_snapshot` | `{level?}` → `{entries:[{ts, level: "debug"\|"info"\|"warn"\|"error", tag, msg}]}` | default level debug (all); ring capacity 2000 |
 | `logs_subscribe` | `{level?}` → `{ok}` then a live `log` event stream on this connection until unsubscribe/disconnect | default level info; a second subscribe replaces the connection's previous one |
@@ -604,20 +673,24 @@ Events (server → client, empty id):
   change (state, settings, selection, metrics every 2 s while connected).
 - `ping_result` — `{host, rtt_ms|null}` per probed host, only to the
   requesting connection.
+- `ping_done` — `{total, answered, error?}` once per ping run, only to the
+  requesting connection; clients end the run on this event instead of a timer.
 - `log` — one `logging.Entry` while subscribed.
 
 Runtime setting keys accepted by `settings_set` (all persisted as overrides in
 `state.json`, `reset:true` drops the override):
 `kill_switch` (on|off|last), `autoconnect` (on|off|last), `proxy_only`
 (on|off|last — **hidden**: not in `SettingsView`, not in the TUI),
-`exit_check`/`redact_targets`/`allow_lan`/`http_proxy`/`solve_challenges`
-(on|off/true/false/yes/no),
+`exit_check`/`redact_targets`/`allow_lan`/`http_proxy`/`solve_challenges`/
+`allow_locked` (on|off/true/false/yes/no),
 `log_level` (debug|info|warn|error), `doh_provider`
 (automatic|cloudflare|google|quad9|off), `dns_upstream` (IP or empty),
 `edge_address` (IP or empty), `upstream_proxy` (URL or empty),
 `exclude_cidrs` (comma-separated CIDRs), `mtu` (576–65535), `socks_port`
 (1–65535), `quota_poll_minutes` (1–1440), `tls_split` (off|first-byte|sni),
-`http_proxy_port` (1–65535), `keepalive_profile` (standard|slow).
+`http_proxy_port` (1–65535), `keepalive_profile` (standard|slow),
+`relay_url` (HTTPS origin or empty), `relay_token` (non-empty secret; only
+the set marker is readable). `relay_token_set` is read-only.
 `socks_bind` and any other key → `unsupported_setting`.
 
 Gap flags (daemon-side abilities beyond the IPC surface):
@@ -777,20 +850,31 @@ default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
 - List: Remote Settings server list; one flat server list with `REC`
   (Recommended Location) first, then countries A–Z, cities A–Z and hostnames
   A–Z; quarantined and targetless servers excluded; `CatchAll Anycast` records
-  dropped. Daemon caches 30 min; `refresh` bypasses; failures fall back to the
-  cache with a warning log.
+  dropped. The engine evaluates the record's JEXL subset against the Firefox
+  version and last exit country, fails open on an unknown expression, and
+  hides `locked` records unless `allow_locked` is on. Daemon caches 30 min;
+  `refresh` bypasses; failures fall back to the cache with a warning log.
+- Favorites and recents: `{country_code, city_code, server}` refs in
+  `state.json`; exact server first, then the first usable server in the city;
+  favorites order by country/city name and recents newest first, deduped, max
+  five. Shared by every client; Clear recents empties the list.
 - Selection: `select_location` persists country/city/server without
   connecting; shown as `*` in the TUI and used by the next connect (or
-  auto-picked after 3 consecutive connect failures for that server).
+  auto-picked after 3 consecutive connect failures for that server). Sending
+  `fastest:true` resolves the minimum fresh cached RTT once, persists the
+  actual server, and returns normally.
 - Filtering: TUI `/` matches country name/code, city name/code, hostname,
   `host:port` and protocol names (client-side). CLI `--to` accepts country
   code, city code, server host or `host:port`, host prefix, or unique
   country-name substring (client-side matching; the daemon accepts
   `location_code`/`city_code`/`server` directly).
-- Ping: daemon TCP probes streamed per host (`ping_result`); CLI waits ≤6 s and
-  prints ms/unreachable/no result; TUI Ping all probes every usable server and
-  shows RTT or `timeout`, then switches to speed order once at completion. No
-  ping history or cancellation.
+- Ping: the daemon opens a temporary edge session per visible candidate,
+  times CONNECT to `vpn.mozilla.org:443` with 4 concurrent and a 10 s probe
+  timeout, caches for 30 minutes, and streams `ping_result`; a single
+  `ping_done` closes the run. CLI waits for that event and prints
+  ms/unreachable/no result; TUI Ping all shows RTT or `timeout`, then switches
+  the full list to speed order once at completion. Hidden locked servers are
+  never probed. No ping history or cancellation.
 
 ## Connect / disconnect semantics and states
 - States: `UNAUTHENTICATED`, `IDLE`, `CONNECTING`, `CONNECTED`, `RECONNECTING`,

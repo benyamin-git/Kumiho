@@ -27,7 +27,7 @@ Copy it to the TV and install it over ADB, or use a file manager:
 The application id is `dev.benyamin.kumiho` for release builds and
 `dev.benyamin.kumiho.debug` for debug builds. A release APK is produced by
 `make android-release` with the signing certificate as described in
-[docs/android-testing.md](docs/android-testing.md).
+[android-testing.md](android-testing.md).
 
 ## Launcher presence
 
@@ -92,10 +92,20 @@ colour: rows scale and gain a border when focused.
   without a browser still shows the release notes and download link.
 - Logs can be viewed, copied line by line and shared with Android's share
   sheet. Diagnostics can be copied and re-run.
-- The Locations tab is one flat server list with real 32×24 flags, a
-  two-line `Country · City` / `host:port · protocols` row, search and one
-  **Ping all** action. There are no carets or expand/collapse controls, and
-  D-pad focus stays on the list after a search or a speed-order switch.
+- The Locations tab has pinned **Fastest**, **Favorites** and **Recent**
+  sections above one flat server list with real 32×24 flags, a two-line
+  `Country · City` / `host:port · protocols` row, search, a favorite star,
+  a **Clear** action on Recent, **Ping all**, and a **Show locked locations**
+  / **Hide locked locations** footer. Fastest stays disabled with its honest
+  hint until a fresh Ping all produces an RTT; selecting it resolves once to
+  the actual server. Locked rows carry a text **Locked** badge. There are no
+  carets or expand/collapse controls, and D-pad focus stays on the list after
+  a search or a speed-order switch. The speed order applies only to the full
+  list when the engine emits `ping_done`; there is no timer.
+- Settings includes **Region**: `allow_locked`, the HTTPS `relay_url`, a
+  write-only `relay_token` with Set/Clear, and a **Test relay** action with
+  its inline result. Region help text states that the relay is used only
+  after HTTP 451 and does not proxy the browser sign-in page.
 - Proxy-only mode remains available but needs a local client; a TV usually
   has none, so the normal use is a full tunnel.
 - IPv6 is blackholed, non-DNS UDP is blocked, and DNS runs as DoH inside the
@@ -149,12 +159,13 @@ TV's own launcher or Wi-Fi behaviour.
       notifications and Always-on guidance all complete with the remote.
 - [ ] Dashboard: connect, disconnect, reconnect and the options page.
 - [ ] Locations: search and no-match copy, real 32×24 flags, flat focusable
-      rows, select a server, then Ping all and inspect the speed order
-      (Recommended first, failures last); confirm there are no carets or
-      expand/collapse controls.
+      rows, Fastest/Favorites/Recent sections, favorite star and Clear,
+      select a server, then Ping all and inspect the speed order (Recommended
+      first, failures last); toggle the locked footer and confirm there are
+      no carets or expand/collapse controls.
 - [ ] Account: add, rename, remove, rotate and sign out.
-- [ ] Settings: theme, accent, update check, split tunneling, bypass and every
-      engine row/dialog.
+- [ ] Settings: theme, accent, update check, split tunneling, bypass, every
+      engine row/dialog, and the Region URL/token/Test relay controls.
 - [ ] Logs: filter, search, follow and copy/share.
 - [ ] Diagnostics: re-run, copy, shortcuts and reset.
 - [ ] Sleep/wake and a Wi-Fi drop keep the service and the watchdog healthy

@@ -100,6 +100,56 @@ credentials.
 that inspects TLS handshakes, try `tls_split=first-byte`, then `tls_split=sni`.
 It is best effort, off by default, and applies on the next connect.
 
+## Mozilla answers HTTP 451
+
+Kumiho classifies a 451 as `region_blocked` and distinguishes the control
+plane from the VPN edge:
+
+- **Control plane** (accounts, profile, Remote Settings, the server list) —
+  Kumiho tries the direct path once. If it is blocked and a relay is
+  configured, it retries exactly once through the relay; if that also fails,
+  the error is
+  `Mozilla returned HTTP 451 and the configured relay failed: <detail>. Check
+  the relay URL and token in Settings → Region.` With no relay the error is
+  `This region is blocking Mozilla's servers (HTTP 451). Set a control-plane
+  relay in Settings → Region, or deploy the relay from docs/relay.md, then
+  retry.` There is no stale-cache fallback for this failure.
+- **VPN edge** — the tunnel still originates from your network, so the error
+  is `The VPN edge refused this region (HTTP 451). A control-plane relay
+  cannot fix the VPN data path; connect from a supported region.` The
+  watchdog parks the session instead of redialing.
+
+For the control plane, set **Settings → Region → Control-plane relay** to the
+Worker HTTPS origin and the write-only token, then use **Test relay** or
+`kumiho relay test`. `Relay rejected the token` means the Worker's
+`RELAY_TOKEN` and the stored token differ; `relay_url is not set` means the URL
+is empty; `Relay unreachable: <detail>` is DNS, TLS, Worker or upstream. The
+relay does not proxy `accounts.firefox.com`, so browser sign-in still opens
+directly. Deployment, allowlist and trust boundaries are in
+[relay.md](relay.md).
+
+## Fastest is disabled or Ping all finds nothing
+
+**Fastest** needs a **fresh** finite RTT from a completed real-edge Ping all;
+it is disabled with **Run Ping all to enable Fastest** when the 30-minute cache
+has no usable sample. A timeout is a result but cannot be fastest. If every
+probe fails, check connectivity and the selected servers; a transport or
+run-level failure leaves the previous order and labels alone. Refreshing
+restores country order and reloads the engine's fresh cached labels. `kumiho
+locations --ping` is the CLI equivalent; it waits for the daemon's `ping_done`
+event rather than a fixed timeout.
+
+## A favorite or old recent location is missing
+
+Favorites and recents are refs, not copied server records. Each resolves to
+the exact server first, then to the first usable server in the same city. A
+missing row usually means Mozilla removed or quarantined that server, the city
+is gone, or a version filter now marks it locked. Turn on **Show locked
+locations** / `allow_locked` to check whether the record is only locked; clear
+recents if an old city keeps rotating in. Favorites and recents are shared
+engine state in `state.json`, so they survive restarts and appear in every
+client, but not on another device.
+
 ## HTTP proxy does not work
 
 - Turn it on: `http_proxy=on` in Settings (or `http_proxy = true` in

@@ -6,20 +6,22 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.8.3**
-(`versionCode` 803). Read the honesty note below before relying on it.
+This guide describes the app as implemented for **v0.9.0**
+(`versionCode` 900); the README carries the latest published release and
+download links. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. v0.6.0, v0.7.0, v0.7.1 and v0.7.2 physical acceptance is pending.
+> full pass. Physical acceptance for v0.6.0 through v0.8.3 is still pending.
 > The production-signed
-> [v0.7.2 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2)
-> is published with the three Android APKs and `SHA256SUMS`; the signing key and
-> GitHub Actions secret values remain user-owned. Local builds are test builds,
-> not published releases. The direct Firefox Accounts OAuth browser flow
-> described below replaced the v0.6.0 flow and is in the published v0.7.2 APK.
+> [v0.8.3 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.8.3)
+> is published with the three Android APKs and `SHA256SUMS`; the v0.9.0
+> release is built from the same signed pipeline. The signing key and GitHub
+> Actions secret values remain user-owned. Local builds are test builds, not
+> published releases. The direct Firefox Accounts OAuth browser flow described
+> below replaced the v0.6.0 flow and is in the published v0.8.3 APK.
 
 ## Requirements
 
@@ -204,14 +206,43 @@ system dialog; a denial closes the sheet and shows the reason.
 
 ### Locations
 
-**Locations** is one flat server-only list. There are no country or city
-header rows, carets or expand/collapse controls. The engine's recommended
-entry is first, then countries A–Z, cities A–Z and hostnames A–Z. Every row
-carries a real 4:3 country flag (a red star for Recommended and a globe for
-an unknown code), the full `Country · City` on the first line and
-`hostname:port · protocols` on the second; the latency or selection check
-trails the row. A quarantined or targetless server is never listed. Refresh
-keeps the previous list on failure and offers one Retry.
+**Locations** has pinned **Fastest**, **Favorites** and **Recent** sections
+above one flat server-only list. There are no country or city header rows,
+carets or expand/collapse controls; empty Favorites/Recent sections are
+hidden. The full list puts the engine's recommended entry first, then
+countries A–Z, cities A–Z and hostnames A–Z. Every row carries a real 4:3
+country flag (a red star for Recommended and a globe for an unknown code), the
+full `Country · City` on the first line and `hostname:port · protocols` on the
+second; the latency or selection check trails the row, and a separate 48 dp
+star button toggles the favorite. A locked row carries a text **Locked**
+badge. A quarantined or targetless server is never listed. Refresh keeps the
+previous list on failure and offers one Retry.
+
+**Fastest** is one pinned row. Until a fresh finite cached RTT exists it says
+**Run Ping all to enable Fastest** and is disabled; afterwards it shows the
+lowest RTT. Selecting it resolves once, persists the actual server and never
+sends a placeholder address. **Favorites** are ordered by country/city;
+**Recent** is newest first, capped at five, with a **Clear** action in its
+heading. Both use the same engine state and semantics as the desktop clients,
+inside the app's own private state.
+
+The toolbar is Refresh and **Ping all**; a footer action reads **Show locked
+locations** or **Hide locked locations** and writes `allow_locked`. Ping all
+opens a temporary real-edge session per visible server regardless of the
+search, deduped by address, skipping quarantined, targetless and hidden-locked
+entries; its button reads **Pinging N…** and stays disabled until the engine's
+`ping_done` event arrives (there is no timer). A measured round trip shows
+milliseconds, an unanswered probe shows **timeout**, and an untested host
+shows **—**; nothing pings on load, typing, refreshing or resuming. Results
+are cached by the engine for 30 minutes, so a fresh visit can show labels
+without a new run.
+
+Only a completed run with at least one result switches the **full list** to
+speed order: finite RTTs ascending, failures and untested servers last, and
+Recommended always first. Pinned sections keep their order. The order lasts
+for the current visit and Refresh restores country order. A timeout counts as
+a result; a transport failure or a run with no results leaves the current
+order alone.
 
 Search matches country name/code, city name/code, server hostname,
 `host:port` and protocol names, case-insensitively. The placeholder is
@@ -221,32 +252,19 @@ scope. The current-selection summary keeps the flag and shows
 longer in the loaded list. There is no connected-location hint; the summary
 is the only current-selection display.
 
-The toolbar is Refresh and **Ping all**. Ping all probes every usable server
-in the loaded list regardless of the search, deduped by address and skipping
-quarantined entries; its button reads **Pinging N…** and stays disabled until
-the run ends. A measured round trip shows milliseconds, an unanswered probe
-shows **timeout**, and an untested host shows **—**; nothing pings on load,
-typing, refreshing or resuming. The run window is 12 seconds for a normal
-list and scales with the target count (1.5 seconds per 24-host batch plus
-margin).
-
-Only a completed run with at least one result switches the list to speed
-order: finite RTTs ascending, failures and untested servers last, and
-Recommended always first. The order lasts for the current visit and Refresh
-restores country order. A timeout counts as a result; a transport failure or
-a run with no results leaves the current order alone.
-
 Selecting a row saves it for the **next** connection — the current session
 keeps its server and exit IP — so the screen says to disconnect on Home and
 connect again.
 
 ## Settings
 
-Settings has four groups. The catalog is the desktop engine's settings, one
-row per key, plus two Android-owned read-only rows; there are **21 catalog
-rows** (19 engine settings and the 2 Android-owned Always-on/lockdown rows).
-The Kumiho app group also has the Split tunneling shortcut and the app-owned
-Keep connections outside the tunnel setting.
+Settings has five groups: **Kumiho app**, **Connection**, **Region**,
+**Android VPN** and **Advanced** (collapsed by default). The catalog is the
+desktop engine's settings, one row per key, plus two Android-owned read-only
+rows and the Region **Test relay** action; there are **25 catalog rows** (23
+engine rows, of which 22 write a setting, and the 2 Android-owned
+Always-on/lockdown rows). The Kumiho app group also has the Split tunneling
+shortcut and the app-owned Keep connections outside the tunnel setting.
 
 ### Kumiho app
 
@@ -286,6 +304,30 @@ Keep connections outside the tunnel setting.
 `192.168.0.0/16`, `169.254.0.0/16` and `224.0.0.0/4`. The tunnel DNS address
 `10.8.0.1` always stays inside the tunnel, even when one of those ranges or a
 user exclusion would otherwise cover it.
+
+### Region (3 settings + 1 action)
+
+| Row | Values | Default | Applies |
+|---|---|---|---|
+| `allow_locked` | on/off | off | immediately; next Locations read |
+| `relay_url` | HTTPS origin, empty = none | empty | immediately |
+| `relay_token` | write-only secret | not set | immediately |
+| `relay_test` | action, not a setting | — | on tap |
+
+`allow_locked` reveals servers the server-list version filter marks locked;
+the same footer action also lives at the bottom of Locations. `relay_url` must
+be an HTTPS origin with no path, query, fragment or userinfo. The relay is
+used only after HTTP 451 and never proxies the browser sign-in page; its help
+text says so.
+
+The token row shows only **Set** or **Not set**, never the value. **Set** opens
+a masked editor; an existing token adds **Clear**, which deletes it
+immediately. The engine stores `relay.token` beside `tokens.json` in the
+app-private no-backup state with mode 0600, and the UI only receives
+`relay_token_set`. **Test** runs one control-plane probe and shows
+**Testing…**, **Relay OK — N ms**, **Relay rejected the token** or
+**Relay unreachable: <detail>** inline; it never writes a setting. The edge
+data path is unaffected — an edge 451 still requires a supported region.
 
 ### Android VPN (2 read-only rows)
 
@@ -714,8 +756,9 @@ all, use the password fallback.
 ### Uninstalling and removing state
 
 `adb uninstall dev.benyamin.kumiho` (or Settings → Apps → Kumiho → Uninstall)
-removes the app and all of its private state — tokens, settings, logs, cached
-server list and split selection. A debug build is
+removes the app and all of its private state — tokens, relay token, settings,
+logs, cached server list, favorites/recents and split selection. A debug build
+is
 `dev.benyamin.kumiho.debug` and is removed separately. If you used Always-on
 or lockdown, turn them off in Android's VPN settings first: an uninstalled VPN
 app leaves the system setting pointing at nothing and, under lockdown, can
@@ -765,8 +808,9 @@ sign-off has happened.
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
-| Locations flat server list, refresh, search and Ping all | Flat server list, real flags, live search, deferred speed order, 24-way ping |
-| Desktop runtime settings, overrides/reset | Settings groups with 19 engine rows and the 2 Android-owned rows, override chips and Reset |
+| Locations flat server list, refresh, search and Ping all | Fastest/Favorites/Recent pinned sections, real flags, live search, real-edge ping with `ping_done` completion, deferred speed order, locked footer |
+| Control-plane relay, HTTP 451 handling and `allow_locked` | Region settings (URL, write-only token, Test relay) and the Locations locked footer |
+| Desktop runtime settings, overrides/reset | Settings groups with 23 engine rows (22 writes and the Test relay action) and the 2 Android-owned rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
 | Account entitlement and sign-out | Account screen |
 | Logs: 2000 lines, filter/follow/search/clear/export | Logs screen, share sheet and a log file |

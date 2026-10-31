@@ -26,6 +26,13 @@ user-visible string** (mind the `...` vs `…` differences — they are real).
 > order, kinds and enum cycles as the TUI. Everything else below describes
 > the app as it exists at `282d63c`.
 
+> **v0.9.0 note.** Locations now has pinned Fastest/Favorites/Recent sections,
+> favorite stars, a locked-locations action and real-edge Ping all completion
+> on `ping_done`. Settings gains the four Region rows (Allow locked locations,
+> Control-plane relay, write-only Relay token, Test relay). The sections below
+> describe the v0.9.0 behavior; the historical framing at `282d63c` still
+> applies to every other screen.
+
 ---
 
 ## Shell (always-visible frame)
@@ -191,37 +198,53 @@ separate decorative node, never option text (D39).
 
 ## Locations
 
-**Reached:** rail item `Locations`. Loads one flat server-only list on first
-view (30 s timeout). There are no country/city parent rows, carets or
-expansion state.
+**Reached:** rail item `Locations`. Loads the daemon's locations snapshot on
+first view (30 s timeout), including favorites, recents, cached latency and
+`allow_locked`. There are no country/city parent rows, carets or expansion
+state.
 
 **Visible elements, top to bottom:**
 
 1. **Title row:** heading `Locations`.
-2. **Action row:** `Refresh` (tonal) and `Ping all` (tonal). Both are disabled
-   while a Ping all run is in flight; Ping all is also disabled when there is
-   no usable target. No Test speed, expand or collapse action exists.
+2. **Action row:** `Refresh` (tonal), `Ping all` (tonal) and a `Show locked
+   locations` / `Hide locked locations` text action. Refresh and Ping all are
+   disabled while a Ping all run is in flight; Ping all is also disabled when
+   there is no usable target. The locked action flips `allow_locked` and
+   reloads; hidden locked rows are excluded from targets.
 3. **Search row:** label `Search locations` and a single-line input with the
-   placeholder `Country, city, server, or protocol`. Typing filters
-   immediately and case-insensitively on country name/code, city name/code,
-   hostname, `host:port` and protocol names. The filter is session-local and
-   does not reset the order.
-4. **Flat list** (card, minimum 200 units high, 36-unit rows): one row per
-   usable server, ordered Recommended first, then country A–Z, city A–Z and
-   hostname A–Z. Each row has a real 4:3 SVG country flag (Recommended uses a
-   star, an unknown code a globe), a two-line body and a trailing slot:
+   placeholder `Country, city, server, or protocol`. Typing filters the full
+   list immediately and case-insensitively on country name/code, city
+   name/code, hostname, `host:port` and protocol names. The filter is
+   session-local and does not reset the order; pinned sections stay visible.
+4. **Sectioned list** (card, minimum 200 units high, 36-unit rows):
+   - **Fastest** — one pinned row. Disabled with `Run Ping all to enable
+     Fastest` and no measurement until a fresh finite cached RTT exists; then
+     it shows the minimum RTT. Its star is hidden; selecting it sends
+     `select_location{fastest:true}`, which resolves once and persists the
+     actual server.
+   - **Favorites** — resolved favorite refs, country/city order, each with
+     the same trailing star. Omitted when empty.
+   - **Recent** — resolved recents, newest first, capped at five, with a
+     `Clear` text button in the heading. Omitted when empty.
+   - **Locations** — the full flat list, ordered Recommended first, then
+     country A–Z, city A–Z and hostname A–Z.
+
+   Each server row has a real 4:3 SVG country flag (Recommended uses a star,
+   an unknown code a globe), a two-line body and a trailing slot:
    - line 1: full `Country · City` (the city is omitted when blank or equal
      to the country);
    - line 2: `host:port · protocol, protocol` (protocols are omitted when
      none);
    - trailing: `42 ms`, `timeout` or `—`, plus a check on the current
-     selection. The selection is done by address and country; it persists
-     without connecting.
+     selection and a separate 40 px star button (accessible `Favorite` /
+     `Remove favorite`). Locked rows add a text `Locked` badge. The selection
+     is done by address and country; it persists without connecting.
 
-   Quarantined servers and servers without a connect target are never listed.
-   While the list is empty: `Loading locations…` during the first fetch,
-   `No locations match the filter.` for an empty filtered result, or
-   `No locations loaded` when the daemon returned nothing.
+   Quarantined servers, servers without a connect target and hidden locked
+   servers are never listed. While the empty-state copy is shown:
+   `Loading locations…` during the first fetch, `No locations match the
+   filter.` for an empty filtered result, or `No locations loaded` when the
+   daemon returned nothing.
 5. **Status line** (bottom, single small line, tone-coloured), priority
    order: load in flight, raw load error, `Pinging N servers...`, speed
    failure, `No locations match the filter`, `No locations loaded`, then the
@@ -231,26 +254,38 @@ expansion state.
 **Interactions:**
 
 - **Click a server row**: persist it via the daemon (`Location saved`; no
-  connect). There is nothing to expand.
+  connect). Clicking Fastest persists the resolved fastest server. There is
+  nothing to expand.
+- **Favorite star**: optimistically flips, sends `favorite_location`, and
+  rolls back on refusal. Fastest and disabled rows cannot be favorited.
+- **Clear**: sends `clear_recents`; the Recent section disappears immediately.
+- **Locked action**: sends `settings_set allow_locked`; the next snapshot
+  filters the list and footer label.
 - **Keyboard:** `Up`/`Down` move the current row; `PageUp`/`PageDown` move by
   a viewport; `Home`/`End` jump to first/last; `Enter` or `Space` selects the
-  current row. Focus movement scrolls the row into view.
+  current row; the star and Clear are real buttons in the tab order. Focus
+  movement scrolls the row into view.
 - **Mouse wheel:** scrolls three rows per notch.
 - **Refresh:** re-downloads the server list (30 s timeout) and resets the
-  list to country order with no latency labels; a failed refresh keeps the
-  stale rows and reports the error.
-- **Ping all:** probes every usable server in the loaded list regardless of
-  the filter, deduped by address and skipping quarantined entries, one run at
-  a time (10 s request timeout). Latency labels stream in; a run keeps its
-  pre-run order while in flight. Only a completed run with at least one result
-  switches to speed order: finite RTTs ascending, failures and untested rows
-  last, Recommended always first. A timeout counts as a result; a transport
-  failure leaves the current order alone. Refresh and adopting a changed
-  server list both reset to country order.
+  full list to country order; fresh cached RTTs still label rows. A failed
+  refresh keeps the stale rows and reports the error.
+- **Ping all:** opens one real-edge session per visible server regardless of
+  the filter, deduped by address and skipping quarantined, targetless and
+  hidden-locked entries, one run at a time. Latency labels stream in; a run
+  keeps its pre-run order while in flight. The view-model completes only on a
+  `ping_done_seq` change (with the fallback when it was busy and becomes
+  idle); a run with at least one result switches the **full list** to speed
+  order: finite RTTs ascending, failures and untested rows last, Recommended
+  always first. Pinned sections keep their order. A timeout counts as a
+  result; a transport failure leaves the current order alone. Refresh and
+  adopting a changed server list both reset the full list to country order.
 
-**Data sources:** list/selection from the daemon; RTT labels from streamed
-ping events; filter text, current row and sort mode are session-local (not
-persisted); the status notice comes from the shared view-model.
+**Data sources:** list, selection, `allow_locked`, favorites, recents and
+cached RTTs from the daemon snapshot; live RTT labels from streamed
+`ping_result` events and completion from `ping_done`; filter text, current
+row, sort mode, frozen order, favorite overrides and the local ping sequence
+are session-local (not persisted); the status notice comes from the shared
+view-model.
 
 ---
 
@@ -308,6 +343,14 @@ Order and controls (the row tooltips are tabulated after the list):
 18. `Solve challenges` — on/off toggle; applies immediately.
 19. `Keepalive profile` — cycling button; `standard → slow → standard`; next
     connect.
+20. `Allow locked locations` — on/off toggle; applies immediately and reloads
+    Locations.
+21. `Control-plane relay` — HTTPS-origin text input + `Apply`; applies
+    immediately; empty means no relay.
+22. `Relay token` — write-only row; shows `set`/`not set`, `Set` opens a
+    masked field and `Clear` deletes it; never reveals the value.
+23. `Test relay` — action button; runs one probe and reports the result
+    without writing a setting.
 
 Tooltips (every row's hover text, verbatim; each states the row's effect and
 when it applies):
@@ -333,6 +376,10 @@ when it applies):
 | `HTTP proxy port` | `Loopback HTTP proxy listener; next connect` |
 | `Solve challenges` | `Solve FxA and edge challenges automatically; applies immediately` |
 | `Keepalive profile` | `Keepalive ping timeout profile; next connect` |
+| `Allow locked locations` | `Show servers the Firefox version filter marks locked; applies immediately` |
+| `Control-plane relay` | `HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page; applies immediately` |
+| `Relay token` | `Shared secret for the control-plane relay; write-only, never shown; applies immediately` |
+| `Test relay` | `Send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page` |
 
 Details of the daemon rows:
 
@@ -351,6 +398,15 @@ Details of the daemon rows:
 - Text/number rows validate only by daemon response: e.g. a non-numeric
   `SOCKS port` shows `could not change the setting: ...` and `Refresh`
   restores the stored value.
+- The relay URL must be an HTTPS origin with no path, query, fragment or
+  userinfo; the daemon's validation error appears on the status line. The
+  token input is masked and empty submission cancels; only `set`/`not set` is
+  ever rendered. **Clear** deletes `relay.token` immediately.
+- **Test relay** calls `relay_test` and shows `Relay OK — N ms`, `Relay
+  rejected the token`, `relay_url is not set` or `Relay unreachable: <detail>`
+  in the status line; it does not change or persist any setting. The Region
+  help text states that the relay is used only after HTTP 451 and does not
+  proxy the browser sign-in page.
 
 **Other elements:** a `Refresh` button (tonal, 110) in the action row under
 the title (`Settings`); a bottom status line with this priority:
@@ -374,7 +430,8 @@ rows from the daemon snapshot (`kill_switch`, `autoconnect`, `log_level`,
 `redact_targets`, `exit_check`, `doh_provider`, `dns_upstream`,
 `edge_address`, `upstream_proxy`, `exclude_cidrs`, `allow_lan`, `mtu`,
 `socks_port`, `quota_poll_minutes`, `tls_split`, `http_proxy`,
-`http_proxy_port`, `solve_challenges`, `keepalive_profile`).
+`http_proxy_port`, `solve_challenges`, `keepalive_profile`, `allow_locked`,
+`relay_url`, `relay_token_set`).
 
 ---
 

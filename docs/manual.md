@@ -29,8 +29,8 @@ Done. From then on it starts by itself, even after a reboot.
 | Key | What happens |
 |---|---|
 | `space` | connect / disconnect |
-| `o` | pick a country/server (`enter` select, `p` test speed, `esc` back) |
-| `s` | settings (kill switch, autoconnect, DNS, MTU, TLS split, proxies, challenge solving, keepalive…) — `enter` change, `d` reset |
+| `o` | pick a country/server (`enter` select, `f` favorite, `P` test speed, `esc` back) |
+| `s` | settings (kill switch, autoconnect, DNS, MTU, TLS split, proxies, challenge solving, region/relay, keepalive…) — `enter` change, `d` reset |
 | `g` | live logs |
 | `a` | accounts and your subscription: email, data left, add/use/rename, rotation |
 | `?` | help |
@@ -104,13 +104,42 @@ DNS stays encrypted. There is no plaintext fallback: if every encrypted
 resolver fails, names stop resolving rather than leak. The technical detail
 is in [usage.md](usage.md).
 
+## New settings in v0.9.0
+
+These are also under settings (`s`), in the **Region** group, and in the GUI
+and Android app's Region group. They only matter if Mozilla blocks the country
+you are connecting from.
+
+- **Allow locked locations** (off by default) — shows server records that a
+  newer Firefox version cannot use. Leave it off unless you are diagnosing a
+  missing country.
+- **Control-plane relay** — an optional HTTPS address of a small relay you
+  deploy yourself. It is used only when Mozilla answers the account or server
+  list with HTTP 451, never for the VPN connection itself. If the VPN server
+  itself refuses your region, a relay cannot help.
+- **Relay token** — the password for that relay. It is stored write-only; you
+  can replace or clear it but never read it back.
+- **Test relay** — checks the address and token without connecting.
+
+The full steps and the free Cloudflare Worker template are in
+[relay.md](relay.md).
+
 ## If you prefer typing commands
 
     kumiho connect        # connect
+    kumiho connect --fastest   # connect to the fastest measured server
     kumiho disconnect     # disconnect
     kumiho status         # what's going on right now
     kumiho locations      # list countries and servers
+    kumiho locations --ping    # measure every server through the real edge
+    kumiho locations --favorites
+    kumiho locations --recent
+    kumiho relay test     # check the optional relay
     kumiho logs -f        # watch what the app is doing (ctrl+c stops)
+
+`kumiho locations --ping` waits until every probe has finished; a timeout can
+take up to ten seconds. The fastest server is also pinned at the top of the
+TUI and GUI screens.
 
 ## Starting / stopping the background service
 

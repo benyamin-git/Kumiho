@@ -137,11 +137,16 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 - **Mozilla's edge challenge handled** — solves the Fastly challenge and
   retries a blocked auth host, so password sign-in works on restrictive
   networks.
+- **Blocked-region control plane** — HTTP 451 is reported honestly, with one
+  optional retry through a user-operated relay, a Worker template, and a Test
+  relay action. The relay never carries VPN traffic or the browser sign-in
+  page. See [the relay guide](docs/relay.md).
 - **Real system tunnel** — TUN on Linux, Wintun on Windows and `VpnService` on
   Android; optional kill switch, split tunneling on Android, and a local SOCKS5
   proxy on every platform.
 - **Locations that make sense** — one flat server list with real country flags,
-  search, Ping all and measured latency.
+  search, real-edge Ping all, Fastest, favorites and recents; locked rows stay
+  hidden until you reveal them.
 - **Strict DNS** — DNS over HTTPS inside the tunnel, with Cloudflare and Quad9
   failover; no plaintext fallback.
 - **Desktop comfort** — systemd or Windows service, a Bubble Tea TUI and CLI,
@@ -153,6 +158,8 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 
 - [Simple manual](docs/manual.md) — the one-screen version.
 - [CLI and TUI](docs/usage.md) — commands, keys and every setting.
+- [Control-plane relay](docs/relay.md) — deploy the Worker, set the token,
+  test it, and understand its limits.
 - [Linux install](docs/install.md) · [Windows GUI](docs/gui.md) ·
   [Android](docs/android.md) · [Android TV](docs/android-tv.md)
 - [Troubleshooting](docs/troubleshooting.md)

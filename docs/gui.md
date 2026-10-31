@@ -156,40 +156,57 @@ header already says so and the card stays empty.
 
 ## Locations
 
-**Reached:** the `Locations` rail item. The screen is one flat server-only
-list; there are no country or city header rows, carets or expand/collapse
-controls. Rows are ordered Recommended first, then country A–Z, city A–Z and
-hostname A–Z. Each row shows a real 4:3 SVG country flag (a star for
-Recommended, a globe for an unknown code), the full `Country · City` on the
-first line and `hostname:port · protocols` on the second. The latency or the
-current-selection check trails the row. Quarantined and targetless servers are
-never listed.
+**Reached:** the `Locations` rail item. The screen has pinned **Fastest**,
+**Favorites**, **Recent** and **Locations** sections above the full flat
+server-only list; there are no country or city header rows, carets or
+expand/collapse controls. Empty Favorites/Recent sections disappear. The full
+list is ordered Recommended first, then country A–Z, city A–Z and hostname
+A–Z. Each row shows a real 4:3 SVG country flag (a star for Recommended, a
+globe for an unknown code), the full `Country · City` on the first line and
+`hostname:port · protocols` on the second. The latency or the
+current-selection check trails the row; a separate star button toggles a
+favorite (40 px, with an accessible **Favorite**/**Remove favorite** label).
+Locked rows carry a text **Locked** badge. Quarantined and targetless servers
+are never listed.
 
-The search box at the top narrows the list live as you type. Its placeholder
-is **Country, city, server, or protocol**, and it matches country name/code,
-city name/code, hostname, `host:port` and protocol names, case-insensitively.
-A no-match result keeps the list area's `No locations match the filter.` copy
-and the status line's `No locations match the filter`.
+**Fastest** is one pinned row. It is disabled with **Run Ping all to enable
+Fastest** until a fresh finite cached RTT exists, then shows the minimum RTT;
+selecting it resolves once to that actual server and persists it. **Favorites**
+are ordered by country/city, **Recent** newest first (max five) and the Recent
+header has **Clear** with no confirmation.
 
-The action row is **Refresh** and **Ping all**. Ping all probes every usable
-server in the loaded list regardless of the filter, deduped by address and
-skipping quarantined entries; its status line reads `Pinging N servers...` and
-the button stays disabled until the run ends. Per-row labels update as results
-stream in. Only a completed run with at least one result switches the list to
-speed order: finite RTTs ascending, failures and untested rows last, and
-Recommended always first. A timeout counts as a result; a transport failure
-leaves the current order alone. A new run keeps the current order while it is
-in flight. Refresh resets country order and the local latency labels; a
-changed list is also a new visit. A status line below reports the last
+The search box at the top narrows the full list live as you type. Its
+placeholder is **Country, city, server, or protocol**, and it matches country
+name/code, city name/code, hostname, `host:port` and protocol names,
+case-insensitively. A no-match result keeps the list area's `No locations
+match the filter.` copy and the status line's `No locations match the filter`.
+Pinned sections are not filtered.
+
+The action row is **Refresh**, **Ping all** and **Show/Hide locked
+locations**. Ping all opens a temporary real-edge session per visible server,
+regardless of the filter, deduped by address and skipping quarantined,
+targetless and hidden-locked entries; its status line reads `Pinging N
+servers...` and the button stays disabled until the daemon's `ping_done`
+arrives. Per-row labels update as results stream in and the daemon caches them
+for 30 minutes. Only a completed run with at least one result switches the
+**full list** to speed order: finite RTTs ascending, failures and untested
+rows last, and Recommended always first. Favorites, Recent and Fastest keep
+their pinned order. A timeout counts as a result; a transport failure leaves
+the current order alone. A new run keeps the current order while it is in
+flight. Refresh restores country order; a changed list is also a new visit and
+its cached fresh RTTs still label rows. A status line below reports the last
 action's result.
 
-Clicking a server row saves it for the **next** connection (status
+The locked action flips `allow_locked` and reloads the list. When it is off,
+locked servers are hidden from the list and from Ping all; when on, they show
+the badge. Clicking a server row saves it for the **next** connection (status
 `Location saved`) without connecting; the current session is unchanged.
 
 ## Settings
 
-**Reached:** the `Settings` rail item. The screen has two sections and a
-**Refresh** action.
+**Reached:** the `Settings` rail item. The screen has two panes — **Kumiho
+app** and **Background service**, the latter ending in a **Region** group —
+and a **Refresh** action.
 
 **Kumiho app** — per-user choices that apply immediately:
 
@@ -228,6 +245,16 @@ row returns to the admin `config.toml` (or built-in) default. The rows are:
 | HTTP proxy port | loopback HTTP proxy listener; next connect |
 | Solve challenges | on/off; answers the Firefox Accounts and edge challenges automatically; applies immediately |
 | Keepalive profile | `standard`, `slow`; keepalive ping timeout profile; next connect |
+| Allow locked locations | on/off; reveals the server-list records marked locked; applies immediately |
+| Control-plane relay | HTTPS origin used only after HTTP 451; empty = none; applies immediately |
+| Relay token | write-only shared secret; **Set** opens a masked field, **Clear** deletes the stored `relay.token`; never displays its value |
+| Test relay | one-shot probe; shows `Relay OK — N ms`, `Relay rejected the token`, `relay_url is not set` or `Relay unreachable: <detail>`; never writes a setting |
+
+The Region block's help text says the relay is used only after HTTP 451 and
+does not proxy the browser sign-in page. A relay URL must be an HTTPS origin
+with no path, query, fragment or userinfo. The token file is `relay.token`
+beside `tokens.json` (mode 0600) and the GUI only ever receives
+`relay_token_set`.
 
 A status line under the rows reports the last change, including `Applying...`
 while a change is in flight. Only one change runs at a time.

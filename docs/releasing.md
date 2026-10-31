@@ -14,7 +14,18 @@ which publishes a full release with stable asset names from v0.8.0 onward.
 - [ ] Regenerate the screenshots and confirm the README paths exist.
 - [ ] Review the repository **About** panel: description, website and topics
   still describe the current capabilities (Android and Android TV included).
-- [ ] Run the full Go gate and, for Android changes, `make android-test`.
+- [ ] Run the full Go gate. For changes under `android/`, `mobile/` or
+  `internal/platform/android/`, the `android` and `android-tv` CI jobs are
+  the Android gate in a T3 release thread: do **not** run Gradle, the
+  emulator or a local connected suite there. Locally, outside T3,
+  `make android-test` is still the documented Android check.
+- [ ] Confirm the five `ANDROID_*` signing secrets exist:
+  `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` and `ANDROID_CERT_SHA256`. Stop
+  before tagging if any is missing; the release workflow cannot publish signed
+  APKs without them.
+- [ ] Confirm no relay token, redirect URL, keystore or generated release
+  material is staged or tracked.
 
 ## Tag and publish
 

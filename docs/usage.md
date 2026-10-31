@@ -23,10 +23,14 @@ app process. Its guide is [android.md](android.md).
     kumiho accounts rotation on|off
     kumiho accounts threshold <1-50>
     kumiho logout               # clear every account; disconnects
-    kumiho connect [--to CODE|CITY|HOST] [--proxy-only] [--kill-switch=on|off|last]
+    kumiho connect [--to CODE|CITY|HOST | --fastest] [--proxy-only] [--kill-switch=on|off|last]
     kumiho disconnect
     kumiho status [--json]      # state, location, quota, exit IP, rates
-    kumiho locations [--ping] [--json] [--refresh]
+    kumiho locations [--ping] [--json] [--refresh] [--favorites] [--recent]
+    kumiho settings get [key] [--json]
+    kumiho settings set <key> [value]
+    kumiho settings reset <key>
+    kumiho relay test
     kumiho logs [-f] [--level debug|info|warn|error]
     kumiho doctor [--json]      # preflight diagnostics + remediation
     kumiho cleanup              # remove stale routes/rules/DNS artifacts
@@ -36,30 +40,60 @@ app process. Its guide is [android.md](android.md).
 listener on `127.0.0.1:1080`; the full tunnel also creates `foxy0` and routes
 TCP through it, with DNS carried as DoH over HTTPS inside the tunnel.
 
+`connect --fastest` selects the lowest fresh RTT from the last Ping all; it
+cannot be combined with `--to`. `locations --favorites` and `--recent` show
+only those sections (both flags union and deduplicate), and the normal country
+summary marks a favorite country with `*` and a recent country with `~` and
+prints the current fastest server when a fresh measurement exists. `--json`
+prints the complete `LocationsResult` object (`countries`, `favorites`,
+`recents`, `latency`, `allow_locked`), not only the country array. With
+`--ping`, results stream until the daemon's `ping_done` event; `--json` then
+refetches and prints the updated object.
+
+`settings get` prints effective values; `settings get --json` prints the full
+`SettingsView` (`relay_token_set` is a boolean; the token itself is never
+returned). `relay_token` is write-only: `settings set relay_token` with no
+value prompts without echo (or pass `-`), `settings reset relay_token` deletes
+it, and `settings get relay_token_set` reads only whether it exists. All other
+setting keys and values are listed in the TUI Settings section and the v0.4.0
+table below.
+
+`relay test` sends one request through the control-plane relay and reports
+`Relay OK — N ms`, `Relay rejected the token`, `relay_url is not set` or
+`Relay unreachable: <detail>`. See [relay.md](relay.md) for deployment and the
+edge-451 limitation.
+
 ## TUI
 
 `space` connect/disconnect, `o` locations, `s` settings, `a` account,
 `g` logs, `l` login, `r` refresh, `?` help overlay, `q` quit. Inside screens:
 arrows/`hjkl` move, `enter` select/change, `esc` back.
 
-- **Locations** — one flat server list with `REC` first and country flags;
-  `P` pings every usable server in the loaded list and switches to speed order
-  when the run completes, `/` searches country, city, server, address and
-  protocol, `enter` selects a server (persisted), and `r` refreshes. A server
-  that fails to connect 3 times in a row is dropped and the next connect
-  auto-picks (`REC` random, else the first country).
+- **Locations** — pinned **Fastest**, **Favorites**, **Recent** and the full
+  flat server list. `P` pings every usable server and switches only the full
+  list to speed order when the daemon's `ping_done` event arrives; `f` toggles
+  the cursor row as a favorite, `c` clears recents from the Recent header, `L`
+  shows or hides locked locations, `/` searches country, city, server, address
+  and protocol, `enter` selects a server (or Fastest), and `r` refreshes. A
+  trailing `*` marks a favorite and `~` a recent; the leading `*` still marks
+  the persisted selection. A server that fails to connect 3 times in a row is
+  dropped and the next connect auto-picks (`REC` random, else the first
+  country).
 - **Settings** — every runtime setting: kill switch, autoconnect, log level,
   redaction, exit check, DoH provider, custom DNS, pinned edge, upstream
   proxy, excluded CIDRs, allow-LAN, MTU, SOCKS port, quota poll, TLS split,
-  HTTP proxy and its port, challenge solving, keepalive profile. `d` resets a
-  row to the config default; `*` marks values changed from `config.toml`.
+  HTTP proxy and its port, challenge solving, keepalive profile, and the
+  Region block (`allow_locked`, `relay_url`, write-only `relay_token`, Test
+  relay). `d` resets a row to the config default; `*` marks values changed
+  from `config.toml`.
   The row list keeps a viewport and scrolls in short terminals (`pgup`/
   `pgdown`, `home`/`end`).
   Changes are persisted as overrides in `/var/lib/kumiho/state.json`
   (`%ProgramData%\kumiho\state.json` on Windows).
-  `kill_switch`, `log_level`, `redact_targets` and `solve_challenges` apply
-  immediately; connection-scoped settings (DNS, MTU, CIDRs, TLS split, the
-  proxies, keepalive, …) apply on the next connect.
+  `kill_switch`, `log_level`, `redact_targets`, `solve_challenges`,
+  `allow_locked`, `relay_url` and `relay_token` apply immediately;
+  connection-scoped settings (DNS, MTU, CIDRs, TLS split, the proxies,
+  keepalive, …) apply on the next connect.
   Toggling `kill_switch` on a connected tunnel re-applies the live policy; if
   that re-apply fails the change is rejected with an error and the previous
   value is kept.
@@ -238,6 +272,19 @@ For example, one of:
 
 Replace the placeholder credentials with your own.
 
+## Blocked regions and the relay
+
+A control-plane HTTP 451 is terminal after one optional relay retry. Configure
+`relay_url` and, if the Worker requires it, the write-only `relay_token` in
+Settings → Region (or with `kumiho settings set`), then use **Test relay** /
+`kumiho relay test`. Without a relay the error tells you to set one; with a
+failed relay it names the failure. Normal traffic is never sent through the
+relay, and the browser sign-in page is opened directly.
+
+An edge 451 is different: the VPN data path still comes from your network, so
+changing the relay cannot help. The full deployment guide, Worker allowlist,
+token header and trust boundary are in [relay.md](relay.md).
+
 ## DNS over SOCKS5 UDP
 
 The local SOCKS5 listener accepts `UDP ASSOCIATE` for DNS only: the request's
@@ -256,7 +303,8 @@ works through the local resolver, including TCP.
 | `/etc/kumiho/config.toml` | admin defaults (all keys optional) |
 | `/var/lib/kumiho/accounts.json` | v2 account store: active account, last method, up to five labeled browser/password accounts with FxA tokens (mode 0600) |
 | `/var/lib/kumiho/tokens.json` | rollback copy of the active account's tokens (mode 0600); migrated from legacy installs and removed on logout |
-| `/var/lib/kumiho/state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides |
+| `/var/lib/kumiho/relay.token` | optional control-plane relay secret (mode 0600); never shown by a client |
+| `/var/lib/kumiho/state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides, favorites and recents |
 | `/var/lib/kumiho/serverlist.json` | cached server list; only used when a fetch fails |
 | `/run/kumiho/control.sock` | IPC socket (0660, group `kumiho`) |
 | `~/.config/kumiho/tui.toml` | per-user TUI prefs (`theme = "dark"` or `"mono"`) |
@@ -269,7 +317,8 @@ LocalSystem and Administrators) and the control endpoint is a named pipe:
 | `%ProgramData%\kumiho\config.toml` | admin defaults (all keys optional) |
 | `%ProgramData%\kumiho\accounts.json` | v2 account store (active id, last method, up to five accounts) |
 | `%ProgramData%\kumiho\tokens.json` | rollback copy of the active account's tokens; removed on logout |
-| `%ProgramData%\kumiho\state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides |
+| `%ProgramData%\kumiho\relay.token` | optional control-plane relay secret (mode 0600); never shown by a client |
+| `%ProgramData%\kumiho\state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides, favorites and recents |
 | `%ProgramData%\kumiho\serverlist.json` | cached server list; only used when a fetch fails |
 | `%ProgramData%\kumiho\logs\kumiho.log` | daemon log; at each service start a file larger than 5 MiB rotates to `kumiho.log.1` |
 | `\\.\pipe\kumiho\control` | named-pipe control endpoint (LocalSystem, Administrators, local group `kumiho`) |

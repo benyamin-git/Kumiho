@@ -535,22 +535,42 @@ remain open.
 
 ### Locations
 
-- [ ] Open Locations on a phone. Expect one flat server-only list, no country
-      or city headers/carets and no expand/collapse action. Recommended is
-      first; rows show a real flag, `Country · City`, then
-      `hostname:port · protocols`, with latency or a selection check trailing.
+- [ ] Open Locations on a phone. Expect pinned **Fastest**, **Favorites** and
+      **Recent** sections above one flat server-only list, no country or city
+      headers/carets and no expand/collapse action. Empty pinned sections are
+      hidden. Recommended is first in the full list; rows show a real flag,
+      `Country · City`, then `hostname:port · protocols`, with latency or a
+      selection check trailing and a star button for favorites. A locked row
+      shows a **Locked** badge, and the footer toggles **Show/Hide locked
+      locations**.
 - [ ] Search by country name/code, city name/code, hostname, `host:port` and a
       protocol name. A miss shows **No matches** with the search scope; the
       placeholder reads **Country, city, server, or protocol**. No connected-
       location hint appears.
 - [ ] Select a row: the check and summary update, and the next connection uses
       it. The current session is unchanged.
-- [ ] Ping all while a search is active. Every usable server is probed even if
-      filtered out; labels stream in without moving rows; the list switches to
-      speed order only when the run completes (Recommended first, failures
-      last). Refresh restores country order and clears the labels.
+- [ ] Favorite a server, confirm it appears in Favorites, then unfavorite it.
+      Tap **Clear** on Recent and confirm the section disappears.
+- [ ] Ping all while a search is active. Every visible server is probed even if
+      filtered out; labels stream in without moving rows; the full list
+      switches to speed order only when the engine emits `ping_done`
+      (Recommended first, failures last). Pinned sections keep their order.
+      Refresh restores country order and reloads fresh cached labels.
+- [ ] Confirm Fastest is disabled with **Run Ping all to enable Fastest** until
+      a fresh result exists, then selecting it persists the actual server.
 - [ ] Confirm a quarantined or targetless server is absent from the list and is
-      not pinged.
+      not pinged; a hidden locked server is absent and is not pinged.
+
+### Region settings
+
+- [ ] Open Settings → Region. Confirm `allow_locked` toggles the Locations
+      footer and list. Enter a malformed `relay_url` and confirm the engine's
+      error; enter a valid HTTPS origin.
+- [ ] Set a relay token: the row shows **Set**, never the value; **Clear**
+      removes it and returns to **Not set**.
+- [ ] Tap **Test** with no relay URL (`relay_url is not set`), with a rejecting
+      token (**Relay rejected the token**) and with a reachable URL (**Relay
+      OK — N ms**). Confirm no probe sends tunnel traffic.
 
 ### Notification, Quick Settings tile and proxy-only (T16)
 
