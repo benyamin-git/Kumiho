@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.City
@@ -70,6 +71,7 @@ class TvLocationsScreenTest : TvTestBase() {
         show()
 
         val row = rule.onNodeWithTag(serverRowTag("us", "nyc", EDGE_ADDRESS))
+        row.performScrollTo()
         row.assertTextContains("United States · New York")
         row.assertTextContains("edge.example.net:2499 · connect, quic")
 
