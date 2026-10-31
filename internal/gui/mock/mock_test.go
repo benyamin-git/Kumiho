@@ -236,6 +236,18 @@ func TestLocationsShape(t *testing.T) {
 	if len(res.Countries) != 4 || res.Countries[0].Code != serverlist.RecommendedCode {
 		t.Fatalf("countries = %+v, want REC first of 4", res.Countries)
 	}
+	if len(res.Favorites) != 2 || res.Favorites[0].Server != "de1.edge.example:443" {
+		t.Fatalf("favorites = %+v, want two pinned rows", res.Favorites)
+	}
+	if len(res.Recents) != 2 || res.Recents[0].Server != "us1.edge.example:443" {
+		t.Fatalf("recents = %+v, want two pinned rows", res.Recents)
+	}
+	if sample, ok := res.Latency["de1.edge.example:443"]; !ok || sample.RTTMS == nil || *sample.RTTMS != 42 {
+		t.Fatalf("latency = %+v, want de1 at 42 ms", res.Latency)
+	}
+	if sample, ok := res.Latency["jp1.edge.example:443"]; !ok || sample.RTTMS != nil {
+		t.Fatalf("latency = %+v, want a measured jp1 timeout", res.Latency)
+	}
 	for i := 2; i < len(res.Countries); i++ {
 		if res.Countries[i-1].Name >= res.Countries[i].Name {
 			t.Fatalf("countries not sorted by name after REC: %q >= %q", res.Countries[i-1].Name, res.Countries[i].Name)
@@ -273,6 +285,53 @@ func TestLocationsShape(t *testing.T) {
 	}
 }
 
+func TestFavoriteClearRecentsAndRelay(t *testing.T) {
+	ctx := context.Background()
+	m := New()
+	if _, err := m.FavoriteLocation(ctx, api.FavoriteLocationPayload{
+		CountryCode: "US", CityCode: "sfo", Server: "us3.edge.example:443", Favorite: true,
+	}); err != nil {
+		t.Fatalf("FavoriteLocation: %v", err)
+	}
+	res, err := m.Locations(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, ref := range res.Favorites {
+		if ref.Server == "us3.edge.example:443" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("favorite was not stored: %+v", res.Favorites)
+	}
+	if _, err := m.FavoriteLocation(ctx, api.FavoriteLocationPayload{
+		CountryCode: "US", CityCode: "sfo", Server: "us3.edge.example:443", Favorite: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, _ = m.Locations(ctx, false)
+	for _, ref := range res.Favorites {
+		if ref.Server == "us3.edge.example:443" {
+			t.Fatal("favorite was not removed")
+		}
+	}
+	if _, err := m.ClearRecents(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ = m.Locations(ctx, false); len(res.Recents) != 0 {
+		t.Fatalf("recents after clear = %+v", res.Recents)
+	}
+	probe, err := m.RelayTest(ctx)
+	if err != nil {
+		t.Fatalf("RelayTest: %v", err)
+	}
+	if !probe.OK || probe.LatencyMS == nil || *probe.LatencyMS != 42 {
+		t.Fatalf("relay probe = %+v", probe)
+	}
+}
+
 func TestSettingsViewIsCanned(t *testing.T) {
 	ctx := context.Background()
 	m := New()
@@ -289,6 +348,9 @@ func TestSettingsViewIsCanned(t *testing.T) {
 	if len(view.Overridden) != 1 || view.Overridden[0] != "kill_switch" {
 		t.Fatalf("overridden = %v, want [kill_switch]", view.Overridden)
 	}
+	if view.AllowLocked || view.RelayURL != "" || view.RelayTokenSet {
+		t.Fatalf("region defaults = %+v, want unset", view)
+	}
 	if _, err := m.SetSetting(ctx, api.SettingsSetPayload{Key: "log_level", Value: "warn"}); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
@@ -298,6 +360,28 @@ func TestSettingsViewIsCanned(t *testing.T) {
 	}
 	if view2.LogLevel != "info" {
 		t.Fatalf("canned settings changed after SetSetting: %q", view2.LogLevel)
+	}
+	if _, err := m.SetSetting(ctx, api.SettingsSetPayload{Key: "allow_locked", Value: "on"}); err != nil {
+		t.Fatalf("SetSetting(allow_locked): %v", err)
+	}
+	if _, err := m.SetSetting(ctx, api.SettingsSetPayload{Key: "relay_url", Value: "https://relay.example.test"}); err != nil {
+		t.Fatalf("SetSetting(relay_url): %v", err)
+	}
+	if _, err := m.SetSetting(ctx, api.SettingsSetPayload{Key: "relay_token", Value: "secret"}); err != nil {
+		t.Fatalf("SetSetting(relay_token): %v", err)
+	}
+	view3, err := m.Settings(ctx)
+	if err != nil {
+		t.Fatalf("Settings (region): %v", err)
+	}
+	if !view3.AllowLocked || view3.RelayURL != "https://relay.example.test" || !view3.RelayTokenSet {
+		t.Fatalf("region state = %+v", view3)
+	}
+	if _, err := m.SetSetting(ctx, api.SettingsSetPayload{Key: "relay_token", Reset: true}); err != nil {
+		t.Fatalf("SetSetting(relay_token reset): %v", err)
+	}
+	if view4, _ := m.Settings(ctx); view4.RelayTokenSet {
+		t.Fatal("relay token set flag survived reset")
 	}
 }
 
@@ -592,6 +676,17 @@ func TestPingStreamsDeterministicResults(t *testing.T) {
 		} else if pr.RTTMS != nil {
 			t.Fatalf("rtt for %q = %v, want a timeout", host, *pr.RTTMS)
 		}
+	}
+	done := readEvent(t, m)
+	if done.Type != ipc.TypePingDone {
+		t.Fatalf("event type = %q, want %q", done.Type, ipc.TypePingDone)
+	}
+	var pd api.PingDone
+	if err := done.DecodePayload(&pd); err != nil {
+		t.Fatalf("decode ping done: %v", err)
+	}
+	if pd.Total != len(hosts) || pd.Answered != 2 {
+		t.Fatalf("ping done = %+v, want total %d answered 2", pd, len(hosts))
 	}
 	assertNoEvent(t, m)
 }

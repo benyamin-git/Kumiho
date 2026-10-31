@@ -43,6 +43,13 @@ type Mock struct {
 	latency  time.Duration
 	failNext error
 
+	// Region state the harness can mutate through the real actions. The
+	// token itself is never stored: only its set/clear flag is.
+	settings     api.SettingsView
+	favoriteRefs []api.LocationRef
+	recentRefs   []api.LocationRef
+	allowLocked  bool
+
 	lastConnect api.ConnectPayload
 	haveConnect bool
 
@@ -65,8 +72,11 @@ type Mock struct {
 // failure. The first event appears when SetScenario changes the scenario.
 func New() *Mock {
 	return &Mock{
-		scenario: ScenarioDisconnected,
-		events:   make(chan *ipc.Envelope, eventsBuffer),
+		scenario:     ScenarioDisconnected,
+		settings:     settingsView(),
+		favoriteRefs: locationFavorites(),
+		recentRefs:   locationRecents(),
+		events:       make(chan *ipc.Envelope, eventsBuffer),
 	}
 }
 
@@ -233,25 +243,83 @@ func (m *Mock) Locations(ctx context.Context, _ bool) (api.LocationsResult, erro
 	if err := m.begin(ctx); err != nil {
 		return api.LocationsResult{}, err
 	}
-	return api.LocationsResult{Countries: countries()}, nil
+	m.mu.Lock()
+	favorites := append([]api.LocationRef(nil), m.favoriteRefs...)
+	recents := append([]api.LocationRef(nil), m.recentRefs...)
+	allowLocked := m.allowLocked
+	m.mu.Unlock()
+	return api.LocationsResult{
+		Countries:   countries(),
+		Favorites:   favorites,
+		Recents:     recents,
+		Latency:     locationLatency(),
+		AllowLocked: allowLocked,
+	}, nil
+}
+
+// FavoriteLocation implements gui.Daemon. The fixture stores the ref so the
+// next Locations reply is authoritative after the optimistic star.
+func (m *Mock) FavoriteLocation(ctx context.Context, p api.FavoriteLocationPayload) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ref := api.LocationRef{CountryCode: p.CountryCode, CityCode: p.CityCode, Server: p.Server}
+	out := m.favoriteRefs[:0]
+	existed := false
+	for _, existing := range m.favoriteRefs {
+		if existing.Server == p.Server {
+			existed = true
+			if p.Favorite {
+				out = append(out, ref)
+			}
+			continue
+		}
+		out = append(out, existing)
+	}
+	if p.Favorite && !existed {
+		out = append(out, ref)
+	}
+	m.favoriteRefs = out
+	return api.Result{OK: true}, nil
+}
+
+// ClearRecents implements gui.Daemon.
+func (m *Mock) ClearRecents(ctx context.Context) (api.Result, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.Result{}, err
+	}
+	m.mu.Lock()
+	m.recentRefs = nil
+	m.mu.Unlock()
+	return api.Result{OK: true}, nil
 }
 
 // Ping implements gui.Daemon: it acknowledges and streams one ping_result
-// event per requested host (see pingRTTMS for the deterministic RTT rule).
+// event per requested host (see pingRTTMS for the deterministic RTT rule),
+// then the ping_done event that ends the run.
 func (m *Mock) Ping(ctx context.Context, hosts []string) (api.Result, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.Result{}, err
 	}
+	answered := 0
 	for i, host := range hosts {
 		var rtt *float64
 		if i%2 == 0 {
 			v := pingRTTMS
 			rtt = &v
+			answered++
 		}
 		env, err := ipc.NewEnvelope("", ipc.TypePingResult, api.PingResult{Host: host, RTTMS: rtt})
 		if err != nil {
 			continue
 		}
+		m.push(env)
+	}
+	if env, err := ipc.NewEnvelope("", ipc.TypePingDone, api.PingDone{
+		Total: len(hosts), Answered: answered,
+	}); err == nil {
 		m.push(env)
 	}
 	return api.Result{OK: true}, nil
@@ -262,16 +330,45 @@ func (m *Mock) Settings(ctx context.Context) (api.SettingsView, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.SettingsView{}, err
 	}
-	return settingsView(), nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return copySettingsView(m.settings), nil
 }
 
-// SetSetting implements gui.Daemon. It acknowledges; the canned settings
-// snapshot never changes (switch scenarios for different reported state).
-func (m *Mock) SetSetting(ctx context.Context, _ api.SettingsSetPayload) (api.Result, error) {
+// SetSetting implements gui.Daemon. Region keys are mutable so the harness
+// can exercise the controls; every other canned setting stays fixed.
+func (m *Mock) SetSetting(ctx context.Context, p api.SettingsSetPayload) (api.Result, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.Result{}, err
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	switch p.Key {
+	case "allow_locked":
+		on := p.Value == "on" || p.Value == "true"
+		if p.Reset {
+			on = false
+		}
+		m.settings.AllowLocked = on
+		m.allowLocked = on
+	case "relay_url":
+		m.settings.RelayURL = p.Value
+		if p.Reset {
+			m.settings.RelayURL = ""
+		}
+	case "relay_token":
+		m.settings.RelayTokenSet = !p.Reset && p.Value != ""
+	}
 	return api.Result{OK: true}, nil
+}
+
+// RelayTest implements gui.Daemon with a deterministic fast success.
+func (m *Mock) RelayTest(ctx context.Context) (api.RelayTestResult, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.RelayTestResult{}, err
+	}
+	ms := 42.0
+	return api.RelayTestResult{OK: true, Status: 200, LatencyMS: &ms}, nil
 }
 
 // Account implements gui.Daemon: the ScenarioError scenario reports a failed
@@ -586,4 +683,10 @@ func parseMinLevel(level string, def logging.Level) (logging.Level, error) {
 		return 0, &api.RemoteError{Code: api.CodeBadRequest, Message: err.Error()}
 	}
 	return lvl, nil
+}
+
+func copySettingsView(v api.SettingsView) api.SettingsView {
+	v.ExcludeCIDRs = append([]string(nil), v.ExcludeCIDRs...)
+	v.Overridden = append([]string(nil), v.Overridden...)
+	return v
 }

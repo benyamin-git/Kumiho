@@ -74,8 +74,11 @@ type Daemon interface {
 	Disconnect(context.Context) (api.Result, error)
 	SelectLocation(context.Context, api.SelectLocationPayload) (api.Result, error)
 	Locations(context.Context, bool) (api.LocationsResult, error)
+	FavoriteLocation(context.Context, api.FavoriteLocationPayload) (api.Result, error)
+	ClearRecents(context.Context) (api.Result, error)
 	Ping(context.Context, []string) (api.Result, error)
 	Settings(context.Context) (api.SettingsView, error)
+	RelayTest(context.Context) (api.RelayTestResult, error)
 	SetSetting(context.Context, api.SettingsSetPayload) (api.Result, error)
 	Account(context.Context) (api.AccountInfo, error)
 	AccountsList(context.Context) (api.AccountsView, error)
@@ -271,8 +274,15 @@ type Controller struct {
 
 	// Server list snapshot.
 	locations        []serverlist.Country
+	favorites        []api.LocationRef
+	recents          []api.LocationRef
+	latency          map[string]api.CachedPing
+	allowLocked      bool
 	locationsLoaded  bool
 	locationsLoading bool
+	pingBusy         bool
+	pingDoneSeq      int
+	relayTest        *api.RelayTestResult
 
 	// Settings snapshot.
 	settings        *api.SettingsView
@@ -373,6 +383,13 @@ func (c *Controller) Snapshot() State {
 		Accounts:          copyAccounts(c.accounts),
 		LocationsLoaded:   c.locationsLoaded,
 		Locations:         c.locations,
+		Favorites:         copyLocationRefs(c.favorites),
+		Recents:           copyLocationRefs(c.recents),
+		Latency:           copyLatency(c.latency),
+		AllowLocked:       c.allowLocked,
+		PingBusy:          c.pingBusy,
+		PingDoneSeq:       c.pingDoneSeq,
+		RelayTest:         copyRelayTest(c.relayTest),
 		RTTs:              copyRTTs(c.rtts),
 		LogsLoaded:        c.logsLoaded,
 		Onboarded:         c.onboarded,
@@ -417,12 +434,18 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchDisconnect()
 	case ActionSelectLocation:
 		return c.dispatchSelectLocation(act)
+	case ActionFavoriteLocation:
+		return c.dispatchFavoriteLocation(act)
+	case ActionClearRecents:
+		return c.dispatchClearRecents(act)
 	case ActionPing:
 		return c.dispatchPing(act)
 	case ActionSettingsGet:
 		return c.dispatchSettingsGet()
 	case ActionSettingsSet:
 		return c.dispatchSettingsSet(act)
+	case ActionRelayTest:
+		return c.dispatchRelayTest(act)
 	case ActionUpdateCheck:
 		return c.dispatchUpdateCheck()
 	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA,
@@ -551,13 +574,88 @@ func (c *Controller) dispatchPing(act Action) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
+	c.mu.Lock()
+	c.pingBusy = true
+	c.mu.Unlock()
 	if _, err := c.d.Ping(ctx, p.Hosts); err != nil {
+		c.mu.Lock()
+		c.pingBusy = false
+		c.mu.Unlock()
 		c.observe(err)
 		c.setNotice(slotLocations, "Speed test failed: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
 	c.clearNoticeError(slotLocations)
+	return nil
+}
+
+func (c *Controller) dispatchFavoriteLocation(act Action) error {
+	p, err := decodePayload[api.FavoriteLocationPayload](act)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsTimeout)
+	defer cancel()
+	if _, err := c.d.FavoriteLocation(ctx, p); err != nil {
+		c.observe(err)
+		c.setNotice(slotLocations, "Could not update favorites: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	if p.Favorite {
+		c.setNotice(slotLocations, "Favorite saved", toneGood, c.opts.NoticeTTL)
+	} else {
+		c.setNotice(slotLocations, "Favorite removed", toneGood, c.opts.NoticeTTL)
+	}
+	c.loadLocations(context.Background(), false, true)
+	return nil
+}
+
+func (c *Controller) dispatchClearRecents(act Action) error {
+	if _, err := decodePayload[struct{}](act); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsTimeout)
+	defer cancel()
+	if _, err := c.d.ClearRecents(ctx); err != nil {
+		c.observe(err)
+		c.setNotice(slotLocations, "Could not clear recent locations: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	c.setNotice(slotLocations, "Recent locations cleared", toneGood, c.opts.NoticeTTL)
+	c.loadLocations(context.Background(), false, true)
+	return nil
+}
+
+func (c *Controller) dispatchRelayTest(act Action) error {
+	if _, err := decodePayload[struct{}](act); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsTimeout)
+	defer cancel()
+	res, err := c.d.RelayTest(ctx)
+	if err != nil {
+		c.observe(err)
+		c.mu.Lock()
+		c.relayTest = &api.RelayTestResult{Error: err.Error()}
+		c.mu.Unlock()
+		c.setNotice(slotSettings, relayTestNotice(api.RelayTestResult{Error: err.Error()}), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	cp := res
+	c.mu.Lock()
+	c.relayTest = &cp
+	c.mu.Unlock()
+	tone := toneGood
+	ttl := c.opts.NoticeTTL
+	if !res.OK {
+		tone = toneBad
+		ttl = 0
+	}
+	c.setNotice(slotSettings, relayTestNotice(res), tone, ttl)
 	return nil
 }
 
@@ -590,6 +688,16 @@ func (c *Controller) dispatchSettingsSet(act Action) error {
 	// settings so values and override marks stay truthful.
 	c.refreshStatus(ctx)
 	c.loadSettings(ctx)
+	if p.Key == "allow_locked" {
+		// Derived choice 13: a locked-list change reloads the server list
+		// without re-downloading it.
+		c.loadLocations(context.Background(), false, true)
+	}
+	if p.Key == "relay_url" || p.Key == "relay_token" {
+		c.mu.Lock()
+		c.relayTest = nil
+		c.mu.Unlock()
+	}
 	return nil
 }
 
@@ -1547,6 +1655,10 @@ func (c *Controller) loadLocations(ctx context.Context, refresh, force bool) {
 		c.observe(nil)
 		c.mu.Lock()
 		c.locations = res.Countries
+		c.favorites = res.Favorites
+		c.recents = res.Recents
+		c.latency = res.Latency
+		c.allowLocked = res.AllowLocked
 		c.locationsLoaded = true
 		c.locationsNotice = clearNoticeError(c.locationsNotice)
 		c.mu.Unlock()
@@ -1578,6 +1690,17 @@ func (c *Controller) applyEvent(ctx context.Context, env *ipc.Envelope) {
 			}
 			c.rtts[pr.Host] = rttLabel(pr.RTTMS)
 			c.mu.Unlock()
+		}
+	case ipc.TypePingDone:
+		var done api.PingDone
+		if env.DecodePayload(&done) == nil {
+			c.mu.Lock()
+			c.pingBusy = false
+			c.pingDoneSeq++
+			c.mu.Unlock()
+			// The reload reconciles the cached latency with the last
+			// streamed results; it never re-downloads the server list.
+			c.loadLocations(ctx, false, true)
 		}
 	case ipc.TypeLog:
 		var e logging.Entry
@@ -1909,6 +2032,40 @@ func copyRTTs(m map[string]string) map[string]string {
 	return cp
 }
 
+func copyLocationRefs(refs []api.LocationRef) []api.LocationRef {
+	if refs == nil {
+		return nil
+	}
+	return append([]api.LocationRef(nil), refs...)
+}
+
+func copyLatency(m map[string]api.CachedPing) map[string]api.CachedPing {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[string]api.CachedPing, len(m))
+	for host, sample := range m {
+		if sample.RTTMS != nil {
+			v := *sample.RTTMS
+			sample.RTTMS = &v
+		}
+		cp[host] = sample
+	}
+	return cp
+}
+
+func copyRelayTest(r *api.RelayTestResult) *api.RelayTestResult {
+	if r == nil {
+		return nil
+	}
+	cp := *r
+	if r.LatencyMS != nil {
+		v := *r.LatencyMS
+		cp.LatencyMS = &v
+	}
+	return &cp
+}
+
 // decodePayload decodes an action's raw JSON payload strictly (unknown
 // fields are errors, matching the envelope's strict decoding); a missing
 // payload yields the zero value.
@@ -1984,6 +2141,27 @@ func rttLabel(ms *float64) string {
 		return "timeout"
 	}
 	return fmt.Sprintf("%.0f ms", *ms)
+}
+
+// relayTestNotice renders the settings notice for one relay probe result.
+// The token itself never appears here or anywhere else in the projection.
+func relayTestNotice(res api.RelayTestResult) string {
+	if res.OK {
+		if res.LatencyMS != nil {
+			return fmt.Sprintf("Relay OK — %.0f ms", *res.LatencyMS)
+		}
+		return "Relay OK"
+	}
+	if res.Status == 401 || res.Status == 403 {
+		return "Relay rejected the token"
+	}
+	if res.Error != "" {
+		return "Relay unreachable: " + res.Error
+	}
+	if res.Status != 0 {
+		return fmt.Sprintf("Relay unreachable: HTTP %d", res.Status)
+	}
+	return "Relay unreachable"
 }
 
 // quotaView renders the quota label and passes the raw numbers through for

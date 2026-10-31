@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/benyamin-git/kumiho/internal/api"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
 
@@ -15,9 +17,12 @@ var frozenActions = []string{
 	"connect",
 	"disconnect",
 	"select_location",
+	"favorite_location",
+	"clear_recents",
 	"ping",
 	"settings_get",
 	"settings_set",
+	"relay_test",
 	"login_email",
 	"login_password",
 	"login_2fa",
@@ -106,7 +111,16 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		Onboarded:       true,
 		Locations:       []serverlist.Country{{Code: "DE", Name: "Germany"}},
 		RTTs:            map[string]string{"de1.example:443": "42 ms"},
-		Notice:          &Notice{Message: "Connected", Tone: "info"},
+		Favorites:       []api.LocationRef{{CountryCode: "DE", CityCode: "ber", Server: "de1.example:443"}},
+		Recents:         []api.LocationRef{{CountryCode: "US", CityCode: "nyc", Server: "us1.example:443"}},
+		Latency: map[string]api.CachedPing{
+			"de1.example:443": {RTTMS: float64Ptr(42), MeasuredAt: time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)},
+		},
+		AllowLocked: true,
+		PingBusy:    true,
+		PingDoneSeq: 2,
+		RelayTest:   &api.RelayTestResult{OK: true, Status: 200, LatencyMS: float64Ptr(8)},
+		Notice:      &Notice{Message: "Connected", Tone: "info"},
 		DiagnosticsNotice: &Notice{
 			Message: "Cleanup finished",
 			Tone:    "good",
@@ -130,6 +144,13 @@ func TestEncodeStatePopulatedShape(t *testing.T) {
 		`"onboarded":true,` +
 		`"locations":[{"code":"DE","name":"Germany","cities":null}],` +
 		`"rtts":{"de1.example:443":"42 ms"},` +
+		`"favorites":[{"country_code":"DE","city_code":"ber","server":"de1.example:443"}],` +
+		`"recents":[{"country_code":"US","city_code":"nyc","server":"us1.example:443"}],` +
+		`"latency":{"de1.example:443":{"rtt_ms":42,"measured_at":"2026-10-31T12:00:00Z"}},` +
+		`"allow_locked":true,` +
+		`"ping_busy":true,` +
+		`"ping_done_seq":2,` +
+		`"relay_test":{"ok":true,"status":200,"latency_ms":8},` +
 		`"notice":{"message":"Connected","tone":"info"},` +
 		`"diagnostics_notice":{"message":"Cleanup finished","tone":"good"},` +
 		`"theme":"dark",` +
@@ -230,11 +251,12 @@ func TestDecodeActionRejects(t *testing.T) {
 }
 
 // TestFrozenActionVocabulary pins the list to the plan's 23 names, the three
-// controller-ruled additions, and the twelve v0.6.0 account/sign-in actions:
-// same members, same count, and every one decodes.
+// controller-ruled additions, the twelve v0.6.0 account/sign-in actions, and
+// the three v0.9.0 region actions: same members, same count, and every one
+// decodes.
 func TestFrozenActionVocabulary(t *testing.T) {
-	if len(frozenActions) != 38 {
-		t.Fatalf("frozenActions has %d entries, want 38", len(frozenActions))
+	if len(frozenActions) != 41 {
+		t.Fatalf("frozenActions has %d entries, want 41", len(frozenActions))
 	}
 	if len(actionNames) != len(frozenActions) {
 		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))
@@ -260,3 +282,5 @@ func TestFrozenActionVocabulary(t *testing.T) {
 		}
 	}
 }
+
+func float64Ptr(v float64) *float64 { return &v }

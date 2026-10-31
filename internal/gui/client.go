@@ -218,6 +218,20 @@ func (c *DaemonClient) Locations(ctx context.Context, refresh bool) (api.Locatio
 	return res, err
 }
 
+// FavoriteLocation implements Daemon.
+func (c *DaemonClient) FavoriteLocation(ctx context.Context, p api.FavoriteLocationPayload) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeFavoriteLocation, p, &res)
+	return res, err
+}
+
+// ClearRecents implements Daemon.
+func (c *DaemonClient) ClearRecents(ctx context.Context) (api.Result, error) {
+	var res api.Result
+	err := c.dec(ctx, ipc.TypeClearRecents, nil, &res)
+	return res, err
+}
+
 // Ping implements Daemon.
 func (c *DaemonClient) Ping(ctx context.Context, hosts []string) (api.Result, error) {
 	var res api.Result
@@ -236,6 +250,13 @@ func (c *DaemonClient) Settings(ctx context.Context) (api.SettingsView, error) {
 func (c *DaemonClient) SetSetting(ctx context.Context, p api.SettingsSetPayload) (api.Result, error) {
 	var res api.Result
 	err := c.dec(ctx, ipc.TypeSettingsSet, p, &res)
+	return res, err
+}
+
+// RelayTest implements Daemon.
+func (c *DaemonClient) RelayTest(ctx context.Context) (api.RelayTestResult, error) {
+	var res api.RelayTestResult
+	err := c.dec(ctx, ipc.TypeRelayTest, nil, &res)
 	return res, err
 }
 

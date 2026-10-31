@@ -255,6 +255,33 @@ func server(host string, port int, quarantined bool) serverlist.Server {
 	}
 }
 
+// locationFavorites and locationRecents are the canned pinned rows. They
+// resolve against countries() by exact server address.
+func locationFavorites() []api.LocationRef {
+	return []api.LocationRef{
+		{CountryCode: "DE", CityCode: "ber", Server: "de1.edge.example:443"},
+		{CountryCode: "JP", CityCode: "tyo", Server: "jp1.edge.example:443"},
+	}
+}
+
+func locationRecents() []api.LocationRef {
+	return []api.LocationRef{
+		{CountryCode: "US", CityCode: "nyc", Server: "us1.edge.example:443"},
+		{CountryCode: "DE", CityCode: "fra", Server: "de3.edge.example:443"},
+	}
+}
+
+// locationLatency is the canned fresh cache: one finite sample, one measured
+// timeout, and one unmeasured server.
+func locationLatency() map[string]api.CachedPing {
+	ms := 42.0
+	at := mockEpoch
+	return map[string]api.CachedPing{
+		"de1.edge.example:443": {RTTMS: &ms, MeasuredAt: at},
+		"jp1.edge.example:443": {RTTMS: nil, MeasuredAt: at},
+	}
+}
+
 // logEntries builds the canned retained log, oldest first: one line per real
 // daemon subsystem tag, every level represented, times fixed relative to
 // mockEpoch. Messages carry no secrets or personal data.

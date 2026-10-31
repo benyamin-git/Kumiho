@@ -25,29 +25,32 @@ const (
 
 // UI → host action names, frozen for the whole GUI plan.
 const (
-	ActionConnect         = "connect"
-	ActionDisconnect      = "disconnect"
-	ActionSelectLocation  = "select_location"
-	ActionPing            = "ping"
-	ActionSettingsGet     = "settings_get"
-	ActionSettingsSet     = "settings_set"
-	ActionLoginEmail      = "login_email"
-	ActionLoginPassword   = "login_password"
-	ActionLogin2FA        = "login_2fa"
-	ActionLogout          = "logout"
-	ActionLogsSnapshot    = "logs_snapshot"
-	ActionLogsSubscribe   = "logs_subscribe"
-	ActionLogsUnsubscribe = "logs_unsubscribe"
-	ActionLogsClear       = "logs_clear"
-	ActionLogsExport      = "logs_export"
-	ActionOpenLogsFolder  = "open_logs_folder"
-	ActionCleanup         = "cleanup"
-	ActionServiceStart    = "service_start"
-	ActionServiceStop     = "service_stop"
-	ActionUpdateCheck     = "update_check"
-	ActionOpenExternal    = "open_external"
-	ActionQuit            = "quit"
-	ActionWindowShow      = "window_show"
+	ActionConnect          = "connect"
+	ActionDisconnect       = "disconnect"
+	ActionSelectLocation   = "select_location"
+	ActionFavoriteLocation = "favorite_location"
+	ActionClearRecents     = "clear_recents"
+	ActionPing             = "ping"
+	ActionSettingsGet      = "settings_get"
+	ActionSettingsSet      = "settings_set"
+	ActionRelayTest        = "relay_test"
+	ActionLoginEmail       = "login_email"
+	ActionLoginPassword    = "login_password"
+	ActionLogin2FA         = "login_2fa"
+	ActionLogout           = "logout"
+	ActionLogsSnapshot     = "logs_snapshot"
+	ActionLogsSubscribe    = "logs_subscribe"
+	ActionLogsUnsubscribe  = "logs_unsubscribe"
+	ActionLogsClear        = "logs_clear"
+	ActionLogsExport       = "logs_export"
+	ActionOpenLogsFolder   = "open_logs_folder"
+	ActionCleanup          = "cleanup"
+	ActionServiceStart     = "service_start"
+	ActionServiceStop      = "service_stop"
+	ActionUpdateCheck      = "update_check"
+	ActionOpenExternal     = "open_external"
+	ActionQuit             = "quit"
+	ActionWindowShow       = "window_show"
 )
 
 // Action names added by a controller ruling on 2026-10-15, appended after
@@ -85,9 +88,12 @@ var actionNames = []string{
 	ActionConnect,
 	ActionDisconnect,
 	ActionSelectLocation,
+	ActionFavoriteLocation,
+	ActionClearRecents,
 	ActionPing,
 	ActionSettingsGet,
 	ActionSettingsSet,
+	ActionRelayTest,
 	ActionLoginEmail,
 	ActionLoginPassword,
 	ActionLogin2FA,
@@ -204,6 +210,19 @@ type State struct {
 
 	// RTTs maps host:port to its test-speed label ("42 ms" or "timeout").
 	RTTs map[string]string `json:"rtts,omitempty"`
+
+	// Locations sections and latency from the last server-list reply.
+	Favorites   []api.LocationRef         `json:"favorites,omitempty"`
+	Recents     []api.LocationRef         `json:"recents,omitempty"`
+	Latency     map[string]api.CachedPing `json:"latency,omitempty"`
+	AllowLocked bool                      `json:"allow_locked,omitempty"`
+
+	// PingBusy and PingDoneSeq expose the daemon's ping run lifecycle.
+	PingBusy    bool `json:"ping_busy,omitempty"`
+	PingDoneSeq int  `json:"ping_done_seq,omitempty"`
+
+	// RelayTest is the last control-plane relay probe result.
+	RelayTest *api.RelayTestResult `json:"relay_test,omitempty"`
 
 	// Logs is the retained log buffer (the daemon snapshot merged with live
 	// entries, capped at 2000).

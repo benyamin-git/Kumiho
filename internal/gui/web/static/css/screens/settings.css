@@ -144,6 +144,16 @@
   min-inline-size: 80px;
 }
 
+.set__token-state,
+.set__relay-result {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.set__relay-result[data-tone="bad"] {
+  color: var(--loss);
+}
+
 /* The overridden mark: a small word beside the Reset button (never colour
  * alone — the text carries the state). */
 .set__override {

@@ -44,6 +44,14 @@ type fakeDaemon struct {
 	pingErr error
 	pings   [][]string
 
+	favoriteErr    error
+	favorites      []api.FavoriteLocationPayload
+	clearRecentErr error
+	recentClears   int
+	relayResult    api.RelayTestResult
+	relayErr       error
+	relayCalls     int
+
 	settings      api.SettingsView
 	settingsErr   error
 	settingsCalls int
@@ -266,6 +274,30 @@ func (f *fakeDaemon) Locations(_ context.Context, refresh bool) (api.LocationsRe
 	f.locationCalls++
 	f.locationRefreshes = append(f.locationRefreshes, refresh)
 	return f.locations, f.locationsErr
+}
+
+func (f *fakeDaemon) FavoriteLocation(_ context.Context, p api.FavoriteLocationPayload) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "favorite_location")
+	f.favorites = append(f.favorites, p)
+	return api.Result{OK: true}, f.favoriteErr
+}
+
+func (f *fakeDaemon) ClearRecents(context.Context) (api.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "clear_recents")
+	f.recentClears++
+	return api.Result{OK: true}, f.clearRecentErr
+}
+
+func (f *fakeDaemon) RelayTest(context.Context) (api.RelayTestResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "relay_test")
+	f.relayCalls++
+	return f.relayResult, f.relayErr
 }
 
 func (f *fakeDaemon) Ping(_ context.Context, hosts []string) (api.Result, error) {

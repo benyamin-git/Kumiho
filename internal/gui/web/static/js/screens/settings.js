@@ -274,6 +274,10 @@ function projectedAutostart(snapshot) {
 /** The daemon setting's display/effective value from a settings snapshot. */
 function settingValue(settings, key) {
   switch (key) {
+    case "allow_locked":
+      return settings.allow_locked ? "on" : "off";
+    case "relay_url":
+      return settings.relay_url || "";
     case "kill_switch":
       return settings.kill_switch_effective ? "on" : "off";
     case "autoconnect":
@@ -324,6 +328,22 @@ function settingsSignature(settings) {
 /** The notice identity used by the mutation guards. */
 function noticeMark(notice) {
   return notice && notice.message ? notice.message + "\u0000" + (notice.tone || "") : "";
+}
+
+/** One relay probe result as the settings copy the spec pins. */
+function relayText(result) {
+  if (!result) return "";
+  if (result.ok) {
+    return result.latency_ms == null
+      ? "Relay OK"
+      : "Relay OK — " + Math.round(Number(result.latency_ms)) + " ms";
+  }
+  if (result.status === 401 || result.status === 403) {
+    return "Relay rejected the token";
+  }
+  if (result.error) return "Relay unreachable: " + result.error;
+  if (result.status) return "Relay unreachable: HTTP " + result.status;
+  return "Relay unreachable";
 }
 
 /** Build one app-section row: label, control area, no override treatment. */
@@ -464,7 +484,106 @@ function build(host, handlers) {
     serviceRows.push(entry);
   }
 
-  pane.append(appSection, serviceSection);
+  // Region controls. These sit in the Background service pane after the
+  // canonical rows: allow_locked, the control-plane relay URL, the
+  // write-only token, and the one-shot relay probe.
+  const regionRow = el("div", "set__row");
+  regionRow.title = "Show servers the Firefox version filter marks locked; next locations refresh";
+  const regionLabel = el("span", "set__label", "Allow locked locations");
+  const regionArea = el("div", "set__control");
+  const allowLocked = el("button", "button button--tonal set__toggle");
+  allowLocked.type = "button";
+  allowLocked.addEventListener("click", () => handlers.onAllowLocked());
+  const allowLockedMark = el("span", "set__override", "overridden");
+  allowLockedMark.hidden = true;
+  const allowLockedReset = el("button", "button button--tonal set__reset", "Reset");
+  allowLockedReset.type = "button";
+  allowLockedReset.setAttribute("aria-label", "Reset allow locked locations");
+  allowLockedReset.hidden = true;
+  allowLockedReset.addEventListener("click", () => handlers.onResetKey("allow_locked"));
+  regionArea.append(allowLocked);
+  regionRow.append(regionLabel, regionArea, allowLockedMark, allowLockedReset);
+
+  const relayRow = el("div", "set__row");
+  relayRow.title = "HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page";
+  const relayLabel = el("span", "set__label", "Relay URL");
+  const relayArea = el("div", "set__control");
+  const relayInput = document.createElement("input");
+  relayInput.className = "input set__edit";
+  relayInput.type = "url";
+  relayInput.autocomplete = "off";
+  relayInput.spellcheck = false;
+  relayInput.id = "set-relay_url";
+  relayInput.placeholder = "https://relay.example.test";
+  relayInput.setAttribute("aria-label", "Relay URL");
+  relayInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handlers.onSaveRelayURL();
+    }
+  });
+  const relayApply = el("button", "button button--tonal set__apply", "Apply");
+  relayApply.type = "button";
+  relayApply.setAttribute("aria-label", "Apply relay URL");
+  relayApply.addEventListener("click", () => handlers.onSaveRelayURL());
+  relayArea.append(relayInput, relayApply);
+  const relayMark = el("span", "set__override", "overridden");
+  relayMark.hidden = true;
+  const relayReset = el("button", "button button--tonal set__reset", "Reset");
+  relayReset.type = "button";
+  relayReset.setAttribute("aria-label", "Reset relay URL");
+  relayReset.hidden = true;
+  relayReset.addEventListener("click", () => handlers.onResetKey("relay_url"));
+  relayRow.append(relayLabel, relayArea, relayMark, relayReset);
+
+  const tokenRow = el("div", "set__row");
+  tokenRow.title = "Write-only relay secret; never shown again after saving";
+  const tokenLabel = el("span", "set__label", "Relay token");
+  const tokenArea = el("div", "set__control");
+  const tokenInput = document.createElement("input");
+  tokenInput.className = "input set__edit";
+  tokenInput.type = "password";
+  tokenInput.autocomplete = "new-password";
+  tokenInput.spellcheck = false;
+  tokenInput.id = "set-relay_token";
+  tokenInput.placeholder = "Paste token";
+  tokenInput.setAttribute("aria-label", "Relay token");
+  tokenInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handlers.onSaveRelayToken();
+    }
+  });
+  const tokenSave = el("button", "button button--tonal set__apply", "Save");
+  tokenSave.type = "button";
+  tokenSave.setAttribute("aria-label", "Save relay token");
+  tokenSave.addEventListener("click", () => handlers.onSaveRelayToken());
+  const tokenClear = el("button", "button button--tonal set__reset", "Clear");
+  tokenClear.type = "button";
+  tokenClear.setAttribute("aria-label", "Clear relay token");
+  tokenClear.addEventListener("click", () => handlers.onClearRelayToken());
+  tokenArea.append(tokenInput, tokenSave, tokenClear);
+  const tokenSet = el("span", "set__token-state", "Not set");
+  tokenRow.append(tokenLabel, tokenArea, tokenSet);
+
+  const testRow = el("div", "set__row");
+  testRow.title = "Send one request through the relay; used only after HTTP 451";
+  const testLabel = el("span", "set__label", "Test relay");
+  const testArea = el("div", "set__control");
+  const testButton = el("button", "button button--tonal set__apply", "Test relay");
+  testButton.type = "button";
+  testButton.setAttribute("aria-label", "Test relay");
+  testButton.addEventListener("click", () => handlers.onRelayTest());
+  const testResult = el("span", "set__relay-result");
+  testResult.hidden = true;
+  testArea.append(testButton, testResult);
+  testRow.append(testLabel, testArea);
+
+  const regionSection = el("div", "set__section");
+  regionSection.append(heading("Region"));
+  regionSection.append(regionRow, relayRow, tokenRow, testRow);
+
+  pane.append(appSection, serviceSection, regionSection);
 
   const status = el("p", "set__status");
   status.setAttribute("aria-live", "polite");
@@ -485,6 +604,21 @@ function build(host, handlers) {
     updateResult: updateResult,
     updateLink: updateLink,
     serviceRows: serviceRows,
+    region: {
+      allowLocked: allowLocked,
+      allowLockedMark: allowLockedMark,
+      allowLockedReset: allowLockedReset,
+      relayInput: relayInput,
+      relayApply: relayApply,
+      relayMark: relayMark,
+      relayReset: relayReset,
+      tokenInput: tokenInput,
+      tokenSave: tokenSave,
+      tokenClear: tokenClear,
+      tokenSet: tokenSet,
+      testButton: testButton,
+      testResult: testResult,
+    },
     status: status,
   };
 }
@@ -608,6 +742,7 @@ export default {
         view.settingsMark = settingsSignature(settings);
         syncService(settings);
       }
+      renderRegion(snapshot, settings);
       renderServiceDisabled();
     }
 
@@ -668,6 +803,37 @@ export default {
       }
     }
 
+    /** Push the Region block values, marks and probe result. */
+    function renderRegion(snapshot, settings) {
+      if (!settings) return;
+      const overridden = new Set(settings.overridden || []);
+      const allow = !!settings.allow_locked;
+      ui.region.allowLocked.textContent = allow ? "on" : "off";
+      ui.region.allowLocked.setAttribute("aria-label", "Allow locked locations: " + (allow ? "on" : "off"));
+      ui.region.allowLockedMark.hidden = !overridden.has("allow_locked");
+      ui.region.allowLockedReset.hidden = !overridden.has("allow_locked");
+
+      const url = settings.relay_url || "";
+      if (document.activeElement !== ui.region.relayInput &&
+          ui.region.relayInput.value !== url) {
+        ui.region.relayInput.value = url;
+      }
+      ui.region.relayMark.hidden = !overridden.has("relay_url");
+      ui.region.relayReset.hidden = !overridden.has("relay_url");
+
+      // The token input is write-only: never populated from state, and the
+      // snapshot only carries the boolean.
+      ui.region.tokenSet.textContent = settings.relay_token_set ? "Set" : "Not set";
+      const result = relayText(snapshot.relay_test);
+      ui.region.testResult.textContent = result;
+      ui.region.testResult.hidden = !result;
+      if (snapshot.relay_test && snapshot.relay_test.ok === false) {
+        ui.region.testResult.dataset.tone = "bad";
+      } else {
+        delete ui.region.testResult.dataset.tone;
+      }
+    }
+
     /**
      * Enable/disable the service controls with the mutation guard: every
      * daemon-row control is ignored while one change is in flight
@@ -680,6 +846,16 @@ export default {
         if (entry.apply) entry.apply.disabled = view.busy;
         if (entry.reset) entry.reset.disabled = view.busy;
       }
+      const region = ui.region;
+      region.allowLocked.disabled = view.busy;
+      region.allowLockedReset.disabled = view.busy;
+      region.relayInput.disabled = view.busy;
+      region.relayApply.disabled = view.busy;
+      region.relayReset.disabled = view.busy;
+      region.tokenInput.disabled = view.busy;
+      region.tokenSave.disabled = view.busy;
+      region.tokenClear.disabled = view.busy;
+      region.testButton.disabled = view.busy || view.updateBusy;
     }
 
     function renderStatus(snapshot) {
@@ -802,6 +978,40 @@ export default {
 
       onReset(entry) {
         mutate({ key: entry.spec.key, reset: true });
+      },
+
+      onAllowLocked() {
+        const settings = ctx.store.get().settings || {};
+        mutate({ key: "allow_locked", value: settings.allow_locked ? "off" : "on" });
+      },
+
+      onSaveRelayURL() {
+        mutate({ key: "relay_url", value: ui.region.relayInput.value });
+      },
+
+      onResetKey(key) {
+        mutate({ key: key, reset: true });
+      },
+
+      onSaveRelayToken() {
+        const value = ui.region.tokenInput.value;
+        if (!value) return;
+        // Clear the field before the round trip: the token is write-only and
+        // must not linger in the DOM after Save.
+        ui.region.tokenInput.value = "";
+        mutate({ key: "relay_token", value: value });
+      },
+
+      onClearRelayToken() {
+        ui.region.tokenInput.value = "";
+        mutate({ key: "relay_token", reset: true });
+      },
+
+      onRelayTest() {
+        if (view.busy || view.updateBusy) return;
+        run("relay_test", {}).then(function (err) {
+          if (err) console.warn("kumiho: settings relay_test refused: " + err);
+        });
       },
     };
 

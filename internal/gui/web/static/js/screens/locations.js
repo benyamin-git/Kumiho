@@ -1,33 +1,26 @@
-/* The Locations screen: one flat server list, the live search, the Refresh
- * and Ping-all actions, and the tone-coloured status line.
+/* The Locations screen: pinned Fastest / Favorites / Recent sections above
+ * the full server list, the live search, Refresh and Ping-all actions, the
+ * locked-list footer action, and the tone-coloured status line.
  *
- * The controller owns every fetch and the latency labels. This screen builds
- * the display rows from `state.locations` (connect target, protocols,
- * Recommended flag, search haystack), filters and orders them locally, and
- * sends only actions. The wire carries no locations-loading flag, so the
- * "Loading locations…" state is `!locations_loaded` without a load error.
+ * The controller owns every fetch and the latency projection. This screen
+ * builds the display rows from `state.locations` (connect target, protocols,
+ * Recommended flag, search haystack), resolves the persisted favorite/recent
+ * refs, filters and orders the full list locally, and sends only actions.
+ * The Fastest row and the pinned sections never participate in speed order.
  *
- * Ping labels are the controller's State.RTTs strings (`42 ms` / `timeout`);
- * this screen parses them for speed ordering and renders them as-is. A run
- * keeps its pre-run order while results arrive; only a completed run with at
- * least one answer switches to speed order. The busy guard is screen-side for
- * the same reason as the Dashboard's: the state carries no ping-in-flight
- * signal. It ends on a speed failure notice, when every requested host has a
- * fresh label, or at the settle timer; a transport refusal ends it without a
- * speed claim.
+ * Ping labels read `state.rtts` while a run is busy and the controller's
+ * `state.latency` cache when idle. The run ends only on the daemon's
+ * `ping_done_seq` change; there is no settle timer. A completed run with at
+ * least one answer switches only the full list to speed order.
  *
- * The list is a listbox, not a tree: no levels, carets or expansion. The
- * router links css/screens/locations.css from its registry entry.
+ * The list is a listbox, not a tree. The router links
+ * css/screens/locations.css from its registry entry.
  */
 
 import { flagIcon } from "../flags.js";
 
 const SEPARATOR = " · ";
 const ROW_PX = 48;
-const PING_SETTLE_MS = 3000;
-const PING_CONCURRENCY = 24;
-const PING_PROBE_MS = 1500;
-const PING_MARGIN_MS = 1500;
 
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
 // time, so one slot is enough).
@@ -98,6 +91,7 @@ function buildRows(locations) {
     const countryName = displayCountryName(country);
     const countryCode = String((country && country.code) || "").trim();
     const recommended = isRecommended(country);
+    const locked = !!country.locked;
     for (const city of (country && country.cities) || []) {
       const cityName = String((city && city.name) || "").trim();
       const cityCode = String((city && city.code) || "").trim();
@@ -123,6 +117,7 @@ function buildRows(locations) {
           address: address,
           protocols: protocols,
           recommended: recommended,
+          locked: locked,
           title: title,
           detail: detail,
           haystack: [
@@ -156,15 +151,44 @@ function rttValue(label) {
   return match ? Number(match[1]) : Infinity;
 }
 
-function latencyValue(latency, address) {
-  return latency[String(address).toLowerCase()];
+function latencySamples(snapshot) {
+  const map = {};
+  const latency = (snapshot && snapshot.latency) || {};
+  for (const key of Object.keys(latency)) {
+    map[String(key).toLowerCase()] = latency[key];
+  }
+  return map;
+}
+
+function liveRTTs(snapshot) {
+  const map = {};
+  const rtts = (snapshot && snapshot.rtts) || {};
+  for (const key of Object.keys(rtts)) map[String(key).toLowerCase()] = rtts[key];
+  return map;
+}
+
+function sampleValue(sample) {
+  if (!sample || sample.rtt_ms == null) return Infinity;
+  const value = Number(sample.rtt_ms);
+  return Number.isFinite(value) ? value : Infinity;
+}
+
+function latencyLabel(snapshot, row, busy) {
+  const key = String(row.address || "").toLowerCase();
+  if (busy) {
+    const live = liveRTTs(snapshot)[key];
+    return live === undefined ? "—" : String(live);
+  }
+  const sample = latencySamples(snapshot)[key];
+  if (sample === undefined) return "—";
+  return sample.rtt_ms == null ? "timeout" : Math.round(Number(sample.rtt_ms)) + " ms";
 }
 
 function compareRows(a, b, sortMode, latency) {
   if (a.recommended !== b.recommended) return a.recommended ? -1 : 1;
   if (sortMode === "speed") {
-    const ar = rttValue(latencyValue(latency, a.address));
-    const br = rttValue(latencyValue(latency, b.address));
+    const ar = sampleValue(latency[String(a.address).toLowerCase()]);
+    const br = sampleValue(latency[String(b.address).toLowerCase()]);
     if (ar !== br) return ar < br ? -1 : 1;
   }
   const country = a.countryName.toLowerCase().localeCompare(b.countryName.toLowerCase());
@@ -191,7 +215,8 @@ function dataSignature(locations) {
   if (!locations) return "";
   let signature = "";
   for (const country of locations) {
-    signature += (country.code || "") + "\u0000" + (country.name || "") + "\u0001";
+    signature += (country.code || "") + "\u0000" + (country.name || "") +
+      (country.locked ? "!" : "") + "\u0001";
     for (const city of country.cities || []) {
       signature += (city.code || "") + "\u0000" + (city.name || "") + "\u0001";
       for (const server of city.servers || []) {
@@ -208,12 +233,46 @@ function dataSignature(locations) {
   return signature;
 }
 
-/** Case-insensitive RTT lookup keyed by the lowercased address. */
-function latencyMap(snapshot) {
-  const map = {};
-  const rtts = snapshot.rtts || {};
-  for (const key of Object.keys(rtts)) map[String(key).toLowerCase()] = rtts[key];
-  return map;
+function refKey(ref) {
+  return [
+    normalizedCode(ref && ref.country_code),
+    normalizedCode(ref && ref.city_code),
+    String((ref && ref.server) || "").toLowerCase(),
+  ].join("/");
+}
+
+function resolvedRefRows(refs, rows) {
+  const out = [];
+  const seen = new Set();
+  for (const ref of refs || []) {
+    if (!ref) continue;
+    const server = String(ref.server || "").toLowerCase();
+    let row = rows.find(function (candidate) {
+      return candidate.address.toLowerCase() === server;
+    });
+    if (!row) {
+      const country = normalizedCode(ref.country_code);
+      const city = normalizedCode(ref.city_code);
+      row = rows.find(function (candidate) {
+        return normalizedCode(candidate.countryCode) === country &&
+          (!city || normalizedCode(candidate.cityCode) === city);
+      });
+    }
+    if (!row) continue;
+    const key = row.address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+function withState(row, section, favorite, recent) {
+  return Object.assign({}, row, {
+    section: section,
+    favorite: !!favorite,
+    recent: !!recent,
+  });
 }
 
 function isSelected(row, snapshot) {
@@ -232,8 +291,10 @@ function build(host) {
   refresh.type = "button";
   const pingAll = el("button", "button button--tonal loc__ping-all", "Ping all");
   pingAll.type = "button";
+  const locked = el("button", "button button--text loc__locked-action", "Show locked locations");
+  locked.type = "button";
   const actions = el("div", "loc__actions");
-  actions.append(refresh, pingAll);
+  actions.append(refresh, pingAll, locked);
 
   const filterLabel = el("label", "field__label", "Search locations");
   filterLabel.htmlFor = "loc-filter";
@@ -267,6 +328,7 @@ function build(host) {
     root: root,
     refresh: refresh,
     pingAll: pingAll,
+    locked: locked,
     filter: filter,
     list: list,
     empty: empty,
@@ -285,21 +347,24 @@ export default {
       dataSignature: null,
       locations: [],
       filter: "",
+      sections: [],
       rows: [],
+      fullRows: [],
       rowsSignature: "",
       rowEls: [],
       current: 0,
       sortMode: "country",
       scrollToTop: false,
-      // Ping-all run state.
+      // Ping-all run state. The daemon's ping_done_seq ends it.
       pingBusy: false,
+      pingSawBusy: false,
       pingHosts: [],
       pingBaseline: {},
       pingAnswered: false,
-      pingTimer: 0,
+      pingDoneSeq: 0,
       frozenLatency: null,
+      favoriteOverrides: {},
       // DOM-render bookkeeping so envelopes only touch what changed.
-      emptyShown: null,
       placeholder: null,
       statusText: null,
       statusTone: null,
@@ -315,10 +380,118 @@ export default {
       return notice && notice.tone === "bad" && !isSpeedFailure(notice) ? notice.message : "";
     }
 
+    function visibleRows(snapshot) {
+      const allowLocked = !!snapshot.allow_locked;
+      return buildRows(view.locations).filter(function (row) {
+        return !row.locked || allowLocked;
+      });
+    }
+
+    function sectionsFor(snapshot) {
+      const rows = visibleRows(snapshot);
+      const latency = latencySamples(snapshot);
+      const favorites = resolvedRefRows(snapshot.favorites, rows);
+      favorites.sort(function (a, b) {
+        const country = a.countryName.toLowerCase().localeCompare(b.countryName.toLowerCase());
+        if (country !== 0) return country;
+        const city = a.cityName.toLowerCase().localeCompare(b.cityName.toLowerCase());
+        if (city !== 0) return city;
+        return a.address.toLowerCase().localeCompare(b.address.toLowerCase());
+      });
+      const recents = resolvedRefRows(snapshot.recents, rows);
+      const favoriteKeys = new Set(favorites.map(function (row) { return row.address.toLowerCase(); }));
+      const recentKeys = new Set(recents.map(function (row) { return row.address.toLowerCase(); }));
+      // Drop optimistic stars once the authoritative state agrees.
+      for (const address of Object.keys(view.favoriteOverrides)) {
+        if (favoriteKeys.has(address) === view.favoriteOverrides[address]) {
+          delete view.favoriteOverrides[address];
+        }
+      }
+      const isFavorite = function (row) {
+        const key = row.address.toLowerCase();
+        return Object.prototype.hasOwnProperty.call(view.favoriteOverrides, key)
+          ? view.favoriteOverrides[key]
+          : favoriteKeys.has(key);
+      };
+
+      let fastest = null;
+      let fastestValue = Infinity;
+      for (const row of rows) {
+        const value = sampleValue(latency[row.address.toLowerCase()]);
+        if (value < fastestValue) {
+          fastestValue = value;
+          fastest = row;
+        }
+      }
+      const fastestRows = [fastest
+        ? withState(fastest, "fastest", false, false)
+        : {
+          footer: false,
+          address: "",
+          title: "Fastest",
+          detail: "Run Ping all to enable Fastest",
+          disabled: true,
+          fastest: true,
+          section: "fastest",
+          favorite: false,
+          recent: false,
+        }];
+      if (fastest) {
+        fastestRows[0].fastest = true;
+        fastestRows[0].disabled = false;
+        fastestRows[0].title = "Fastest" + SEPARATOR + fastest.title;
+      }
+
+      const favoriteRows = favorites.map(function (row) {
+        return withState(row, "favorites", isFavorite(row), recentKeys.has(row.address.toLowerCase()));
+      });
+      const recentRows = recents.map(function (row) {
+        return withState(row, "recent", isFavorite(row), true);
+      });
+
+      const sortLatency = view.pingBusy && view.frozenLatency ? view.frozenLatency : latency;
+      const full = sortRows(
+        matchingRows(rows, view.filter),
+        view.sortMode,
+        sortLatency,
+      ).map(function (row) {
+        return withState(
+          row,
+          "locations",
+          isFavorite(row),
+          recentKeys.has(row.address.toLowerCase()),
+        );
+      });
+
+      const sections = [{ id: "fastest", title: "Fastest", rows: fastestRows }];
+      if (favoriteRows.length > 0) {
+        sections.push({ id: "favorites", title: "Favorites", rows: favoriteRows });
+      }
+      if (recentRows.length > 0) {
+        sections.push({ id: "recent", title: "Recent", rows: recentRows, clearable: true });
+      }
+      sections.push({ id: "locations", title: "Locations", rows: full });
+      return { sections: sections, full: full };
+    }
+
+    function allTargets() {
+      const snapshot = ctx.store.get();
+      const seen = new Set();
+      const hosts = [];
+      for (const row of visibleRows(snapshot)) {
+        const key = row.address.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hosts.push(row.address);
+      }
+      return hosts;
+    }
+
     /**
      * Adopt new served data. A changed list is a new visit: country order,
-     * top of the list and no stale local latency ordering. A refresh with the
-     * same data is reset by onRefresh (the controller also clears its RTTs).
+     * top of the list and no stale local latency ordering. Pinned state
+     * changes arrive in the same state envelope and update markers without
+     * resetting the list.
      */
     function syncData(snapshot) {
       const signature = dataSignature(snapshot.locations);
@@ -331,42 +504,39 @@ export default {
       view.frozenLatency = null;
     }
 
-    function currentRows(snapshot) {
-      const live = latencyMap(snapshot);
-      const sortLatency = view.pingBusy && view.frozenLatency ? view.frozenLatency : live;
-      const rows = sortRows(
-        matchingRows(buildRows(view.locations), view.filter),
-        view.sortMode,
-        sortLatency,
-      );
-      return { rows: rows, live: live };
-    }
-
-    function allTargets() {
-      const seen = new Set();
-      const hosts = [];
-      for (const row of buildRows(view.locations)) {
-        const key = row.address.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        hosts.push(row.address);
-      }
-      return hosts;
-    }
-
     function rebuildRows() {
       const frag = document.createDocumentFragment();
       const els = [];
+      let lastSection = null;
       view.rows.forEach(function (row, index) {
+        if (row.section !== lastSection) {
+          lastSection = row.section;
+          const section = view.sections.find(function (entry) { return entry.id === row.section; });
+          const heading = el("div", "loc__heading");
+          heading.setAttribute("role", "presentation");
+          const title = el("h3", "loc__heading-title", section ? section.title : "");
+          heading.append(title);
+          if (section && section.clearable) {
+            const clear = el("button", "button button--text loc__clear", "Clear");
+            clear.type = "button";
+            clear.setAttribute("aria-label", "Clear recent locations");
+            clear.addEventListener("click", onClearRecents);
+            heading.append(clear);
+          }
+          frag.append(heading);
+        }
+
         const rowEl = el("div", "loc__row");
+        if (row.disabled) rowEl.classList.add("loc__row--disabled");
         rowEl.id = "loc-row-" + index;
         rowEl.dataset.index = String(index);
         rowEl.setAttribute("role", "option");
         rowEl.setAttribute("aria-selected", "false");
+        if (row.disabled) rowEl.setAttribute("aria-disabled", "true");
 
         const flag = el("span", "loc__flag");
         flag.setAttribute("aria-hidden", "true");
-        flag.append(flagIcon(row.countryCode));
+        if (row.countryCode) flag.append(flagIcon(row.countryCode));
         rowEl.append(flag);
 
         const main = el("span", "loc__main");
@@ -377,15 +547,27 @@ export default {
         rowEl.append(main);
 
         const trailing = el("span", "loc__trailing");
+        if (row.locked) {
+          const badge = el("span", "loc__locked-badge", "Locked");
+          badge.setAttribute("aria-label", "Locked");
+          trailing.append(badge);
+        }
         const latency = el("span", "loc__latency");
+        const star = el("button", "button loc__star");
+        star.type = "button";
+        star.hidden = !!row.fastest;
+        star.addEventListener("click", function (event) {
+          event.stopPropagation();
+          onFavorite(row);
+        });
         const check = el("span", "loc__check", "✓");
         check.setAttribute("aria-hidden", "true");
         check.hidden = true;
-        trailing.append(latency, check);
+        trailing.append(latency, star, check);
         rowEl.append(trailing);
 
         frag.append(rowEl);
-        els.push({ el: rowEl, latency: latency, check: check });
+        els.push({ el: rowEl, latency: latency, star: star, check: check });
       });
       ui.list.replaceChildren(frag);
       view.rowEls = els;
@@ -399,14 +581,31 @@ export default {
       view.current = Math.max(0, Math.min(view.current, view.rows.length - 1));
     }
 
-    /** Per-envelope row updates: latency, selected mark and current row. */
+    /** Per-envelope row updates: latency, selected mark, star and current. */
     function renderRowState(snapshot, live) {
       for (let i = 0; i < view.rows.length; i++) {
         const row = view.rows[i];
         const entry = view.rowEls[i];
-        const label = latencyValue(live, row.address);
-        const latency = label === undefined || label === "" ? "—" : String(label);
+        const label = latencyLabel(snapshot, row, view.pingBusy);
+        const latency = label || "—";
         if (entry.latency.textContent !== latency) entry.latency.textContent = latency;
+
+        if (!entry.star.hidden) {
+          const pressed = row.favorite ? "true" : "false";
+          if (entry.star.getAttribute("aria-pressed") !== pressed) {
+            entry.star.setAttribute("aria-pressed", pressed);
+          }
+          const want = row.favorite ? "★" : "☆";
+          if (entry.star.textContent !== want) entry.star.textContent = want;
+          const name = [row.countryName, row.cityName].filter(Boolean).join(" ");
+          const labelText = row.favorite
+            ? "Remove favorite " + name
+            : "Favorite " + name;
+          if (entry.star.getAttribute("aria-label") !== labelText) {
+            entry.star.setAttribute("aria-label", labelText);
+          }
+        }
+
         const selected = isSelected(row, snapshot);
         const wantSelected = selected ? "true" : "false";
         if (entry.el.getAttribute("aria-selected") !== wantSelected) {
@@ -425,11 +624,8 @@ export default {
 
     function renderList(snapshot) {
       const empty = view.rows.length === 0;
-      if (empty !== view.emptyShown) {
-        view.emptyShown = empty;
-        ui.list.hidden = empty;
-        ui.empty.hidden = !empty;
-      }
+      ui.list.hidden = empty;
+      ui.empty.hidden = !empty;
       let placeholder = "";
       if (empty) {
         placeholder = !snapshot.locations_loaded && !loadError(snapshot)
@@ -455,11 +651,8 @@ export default {
       if (error) return { text: error, tone: "bad" };
       if (view.pingBusy) return { text: "Pinging " + view.pingHosts.length + " servers...", tone: "" };
       if (isSpeedFailure(notice)) return { text: notice.message, tone: "bad" };
-      if (snapshot.locations_loaded && view.rows.length === 0 && view.filter.trim() !== "") {
+      if (snapshot.locations_loaded && view.fullRows.length === 0 && view.filter.trim() !== "") {
         return { text: "No locations match the filter", tone: "" };
-      }
-      if (snapshot.locations_loaded && view.rows.length === 0) {
-        return { text: "No locations loaded", tone: "" };
       }
       const shared = snapshot.notice;
       if (shared && shared.message) return { text: shared.message, tone: "" };
@@ -478,10 +671,14 @@ export default {
       ui.status.hidden = line.text === "";
     }
 
-    function renderActions() {
+    function renderActions(snapshot) {
       const busy = view.pingBusy;
       ui.refresh.disabled = busy;
       ui.pingAll.disabled = busy || allTargets().length === 0;
+      const showLocked = !!snapshot.allow_locked;
+      const label = showLocked ? "Hide locked locations" : "Show locked locations";
+      if (ui.locked.textContent !== label) ui.locked.textContent = label;
+      ui.locked.setAttribute("aria-pressed", showLocked ? "true" : "false");
     }
 
     function endPing() {
@@ -490,13 +687,10 @@ export default {
       view.pingBaseline = {};
       view.pingAnswered = false;
       view.frozenLatency = null;
-      clearTimeout(view.pingTimer);
-      view.pingTimer = 0;
     }
 
-    function finishPing(failed) {
+    function finishPing(answered) {
       if (!view.pingBusy) return;
-      const answered = view.pingAnswered && !failed;
       endPing();
       if (answered) {
         view.sortMode = "speed";
@@ -506,31 +700,32 @@ export default {
     }
 
     /**
-     * pollPing ends a run on a speed-failure notice, or when every requested
-     * host has a fresh label and at least one host answered. A run whose
-     * results are all byte-identical to the baseline moves nothing and ends
-     * at the settle timer instead.
+     * pollPing ends the run only on a ping_done_seq change. Results merely
+     * update labels and record whether anything answered.
      */
     function pollPing(snapshot) {
       if (!view.pingBusy) return;
-      if (isSpeedFailure(snapshot.locations_notice)) {
-        finishPing(true);
+      const seq = Number(snapshot.ping_done_seq || 0);
+      if (seq !== view.pingDoneSeq) {
+        finishPing(view.pingAnswered);
         return;
       }
-      const rtts = latencyMap(snapshot);
-      let allLabelled = true;
+      const busy = !!snapshot.ping_busy;
+      if (busy) {
+        view.pingSawBusy = true;
+      } else if (view.pingSawBusy) {
+        finishPing(view.pingAnswered);
+        return;
+      }
+      const rtts = liveRTTs(snapshot);
       for (const host of view.pingHosts) {
         const key = host.toLowerCase();
         const now = rtts[key];
-        if (now === undefined) {
-          allLabelled = false;
-          continue;
-        }
+        if (now === undefined) continue;
         if (view.pingBaseline[key] === undefined || now !== view.pingBaseline[key]) {
           view.pingAnswered = true;
         }
       }
-      if (view.pingAnswered && allLabelled) finishPing(false);
     }
 
     function render() {
@@ -538,47 +733,46 @@ export default {
       syncData(snapshot);
       pollPing(snapshot);
 
-      const current = currentRows(snapshot);
-      view.rows = current.rows;
+      const built = sectionsFor(snapshot);
+      view.sections = built.sections;
+      view.rows = built.sections.flatMap(function (section) { return section.rows; });
+      view.fullRows = built.full;
       const signature = view.rows.map(function (row) {
-        return row.key + "\u0000" + row.title + "\u0000" + row.detail;
+        return [
+          row.section,
+          row.key || row.address,
+          row.title,
+          row.detail,
+          row.favorite ? "f" : "",
+          row.recent ? "r" : "",
+          row.locked ? "l" : "",
+          row.disabled ? "d" : "",
+        ].join("\u0000");
       }).join("\n");
       if (signature !== view.rowsSignature) {
         view.rowsSignature = signature;
         rebuildRows();
       }
       clampCurrent();
-      renderRowState(snapshot, current.live);
+      renderRowState(snapshot);
       renderList(snapshot);
       renderStatus(snapshot);
-      renderActions();
-    }
-
-    function pingWindowMs(count) {
-      return Math.max(
-        PING_SETTLE_MS,
-        Math.ceil(count / PING_CONCURRENCY) * PING_PROBE_MS + PING_MARGIN_MS,
-      );
+      renderActions(snapshot);
     }
 
     function beginPing(hosts) {
       const snapshot = ctx.store.get();
-      const live = latencyMap(snapshot);
       const baseline = {};
-      for (const host of hosts) baseline[host.toLowerCase()] = live[host.toLowerCase()];
+      for (const host of hosts) {
+        baseline[host.toLowerCase()] = liveRTTs(snapshot)[host.toLowerCase()];
+      }
       view.pingBusy = true;
+      view.pingSawBusy = false;
       view.pingHosts = hosts.slice();
       view.pingBaseline = baseline;
       view.pingAnswered = false;
-      view.frozenLatency = live;
-      clearTimeout(view.pingTimer);
-      view.pingTimer = setTimeout(function () {
-        view.pingTimer = 0;
-        finishPing(false);
-        render();
-      }, pingWindowMs(hosts.length));
-      // Disable the buttons in the click's own turn: another click before the
-      // next envelope must find them disabled.
+      view.pingDoneSeq = Number(snapshot.ping_done_seq || 0);
+      view.frozenLatency = latencySamples(snapshot);
       render();
     }
 
@@ -590,17 +784,13 @@ export default {
       ctx.send("ping", { hosts: hosts }).then(function (err) {
         if (!err) return;
         if (view.pingBusy) {
-          finishPing(true);
+          finishPing(false);
           render();
         }
         console.warn("kumiho: locations ping all refused: " + err);
       });
     }
 
-    // Refresh asks the daemon to re-download the server list. The controller
-    // clears its RTT projection; this screen immediately returns to country
-    // order (a new visit), keeps the old rows while the fetch runs, and shows
-    // a failed refresh through the existing status line.
     function onRefresh() {
       if (view.pingBusy) return;
       view.sortMode = "country";
@@ -613,7 +803,48 @@ export default {
       });
     }
 
+    function onFavorite(row) {
+      if (!row || row.fastest || row.disabled || !row.address) return;
+      const favorite = !row.favorite;
+      view.favoriteOverrides[row.address.toLowerCase()] = favorite;
+      view.rowsSignature = "";
+      render();
+      ctx.send("favorite_location", {
+        country_code: row.countryCode,
+        city_code: row.cityCode,
+        server: row.address,
+        favorite: favorite,
+      }).then(function (err) {
+        if (!err) return;
+        delete view.favoriteOverrides[row.address.toLowerCase()];
+        view.rowsSignature = "";
+        render();
+        console.warn("kumiho: locations favorite refused: " + err);
+      });
+    }
+
+    function onClearRecents() {
+      ctx.send("clear_recents", {}).then(function (err) {
+        if (err) console.warn("kumiho: locations clear_recents refused: " + err);
+      });
+    }
+
+    function onLocked() {
+      const snapshot = ctx.store.get();
+      const next = snapshot.allow_locked ? "off" : "on";
+      ctx.send("settings_set", { key: "allow_locked", value: next }).then(function (err) {
+        if (err) console.warn("kumiho: locations allow_locked refused: " + err);
+      });
+    }
+
     function selectServer(row) {
+      if (!row || row.disabled) return;
+      if (row.fastest) {
+        ctx.send("select_location", { fastest: true }).then(function (err) {
+          if (err) console.warn("kumiho: locations select_location refused: " + err);
+        });
+        return;
+      }
       ctx.send("select_location", {
         country_code: row.countryCode,
         city_code: row.cityCode,
@@ -689,18 +920,17 @@ export default {
 
     ui.refresh.addEventListener("click", onRefresh);
     ui.pingAll.addEventListener("click", onPingAll);
+    ui.locked.addEventListener("click", onLocked);
     ui.filter.addEventListener("input", onFilter);
     ui.list.addEventListener("keydown", onListKey);
     ui.list.addEventListener("click", onListClick);
 
     const unsubscribe = ctx.store.subscribe(render);
 
-    // Teardown: only the timer and the subscription outlive the screen's
-    // nodes (every listener above dies with the router's replaceChildren).
+    // Teardown: only the subscription outlives the screen's nodes (every
+    // listener above dies with the router's replaceChildren).
     cleanup = function () {
       unsubscribe();
-      clearTimeout(view.pingTimer);
-      view.pingTimer = 0;
     };
   },
 

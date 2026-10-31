@@ -28,6 +28,34 @@
   min-inline-size: 110px;
 }
 
+.loc__locked-action {
+  margin-inline-start: auto;
+}
+
+/* ---------------------------------------------------------------- sections */
+
+.loc__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 32px;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+.loc__heading-title {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.loc__clear {
+  min-block-size: 40px;
+  padding-inline: var(--space-2);
+}
+
 /* ----------------------------------------------------------------- filter */
 
 /* The search field is wider than the old filter because its copy names every
@@ -83,6 +111,15 @@
    aria-selected state never rely on colour alone. */
 .loc__row[aria-selected="true"] {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.loc__row--disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.loc__row--disabled:hover {
+  background: transparent;
 }
 
 .loc__flag {
@@ -155,6 +192,32 @@
 
 .loc__check[hidden] {
   display: none;
+}
+
+/* The favorite control is a real 40 px button with a visible focus ring; the
+ * star glyph carries the state and aria-pressed carries it to assistive
+ * technology. */
+.loc__star {
+  min-inline-size: 40px;
+  min-block-size: 40px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  background: transparent;
+}
+
+.loc__star[aria-pressed="true"] {
+  color: var(--primary);
+}
+
+.loc__locked-badge {
+  padding-inline: var(--space-1);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-button);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------- empty/status */
