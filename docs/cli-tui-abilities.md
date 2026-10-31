@@ -433,9 +433,9 @@ Keys:
 - `r` — force server-list refresh (`--refresh`); clears speed order and the
   cursor and returns to country order, then reloads the engine's fresh cached
   latency labels.
-- `esc` — back to Dashboard. Footer: `enter select • f favorite • c clear
-  recents • L show/hide locked • P ping all • / filter • r refresh • esc back
-  • ? help • q quit`.
+- `esc` — back to Dashboard. Footer: `enter select • f favorite • c clear •
+  L locked • P ping • / filter • r refresh • esc back • ? help` (kept to the
+  100-column capture width; the help overlay lists the full names and `q`).
 - Leaving and re-entering through `o` resets speed order and the cursor.
 
 ## Settings screen

@@ -819,5 +819,5 @@ func (m *Model) renderLocations(b *strings.Builder) {
 	if run := m.loc.ping; run != nil {
 		fmt.Fprintln(b, dimStyle.Render(fmt.Sprintf("pinging %d servers...", run.total)))
 	}
-	fmt.Fprintln(b, dimStyle.Render("enter select • f favorite • c clear recents • L show/hide locked • P ping all • / filter • r refresh • esc back • ? help • q quit"))
+	fmt.Fprintln(b, dimStyle.Render("enter select • f favorite • c clear • L locked • P ping • / filter • r refresh • esc back • ? help"))
 }
