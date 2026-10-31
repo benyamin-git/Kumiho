@@ -66,12 +66,13 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first country list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.8.2
+## What's new in v0.8.3
 
-- **The bottom bar fits narrow phones** — on Android, "Locations" used to wrap
-  its last letter when the five destinations did not fit. Settings, then
-  Account, now move into **More** as the width runs out, and **More** stays
-  marked while one of them is open.
+- **Account sign-in works again** — Fastly's Firefox Accounts edge began
+  rejecting the Mozilla VPN client name with an empty 406, so the login email
+  arrived but the app reported "could not solve the anti-bot challenge".
+  Sign-in now uses Firefox's identity, the same one Firefox's built-in VPN
+  uses.
 
 **Known issue:** adding an account with **Continue in browser** still fails
 with Mozilla's *Invalid Query Parameters* page. Use password sign-in for now;
