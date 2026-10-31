@@ -59,14 +59,18 @@ real-edge latency, Fastest, favorites and recents.
 
 ### Fixed
 
-- **Browser sign-in works again when adding an account.** Mozilla's page
-  returned **Bad Request: Invalid Query Parameters** because the authorization
-  URL sent the registered `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel`
-  redirect as a `redirect_uri` parameter, and FxA's content-server validator
-  accepts only the `pair-auth-webchannel` URN there. The parameter is now
-  omitted, as in Firefox's own OAuth flow; the auth server fills in the
-  client's registered redirect, so the browser still ends at the same URN and
-  the app still completes the flow. Password sign-in was unaffected.
+- **Browser sign-in completes in Chrome, Brave and Firefox.** Mozilla's page
+  loaded and accepted the account, but the final redirect never reached the
+  app. Firefox Desktop's client (`5882386c6d801776`) delivers its registered
+  `urn:` redirect only through Firefox's in-process WebChannel; Chromium blocks
+  that navigation silently, and FxA's content server also rejects the URN as a
+  `redirect_uri` parameter (**Bad Request: Invalid Query Parameters**). Browser
+  sign-in now uses the public Firefox for Android OAuth client
+  (`a2270f727f45f648`) with its registered HTTPS success page. After sign-in
+  the browser lands on `accounts.firefox.com/oauth/success/...`, where the
+  complete URL can be copied; the Android WebView intercepts the same URL.
+  Tokens record their issuing OAuth client, so browser and password accounts
+  refresh correctly. Password sign-in is unchanged.
 
 ## [0.8.3] - 2026-10-31
 

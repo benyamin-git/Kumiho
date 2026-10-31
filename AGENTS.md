@@ -160,8 +160,8 @@ them locally for any change under `android/`, `mobile/` or
   best-effort refresh-token destroy) alongside the existing password client
   and refresh. The engine consumes it in `internal/engine/browser.go`: an
   in-memory flow with a ten-minute deadline, no listener, and start/status/
-  complete/cancel commands; `login_complete` accepts the complete `urn:`
-  redirect URL.
+  complete/cancel commands; `login_complete` accepts the complete HTTPS
+  success redirect URL.
   Clients only open the returned URL and poll `login_status`/
   `accounts_add_status`; desktop clients paste the redirect URL, while Android
   intercepts it in the in-app WebView. `internal/webauth` is gone.
@@ -234,8 +234,9 @@ them locally for any change under `android/`, `mobile/` or
   over the facade; `ui/` is the shell and screens; `data/` holds DataStore
   preferences and split tunneling; `crash/` the local crash log;
   `diagnostics/` the Android facts. Browser sign-in is a full-screen in-app
-  WebView over `accounts.firefox.com` that intercepts the `urn:` redirect and
-  submits the complete URL through `login_complete`; `ui/account/AccountBrowser.kt`
+  WebView over `accounts.firefox.com` that intercepts the HTTPS success
+  redirect and submits the complete URL through `login_complete`;
+  `ui/account/AccountBrowser.kt`
   is only the validated system-browser fallback when the WebView cannot be
   created, and the waiting card offers paste and password alternatives. WebView
   cookies persist across attempts and are cleared on sign-out.

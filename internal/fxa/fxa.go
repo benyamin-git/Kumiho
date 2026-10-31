@@ -20,8 +20,16 @@ const (
 	// the identical auth-server build. The fallback is tried after a 406 and
 	// before any solve, so the normal path never depends on it.
 	DefaultFallbackBaseURL = "https://oauth.accounts.firefox.com/v1"
-	// ClientID is the Firefox VPN OAuth client.
+	// ClientID is Firefox Desktop's OAuth client. The password flow uses it,
+	// and it is the legacy default for accounts created before browser tokens
+	// recorded their own client. Desktop relies on Firefox's in-process
+	// WebChannel, so a standalone app cannot receive its URN redirect.
 	ClientID = "5882386c6d801776"
+	// OAuthClientID is Firefox for Android's public OAuth client. It has an
+	// HTTPS success redirect registered on accounts.firefox.com, so any normal
+	// browser can complete the flow and show a copyable URL. The browser flow
+	// uses this client; the password flow keeps ClientID.
+	OAuthClientID = "a2270f727f45f648"
 	// Scope requests the VPN entitlement plus profile.
 	Scope = "profile https://identity.mozilla.com/apps/vpn"
 	// UserAgent identifies as the official Mozilla VPN client (Linux). It is
@@ -42,8 +50,12 @@ const (
 	// is unproven until Gate G1 signs in, forces a refresh and verifies it.
 	// Do not change the refresh endpoint without that evidence.
 	DefaultTokenEndpoint = "https://oauth.accounts.firefox.com/v1/token"
-	// OAuthRedirectURI is the client's registered out-of-band redirect.
-	OAuthRedirectURI = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
+	// OAuthRedirectURI is the HTTPS success page registered for OAuthClientID.
+	// FxA navigates here with the authorization code and state in the query,
+	// which a browser can display and the user can paste back. This replaces
+	// Firefox Desktop's URN redirect, which only Firefox's WebChannel can
+	// receive and which Chromium browsers silently block.
+	OAuthRedirectURI = "https://accounts.firefox.com/oauth/success/" + OAuthClientID
 	// DefaultProfileEndpoint returns the signed-in account's profile.
 	DefaultProfileEndpoint = "https://profile.accounts.firefox.com/v1/profile"
 	// DefaultDestroyEndpoint revokes a refresh token.
@@ -68,6 +80,10 @@ type Tokens struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 	Scope        string `json:"scope,omitempty"`
 	ExpiresAt    int64  `json:"expires_at"`
+	// ClientID records which OAuth client issued the refresh token. Browser
+	// tokens are issued to OAuthClientID; password tokens and older accounts
+	// use ClientID. Refresh must send the same client that issued the token.
+	ClientID string `json:"client_id,omitempty"`
 }
 
 // APIError is a structured FxA error response.

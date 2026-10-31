@@ -712,7 +712,7 @@ class AccountAccountsTest {
     private companion object {
         const val URL = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152"
         const val FULL_REDIRECT =
-            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+            "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=code-1&state=state-1"
         const val LIMIT = "account limit reached (5); remove one first"
         const val LEGACY_NOTICE = "Old browser sign-in removed. Add your Firefox account again."
         val TOKEN_EXPIRY: Long = Instant.parse("2026-11-21T12:00:00Z").epochSecond

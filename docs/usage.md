@@ -126,10 +126,10 @@ terminal, `kumiho login` uses the password flow for script compatibility; pass
 PKCE, `state` and the VPN scope. It prints (and, unless `--no-open` is given,
 opens) a `https://accounts.firefox.com/authorization?...` URL, then prompts
 `Redirect URL:` on stdin. Complete captcha, password, TOTP or unblock
-challenges in the browser. Mozilla redirects to a
-`urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?...` address, so the
-browser shows its “can't open this address” page — that is expected. Copy the
-complete URL from the browser's address bar and paste it at the prompt.
+challenges in the browser. Mozilla finishes on its Firefox Accounts success
+page (`https://accounts.firefox.com/oauth/success/...?...`), which works in any
+browser. Copy the complete URL from the browser's address bar and paste it at
+the prompt.
 Kumiho exchanges the code, fetches the Firefox Accounts profile for the
 UID/email and stores ordinary FxA access and refresh tokens; later refreshes
 work like a password login, and a permanently rejected refresh token marks the

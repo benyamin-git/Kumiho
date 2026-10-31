@@ -1,6 +1,13 @@
 # Firefox Accounts browser OAuth — Design Spec
 
-**Status:** Approved
+> **Superseded 2026-10-31.** Firefox Desktop's `urn:` redirect cannot complete
+> outside Firefox's in-process WebChannel. Browser sign-in now uses the public
+> Firefox for Android client `a2270f727f45f648` and its HTTPS success redirect;
+> see the v0.9.0 changelog and the follow-up section in
+> `2026-10-31-v0.9.0-region-truth-design.md`. Decisions D3, D4 and D37 below
+> record the original design and must not be implemented.
+
+**Status:** Superseded
 **Date:** 2026-10-24
 **Supersedes:** the browser-sign-in token assumption in
 `2026-10-23-v0.6.0-roadmap-design.md` and the shipped v0.6.0 browser flow.

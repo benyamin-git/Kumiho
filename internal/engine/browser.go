@@ -37,7 +37,8 @@ const (
 
 // browserLogin is one in-flight daemon-owned browser sign-in. All fields are
 // guarded by Controller.mu. There is no listener, goroutine or browser
-// dependency: clients hand the full URN redirect URL back to LoginComplete.
+// dependency: clients hand the full HTTPS success redirect URL back to
+// LoginComplete.
 type browserLogin struct {
 	id         string
 	state      api.LoginState
@@ -83,7 +84,7 @@ func (c *Controller) LoginStatus(id string) (api.LoginState, error) {
 	return api.LoginState{}, badRequestError(browserFlowMissingMessage)
 }
 
-// LoginComplete finishes a browser sign-in from the complete URN redirect URL.
+// LoginComplete finishes a browser sign-in from the complete HTTPS redirect URL.
 // A nil return means the flow either completed or reached a terminal state;
 // LoginStatus reports the terminal done/error state. Retryable bad input (a
 // malformed URL, wrong state, or a transient exchange/profile failure) returns
@@ -380,8 +381,10 @@ func parseBrowserRedirect(raw string) (code, state string, err error) {
 		return "", "", errors.New(browserRedirectRequired)
 	}
 	u, parseErr := url.Parse(raw)
-	if parseErr != nil || !strings.EqualFold(u.Scheme, "urn") ||
-		u.Opaque != strings.TrimPrefix(fxa.OAuthRedirectURI, "urn:") {
+	if parseErr != nil ||
+		!strings.EqualFold(u.Scheme, "https") ||
+		!strings.EqualFold(u.Host, "accounts.firefox.com") ||
+		u.Path != "/oauth/success/"+fxa.OAuthClientID {
 		return "", "", errors.New(browserRedirectRequired)
 	}
 	q := u.Query()

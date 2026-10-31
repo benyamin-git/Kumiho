@@ -312,12 +312,12 @@ class MozillaAccountWebViewFlowTest {
     }
 
     private companion object {
-        const val URN = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
+        const val SUCCESS = "https://accounts.firefox.com/oauth/success/a2270f727f45f648"
         const val INITIAL_URL = "https://accounts.firefox.com/authorization?test=1"
         const val BASE_URL = "https://accounts.firefox.com/"
-        const val FULL_REDIRECT = "$URN?code=code-1&state=state-1"
-        const val SECOND_REDIRECT = "$URN?code=code-2&state=state-2"
-        const val MALFORMED_REDIRECT = "$URN?code=only-a-code"
+        const val FULL_REDIRECT = "$SUCCESS?code=code-1&state=state-1"
+        const val SECOND_REDIRECT = "$SUCCESS?code=code-2&state=state-2"
+        const val MALFORMED_REDIRECT = "$SUCCESS?code=only-a-code"
         const val EXTERNAL_URL = "https://example.com/help"
         const val HOSTED_PAGE = "<html><head><title>hosted</title></head><body>hosted</body></html>"
     }

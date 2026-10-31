@@ -183,12 +183,12 @@ and
       kumiho login --browser --no-open
 
   Expect: `Open this URL to sign in:` plus a `https://accounts.firefox.com/...`
-  URL, then `Redirect URL:`. Mozilla's “can't open this address” page is
-  expected; copy the complete address-bar URL and paste it. The command exits
-  0 with `Signed in as <email>.` An expired or cancelled flow exits 1 with a
-  clear message; the flow has no loopback listener and times out after ten
-  minutes. Re-running this for the same email switches to that account rather
-  than refusing because a session exists.
+  URL, then `Redirect URL:`. Mozilla finishes on its HTTPS success page; copy
+  the complete address-bar URL and paste it. The command exits 0 with
+  `Signed in as <email>.` An expired or cancelled flow exits 1 with a clear
+  message; the flow has no loopback listener and times out after ten minutes.
+  Re-running this for the same email switches to that account rather than
+  refusing because a session exists.
 
 - [ ] Inspect and modify the account surface:
 
@@ -687,8 +687,8 @@ never persisted).
       browser choice opens Mozilla's page for captcha/password/TOTP, then
       shows the waiting card with the engine URL, **Redirect URL**,
       **Continue**, **Open again** and **Cancel**. Complete Mozilla's page,
-      copy the complete redirect URL from the address bar (the “can't open
-      this address” page is expected) and paste it. The password
+      copy the complete URL from the Firefox Accounts success page and paste
+      it. The password
       choice runs email → password → 2FA/email-link inline. If the daemon
       already holds a session, the step shows `Signed in as <email>` with
       **Continue** and **Sign out**.

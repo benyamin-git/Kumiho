@@ -120,7 +120,7 @@ const LOGIN_LINK_BODY =
 const LOGIN_SIGNED_BODY =
   "Kumiho already has a signed-in Firefox account. Choose Continue to finish setting up, or sign out to use a different account.";
 const LOGIN_WAITING_BODY =
-  "Finish signing in in your browser, then paste the redirect URL from its address bar.";
+  "Finish signing in in your browser. The browser lands on a Firefox Accounts success page; paste the complete URL from its address bar.";
 
 // The remaining steps' bodies and the shared sign-out dialog copy.
 const HEALTH_BODY =

@@ -32,9 +32,10 @@ func TestAuthorizationURL(t *testing.T) {
 
 	q := u.Query()
 	want := map[string]string{
-		"client_id":             ClientID,
+		"client_id":             OAuthClientID,
 		"scope":                 Scope,
 		"response_type":         "code",
+		"redirect_uri":          OAuthRedirectURI,
 		"state":                 "test-state",
 		"code_challenge":        "test-challenge",
 		"code_challenge_method": "S256",
@@ -55,10 +56,8 @@ func TestAuthorizationURL(t *testing.T) {
 	if q.Has("client_secret") {
 		t.Error("authorization URL must not include a client secret")
 	}
-	// FxA rejects the registered URN as a redirect_uri query parameter; the
-	// auth server fills it in from the client registration.
-	if q.Has("redirect_uri") {
-		t.Errorf("authorization URL must omit redirect_uri, got %q", q.Get("redirect_uri"))
+	if q.Get("redirect_uri") != OAuthRedirectURI {
+		t.Errorf("redirect_uri = %q, want %q", q.Get("redirect_uri"), OAuthRedirectURI)
 	}
 
 	// Email and force_auth are optional.
@@ -146,8 +145,12 @@ func TestExchangeCode(t *testing.T) {
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("Authorization")
 		gotContentType = r.Header.Get("Content-Type")
-		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
-			t.Errorf("decode body: %v", err)
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		gotBody = make(map[string]string, len(r.PostForm))
+		for key := range r.PostForm {
+			gotBody[key] = r.PostForm.Get(key)
 		}
 		fmt.Fprintf(w, `{"access_token":"access-token","refresh_token":"refresh-token","scope":%q,"expires_in":3600}`, Scope)
 	}))
@@ -168,12 +171,12 @@ func TestExchangeCode(t *testing.T) {
 	if gotAuth != "" {
 		t.Errorf("exchange must not be Hawk- or bearer-signed, got %q", gotAuth)
 	}
-	if !strings.HasPrefix(gotContentType, "application/json") {
-		t.Errorf("Content-Type = %q, want application/json", gotContentType)
+	if !strings.HasPrefix(gotContentType, "application/x-www-form-urlencoded") {
+		t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", gotContentType)
 	}
 
 	wantBody := map[string]string{
-		"client_id":     ClientID,
+		"client_id":     OAuthClientID,
 		"grant_type":    "authorization_code",
 		"code":          "the-code",
 		"code_verifier": "the-verifier",
@@ -185,7 +188,8 @@ func TestExchangeCode(t *testing.T) {
 	if tokens.AccessToken != "access-token" ||
 		tokens.RefreshToken != "refresh-token" ||
 		tokens.Scope != Scope ||
-		tokens.ExpiresAt != 6600 {
+		tokens.ExpiresAt != 6600 ||
+		tokens.ClientID != OAuthClientID {
 		t.Errorf("tokens = %+v", tokens)
 	}
 }

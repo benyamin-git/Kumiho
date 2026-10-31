@@ -47,11 +47,10 @@ with large packets; a new value takes effect on the next connect.
 `kumiho login` asks whether to sign in with your browser or with your
 password. Browser sign-in is the easy choice: a Mozilla page opens where you
 can enter the password, a code, or solve a captcha. When you finish, the
-browser shows a page saying it can't open the address — that is normal. Copy
-the whole URL from the browser's address bar and paste it into Kumiho's
-**Redirect URL** prompt. Nothing about your password is stored, and the
-browser can run on another computer because only the pasted URL comes back to
-Kumiho.
+browser shows Mozilla's Firefox Accounts success page. Copy the whole URL from
+the browser's address bar and paste it into Kumiho's **Redirect URL** prompt.
+Nothing about your password is stored, and the browser can run on another
+computer because only the pasted URL comes back to Kumiho.
 
 On the Account screen (`a`):
 

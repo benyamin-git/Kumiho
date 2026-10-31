@@ -1,7 +1,11 @@
 # Firefox Accounts browser OAuth — Implementation Plan
 
+> **Superseded 2026-10-31.** This plan's `urn:` redirect steps were replaced by
+> the public Firefox for Android client and its HTTPS success page. Do not
+> implement the URN tasks below; see the v0.9.0 changelog.
+
 **Spec:** [`docs/superpowers/specs/2026-10-24-fxa-browser-oauth-design.md`](../specs/2026-10-24-fxa-browser-oauth-design.md)
-**Status:** Approved
+**Status:** Superseded
 **Date:** 2026-10-24
 
 ## Global constraints

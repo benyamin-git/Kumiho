@@ -192,9 +192,9 @@ func TestDecodeActionRoundTrip(t *testing.T) {
 		},
 		{
 			name:        "browser redirect completion",
-			raw:         `{"type":"action","name":"login_complete","payload":{"login_id":"login-1","redirect_url":"urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"}}`,
+			raw:         `{"type":"action","name":"login_complete","payload":{"login_id":"login-1","redirect_url":"https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"}}`,
 			wantName:    ActionLoginComplete,
-			wantPayload: `{"login_id":"login-1","redirect_url":"urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"}`,
+			wantPayload: `{"login_id":"login-1","redirect_url":"https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"}`,
 		},
 		{
 			name:     "payload omitted",

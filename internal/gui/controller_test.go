@@ -2334,7 +2334,7 @@ func TestControllerLogoutClearsTheLoginProjection(t *testing.T) {
 }
 
 func TestControllerLoginCompleteAccountFlow(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) {
 		d.accountsAddStartState = api.LoginState{
@@ -2388,7 +2388,7 @@ func TestControllerLoginCompleteAccountFlow(t *testing.T) {
 // completion reads login_status, reports on the shared notice and never
 // claims the Account screen's notice.
 func TestControllerLoginCompleteOnboardingFlow(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-2&code=code-2"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-2&code=code-2"
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) {
 		d.loginStartState = api.LoginState{
@@ -2430,7 +2430,7 @@ func TestControllerLoginCompleteOnboardingFlow(t *testing.T) {
 // shows the error inline on the login view, writes the action's notice on the
 // owning screen and accepts a corrected paste afterwards.
 func TestControllerLoginCompleteRetryableError(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"
 	const daemonErr = "the redirect URL does not belong to this sign-in flow"
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) {
@@ -2495,7 +2495,7 @@ func TestControllerLoginCompleteRetryableError(t *testing.T) {
 // browser step, the flow must stay intact so the screen's poll can land the
 // daemon's later done/error reply.
 func TestControllerLoginCompleteLeavesTheWaitingCardPolling(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-3&code=code-3"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-3&code=code-3"
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) {
 		d.loginStartState = api.LoginState{
@@ -2536,7 +2536,7 @@ func TestControllerLoginCompleteLeavesTheWaitingCardPolling(t *testing.T) {
 // sign-in failure and never erases the waiting flow: the completion succeeded,
 // so the screen's poll keeps retrying.
 func TestControllerLoginCompleteStatusFailureKeepsFlow(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-4&code=code-4"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-4&code=code-4"
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) {
 		d.loginStartState = api.LoginState{

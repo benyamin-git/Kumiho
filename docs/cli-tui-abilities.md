@@ -115,10 +115,10 @@ Global CLI mechanics (apply to every subcommand):
 - **Browser:** `login_start` returns a Firefox Accounts URL and `login_id`.
   Unless `--no-open`, the CLI opens it with the platform opener. It prints
   `Open this URL to sign in:` followed by the URL, then the instruction to
-  copy the complete redirect URL from the browser's address bar, and prompts
-  `Redirect URL:`. The browser's “can't open this address” page is expected:
-  Mozilla redirects to the registered `urn:` URL. The CLI submits the pasted
-  URL with `login_complete` and polls `login_status` for the terminal state.
+  copy the complete URL from the browser's Firefox Accounts success page, and
+  prompts `Redirect URL:`. The success page is a normal HTTPS page, so Chrome,
+  Brave and Firefox all reach it. The CLI submits the pasted URL with
+  `login_complete` and polls `login_status` for the terminal state.
   The daemon owns a ten-minute flow with no listener; the CLI cancels the flow
   if its deadline expires and prints `timed out waiting for the browser
   sign-in`. Success prints `Signed in as <email>.`.
@@ -372,8 +372,9 @@ the password flow. Steps in the password flow are `email` → `password` → `2f
   Accounts...` while busy, red error line, footer `enter continue • esc cancel`.
 - Browser waiting card: shows `Open this URL in any browser:`, the URL, the
   `Paste the complete redirect URL from the browser:` prompt, an editable
-  `Redirect URL:` line and the browser's expected “can't open this address”
-  note; `enter` submits the pasted URL and `esc` cancels the flow
+  `Redirect URL:` line and a note about copying the complete URL from the
+  Firefox Accounts success page; `enter` submits the pasted URL and `esc`
+  cancels the flow
   (`login_cancel`). The TUI has no browser opener and does not wait for a
   browser callback.
 - Keys: printable runes append to the active field (email / password / code);
@@ -588,9 +589,9 @@ Keys (idle):
   refresh • x sign out • esc back • ? help • q quit`.
 - Browser waiting card: shows `Open this URL in any browser:` and the URL,
   the `Paste the complete redirect URL from the browser:` prompt, an editable
-  `Redirect URL:` line and the “can't open this address” note. `enter` submits
-  the pasted URL; `esc` cancels through `accounts_add_cancel`. The TUI has no
-  browser opener.
+  `Redirect URL:` line and a note about the Firefox Accounts success page.
+  `enter` submits the pasted URL; `esc` cancels through `accounts_add_cancel`.
+  The TUI has no browser opener.
 
 ## Help overlay (`?`)
 Full-screen replacement listing:
@@ -732,8 +733,8 @@ Gap flags (daemon-side abilities beyond the IPC surface):
   messages (wrong password, link-not-confirmed, anti-bot challenge wording,
   timeouts). The CLI caps a password attempt loop at 12.
 - Browser steps: `login_start` returns `{method, login_id, url}` with step
-  `browser`. Clients open the URL, ask for the complete redirect URL from the
-  browser's address bar, send it with `login_complete`, and poll
+  `browser`. Clients open the URL, ask for the complete URL from the browser's
+  Firefox Accounts success page, send it with `login_complete`, and poll
   `login_status(login_id)` until `done`/`error`, or call `login_cancel`. The
   daemon runs a direct Firefox Accounts OAuth flow with PKCE and `state`, no
   listener and a ten-minute deadline. The redirect URL, code, verifier and

@@ -612,7 +612,7 @@ func (m *Model) renderBrowserWaiting(b *strings.Builder) {
 	fmt.Fprintln(b, "Open this URL in any browser:")
 	fmt.Fprintln(b, ac.browserURL)
 	fmt.Fprintln(b)
-	fmt.Fprintln(b, dimStyle.Render("The browser's \"can't open this address\" page is expected; copy the complete URL from its address bar."))
+	fmt.Fprintln(b, dimStyle.Render("After signing in, the browser shows a Firefox Accounts success page; copy the complete URL from its address bar."))
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, browserRedirectPrompt)
 	if ac.browserSubmitting {

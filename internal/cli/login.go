@@ -24,7 +24,7 @@ const (
 	browserSignInTimeout   = 10 * time.Minute
 	browserPollInterval    = 2 * time.Second
 
-	browserRedirectInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here. The browser may say it can't open this address; the address bar holds the URL."
+	browserRedirectInstruction = "After signing in, the browser shows a Firefox Accounts success page. Copy the complete URL from the address bar and paste it here."
 )
 
 // announceAccountsNotice surfaces the engine's one-time account notice (the

@@ -3,7 +3,6 @@ package engine
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -71,9 +70,12 @@ func (s *fxaTestServer) handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
 	case "/token":
-		var body map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			s.t.Errorf("decode token request: %v", err)
+		if err := r.ParseForm(); err != nil {
+			s.t.Errorf("parse token request: %v", err)
+		}
+		body := make(map[string]string, len(r.PostForm))
+		for key := range r.PostForm {
+			body[key] = r.PostForm.Get(key)
 		}
 		s.mu.Lock()
 		s.tokenCalls++
@@ -230,8 +232,9 @@ func TestBrowserLoginStartBuildsAuthorizationURL(t *testing.T) {
 	}
 	q := u.Query()
 	want := map[string]string{
-		"client_id":             fxa.ClientID,
+		"client_id":             fxa.OAuthClientID,
 		"response_type":         "code",
+		"redirect_uri":          fxa.OAuthRedirectURI,
 		"scope":                 fxa.Scope,
 		"access_type":           "offline",
 		"code_challenge_method": "S256",
@@ -241,8 +244,8 @@ func TestBrowserLoginStartBuildsAuthorizationURL(t *testing.T) {
 			t.Errorf("%s = %q, want %q", key, got, value)
 		}
 	}
-	if q.Has("redirect_uri") {
-		t.Errorf("authorization URL must omit redirect_uri, got %q", q.Get("redirect_uri"))
+	if q.Get("redirect_uri") != fxa.OAuthRedirectURI {
+		t.Errorf("redirect_uri = %q, want %q", q.Get("redirect_uri"), fxa.OAuthRedirectURI)
 	}
 	if q.Get("state") == "" || q.Get("code_challenge") == "" {
 		t.Fatalf("authorization URL lacks state or PKCE challenge: %s", ls.URL)
@@ -390,7 +393,9 @@ func TestBrowserLoginCompleteSavesFxA(t *testing.T) {
 		t.Fatal(err)
 	}
 	persisted := findAccountLocked(loaded, account.ID)
-	if persisted == nil || persisted.FxA == nil || persisted.FxA.AccessToken != testBrowserAccess {
+	if persisted == nil || persisted.FxA == nil ||
+		persisted.FxA.AccessToken != testBrowserAccess ||
+		persisted.FxA.ClientID != fxa.OAuthClientID {
 		t.Fatalf("persisted account = %+v", persisted)
 	}
 	if persisted.Browser != nil || persisted.ReauthRequired {
@@ -400,7 +405,9 @@ func TestBrowserLoginCompleteSavesFxA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tokens == nil || tokens.AccessToken != testBrowserAccess || tokens.RefreshToken != testBrowserRefresh {
+	if tokens == nil || tokens.AccessToken != testBrowserAccess ||
+		tokens.RefreshToken != testBrowserRefresh ||
+		tokens.ClientID != fxa.OAuthClientID {
 		t.Fatalf("tokens.json rollback copy = %+v", tokens)
 	}
 
@@ -411,7 +418,7 @@ func TestBrowserLoginCompleteSavesFxA(t *testing.T) {
 	if tokenRequest["grant_type"] != "authorization_code" ||
 		tokenRequest["code"] != testBrowserCode ||
 		tokenRequest["redirect_uri"] != fxa.OAuthRedirectURI ||
-		tokenRequest["client_id"] != fxa.ClientID {
+		tokenRequest["client_id"] != fxa.OAuthClientID {
 		t.Fatalf("token request = %+v", tokenRequest)
 	}
 	if tokenRequest["code_verifier"] == "" {
@@ -460,7 +467,7 @@ func TestBrowserLoginBadRedirectKeepsFlowActive(t *testing.T) {
 		},
 		{
 			name:   "wrong URN",
-			url:    "urn:ietf:wg:oauth:2.0:oob:wrong?code=" + testBrowserCode + "&state=" + url.QueryEscape(state),
+			url:    "https://accounts.firefox.com/oauth/success/not-the-client?code=" + testBrowserCode + "&state=" + url.QueryEscape(state),
 			secret: "wrong?",
 			want:   "paste the complete redirect URL",
 		},

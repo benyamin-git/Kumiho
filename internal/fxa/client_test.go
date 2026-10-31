@@ -134,6 +134,48 @@ func TestRefreshSendsNoHawkAndKeepsOldRefreshToken(t *testing.T) {
 	if toks.ExpiresAt != 9200 {
 		t.Errorf("ExpiresAt = %d, want 9200", toks.ExpiresAt)
 	}
+	if toks.ClientID != ClientID {
+		t.Errorf("ClientID = %q, want %q", toks.ClientID, ClientID)
+	}
+}
+
+func TestRefreshWithBrowserClientUsesOAuthEndpoint(t *testing.T) {
+	var gotPath, gotClientID, gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		gotClientID = r.PostForm.Get("client_id")
+		fmt.Fprint(w, `{"access_token":"browser-atok","expires_in":7200}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = "http://127.0.0.1:1/v1" // the auth-server path must not be used
+	c.TokenEndpoint = srv.URL + "/v1/token"
+	c.Now = func() time.Time { return time.Unix(2000, 0) }
+
+	toks, err := c.RefreshWithClient(context.Background(), "browser-refresh", OAuthClientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v1/token" {
+		t.Errorf("path = %q, want /v1/token", gotPath)
+	}
+	if gotClientID != OAuthClientID {
+		t.Errorf("client_id = %q, want %q", gotClientID, OAuthClientID)
+	}
+	if !strings.HasPrefix(gotContentType, "application/x-www-form-urlencoded") {
+		t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", gotContentType)
+	}
+	if toks.AccessToken != "browser-atok" ||
+		toks.RefreshToken != "browser-refresh" ||
+		toks.ClientID != OAuthClientID ||
+		toks.ExpiresAt != 9200 {
+		t.Errorf("tokens = %+v", toks)
+	}
 }
 
 func TestRefreshPermanentRejection(t *testing.T) {

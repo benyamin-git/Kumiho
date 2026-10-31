@@ -135,7 +135,7 @@ class SetupFlowTest {
                         url = "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152",
                     ),
                     browserPasteOpen = true,
-                    browserPasteValue = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=c&state=s",
+                    browserPasteValue = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=c&state=s",
                     browserPasteError = null,
                     browserPasteMessage = null,
                     browserSubmitting = false,

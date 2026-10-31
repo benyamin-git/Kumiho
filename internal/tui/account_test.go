@@ -251,7 +251,7 @@ func TestAccountBrowserWaitingShowsURL(t *testing.T) {
 		"https://example.test/signin",
 		"Paste the complete redirect URL from the browser:",
 		"Redirect URL:",
-		"can't open this address",
+		"Firefox Accounts success page",
 		"press Enter to submit",
 		"press Esc to cancel",
 	} {
@@ -260,7 +260,7 @@ func TestAccountBrowserWaitingShowsURL(t *testing.T) {
 		}
 	}
 
-	m.ac.browserInput = "urn:ietf:wg:oauth:2.0:oob?code=secret"
+	m.ac.browserInput = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=secret"
 	m.ac.browserError = "some error"
 	m.ac.browserSubmitting = true
 	_, cmd := m.handleAccountKey(tea.KeyMsg{Type: tea.KeyEsc})
@@ -278,7 +278,7 @@ func TestAccountBrowserWaitingShowsURL(t *testing.T) {
 }
 
 func TestAccountBrowserPasteSubmitsRedirectURL(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		if req.typ == ipc.TypeLoginComplete {
 			return ipc.TypeResult, api.Result{OK: true}
@@ -374,7 +374,7 @@ func TestAccountBrowserInputEditing(t *testing.T) {
 }
 
 func TestAccountBrowserPasteErrorKeepsFlow(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"
 	const daemonErr = "bad_request: the redirect URL does not belong to this sign-in flow"
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		if req.typ == ipc.TypeLoginComplete {
@@ -428,7 +428,7 @@ func TestAccountBrowserPasteErrorKeepsFlow(t *testing.T) {
 }
 
 func TestAccountBrowserTerminalErrorClearsFlow(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"
 	const terminal = "the browser authorization code was rejected or already used; start again"
 	m := &Model{
 		screen: screenAccount,
@@ -471,7 +471,7 @@ func TestAccountBrowserCancelledPollClearsFlow(t *testing.T) {
 		ac: accountState{
 			loaded: true, view: accountTestView(), adding: true, polling: true,
 			browserURL: "https://example.test/signin", browserID: "login-1",
-			browserInput: "urn:ietf:wg:oauth:2.0:oob?code=secret",
+			browserInput: "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=secret",
 		},
 	}
 	_, cmd := m.Update(browserPollMsg{
@@ -490,7 +490,7 @@ func TestAccountBrowserCancelledPollClearsFlow(t *testing.T) {
 }
 
 func TestAccountBrowserWaitingQuestionMarkStaysInInput(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1"
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		if req.typ == ipc.TypeLoginComplete {
 			return ipc.TypeResult, api.Result{OK: true}
@@ -544,7 +544,7 @@ func TestAccountBrowserDoneFinishes(t *testing.T) {
 		ac: accountState{
 			loaded: true, view: accountTestView(), adding: true, polling: true,
 			browserURL: "https://example.test/signin", browserID: "login-1",
-			browserInput: "urn:ietf:wg:oauth:2.0:oob?code=secret",
+			browserInput: "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=secret",
 		},
 	}
 	_, cmd := m.Update(browserPollMsg{
@@ -561,7 +561,7 @@ func TestAccountBrowserDoneFinishes(t *testing.T) {
 	if !strings.Contains(view, "account added: user@example.com") {
 		t.Fatalf("account view missing the success notice:\n%s", view)
 	}
-	if strings.Contains(view, "urn:ietf:wg:oauth:2.0:oob") {
+	if strings.Contains(view, "https://accounts.firefox.com/oauth/success/a2270f727f45f648") {
 		t.Fatalf("success view leaked the redirect URL:\n%s", view)
 	}
 }
@@ -697,7 +697,7 @@ func TestLoginFieldsDropControlCharacters(t *testing.T) {
 }
 
 func TestLoginScreenBrowserPasteFlow(t *testing.T) {
-	const redirect = "urn:ietf:wg:oauth:2.0:oob?state=state-2&code=code-2"
+	const redirect = "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-2&code=code-2"
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		if req.typ == ipc.TypeLoginComplete {
 			return ipc.TypeResult, api.Result{OK: true}
@@ -717,7 +717,7 @@ func TestLoginScreenBrowserPasteFlow(t *testing.T) {
 	for _, want := range []string{
 		"Paste the complete redirect URL from the browser:",
 		"Redirect URL:",
-		"can't open this address",
+		"Firefox Accounts success page",
 		"press Enter to submit",
 		"press Esc to cancel",
 	} {

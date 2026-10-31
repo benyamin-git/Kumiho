@@ -10,8 +10,9 @@ import androidx.browser.customtabs.CustomTabsIntent
 /**
  * Opens the engine's browser sign-in URL in a Custom Tab. This is the fallback
  * used only when the in-app [MozillaAccountBrowserScreen] cannot be created:
- * the WebView path intercepts Mozilla's URN redirect itself, while this path
- * leaves the complete redirect URL to be pasted on the sign-in screen.
+ * the WebView path intercepts Mozilla's HTTPS success redirect itself, while
+ * this path leaves the complete redirect URL to be pasted on the sign-in
+ * screen.
  *
  * The engine returns Mozilla's HTTPS Firefox Accounts page; plain http is
  * accepted only for loopback, which keeps dev/test harnesses safe.

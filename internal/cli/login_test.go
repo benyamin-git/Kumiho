@@ -39,7 +39,7 @@ func TestPrintSignInDone(t *testing.T) {
 }
 
 func TestBrowserRedirectInstructionMentionsTheAddressBar(t *testing.T) {
-	for _, want := range []string{"can't open this address", "address bar holds the URL"} {
+	for _, want := range []string{"success page", "complete URL", "address bar"} {
 		if !strings.Contains(browserRedirectInstruction, want) {
 			t.Fatalf("browserRedirectInstruction is missing %q: %q", want, browserRedirectInstruction)
 		}
@@ -102,10 +102,10 @@ func TestBrowserRedirectPromptTrim(t *testing.T) {
 }
 
 func TestLoginCompleteRetryTrimAndPayload(t *testing.T) {
-	const wantInstruction = "After signing in, copy the complete redirect URL from the browser's address bar and paste it here. The browser may say it can't open this address; the address bar holds the URL."
+	const wantInstruction = "After signing in, the browser shows a Firefox Accounts success page. Copy the complete URL from the address bar and paste it here."
 
-	first := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=bad-code&state=bad-state"
-	second := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=good-code&state=good-state"
+	first := "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=bad-code&state=bad-state"
+	second := "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=good-code&state=good-state"
 	client, fake := newFakeLoginServer(t, fakeLoginConfig{
 		completeErrs: []*api.RemoteError{
 			{Code: api.CodeBadRequest, Message: "the redirect URL does not belong to this sign-in; paste the URL from this sign-in"},
@@ -200,7 +200,7 @@ func TestLoginCompleteTerminalError(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	code := runBrowserSignIn(client, ipc.TypeLoginStart, ipc.TypeLoginStatus, ipc.TypeLoginCancel,
 		"", "", true, false, "login",
-		strings.NewReader("urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=used&state=state\n"), &out, &errBuf)
+		strings.NewReader("https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=used&state=state\n"), &out, &errBuf)
 
 	if code == 0 {
 		t.Fatalf("runBrowserSignIn() = 0, want nonzero")
@@ -219,7 +219,7 @@ func TestLoginCompleteTerminalError(t *testing.T) {
 func TestLoginCompleteErrorReconcilesStatus(t *testing.T) {
 	const completeErr = "the redirect URL does not belong to this sign-in; paste the URL from this sign-in"
 	const terminal = "the browser authorization code was rejected or already used; start again"
-	redirect := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s"
+	redirect := "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=a&state=s"
 
 	tests := []struct {
 		name     string
@@ -298,7 +298,7 @@ func TestLoginCompleteErrorReconcilesStatus(t *testing.T) {
 
 func TestLoginCompleteErrorStatusBrowserRetries(t *testing.T) {
 	const completeErr = "the browser profile lookup failed; try again"
-	redirect := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s"
+	redirect := "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=a&state=s"
 	client, fake := newFakeLoginServer(t, fakeLoginConfig{
 		completeErrs: []*api.RemoteError{{Code: api.CodeBadRequest, Message: completeErr}, nil},
 		statuses: []api.LoginState{
@@ -351,7 +351,7 @@ func TestLoginCompleteErrorStatusTransport(t *testing.T) {
 		completeErrs: []*api.RemoteError{{Code: api.CodeBadRequest, Message: "the redirect URL does not belong to this sign-in"}},
 		closeStatus:  true,
 	})
-	redirect := "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s"
+	redirect := "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=a&state=s"
 
 	var out, errBuf bytes.Buffer
 	code := runBrowserSignIn(client, ipc.TypeLoginStart, ipc.TypeLoginStatus, ipc.TypeLoginCancel,
@@ -390,7 +390,7 @@ func TestRunBrowserSignInCancelled(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	code := runBrowserSignIn(client, ipc.TypeLoginStart, ipc.TypeLoginStatus, ipc.TypeLoginCancel,
 		"", "", true, false, "login",
-		strings.NewReader("urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=a&state=s\n"), &out, &errBuf)
+		strings.NewReader("https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=a&state=s\n"), &out, &errBuf)
 
 	if code == 0 {
 		t.Fatalf("runBrowserSignIn() = 0, want nonzero")

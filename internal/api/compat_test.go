@@ -138,7 +138,7 @@ func TestAccountPayloadRoundTrips(t *testing.T) {
 			name: "login complete",
 			payload: LoginCompletePayload{
 				LoginID:     "login-1",
-				RedirectURL: "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=abc&state=def",
+				RedirectURL: "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=abc&state=def",
 			},
 			wantKeys: []string{"login_id", "redirect_url", "code"},
 		},

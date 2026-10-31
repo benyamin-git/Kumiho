@@ -54,7 +54,7 @@ class MozillaAccountWebViewTest {
     // ---- navigation policy ------------------------------------------------
 
     @Test
-    fun `the redirect urn is intercepted and the account origin stays inside`() {
+    fun `the HTTPS success redirect is intercepted and the account origin stays inside`() {
         assertEquals(BrowserNavigation.REDIRECT, classifyBrowserNavigation(REDIRECT))
         assertEquals(
             BrowserNavigation.REDIRECT,
@@ -63,7 +63,7 @@ class MozillaAccountWebViewTest {
         assertEquals(
             "a malformed redirect is still a redirect, not a page to load",
             BrowserNavigation.REDIRECT,
-            classifyBrowserNavigation("$URN?code=only-a-code"),
+            classifyBrowserNavigation("$SUCCESS?code=only-a-code"),
         )
         assertEquals(
             BrowserNavigation.IN_APP,
@@ -105,9 +105,9 @@ class MozillaAccountWebViewTest {
     // ---- redirect parser --------------------------------------------------
 
     @Test
-    fun `the exact urn is parsed and both values are decoded`() {
+    fun `the exact success URL is parsed and both values are decoded`() {
         val parsed = parseBrowserRedirect(
-            "$URN?code=code%2Fone%2Btwo%3D&state=state%2Fthree%2Bfour",
+            "$SUCCESS?code=code%2Fone%2Btwo%3D&state=state%2Fthree%2Bfour",
         )
 
         assertEquals(BrowserRedirect("code/one+two=", "state/three+four"), parsed)
@@ -116,28 +116,28 @@ class MozillaAccountWebViewTest {
     @Test
     fun `unknown query parameters do not hide the redirect`() {
         val parsed = parseBrowserRedirect(
-            "$URN?foo=bar&code=the-code&state=the-state&extra=1",
+            "$SUCCESS?foo=bar&code=the-code&state=the-state&extra=1",
         )
 
         assertEquals(BrowserRedirect("the-code", "the-state"), parsed)
     }
 
     @Test
-    fun `the urn scheme and surrounding whitespace tolerate browser delivery`() {
+    fun `the HTTPS success URL tolerates browser delivery`() {
         assertEquals(
             BrowserRedirect("the-code", "the-state"),
-            parseBrowserRedirect("  URN:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=the-code&state=the-state  "),
+            parseBrowserRedirect("  $SUCCESS?code=the-code&state=the-state  "),
         )
     }
 
     @Test
-    fun `wrong scheme, opaque part or origin are rejected`() {
+    fun `wrong scheme, host or path are rejected`() {
         val rejected = listOf(
             "https://accounts.firefox.com/signin?code=the-code&state=the-state",
-            "http:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=the-code&state=the-state",
-            "urn:ietf:wg:oauth:2.0:oob?code=the-code&state=the-state",
-            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel-other?code=the-code&state=the-state",
-            "$URN",
+            "http://accounts.firefox.com/oauth/success/a2270f727f45f648?code=the-code&state=the-state",
+            "https://evil.example/oauth/success/a2270f727f45f648?code=the-code&state=the-state",
+            "https://accounts.firefox.com/oauth/success/other?code=the-code&state=the-state",
+            "https://accounts.firefox.com/oauth/success/a2270f727f45f648",
             "",
         )
 
@@ -149,14 +149,14 @@ class MozillaAccountWebViewTest {
     @Test
     fun `a redirect must carry both a code and a state`() {
         val rejected = listOf(
-            "$URN?code=the-code",
-            "$URN?state=the-state",
-            "$URN?code=&state=the-state",
-            "$URN?code=the-code&state=",
-            "$URN?code&state=the-state",
-            "$URN?code=the-code&state",
-            "$URN?code=+&state=the-state",
-            "$URN?code=the-code&state=%20",
+            "$SUCCESS?code=the-code",
+            "$SUCCESS?state=the-state",
+            "$SUCCESS?code=&state=the-state",
+            "$SUCCESS?code=the-code&state=",
+            "$SUCCESS?code&state=the-state",
+            "$SUCCESS?code=the-code&state",
+            "$SUCCESS?code=+&state=the-state",
+            "$SUCCESS?code=the-code&state=%20",
         )
 
         rejected.forEach { raw ->
@@ -166,26 +166,26 @@ class MozillaAccountWebViewTest {
 
     @Test
     fun `error redirects are rejected even when a code is present`() {
-        assertNull(parseBrowserRedirect("$URN?error=access_denied"))
+        assertNull(parseBrowserRedirect("$SUCCESS?error=access_denied"))
         assertNull(
             parseBrowserRedirect(
-                "$URN?error=access_denied&error_description=No+access&code=the-code&state=the-state",
+                "$SUCCESS?error=access_denied&error_description=No+access&code=the-code&state=the-state",
             ),
         )
-        assertNull(parseBrowserRedirect("$URN?code=the-code&state=the-state&error="))
+        assertNull(parseBrowserRedirect("$SUCCESS?code=the-code&state=the-state&error="))
     }
 
     @Test
     fun `ambiguous, malformed or fragmented redirects are rejected`() {
         val rejected = listOf(
-            "$URN?code=one&code=two&state=the-state",
-            "$URN?code=the-code&state=one&state=two",
-            "$URN?code=the-code&state=the-state#fragment",
-            "$URN?code=%ZZ&state=the-state",
-            "$URN?code=the-code&state=%ZZ",
-            "$URN?code=the-code&&state=the-state",
-            "$URN?code=the-code&state=the-state&",
-            "$URN?=value&code=the-code&state=the-state",
+            "$SUCCESS?code=one&code=two&state=the-state",
+            "$SUCCESS?code=the-code&state=one&state=two",
+            "$SUCCESS?code=the-code&state=the-state#fragment",
+            "$SUCCESS?code=%ZZ&state=the-state",
+            "$SUCCESS?code=the-code&state=%ZZ",
+            "$SUCCESS?code=the-code&&state=the-state",
+            "$SUCCESS?code=the-code&state=the-state&",
+            "$SUCCESS?=value&code=the-code&state=the-state",
         )
 
         rejected.forEach { raw ->
@@ -221,7 +221,7 @@ class MozillaAccountWebViewTest {
             onInvalid = { invalid++ },
         )
 
-        handler.handle("$URN?code=only-a-code")
+        handler.handle("$SUCCESS?code=only-a-code")
         handler.handle(REDIRECT)
 
         assertTrue(submitted.isEmpty())
@@ -237,16 +237,16 @@ class MozillaAccountWebViewTest {
             onInvalid = { invalid++ },
         )
 
-        handler.handle("$URN?error=access_denied&state=the-state")
+        handler.handle("$SUCCESS?error=access_denied&state=the-state")
 
         assertTrue(submitted.isEmpty())
         assertEquals(1, invalid)
     }
 
     private companion object {
-        const val URN = "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
-        const val REDIRECT = "$URN?code=the-code&state=the-state"
+        const val SUCCESS = "https://accounts.firefox.com/oauth/success/a2270f727f45f648"
+        const val REDIRECT = "$SUCCESS?code=the-code&state=the-state"
         const val REDIRECT_WITH_VALUES =
-            "$URN?code=b7d4b0f0-1d5a-4c44-9f0a-8a8f1d0c0f00&state=9f4c2a6e8b1d4c3a"
+            "$SUCCESS?code=b7d4b0f0-1d5a-4c44-9f0a-8a8f1d0c0f00&state=9f4c2a6e8b1d4c3a"
     }
 }

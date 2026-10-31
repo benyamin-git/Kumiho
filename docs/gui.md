@@ -79,10 +79,10 @@ the screens. The rail and header are hidden while it runs. Its steps are:
    first page offers **Continue in browser** (the default) or **Use
    password**, and remembers the last successful method. Browser sign-in opens
    Mozilla's Firefox Accounts page for captcha, password, TOTP or unblock
-   codes. Mozilla finishes on a redirect address; the browser's “can't open
-   this address” page is expected — copy the complete URL from its address bar,
-   paste it into the waiting card's **Redirect URL** field and choose
-   **Continue**. The card also offers **Open again** and **Cancel** and checks
+   codes. Mozilla finishes on its HTTPS success page; copy the complete URL
+   from the address bar, paste it into the waiting card's **Redirect URL**
+   field and choose **Continue**. The card also offers **Open again** and
+   **Cancel** and checks
    every second. There is no loopback listener, so the browser may run on
    another machine. Password sign-in keeps the
    in-app email → password → 2FA/email-link pages. Kumiho stores the resulting

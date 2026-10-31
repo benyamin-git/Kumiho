@@ -118,13 +118,14 @@ disabled **Continue** so it is always visible.
 2. **Sign in.** Choose **Continue in browser** (the default) or **Use
    password**. Browser sign-in opens a full-screen in-app **Mozilla account**
    page; complete captcha, password, TOTP or unblock there. Mozilla then
-   redirects to a `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?...`
-   address, which the app intercepts before it leaves the WebView, closes the
-   page and finishes automatically. The waiting card behind it offers **Open
-   again**, **Paste redirect URL instead** (**Redirect URL** → **Continue**),
-   **Use password** and **Cancel**. If the WebView cannot be created, the same
-   URL opens in a Custom Tab and the paste field is already visible; the
-   complete URL from the browser's address bar is then the value to paste.
+   redirects to its HTTPS Firefox Accounts success page
+   (`accounts.firefox.com/oauth/success/...?...`), which the app intercepts
+   before it leaves the WebView, closes the page and finishes automatically.
+   The waiting card behind it offers **Open again**, **Paste redirect URL
+   instead** (**Redirect URL** → **Continue**), **Use password** and
+   **Cancel**. If the WebView cannot be created, the same URL opens in a
+   Custom Tab and the paste field is already visible; the complete URL from the
+   success page is then the value to paste.
    The flow expires after ten minutes. The password choice stays native:
    email, password, then a verification code if Firefox Accounts asks for one.
    For an email-link 2FA, the app waits and re-checks every three seconds while
@@ -747,11 +748,11 @@ Firefox Accounts sometimes presents an interactive captcha. The native
 password flow solves the Fastly proof-of-work/PAT/clientmetrics challenges but
 cannot solve a captcha. Cancel it and choose **Continue in browser**; the
 full-screen **Mozilla account** page can complete the captcha and the app
-intercepts the redirect when it finishes. If the in-app page cannot be
-created, Kumiho opens the URL in a Custom Tab and reveals the **Redirect URL**
-field; the browser's “can't open this address” page is expected, and the
-complete address-bar URL is the value to paste. If no browser is available at
-all, use the password fallback.
+intercepts the HTTPS success redirect when it finishes. If the in-app page
+cannot be created, Kumiho opens the URL in a Custom Tab and reveals the
+**Redirect URL** field; copy the complete URL from the Firefox Accounts success
+page and paste it there. If no browser is available at all, use the password
+fallback.
 
 ### Uninstalling and removing state
 

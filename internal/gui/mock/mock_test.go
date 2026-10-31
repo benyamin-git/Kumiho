@@ -1121,7 +1121,7 @@ func TestBrowserLoginFixtures(t *testing.T) {
 
 	if _, err := m.LoginComplete(ctx, api.LoginCompletePayload{
 		LoginID:     first.LoginID,
-		RedirectURL: "urn:ietf:wg:oauth:2.0:oob?state=state-1&code=code-1",
+		RedirectURL: "https://accounts.firefox.com/oauth/success/a2270f727f45f648?state=state-1&code=code-1",
 	}); err != nil {
 		t.Fatalf("LoginComplete: %v", err)
 	}

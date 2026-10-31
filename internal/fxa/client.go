@@ -160,25 +160,60 @@ func (c *Client) OAuthToken(ctx context.Context, sessionToken string) (*Tokens, 
 	if err != nil {
 		return nil, err
 	}
-	return c.tokensFromResponse(raw, "")
+	tokens, err := c.tokensFromResponse(raw, "")
+	if err != nil {
+		return nil, err
+	}
+	tokens.ClientID = ClientID
+	return tokens, nil
 }
 
-// Refresh renews the access token (POST /oauth/token,
-// grant_type=refresh_token, no Hawk). Browser accounts use this existing path;
-// Gate G1 must prove the OAuth exchange's refresh token is accepted here before
-// any endpoint unification is considered.
+// Refresh renews a legacy or password-account access token (POST
+// /oauth/token, grant_type=refresh_token, no Hawk) with Firefox Desktop's
+// client. New callers should use RefreshWithClient so a browser token is
+// refreshed by the client that issued it.
 func (c *Client) Refresh(ctx context.Context, refreshToken string) (*Tokens, error) {
+	return c.RefreshWithClient(ctx, refreshToken, ClientID)
+}
+
+// RefreshWithClient renews the access token with the OAuth client recorded on
+// the token set. Browser tokens were issued by OAuthClientID at the OAuth
+// token endpoint, so they refresh there with the same client; password and
+// legacy tokens keep the auth-server path and ClientID.
+func (c *Client) RefreshWithClient(ctx context.Context, refreshToken, clientID string) (*Tokens, error) {
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		clientID = ClientID
+	}
 	body := map[string]string{
-		"client_id":     ClientID,
+		"client_id":     clientID,
 		"grant_type":    "refresh_token",
 		"refresh_token": refreshToken,
 		"scope":         Scope,
 	}
-	raw, err := c.doJSON(ctx, http.MethodPost, "/oauth/token", "", body)
+	var (
+		raw []byte
+		err error
+	)
+	if clientID == OAuthClientID {
+		raw, err = c.doEndpointForm(ctx, c.tokenEndpoint(), url.Values{
+			"client_id":     {clientID},
+			"grant_type":    {"refresh_token"},
+			"refresh_token": {refreshToken},
+			"scope":         {Scope},
+		})
+	} else {
+		raw, err = c.doJSON(ctx, http.MethodPost, "/oauth/token", "", body)
+	}
 	if err != nil {
 		return nil, err
 	}
-	return c.tokensFromResponse(raw, refreshToken)
+	tokens, err := c.tokensFromResponse(raw, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	tokens.ClientID = clientID
+	return tokens, nil
 }
 
 // AccessTokenValid reports whether the token set stays valid for at least
@@ -312,9 +347,17 @@ func (c *Client) doEndpointJSON(ctx context.Context, method, endpoint, bearerTok
 	return c.doRequest(ctx, method, endpoint, "", bearerToken, payload, true)
 }
 
-// doRequest sends a request to endpoint, signs it with Hawk when a session
-// token is given or with a bearer token when one is given, and retries HTTP
-// 406 through the challenge solver when one is configured and solve is set.
+// doEndpointForm sends an application/x-www-form-urlencoded request to a full
+// endpoint. RFC 6749 token endpoints require form encoding; the auth-server
+// JSON endpoints remain on doRequest.
+func (c *Client) doEndpointForm(ctx context.Context, endpoint string, values url.Values) ([]byte, error) {
+	return c.doRequestBytes(ctx, http.MethodPost, endpoint, "", "", []byte(values.Encode()), "application/x-www-form-urlencoded", true)
+}
+
+// doRequest sends a JSON request to endpoint, signs it with Hawk when a
+// session token is given or with a bearer token when one is given, and retries
+// HTTP 406 through the challenge solver when one is configured and solve is
+// set.
 func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, bearerToken string, payload any, solve bool) ([]byte, error) {
 	var body []byte
 	if payload != nil {
@@ -324,7 +367,13 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, 
 			return nil, err
 		}
 	}
+	return c.doRequestBytes(ctx, method, endpoint, sessionToken, bearerToken, body, "application/json", solve)
+}
 
+// doRequestBytes is the single HTTP path for JSON and form requests. Hawk uses
+// the exact request body, so body and contentType must describe the same
+// bytes.
+func (c *Client) doRequestBytes(ctx context.Context, method, endpoint, sessionToken, bearerToken string, body []byte, contentType string, solve bool) ([]byte, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
@@ -355,7 +404,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint, sessionToken, 
 		req.Header.Set("User-Agent", ua)
 		req.Header.Set("Accept", "application/json")
 		if body != nil {
-			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Content-Type", contentType)
 		}
 		if creds != nil {
 			nonce := make([]byte, 6)

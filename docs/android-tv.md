@@ -53,9 +53,9 @@ rejects it.
 
 1. Accept the consent step.
 2. Sign in with Firefox Accounts. **Continue in browser** opens the in-app
-   WebView; the `urn:` redirect is intercepted and returns to the app. If the
-   WebView cannot start, use **Paste redirect URL instead** or **Use
-   password**.
+   WebView; the HTTPS Firefox Accounts success redirect is intercepted and
+   returns to the app. If the WebView cannot start, use **Paste redirect URL
+   instead** or **Use password**.
 3. Grant the VPN permission and allow notifications.
 4. Review Android's Always-on guidance. Always-on and lockdown are Android
    settings; Kumiho can open the right system page but cannot enable them.

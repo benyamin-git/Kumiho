@@ -146,6 +146,7 @@ func (c *Controller) refreshAccountToken(ctx context.Context, id string, gen uin
 		return errors.New("account has no refreshable session")
 	}
 	refreshToken := strings.TrimSpace(a.FxA.RefreshToken)
+	clientID := a.FxA.ClientID
 	method := a.Method
 	if refreshToken == "" {
 		c.mu.Unlock()
@@ -153,7 +154,7 @@ func (c *Controller) refreshAccountToken(ctx context.Context, id string, gen uin
 	}
 	c.mu.Unlock()
 
-	refreshed, err := c.fxa.Refresh(ctx, refreshToken)
+	refreshed, err := c.fxa.RefreshWithClient(ctx, refreshToken, clientID)
 	if err != nil {
 		var apiErr *fxa.APIError
 		if errors.As(err, &apiErr) && apiErr.PermanentRefreshRejection() &&

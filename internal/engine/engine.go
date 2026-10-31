@@ -157,7 +157,7 @@ type Controller struct {
 	legacyNotice   string
 	// Browser sign-in is daemon-owned: PKCE material, the exchanged tokens and
 	// status polling all live here, never in a client. The flow has no
-	// listener; clients hand back the full URN redirect URL.
+	// listener; clients hand back the full HTTPS success redirect URL.
 	browser        *browserLogin
 	browserTimeout time.Duration
 	// authGen fences network work that started under one account session
@@ -776,7 +776,7 @@ func (c *Controller) refreshAccessToken(ctx context.Context) error {
 		return errors.New("stored session cannot be renewed; sign in again")
 	}
 
-	refreshed, err := c.fxa.Refresh(ctx, tokens.RefreshToken)
+	refreshed, err := c.fxa.RefreshWithClient(ctx, tokens.RefreshToken, tokens.ClientID)
 	if err != nil {
 		if re := c.regionBlocked(err); re != nil {
 			return re

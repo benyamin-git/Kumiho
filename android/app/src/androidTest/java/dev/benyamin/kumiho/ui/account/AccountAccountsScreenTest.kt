@@ -412,7 +412,7 @@ class AccountAccountsScreenTest {
 
     private companion object {
         const val REDIRECT =
-            "urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel?code=code-1&state=state-1"
+            "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=code-1&state=state-1"
         const val INVALID_BROWSER_URL = "https://evil.example/signin"
         const val BOUNDS_EPSILON = 1f
     }

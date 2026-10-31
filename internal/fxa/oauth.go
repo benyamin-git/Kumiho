@@ -62,16 +62,16 @@ func NewPKCE(r io.Reader) (PKCE, error) {
 
 // AuthorizationURL builds the browser consent URL for the authorization-code
 // flow. Email and force_auth are optional; no client secret is included.
+//
+// The URL uses Firefox for Android's public OAuth client and its HTTPS success
+// redirect. Unlike Firefox Desktop's WebChannel URN, the HTTPS page is a normal
+// navigation in any browser, and the complete redirect URL is copyable.
 func (c *Client) AuthorizationURL(email string, forceAuth bool, state, challenge string) string {
-	// redirect_uri is deliberately omitted. FxA's content-server validator
-	// rejects the registered WebChannel URN in this parameter (only
-	// pair-auth-webchannel is allowed), while the auth server fills in the
-	// client's registered redirect when it is absent. Firefox's own flow does
-	// the same.
 	q := url.Values{
-		"client_id":             {ClientID},
+		"client_id":             {OAuthClientID},
 		"scope":                 {Scope},
 		"response_type":         {"code"},
+		"redirect_uri":          {OAuthRedirectURI},
 		"state":                 {state},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
@@ -96,14 +96,17 @@ func (c *Client) AuthorizationURL(email string, forceAuth bool, state, challenge
 // ExchangeCode trades an authorization code and PKCE verifier for tokens at
 // the OAuth token endpoint.
 func (c *Client) ExchangeCode(ctx context.Context, code, verifier, redirectURI string) (*Tokens, error) {
-	body := map[string]string{
-		"client_id":     ClientID,
-		"grant_type":    "authorization_code",
-		"code":          code,
-		"code_verifier": verifier,
-		"redirect_uri":  redirectURI,
+	// The FxA OAuth token endpoint follows RFC 6749 and expects a form body.
+	// A JSON body is accepted by the auth server's /oauth/token route used by
+	// password accounts, but not reliably by the public OAuth endpoint.
+	body := url.Values{
+		"client_id":     {OAuthClientID},
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {redirectURI},
 	}
-	raw, err := c.doEndpointJSON(ctx, http.MethodPost, c.tokenEndpoint(), "", body)
+	raw, err := c.doEndpointForm(ctx, c.tokenEndpoint(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +114,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code, verifier, redirectURI s
 	if err != nil {
 		return nil, err
 	}
+	tokens.ClientID = OAuthClientID
 	// The browser flow stores Account.FxA and only refreshes it through the
 	// ordinary refresh path; an access-only response would silently become
 	// dead at expiry, so reject it as a terminal unusable response.

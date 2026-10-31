@@ -61,11 +61,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 private const val MOZILLA_ACCOUNTS_HOST = "accounts.firefox.com"
 
 /**
- * The OAuth redirect registered for the Firefox client. FxA navigates to
- * `urn:<this>` after sign-in; the WebView intercepts it before the navigation
- * leaves the app and hands the complete URL to the engine.
+ * The HTTPS success redirect registered for the public browser OAuth client.
+ * FxA navigates here with the code and state in the query; the WebView
+ * intercepts it before loading the success page and hands the complete URL to
+ * the engine.
  */
-private const val REDIRECT_OPAQUE = "ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel"
+private const val REDIRECT_PATH = "/oauth/success/a2270f727f45f648"
 
 /** Test tags for the Mozilla account WebView screen. */
 object MozillaAccountWebViewTags {
@@ -97,11 +98,11 @@ fun isMozillaAuthorizationUrl(raw: String): Boolean {
 }
 
 /**
- * Parses the exact `urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel`
- * redirect and URL-decodes its values. Returns null for a different scheme or
- * URN, an error redirect, a missing/empty code or state, duplicate values or a
- * malformed query. The engine still validates the state; this parser only
- * keeps obvious or hostile shapes from reaching it.
+ * Parses the exact HTTPS success redirect and URL-decodes its values. Returns
+ * null for a different scheme, host or path, an error redirect, a missing or
+ * empty code/state, duplicate values or a malformed query. The engine still
+ * validates the state; this parser only keeps obvious or hostile shapes from
+ * reaching it.
  */
 fun parseBrowserRedirect(raw: String): BrowserRedirect? {
     if (!isMozillaRedirectUrl(raw)) return null
@@ -138,7 +139,7 @@ fun clearMozillaCookies(context: Context) {
 
 /** What the WebView should do with a navigation. */
 internal enum class BrowserNavigation {
-    /** Intercept the OAuth URN and hand it to the engine. */
+    /** Intercept the HTTPS OAuth success redirect and hand it to the engine. */
     REDIRECT,
 
     /** Load an accounts.firefox.com page inside the WebView. */
@@ -371,7 +372,7 @@ internal fun MozillaAccountBrowserScreenForTest(
  * data. JavaScript is required by Mozilla's page; the origin policy above and
  * the absent JavaScript bridge are the mitigation. There is deliberately no
  * `addJavascriptInterface`; the only value the app reads is the intercepted
- * URN.
+ * HTTPS success URL.
  */
 @SuppressLint("SetJavaScriptEnabled")
 internal fun configureMozillaWebView(webView: WebView) {
@@ -428,7 +429,7 @@ private class MozillaWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String?) {
         onFirstPageFinished()
-        // Some WebViews report the failed URN navigation as a finished page
+        // Some WebViews report the success navigation as a finished page
         // instead of calling shouldOverrideUrlLoading. The caller's one-shot
         // flag makes this path harmless when the override already submitted.
         val current = url ?: view.url
@@ -442,11 +443,11 @@ private class MozillaWebViewClient(
     ) {
         if (!request.isForMainFrame) return
         val raw = request.url.toString()
-        // A navigation to the OAuth URN is expected to fail: the WebView has
-        // nowhere to take `urn:`. Hand the URL to the same one-shot handler
-        // here too, in case this WebView reports the failure without calling
-        // shouldOverrideUrlLoading or onPageFinished. A malformed redirect
-        // sets the error state in the caller.
+        // The success page should be intercepted before it loads, but some
+        // WebViews can report a navigation failure instead. Hand the URL to
+        // the same one-shot handler here too, in case this WebView reports it
+        // without calling shouldOverrideUrlLoading or onPageFinished. A
+        // malformed redirect sets the error state in the caller.
         if (isMozillaRedirectUrl(raw)) {
             onRedirect(raw)
             return
@@ -509,15 +510,12 @@ private fun MozillaAccountWebViewError(
 }
 
 private fun isMozillaRedirectUrl(raw: String): Boolean {
-    val value = raw.trim()
-    val schemeEnd = value.indexOf(':')
-    if (schemeEnd <= 0 || !value.substring(0, schemeEnd).equals("urn", ignoreCase = true)) {
-        return false
-    }
-    val opaque = value.substring(schemeEnd + 1)
-    val queryStart = opaque.indexOf('?')
-    val urn = if (queryStart < 0) opaque else opaque.substring(0, queryStart)
-    return urn == REDIRECT_OPAQUE
+    val uri = parseUri(raw.trim()) ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        MOZILLA_ACCOUNTS_HOST.equals(uri.host, ignoreCase = true) &&
+        uri.rawPath == REDIRECT_PATH &&
+        uri.rawUserInfo == null &&
+        (uri.port == -1 || uri.port == 443)
 }
 
 private fun isMozillaHostUrl(raw: String): Boolean {

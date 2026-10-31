@@ -227,7 +227,7 @@ function build(host) {
   const waitingTitle = el("h2", "acct__waiting-title", "Waiting for browser sign-in");
   waitingTitle.id = "acct-waiting-title";
   const waitingBody = el("p", "acct__waiting-body",
-    "Finish signing in in your browser, then paste the redirect URL from its address bar. Kumiho stores the sign-in tokens, never your password.");
+    "Finish signing in in your browser. The browser lands on a Firefox Accounts success page; paste the complete URL from its address bar. Kumiho stores the sign-in tokens, never your password.");
   const waitingURL = el("p", "acct__waiting-url");
   const redirect = fieldBox("acct-browser-redirect", "Redirect URL", "text", "off");
   redirect.input.placeholder = "Paste the complete URL";

@@ -452,9 +452,9 @@ the way).
    percent and `re-auth required` when applicable. The row overflow menu
    offers `Use`, `Rename`, `Re-authenticate` (browser) and `Remove`.
 4. **Browser waiting card** (one flow at a time): title `Waiting for browser
-   sign-in`, body `Finish signing in in your browser, then paste the redirect
-   URL from its address bar. Kumiho stores the sign-in tokens, never your
-   password.`, the URL, **Open again**, a labelled **Redirect URL** field,
+   sign-in`, body explaining that the Firefox Accounts success page URL is
+   pasted back from the address bar (Kumiho stores the sign-in tokens, never
+   your password), the URL, **Open again**, a labelled **Redirect URL** field,
    **Continue** and **Cancel**. The URL is opened once automatically and
    polled every second; the card stays until the pasted URL completes the flow
    or it is cancelled.

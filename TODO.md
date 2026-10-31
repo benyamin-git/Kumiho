@@ -24,26 +24,26 @@ Android TV, Windows GUI and the TUI.
     this account-list scroll.
 
 - [x] **A2 — Fix browser sign-in when adding an account**
-  - Problem: the browser flow still does not complete on the v0.7.0 Android
-    pre-release downloaded from GitHub.
-  - Observed: Mozilla's page shows **Bad Request: Invalid Query Parameters**
-    (error ID `3bcf11f926a940ab99778fcb728efaef`) and reports that
-    `redirectUri` failed the `IsFxaRedirectUri` constraint. The failure happens
-    before the app can receive a redirect.
-  - Cause: the authorization URL sent
-    `redirect_uri=urn:ietf:wg:oauth:2.0:oob:oauth-redirect-webchannel`. FxA's
-    content-server validator (`IsFxaRedirectUri`) runs `isURL()` on that
-    parameter, which accepts only the `pair-auth-webchannel` URN — every other
-    `urn:` value fails. Firefox's own OAuth flow omits `redirect_uri` and lets
-    the auth server fill in the client's registered redirect, which is exactly
-    that URN.
-  - Fixed: `fxa.AuthorizationURL` now omits `redirect_uri`; the token exchange
-    is unchanged. `TestAuthorizationURL` and
-    `TestBrowserLoginStartBuildsAuthorizationURL` assert the parameter is
-    absent. The registered URN and the Android WebView interception are
-    unchanged, so the browser still ends at the paste/redirect page.
-  - Live check: complete one browser sign-in on the phone; unit tests cover
-    the URL contract, not the real Mozilla consent page.
+  - Problem: the browser page loaded and recognised the account, but choosing
+    **Sign in** did nothing. The failure reproduced in Chrome, Brave and
+    Firefox, and the app never received a redirect.
+  - Cause: Firefox Desktop's OAuth client (`5882386c6d801776`) is tied to
+    Firefox's in-process WebChannel. Its URN redirect cannot be delivered to a
+    standalone app; Chromium blocks the `urn:` navigation without showing an
+    error, and the content server rejects that URN when it is sent explicitly
+    as `redirect_uri` (**Bad Request: Invalid Query Parameters**). Omitting
+    `redirect_uri` fixed the page load but still left the browser at the dead
+    URN.
+  - Fixed: browser sign-in uses the public Firefox for Android OAuth client
+    (`a2270f727f45f648`) and its registered HTTPS success page,
+    `accounts.firefox.com/oauth/success/...`. Any ordinary browser can navigate
+    there and show the complete URL for paste-back; the Android WebView
+    intercepts that HTTPS URL directly. Browser tokens record the issuing
+    client in `Tokens.ClientID`, and refresh sends the same client, so browser
+    and password accounts renew correctly.
+  - Live check: complete one browser sign-in on the CLI and one in the Android
+    WebView. Unit tests cover the URL, redirect and token contracts, not the
+    real Mozilla consent page.
 
 - [x] **A3 — Fix “Check for update” returning HTTP 404**
   - Problem: update check reports `github answered HTTP 404` on **every
