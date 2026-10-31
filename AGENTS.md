@@ -134,9 +134,9 @@ them locally for any change under `android/`, `mobile/` or
   `v0.5.2` release on 2026-10-23, the `v0.6.0` release on 2026-10-24, the
   `v0.7.0` release on 2026-10-28, the `v0.7.1` release on 2026-10-30, the
   `v0.7.2` release on 2026-10-30, the `v0.8.0` release on 2026-10-30, the
-  `v0.8.1` release on 2026-10-30, the `v0.8.2` release on 2026-10-30 and the
-  `v0.8.3` release on 2026-10-31; each release workflow published the desktop
-  and Android assets. See
+  `v0.8.1` release on 2026-10-30, the `v0.8.2` release on 2026-10-30, the
+  `v0.8.3` release on 2026-10-31 and the `v0.9.0` release on 2026-10-31; each
+  release workflow published the desktop and Android assets. See
   [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
@@ -163,8 +163,12 @@ them locally for any change under `android/`, `mobile/` or
   complete/cancel commands; `login_complete` accepts the complete HTTPS
   success redirect URL.
   Clients only open the returned URL and poll `login_status`/
-  `accounts_add_status`; desktop clients paste the redirect URL, while Android
-  intercepts it in the in-app WebView. `internal/webauth` is gone.
+  `accounts_add_status`; desktop clients paste the success-page URL, while
+  Android intercepts it in the in-app WebView. Browser sign-in uses the public
+  Firefox for Android client `a2270f727f45f648` and its HTTPS success page;
+  password sign-in keeps `5882386c6d801776`. `Tokens.ClientID` records the
+  issuing client so each token refreshes through the right endpoint.
+  `internal/webauth` is gone.
   `internal/engine/accounts.go` owns `accounts.json` v2 (five-account cap,
   labels, active id, `last_method`, FxA tokens, durable `reauth_required`) and
   migration from legacy `tokens.json`, which remains a synchronized rollback

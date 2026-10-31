@@ -41,9 +41,10 @@ Android TV, Windows GUI and the TUI.
     intercepts that HTTPS URL directly. Browser tokens record the issuing
     client in `Tokens.ClientID`, and refresh sends the same client, so browser
     and password accounts renew correctly.
-  - Live check: complete one browser sign-in on the CLI and one in the Android
-    WebView. Unit tests cover the URL, redirect and token contracts, not the
-    real Mozilla consent page.
+  - Live check: the CLI browser sign-in and a forced token refresh passed on
+    2026-10-31; the Android WebView sign-in is the remaining live check. Unit
+    tests cover the URL, redirect and token contracts, not the real Mozilla
+    consent page.
 
 - [x] **A3 — Fix “Check for update” returning HTTP 404**
   - Problem: update check reports `github answered HTTP 404` on **every

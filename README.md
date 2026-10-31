@@ -66,17 +66,18 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first country list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.8.3
+## What's new in v0.9.0
 
-- **Account sign-in works again** — Fastly's Firefox Accounts edge began
-  rejecting the Mozilla VPN client name with an empty 406, so the login email
-  arrived but the app reported "could not solve the anti-bot challenge".
-  Sign-in now uses Firefox's identity, the same one Firefox's built-in VPN
-  uses.
-
-**Known issue:** adding an account with **Continue in browser** still fails
-with Mozilla's *Invalid Query Parameters* page. Use password sign-in for now;
-the browser flow is the next fix.
+- **Region and location truth** — HTTP 451 is reported honestly with an
+  optional user-operated relay, the real server list behind Firefox's
+  filters, real-edge latency, Fastest, favorites and recents on every client.
+- **Browser sign-in completes in Chrome, Brave and Firefox** — Firefox
+  Accounts now finishes on its HTTPS success page, so the complete URL can be
+  pasted on desktop and intercepted directly by the Android WebView. Browser
+  and password tokens refresh with the client that issued them.
+- **Settings → Region everywhere** — `allow_locked`, relay URL, the
+  write-only relay token and a **Test relay** action on the CLI, TUI, Windows
+  GUI, Android phone and Android TV.
 
 Older changes are in the [changelog](CHANGELOG.md).
 
