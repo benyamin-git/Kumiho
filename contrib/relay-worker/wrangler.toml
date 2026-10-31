@@ -1,0 +1,13 @@
+name = "kumiho-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-31"
+
+# The operator owns the route and custom domain. Set them in the Cloudflare
+# dashboard, or uncomment and replace the example:
+#
+# routes = [
+#   { pattern = "relay.example.com", custom_domain = true }
+# ]
+#
+# Never commit RELAY_TOKEN here. Set it with:
+#   npx wrangler secret put RELAY_TOKEN
