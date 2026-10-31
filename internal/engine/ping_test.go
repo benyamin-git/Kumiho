@@ -360,10 +360,12 @@ func TestPingHostsConcurrencyLimit(t *testing.T) {
 			pingHost(0), pingHost(1), pingHost(2), pingHost(3), pingHost(4),
 		}, nil)
 	}()
+	// Generous startup budget: this covers scheduler delay on loaded CI
+	// runners, not dial latency, so a slow machine cannot fail the test.
 	for i := 0; i < 4; i++ {
 		select {
 		case <-started:
-		case <-time.After(time.Second):
+		case <-time.After(5 * time.Second):
 			t.Fatal("four dials did not start")
 		}
 	}
