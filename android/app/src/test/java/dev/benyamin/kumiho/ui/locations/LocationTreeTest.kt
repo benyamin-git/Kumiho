@@ -428,7 +428,13 @@ class LocationTreeTest {
             resolved.favorites.map { it.key },
         )
         assertTrue(resolved.recents.isEmpty())
-        assertTrue(LocationTree.isFavorite(listOf(favorite), LocationTree.rows(listOf(US)).first()))
+        assertTrue(
+            LocationTree.isFavorite(
+                favorites = listOf(favorite),
+                row = LocationTree.rows(listOf(US)).first(),
+                countries = listOf(US),
+            ),
+        )
         assertEquals(
             LocationRef("us", "nyc", EDGE_ADDRESS),
             LocationTree.refOf(LocationTree.rows(listOf(US)).first()),
@@ -446,7 +452,7 @@ class LocationTreeTest {
             LocationTree.addressKey(EDGE_ADDRESS) to null,
             LocationTree.addressKey(SHARE_ADDRESS) to 5.0,
             LocationTree.addressKey(WEST_ADDRESS) to 5.0,
-            "aa.example.net:443" to 5.0,
+            "a.example.net:443" to 5.0,
         )
 
         val fastest = LocationTree.fastest(listOf(US, tie), latency)

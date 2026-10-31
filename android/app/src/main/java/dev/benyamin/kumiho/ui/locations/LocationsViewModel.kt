@@ -270,7 +270,8 @@ data class LocationsState(
     fun isSaving(server: Server): Boolean =
         savingServer == LocationTree.connectTarget(server)?.let(LocationTree::addressKey)
 
-    fun isFavorite(row: LocationRow): Boolean = LocationTree.isFavorite(favorites, row)
+    fun isFavorite(row: LocationRow): Boolean =
+        LocationTree.isFavorite(favorites, row, countries, allowLocked)
 
     val canSelectFastest: Boolean
         get() = fastest != null && !savingFastest && savingServer == null && !savingLocked

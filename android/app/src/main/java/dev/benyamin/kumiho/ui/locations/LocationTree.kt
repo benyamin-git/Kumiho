@@ -250,8 +250,18 @@ object LocationTree {
             a.cityCode.orEmpty().equals(b.cityCode.orEmpty(), ignoreCase = true) &&
             a.server.equals(b.server, ignoreCase = true)
 
-    fun isFavorite(favorites: List<LocationRef>, row: LocationRow): Boolean =
-        favorites.any { sameRef(it, refOf(row)) }
+    fun isFavorite(
+        favorites: List<LocationRef>,
+        row: LocationRow,
+        countries: List<Country> = emptyList(),
+        allowLocked: Boolean = false,
+    ): Boolean {
+        if (favorites.any { sameRef(it, refOf(row)) }) return true
+        if (countries.isEmpty()) return false
+        return favorites.any { ref ->
+            resolveRef(countries, ref, allowLocked)?.key == row.key
+        }
+    }
 
     private fun resolveRefs(
         countries: List<Country>,
