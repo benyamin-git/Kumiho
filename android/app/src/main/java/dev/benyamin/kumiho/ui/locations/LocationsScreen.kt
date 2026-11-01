@@ -34,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -152,7 +153,8 @@ data class LocationsActions(
 
 /**
  * The stateless Locations screen: a pinned search field and toolbar, the
- * current selection, the notice banner and one flat server list.
+ * current selection, the notice banner and one flat server list of house
+ * cards.
  *
  * It makes no engine, service or Android call, so a Compose test renders it
  * from fake state. A row tap is a request, and the check mark only follows the
@@ -268,7 +270,7 @@ private fun Toolbar(state: LocationsState, actions: LocationsActions) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space1),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(
@@ -292,52 +294,32 @@ private fun Toolbar(state: LocationsState, actions: LocationsActions) {
                 )
             }
         }
-        ToolbarAction(
-            label = if (state.pingingAll) {
-                stringResource(R.string.locations_pinging_all, state.pingAllCount)
-            } else {
-                stringResource(R.string.locations_ping_all)
-            },
-            tag = LocationsTags.PING_ALL,
-            enabled = state.canPingAll,
-            loading = state.pingingAll,
+        Spacer(modifier = Modifier.weight(1f))
+        OutlinedButton(
             onClick = actions.onPingAll,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-/** One equal-width action in the toolbar row, with an optional spinner. */
-@Composable
-private fun ToolbarAction(
-    label: String,
-    tag: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    loading: Boolean = false,
-) {
-    TextButton(
-        onClick = onClick,
-        enabled = enabled,
-        contentPadding = PaddingValues(horizontal = Dimens.Space2, vertical = Dimens.Space2),
-        modifier = modifier
-            .heightIn(min = Dimens.TouchTarget)
-            .testTag(tag),
-    ) {
-        if (loading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
+            enabled = state.canPingAll,
+            modifier = Modifier
+                .heightIn(min = Dimens.TouchTarget)
+                .testTag(LocationsTags.PING_ALL),
+        ) {
+            if (state.pingingAll) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.size(Dimens.Space1))
+            }
+            Text(
+                text = if (state.pingingAll) {
+                    stringResource(R.string.locations_pinging_all, state.pingAllCount)
+                } else {
+                    stringResource(R.string.locations_ping_all)
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(modifier = Modifier.size(Dimens.Space1))
         }
-        Text(
-            text = label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -410,7 +392,7 @@ internal fun selectionText(selection: LocationSelection?): String {
     return parts.joinToString(separator)
 }
 
-// ---- sections and flat server list --------------------------------------
+// ---- sections and server cards ------------------------------------------
 
 @Composable
 private fun ServerList(
@@ -427,9 +409,10 @@ private fun ServerList(
         contentPadding = PaddingValues(
             start = Dimens.ScreenPadding,
             end = Dimens.ScreenPadding,
-            top = Dimens.Space1,
+            top = Dimens.Space2,
             bottom = Dimens.Space4,
         ),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
         item(key = "fastest") {
             FastestRow(
@@ -505,11 +488,11 @@ private fun ServerList(
 private fun SectionHeading(text: String, tag: String? = null) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = Dimens.Space3, bottom = Dimens.Space1)
+            .padding(top = Dimens.Space4, bottom = Dimens.Space1)
             .semantics { heading() }
             .then(if (tag != null) Modifier.testTag(tag) else Modifier),
     )
@@ -520,12 +503,12 @@ private fun RecentHeading(onClear: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = Dimens.Space3, bottom = Dimens.Space1),
+            .padding(top = Dimens.Space4, bottom = Dimens.Space1),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = stringResource(R.string.locations_recent),
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .weight(1f)
@@ -554,12 +537,15 @@ private fun FastestRow(
     enabled: Boolean,
     onSelect: () -> Unit,
 ) {
+    val shape = MaterialTheme.shapes.medium
     Surface(
+        shape = shape,
         color = if (fastest != null) {
             MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
         } else {
-            MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+            MaterialTheme.colorScheme.surfaceContainer
         },
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = Dimens.RowHeight)
@@ -585,6 +571,8 @@ private fun FastestRow(
                     code = fastest.row.country.code,
                     recommended = LocationTree.isRecommended(fastest.row.country),
                 )
+            } else {
+                Spacer(modifier = Modifier.size(24.dp, 18.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -662,7 +650,7 @@ private fun LockedFooter(
 }
 
 /**
- * One server: the flag, the full `Country · City`, the second line
+ * One server card: the flag, the full `Country · City`, the second line
  * `hostname:port · protocols`, the locked badge, the latency/check trailing,
  * and the separate 48 dp favorite star. The row body remains single-tap.
  */
@@ -677,16 +665,27 @@ private fun ServerRow(
     onFavorite: () -> Unit,
 ) {
     val server = row.server
-    val background = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-    } else {
-        MaterialTheme.colorScheme.surface.copy(alpha = 0f)
-    }
     val favoriteDescription = stringResource(
         if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
         row.title,
     )
-    Surface(color = background, modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        border = BorderStroke(
+            1.dp,
+            if (selected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -707,13 +706,13 @@ private fun ServerRow(
                     )
                     .testTag(serverRowTag(row.country.code, row.city.code, row.address))
                     .padding(
-                        start = Dimens.Space2,
-                        end = Dimens.Space2,
-                        top = Dimens.Space1,
-                        bottom = Dimens.Space1,
+                        start = Dimens.Space4,
+                        end = Dimens.Space1,
+                        top = Dimens.Space2,
+                        bottom = Dimens.Space2,
                     ),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
             ) {
                 CountryFlags.Flag(
                     code = row.country.code,

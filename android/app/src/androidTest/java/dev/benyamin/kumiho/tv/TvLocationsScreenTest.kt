@@ -28,8 +28,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The TV Locations surface as it is drawn: one flat focusable list, real
- * flags, the selection summary and the search/no-match controls. TV only.
+ * The TV Locations surface as it is drawn: one focusable list of server
+ * cards, real flags, the selection summary and the search/no-match controls.
+ * TV only.
  */
 class TvLocationsScreenTest : TvTestBase() {
 

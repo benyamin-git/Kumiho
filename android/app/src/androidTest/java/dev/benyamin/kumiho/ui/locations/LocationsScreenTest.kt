@@ -32,9 +32,9 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The flat Locations screen as it is drawn: real Compose, the real light
- * palette, and only [LocationsState]/[LocationsActions] for input. No engine,
- * service or network is involved.
+ * The Locations screen as it is drawn: real Compose, the real light palette,
+ * and only [LocationsState]/[LocationsActions] for input. No engine, service
+ * or network is involved.
  */
 class LocationsScreenTest {
 

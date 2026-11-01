@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import dev.benyamin.kumiho.ui.tv.theme.TvDimens
@@ -29,7 +30,9 @@ import dev.benyamin.kumiho.ui.tv.theme.TvDimens
 /**
  * The one focusable TV surface: a 2dp primary ring, a subtle 1.03 scale and a
  * button role. Clickable handles D-pad Center/Enter and touch; the ring is
- * never optional, so a focused control is always visible.
+ * never optional, so a focused control is always visible. A surface inside a
+ * larger card passes [restingBorder] false so only one outline is drawn, and
+ * [scaleOnFocus] false so the focus scale cannot clip at the card edge.
  */
 @Composable
 fun TvFocusableSurface(
@@ -39,11 +42,14 @@ fun TvFocusableSurface(
     shape: Shape = MaterialTheme.shapes.medium,
     containerColor: Color = Color.Unspecified,
     focusRingColor: Color = Color.Unspecified,
+    restingBorder: Boolean = true,
+    scaleOnFocus: Boolean = true,
+    contentPadding: Dp = TvDimens.MinTarget / 4,
     content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.03f else 1f,
+        targetValue = if (focused && scaleOnFocus) 1.03f else 1f,
         label = "tv-focus-scale",
     )
     val colors = MaterialTheme.colorScheme
@@ -55,19 +61,25 @@ fun TvFocusableSurface(
             }
             .clip(shape)
             .background(if (containerColor == Color.Unspecified) colors.surfaceVariant else containerColor)
-            .border(
-                width = if (focused) TvDimens.FocusRing else 1.dp,
-                color = if (focused) {
-                    if (focusRingColor == Color.Unspecified) colors.primary else focusRingColor
-                } else {
-                    colors.borderVariant
+            .then(
+                when {
+                    focused -> Modifier.border(
+                        width = TvDimens.FocusRing,
+                        color = if (focusRingColor == Color.Unspecified) {
+                            colors.primary
+                        } else {
+                            focusRingColor
+                        },
+                        shape = shape,
+                    )
+                    restingBorder -> Modifier.border(1.dp, colors.borderVariant, shape)
+                    else -> Modifier
                 },
-                shape = shape,
             )
             .onFocusChanged { focused = it.isFocused }
             .semantics { role = Role.Button }
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(TvDimens.MinTarget / 4),
+            .padding(contentPadding),
         contentAlignment = Alignment.Center,
         content = content,
     )

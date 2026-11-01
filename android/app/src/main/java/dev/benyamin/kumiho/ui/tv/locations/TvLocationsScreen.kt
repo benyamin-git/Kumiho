@@ -10,12 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
@@ -23,12 +27,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -74,7 +79,7 @@ fun TvLocationsRoute(container: AppContainer, modifier: Modifier = Modifier) {
 
 /**
  * The ten-foot location list: a search row, refresh and ping controls, the
- * saved selection and one flat focusable server list.
+ * saved selection and one flat list of focusable server cards.
  */
 @Composable
 fun TvLocationsScreen(
@@ -357,6 +362,7 @@ private fun SelectionSummary(state: LocationsState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
             .background(colors.surface)
             .border(1.dp, colors.borderVariant, MaterialTheme.shapes.medium)
             .padding(horizontal = TvDimens.Space2, vertical = TvDimens.Space1)
@@ -399,7 +405,7 @@ private fun TvSectionHeading(text: String, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = TvDimens.Space1),
+            .padding(top = TvDimens.Space2),
     )
 }
 
@@ -468,8 +474,10 @@ private fun FastestRow(
 }
 
 /**
- * One server in the ten-foot list. The row body and the trailing star are two
- * separate focus targets: D-pad right reaches the star without selecting.
+ * One server in the ten-foot list, drawn as a house card. The row body and the
+ * trailing star are two separate focus targets: D-pad right reaches the star
+ * without selecting. The body and star share the card's outline so only the
+ * focus ring is drawn inside it.
  */
 @Composable
 private fun ServerRow(
@@ -483,6 +491,7 @@ private fun ServerRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.medium
     val favoriteDescription = stringResource(
         if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
         row.title,
@@ -490,8 +499,13 @@ private fun ServerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .background(if (selected) colors.primary.copy(alpha = 0.16f) else colors.surface)
-            .border(1.dp, colors.borderVariant, MaterialTheme.shapes.medium)
+            .border(
+                width = 1.dp,
+                color = if (selected) colors.primary.copy(alpha = 0.5f) else colors.borderVariant,
+                shape = shape,
+            )
             .padding(TvDimens.Space1),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
@@ -499,7 +513,11 @@ private fun ServerRow(
         TvFocusableSurface(
             onClick = { onSelect(row.country, row.city, row.server) },
             enabled = !saving,
-            containerColor = colors.surface.copy(alpha = 0f),
+            shape = shape,
+            containerColor = Color.Transparent,
+            restingBorder = false,
+            scaleOnFocus = false,
+            contentPadding = TvDimens.Space1,
             modifier = modifier
                 .weight(1f)
                 .semantics(mergeDescendants = true) { this.selected = selected }
@@ -555,30 +573,48 @@ private fun ServerRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                 )
-                Text(
-                    text = when {
-                        saving -> "…"
-                        selected -> "✓"
-                        else -> " "
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.primary,
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
+                Box(
+                    modifier = Modifier.size(20.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        saving -> Text(
+                            text = "…",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.primary,
+                        )
+                        selected -> Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
             }
         }
-        TvButton(
-            label = if (favorite) "★" else "☆",
+        TvFocusableSurface(
             onClick = onFavorite,
+            enabled = !saving,
+            shape = shape,
+            containerColor = Color.Transparent,
+            restingBorder = false,
+            contentPadding = 0.dp,
             modifier = Modifier
-                .heightIn(min = 48.dp)
+                .size(TvDimens.MinTarget)
                 .semantics {
                     contentDescription = favoriteDescription
                     this.selected = favorite
                 }
                 .testTag(LocationsTags.favorite(row)),
-            enabled = !saving,
-        )
+        ) {
+            Icon(
+                imageVector = if (favorite) Icons.Filled.Star else Icons.Outlined.Star,
+                contentDescription = null,
+                tint = if (favorite) colors.primary else colors.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
     }
 }
 
@@ -597,6 +633,7 @@ private fun NoticeBanner(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
             .background(tint.copy(alpha = 0.12f))
             .border(1.dp, tint.copy(alpha = 0.5f), MaterialTheme.shapes.medium)
             .padding(TvDimens.Space2)
