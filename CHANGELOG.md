@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Download links are platform badges**: the README table and the generated
+  release notes, which now start with the download table, show one badge per
+  file.
+
 ## [0.9.1] - 2026-11-01
 
 Android Locations consistency: every server is now its own house card, the

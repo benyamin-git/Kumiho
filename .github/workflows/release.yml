@@ -121,6 +121,7 @@ jobs:
       - name: Build release notes
         run: |
           version="${GITHUB_REF_NAME#v}"
+          download="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
           notes="$RUNNER_TEMP/kumiho-release-notes.md"
           awk -v version="$version" '
             /^## \[/ {
@@ -130,20 +131,17 @@ jobs:
             found { print }
           ' CHANGELOG.md > "$RUNNER_TEMP/changelog-section.md"
           {
+            printf '## Download\n\n'
+            printf '| Platform | Download |\n| --- | --- |\n'
+            printf '| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](%s/Kumiho-Windows-amd64.zip) |\n' "$download"
+            printf '| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](%s/Kumiho-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](%s/Kumiho-Linux-arm64.zip) |\n' "$download" "$download"
+            printf '| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](%s/Kumiho-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](%s/Kumiho-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](%s/Kumiho-Android-universal.apk) |\n' "$download" "$download" "$download"
+            printf '\nVerify every download against [SHA256SUMS](%s/SHA256SUMS).\n\n' "$download"
             if [ -s "$RUNNER_TEMP/changelog-section.md" ]; then
               cat "$RUNNER_TEMP/changelog-section.md"
             else
-              echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md)."
+              printf 'See [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md).\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
             fi
-            printf '\n## Download\n\n'
-            printf '| Platform | File |\n| --- | --- |\n'
-            printf '| Linux amd64 | [Kumiho-Linux-amd64.zip](https://github.com/%s/releases/download/%s/Kumiho-Linux-amd64.zip) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
-            printf '| Linux arm64 | [Kumiho-Linux-arm64.zip](https://github.com/%s/releases/download/%s/Kumiho-Linux-arm64.zip) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
-            printf '| Windows 11 amd64 | [Kumiho-Windows-amd64.zip](https://github.com/%s/releases/download/%s/Kumiho-Windows-amd64.zip) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
-            printf '| Android arm64-v8a | [Kumiho-Android-arm64-v8a.apk](https://github.com/%s/releases/download/%s/Kumiho-Android-arm64-v8a.apk) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
-            printf '| Android armeabi-v7a | [Kumiho-Android-armeabi-v7a.apk](https://github.com/%s/releases/download/%s/Kumiho-Android-armeabi-v7a.apk) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
-            printf '| Android universal | [Kumiho-Android-universal.apk](https://github.com/%s/releases/download/%s/Kumiho-Android-universal.apk) |\n' "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
-            printf '\nVerify every download against `SHA256SUMS`.\n'
           } > "$notes"
           cat "$notes"
 
