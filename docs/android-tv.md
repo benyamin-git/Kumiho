@@ -93,15 +93,19 @@ colour: rows scale and gain a border when focused.
 - Logs can be viewed, copied line by line and shared with Android's share
   sheet. Diagnostics can be copied and re-run.
 - The Locations tab has pinned **Fastest**, **Favorites** and **Recent**
-  sections above one flat server list with real 32×24 flags, a two-line
-  `Country · City` / `host:port · protocols` row, search, a favorite star,
+  sections above one flat server list. Each server is a rounded house card
+  (surface fill, 1 dp outline, 12 dp radius) with real 32×24 flags, a two-line
+  `Country · City` / `host:port · protocols` body, search, a favorite star,
   a **Clear** action on Recent, **Ping all**, and a **Show locked locations**
-  / **Hide locked locations** footer. Fastest stays disabled with its honest
-  hint until a fresh Ping all produces an RTT; selecting it resolves once to
-  the actual server. Locked rows carry a text **Locked** badge. There are no
-  carets or expand/collapse controls, and D-pad focus stays on the list after
-  a search or a speed-order switch. The speed order applies only to the full
-  list when the engine emits `ping_done`; there is no timer.
+  / **Hide locked locations** footer. The selected card adds the primary tint,
+  a matching outline and a check; the body and star are separate focus targets
+  and the focus ring is the only outline drawn inside the card. Fastest stays
+  disabled with its honest hint until a fresh Ping all produces an RTT;
+  selecting it resolves once to the actual server. Locked rows carry a text
+  **Locked** badge. There are no carets or expand/collapse controls, and D-pad
+  focus stays on the list after a search or a speed-order switch. The speed
+  order applies only to the full list when the engine emits `ping_done`; there
+  is no timer.
 - Settings includes **Region**: `allow_locked`, the HTTPS `relay_url`, a
   write-only `relay_token` with Set/Clear, and a **Test relay** action with
   its inline result. Region help text states that the relay is used only
@@ -158,11 +162,12 @@ TV's own launcher or Wi-Fi behaviour.
 - [ ] Setup: consent, browser sign-in (WebView), VPN permission,
       notifications and Always-on guidance all complete with the remote.
 - [ ] Dashboard: connect, disconnect, reconnect and the options page.
-- [ ] Locations: search and no-match copy, real 32×24 flags, flat focusable
-      rows, Fastest/Favorites/Recent sections, favorite star and Clear,
-      select a server, then Ping all and inspect the speed order (Recommended
-      first, failures last); toggle the locked footer and confirm there are
-      no carets or expand/collapse controls.
+- [ ] Locations: search and no-match copy, real 32×24 flags, rounded
+      focusable server cards with one outline per card, Fastest/Favorites/Recent
+      sections, favorite star and Clear, select a server, then Ping all and
+      inspect the speed order (Recommended first, failures last); toggle the
+      locked footer and confirm there are no carets or expand/collapse
+      controls.
 - [ ] Account: add, rename, remove, rotate and sign out.
 - [ ] Settings: theme, accent, update check, split tunneling, bypass, every
       engine row/dialog, and the Region URL/token/Test relay controls.

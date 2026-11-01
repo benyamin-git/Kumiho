@@ -8,6 +8,27 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-01
+
+Android Locations consistency: every server is now its own house card, the
+selected row keeps a rounded highlight, and the TV list stops drawing nested
+outlines.
+
+### Changed
+
+- **Android Locations rows are cards.** Each server is a surface-container card
+  with a 1 dp hairline outline, a 12 dp radius and 8 dp between rows. The
+  selected row keeps the primary tint and gains a matching outline plus the
+  check mark; the Fastest row uses the same card, and its disabled state keeps
+  the flag slot so the text does not jump.
+- **Locations toolbar and headings match the rest of the app.** Refresh sits
+  on the left and Ping all is an outlined button on the right; section headings
+  use the Settings group-header scale and spacing.
+- **Android TV Locations uses the same card language.** One rounded card per
+  server with the primary tint and outline on the selected row, Material star
+  and check icons, rounded summary and notice backgrounds, and no nested
+  outline inside the card. The star remains a separate D-pad focus target.
+
 ## [0.9.0] - 2026-10-31
 
 Region and location truth across every client: blocked-region handling with an
@@ -731,7 +752,9 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 [0.7.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.0
 [0.6.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0
 [0.5.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.1
+[0.9.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.0
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1

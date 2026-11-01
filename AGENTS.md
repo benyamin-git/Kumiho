@@ -135,9 +135,9 @@ them locally for any change under `android/`, `mobile/` or
   `v0.7.0` release on 2026-10-28, the `v0.7.1` release on 2026-10-30, the
   `v0.7.2` release on 2026-10-30, the `v0.8.0` release on 2026-10-30, the
   `v0.8.1` release on 2026-10-30, the `v0.8.2` release on 2026-10-30, the
-  `v0.8.3` release on 2026-10-31 and the `v0.9.0` release on 2026-10-31; each
-  release workflow published the desktop and Android assets. See
-  [docs/android-testing.md](docs/android-testing.md).
+  `v0.8.3` release on 2026-10-31, the `v0.9.0` release on 2026-10-31 and the
+  `v0.9.1` release on 2026-11-01; each release workflow published the desktop
+  and Android assets. See [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
 
@@ -286,6 +286,11 @@ them locally for any change under `android/`, `mobile/` or
 - TV: Compose for TV type scale and remote-first focus (larger type, focus
   ring, overscan-safe frame) is an approved form-factor departure, not a
   second palette. TV assets: `tv_banner`, `ic_launcher_tv`, channel logo.
+- Locations: Android phone and Android TV draw every server as its own house
+  card (surface-container fill, 1 dp hairline outline, 12 dp radius, 8 dp
+  gaps); the selected row adds the primary tint, a matching outline and a
+  check, and the TV card keeps the focus ring as its only inner outline
+  (v0.9.1).
 - Approved: 2026-10-15; locations redesign approved 2026-10-29
 
 ## Vendor policy

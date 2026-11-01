@@ -58,26 +58,21 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations | Settings |
 | --- | --- | --- |
-| <img src="screenshots/android-phone/dashboard.png" width="260" alt="Android dashboard: connected tunnel with quota and session totals"> | <img src="screenshots/android-phone/locations.png" width="260" alt="Android locations: search, Ping all and flagged country rows"> | <img src="screenshots/android-phone/settings.png" width="260" alt="Android settings: app and system cards"> |
+| <img src="screenshots/android-phone/dashboard.png" width="260" alt="Android dashboard: connected tunnel with quota and session totals"> | <img src="screenshots/android-phone/locations.png" width="260" alt="Android locations: search, Ping all and server list"> | <img src="screenshots/android-phone/settings.png" width="260" alt="Android settings: app and system cards"> |
 
 ### Android TV
 
 | Home | Locations | Settings |
 | --- | --- | --- |
-| <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first country list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
+| <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.9.0
+## What's new in v0.9.1
 
-- **Region and location truth** — HTTP 451 is reported honestly with an
-  optional user-operated relay, the real server list behind Firefox's
-  filters, real-edge latency, Fastest, favorites and recents on every client.
-- **Browser sign-in completes in Chrome, Brave and Firefox** — Firefox
-  Accounts now finishes on its HTTPS success page, so the complete URL can be
-  pasted on desktop and intercepted directly by the Android WebView. Browser
-  and password tokens refresh with the client that issued them.
-- **Settings → Region everywhere** — `allow_locked`, relay URL, the
-  write-only relay token and a **Test relay** action on the CLI, TUI, Windows
-  GUI, Android phone and Android TV.
+- **Android Locations looks like the rest of the app** — every server is its
+  own card with a hairline outline and a rounded selected highlight, and the
+  toolbar and section headings now follow the house layout.
+- **Android TV Locations matches too** — rounded focusable server cards,
+  Material star and check icons, and a single outline per card.
 
 Older changes are in the [changelog](CHANGELOG.md).
 

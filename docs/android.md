@@ -6,22 +6,21 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.9.0**
-(`versionCode` 900); the README carries the latest published release and
+This guide describes the app as implemented for **v0.9.1**
+(`versionCode` 901); the README carries the latest published release and
 download links. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. Physical acceptance for v0.6.0 through v0.8.3 is still pending.
+> full pass. Physical acceptance for v0.6.0 through v0.9.1 is still pending.
 > The production-signed
-> [v0.8.3 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.8.3)
-> is published with the three Android APKs and `SHA256SUMS`; the v0.9.0
-> release is built from the same signed pipeline. The signing key and GitHub
+> [v0.9.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.9.1)
+> ships the three Android APKs with `SHA256SUMS`. The signing key and GitHub
 > Actions secret values remain user-owned. Local builds are test builds, not
 > published releases. The direct Firefox Accounts OAuth browser flow described
-> below replaced the v0.6.0 flow and is in the published v0.8.3 APK.
+> below replaced the v0.6.0 flow and is in the published v0.9.1 APK.
 
 ## Requirements
 
@@ -211,11 +210,16 @@ system dialog; a denial closes the sheet and shows the reason.
 above one flat server-only list. There are no country or city header rows,
 carets or expand/collapse controls; empty Favorites/Recent sections are
 hidden. The full list puts the engine's recommended entry first, then
-countries A–Z, cities A–Z and hostnames A–Z. Every row carries a real 4:3
-country flag (a red star for Recommended and a globe for an unknown code), the
-full `Country · City` on the first line and `hostname:port · protocols` on the
-second; the latency or selection check trails the row, and a separate 48 dp
-star button toggles the favorite. A locked row carries a text **Locked**
+countries A–Z, cities A–Z and hostnames A–Z. Every server is its own card: a
+surface-container fill, a 1 dp hairline outline, a 12 dp radius and 8 dp
+between rows. The selected card keeps the primary tint and gains a matching
+outline plus a check; the pinned Fastest row uses the same card. The toolbar
+puts Refresh on the left and an outlined **Ping all** on the right, and each
+section heading uses the Settings group-header scale. Every row carries a real
+4:3 country flag (a red star for Recommended and a globe for an unknown code),
+the full `Country · City` on the first line and `hostname:port · protocols` on
+the second; the latency or selection check trails the row, and a separate
+48 dp star button toggles the favorite. A locked row carries a text **Locked**
 badge. A quarantined or targetless server is never listed. Refresh keeps the
 previous list on failure and offers one Retry.
 
@@ -809,7 +813,7 @@ sign-off has happened.
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
-| Locations flat server list, refresh, search and Ping all | Fastest/Favorites/Recent pinned sections, real flags, live search, real-edge ping with `ping_done` completion, deferred speed order, locked footer |
+| Locations flat server list, refresh, search and Ping all | Fastest/Favorites/Recent pinned sections, card rows with rounded selection, real flags, live search, real-edge ping with `ping_done` completion, deferred speed order, locked footer |
 | Control-plane relay, HTTP 451 handling and `allow_locked` | Region settings (URL, write-only token, Test relay) and the Locations locked footer |
 | Desktop runtime settings, overrides/reset | Settings groups with 23 engine rows (22 writes and the Test relay action) and the 2 Android-owned rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
@@ -828,7 +832,8 @@ sign-off has happened.
 
 All four location surfaces — Android phone, Android TV, the Windows GUI and
 the TUI — use the same flat server-only list, country/city/hostname order,
-one Ping all action and speed order that switches only at completion. The GUI
+one Ping all action and speed order that switches only at completion. The
+Android phone and TV draw each server as its own house card (v0.9.1). The GUI
 dashboard's native country select is intentionally text-only with a real flag
 beside it (D39); the TUI keeps emoji flags.
 

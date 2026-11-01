@@ -178,7 +178,7 @@ Then run:
 
 Current expected result: **157 phone tests**, plus the 21 TV-only testcases
 which skip by assumption on the phone AVD; the Gradle task is green. The suite
-includes the AAR probe, setup, dashboard, the flat Locations list and its
+includes the AAR probe, setup, dashboard, the card Locations list and its
 connect targets, flags, search and Ping-all/speed-order paths, settings, split
 tunneling, account, logs, diagnostics, notification/tile reducers and the
 screenshot capture tests. A connected run uninstalls the app and its external
@@ -219,7 +219,7 @@ Then run:
     make android-tv-emulator-test
 
 This builds the x86_64 AAR and runs only the TV package (**21 testcases**). The
-screenshot test writes Home, setup, the flat Locations list and Settings
+screenshot test writes Home, setup, the card Locations list and Settings
 captures in Light, Dark and OLED to
 `/sdcard/Android/data/dev.benyamin.kumiho.debug/files/tv-screenshots`; pull
 them with `adb pull` and review the real flags, overscan, focus and contrast.
@@ -538,7 +538,9 @@ remain open.
 - [ ] Open Locations on a phone. Expect pinned **Fastest**, **Favorites** and
       **Recent** sections above one flat server-only list, no country or city
       headers/carets and no expand/collapse action. Empty pinned sections are
-      hidden. Recommended is first in the full list; rows show a real flag,
+      hidden. Recommended is first in the full list; each row is a rounded card
+      with a hairline outline, and selecting one adds the primary tint, a
+      matching outline and the check. Rows show a real flag,
       `Country · City`, then `hostname:port · protocols`, with latency or a
       selection check trailing and a star button for favorites. A locked row
       shows a **Locked** badge, and the footer toggles **Show/Hide locked
