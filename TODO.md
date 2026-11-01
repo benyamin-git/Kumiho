@@ -131,6 +131,18 @@ Android TV, Windows GUI and the TUI.
   - Added [docs/releasing.md](docs/releasing.md) to the release checklist so
     the About panel is reviewed whenever capabilities change.
 
+- [ ] **C7 — Regenerate the Android Locations screenshots**
+  - Problem: `screenshots/android-phone/locations.png` and
+    `screenshots/android-tv/locations.png` are v0.9.0 captures, but v0.9.1
+    draws every server as its own card, so both images no longer match the app.
+  - Action: run `make android-emulator-test` and
+    `make android-tv-emulator-test`, pull `locations-screenshots` and
+    `tv-screenshots` from the debug app's external files directory, and copy
+    the chosen frames over the README assets as described in
+    `scripts/screenshots/README.md`.
+  - Deferred: Gradle and emulator runs are excluded from the T3 release
+    thread, so the images are refreshed in a later session.
+
 ## Engineering follow-ups
 
 - [ ] **D1 — Harden `TestEngineForwardsTCPFlowToDialer` against CI flakes**
