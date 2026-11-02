@@ -10,9 +10,10 @@ permissions:
 jobs:
   release:
     # The Android release script accepts stable MAJOR.MINOR.PATCH tags only.
-    # Hyphenated tags (for example v0.5.0-rc.1) are not published. Releases are
-    # full releases from v0.8.0 so /releases/latest and the stable download
-    # links in README.md resolve; v0.7.2 and earlier remain prereleases.
+    # Hyphenated tags (for example v0.5.0-rc.1) are not published. The tag
+    # builds a draft release with the signed APKs so the Android phone and TV
+    # builds can be tested first; publishing the draft makes it the latest
+    # release and keeps the /releases/latest links resolving.
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -153,7 +154,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "Kumiho $GITHUB_REF_NAME" \
             --verify-tag \
-            --latest \
+            --draft \
             --notes-file "$RUNNER_TEMP/kumiho-release-notes.md" \
             release-assets/Kumiho-Linux-amd64.zip \
             release-assets/Kumiho-Linux-arm64.zip \
