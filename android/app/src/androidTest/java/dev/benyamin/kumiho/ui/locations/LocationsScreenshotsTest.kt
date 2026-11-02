@@ -2,13 +2,9 @@ package dev.benyamin.kumiho.ui.locations
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -18,6 +14,9 @@ import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
+import dev.benyamin.kumiho.ui.shell.AppShell
+import dev.benyamin.kumiho.ui.shell.Destination
+import dev.benyamin.kumiho.ui.shell.ShellNavState
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
@@ -55,14 +54,15 @@ class LocationsScreenshotsTest {
                     KumihoAccent.BLUE,
                 ),
             ) {
-                // The app shell owns the Scaffold background; the harness adds
-                // one so a dark theme is not drawn on the window's white.
-                Surface(
-                    color = MaterialTheme.colorScheme.background,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    LocationsScreen(state = state, actions = noOpActions())
-                }
+                // The real shell, so the capture shows the same top and bottom
+                // bars the app draws.
+                AppShell(
+                    state = ShellNavState(tab = Destination.Locations),
+                    onSelectTab = {},
+                    onOpenMoreRoute = {},
+                    onBack = { false },
+                    locations = { LocationsScreen(state = state, actions = noOpActions()) },
+                )
             }
         }
         val output = InstrumentationRegistry.getInstrumentation()

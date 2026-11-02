@@ -10,8 +10,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.requestFocus
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.benyamin.kumiho.BuildConfig
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.engine.City
@@ -21,6 +24,7 @@ import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.engine.Settings
+import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.ui.dashboard.ConnectOptionsState
 import dev.benyamin.kumiho.ui.dashboard.DashboardActions
 import dev.benyamin.kumiho.ui.dashboard.DashboardPhase
@@ -35,16 +39,21 @@ import dev.benyamin.kumiho.ui.settings.SettingsActions
 import dev.benyamin.kumiho.ui.settings.SettingsAppState
 import dev.benyamin.kumiho.ui.settings.BatteryOptimization
 import dev.benyamin.kumiho.ui.settings.SettingsState
-import dev.benyamin.kumiho.ui.settings.UpdateState
+import dev.benyamin.kumiho.ui.shell.Destination
+import dev.benyamin.kumiho.ui.shell.ShellNavigation
 import dev.benyamin.kumiho.ui.setup.SetupActions
 import dev.benyamin.kumiho.ui.setup.SetupState
 import dev.benyamin.kumiho.ui.setup.SetupStep
+import dev.benyamin.kumiho.ui.theme.KumihoAccent
+import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.ui.tv.TvAppShell
 import dev.benyamin.kumiho.ui.tv.dashboard.TvDashboardScreen
 import dev.benyamin.kumiho.ui.tv.locations.TvLocationsScreen
 import dev.benyamin.kumiho.ui.tv.settings.TvSettingsScreen
 import dev.benyamin.kumiho.ui.tv.setup.TvSetupScreen
 import dev.benyamin.kumiho.ui.tv.theme.TvKumihoTheme
+import dev.benyamin.kumiho.ui.tv.tvRailTag
 import dev.benyamin.kumiho.vpn.SplitMode
 import java.io.File
 import org.junit.Assert.assertTrue
@@ -69,43 +78,70 @@ class TvScreenshotsTest : TvTestBase() {
         output.mkdirs()
 
         capture(output, "home")
-        rule.runOnIdle { screen = Screen.Options }
+        show(Screen.Options)
         capture(output, "options")
-        rule.runOnIdle { screen = Screen.Setup }
+        show(Screen.Setup)
         capture(output, "setup")
-        rule.runOnIdle { screen = Screen.Locations }
+        show(Screen.Locations)
         capture(output, "locations")
-        rule.runOnIdle { screen = Screen.Settings }
+        show(Screen.Settings)
         capture(output, "settings")
     }
 
     private var screen by mutableStateOf(Screen.Home)
+    private val nav = ShellNavigation(Destination.Home)
+
+    /** Selects the page and its rail tab; setup lives outside the shell. */
+    private fun show(next: Screen) {
+        rule.runOnIdle {
+            screen = next
+            next.destination?.let(nav::selectTab)
+        }
+        rule.waitForIdle()
+        if (next.railFocus) {
+            // A page that takes focus by itself (the locations list, the options
+            // panel) keeps it; otherwise the remote is still on the rail item.
+            rule.onNodeWithTag(tvRailTag(nav.state.value.tab)).requestFocus()
+            rule.waitForIdle()
+        }
+    }
 
     @androidx.compose.runtime.Composable
     private fun CaptureFrame() {
         TvKumihoTheme(palette(theme)) {
-            Surface(
-                color = androidx.tv.material3.MaterialTheme.colorScheme.background,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                when (screen) {
-                    Screen.Home -> TvDashboardScreen(state = dashboardState(), actions = dashboardActions())
-                    Screen.Options -> TvDashboardScreen(state = optionsState(), actions = dashboardActions())
-                    Screen.Setup -> TvSetupScreen(state = SetupState(step = SetupStep.CONSENT), actions = setupActions())
-                    Screen.Locations -> TvLocationsScreen(state = locationsState(), actions = locationsActions())
-                    Screen.Settings -> TvSettingsScreen(
-                        state = settingsState(),
-                        appState = SettingsAppState(
-                            theme = theme,
-                            splitMode = SplitMode.EXCLUDE,
-                            splitAppCount = 3,
-                            bypassEnabled = true,
-                            bypassLoaded = true,
-                            battery = BatteryOptimization.OPTIMIZED,
-                        ),
-                        actions = settingsActions(),
-                    )
+            if (screen == Screen.Setup) {
+                Surface(
+                    color = androidx.tv.material3.MaterialTheme.colorScheme.background,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    TvSetupScreen(state = SetupState(step = SetupStep.CONSENT), actions = setupActions())
                 }
+            } else {
+                // The real shell, so the capture shows the rail, the top bar and
+                // the overscan frame the app draws.
+                TvAppShell(
+                    nav = nav,
+                    home = {
+                        if (screen == Screen.Options) {
+                            TvDashboardScreen(state = optionsState(), actions = dashboardActions())
+                        } else {
+                            TvDashboardScreen(state = dashboardState(), actions = dashboardActions())
+                        }
+                    },
+                    locations = {
+                        TvLocationsScreen(state = locationsState(), actions = locationsActions())
+                    },
+                    account = {},
+                    settings = {
+                        TvSettingsScreen(
+                            state = settingsState(),
+                            appState = appState(),
+                            actions = settingsActions(),
+                        )
+                    },
+                    logs = {},
+                    diagnostics = {},
+                )
             }
         }
     }
@@ -214,6 +250,8 @@ class TvScreenshotsTest : TvTestBase() {
         onRetryNotice = {},
     )
 
+    private val releaseVersion = BuildConfig.VERSION_NAME.removeSuffix("-debug")
+
     private fun settingsState() = SettingsState(
         loading = false,
         loaded = true,
@@ -241,9 +279,21 @@ class TvScreenshotsTest : TvTestBase() {
             solveChallenges = true,
             keepaliveProfile = "standard",
         ),
-        appVersion = "0.7.0",
-        engineVersion = "0.7.0",
-        update = UpdateState.Available("0.7.0", "https://example.invalid/release"),
+        appVersion = releaseVersion,
+        engineVersion = "v$releaseVersion",
+    )
+
+    private fun appState() = SettingsAppState(
+        theme = theme,
+        accent = KumihoAccent.BLUE,
+        accentPreviews = KumihoAccent.entries.associateWith { accent ->
+            PaletteMapping.fromJson(Mobile.palette(theme.id, accent.id), theme, accent).primary
+        },
+        splitMode = SplitMode.EXCLUDE,
+        splitAppCount = 3,
+        bypassEnabled = true,
+        bypassLoaded = true,
+        battery = BatteryOptimization.OPTIMIZED,
     )
 
     private fun settingsActions() = SettingsActions(
@@ -275,7 +325,13 @@ class TvScreenshotsTest : TvTestBase() {
         ),
     )
 
-    private enum class Screen { Home, Options, Setup, Locations, Settings }
+    private enum class Screen(val destination: Destination?, val railFocus: Boolean = true) {
+        Home(Destination.Home),
+        Options(Destination.Home, railFocus = false),
+        Setup(null, railFocus = false),
+        Locations(Destination.Locations, railFocus = false),
+        Settings(Destination.Settings),
+    }
 
     private companion object {
         const val GIB = 1024L * 1024L * 1024L

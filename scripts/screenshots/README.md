@@ -87,7 +87,11 @@ and copy `t13-{home,locations,settings}-dark.png` to
 `screenshots/android-tv/{home,locations,settings}.png`.
 
 The tests render the real Compose screens with fixed sample data at the
-emulators' native sizes (1080×2400 phone, 1920×1080 TV).
+emulators' native sizes (1080×2400 phone, 1920×1080 TV). The phone captures go
+through `AppShell` and the TV captures through `TvAppShell`, so the top bar, the
+bottom bar (phone), the rail and the overscan frame (TV) are the ones the app
+draws. The version rows read `BuildConfig.VERSION_NAME` with the debug suffix
+stripped, so a regenerated capture never shows a stale release.
 
 The script leaves `dist/kumiho-gui-web-linux-amd64` built with the release
 version label. Run `make build-web` to restore the normal git-describe build.

@@ -131,17 +131,17 @@ Android TV, Windows GUI and the TUI.
   - Added [docs/releasing.md](docs/releasing.md) to the release checklist so
     the About panel is reviewed whenever capabilities change.
 
-- [ ] **C7 — Regenerate the Android Locations screenshots**
+- [x] **C7 — Regenerate the Android Locations screenshots**
   - Problem: `screenshots/android-phone/locations.png` and
     `screenshots/android-tv/locations.png` are v0.9.0 captures, but v0.9.1
     draws every server as its own card, so both images no longer match the app.
-  - Action: run `make android-emulator-test` and
-    `make android-tv-emulator-test`, pull `locations-screenshots` and
-    `tv-screenshots` from the debug app's external files directory, and copy
-    the chosen frames over the README assets as described in
-    `scripts/screenshots/README.md`.
-  - Deferred: Gradle and emulator runs are excluded from the T3 release
-    thread, so the images are refreshed in a later session.
+  - Done (2026-11-02): every phone and TV capture now renders through
+    `AppShell` / `TvAppShell` instead of the bare screen, so the bottom bar,
+    the rail, the top bar and the overscan frame appear. The TV Settings
+    capture passes `accentPreviews`, so the accent buttons show their colour
+    swatches like the app, and both Settings captures read
+    `BuildConfig.VERSION_NAME` instead of hardcoded versions. All six images
+    were regenerated from the running phone and TV emulators.
 
 ## Engineering follow-ups
 

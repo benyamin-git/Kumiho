@@ -2,13 +2,9 @@ package dev.benyamin.kumiho.ui.settings
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
@@ -19,7 +15,11 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.benyamin.kumiho.BuildConfig
 import dev.benyamin.kumiho.engine.Settings
+import dev.benyamin.kumiho.ui.shell.AppShell
+import dev.benyamin.kumiho.ui.shell.Destination
+import dev.benyamin.kumiho.ui.shell.ShellNavState
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
@@ -45,6 +45,7 @@ class SettingsScreenshotsTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>()
 
+    private val releaseVersion = BuildConfig.VERSION_NAME.removeSuffix("-debug")
     private var theme by mutableStateOf(ThemeId.LIGHT)
     private var state by mutableStateOf(sceneState())
     private var app by mutableStateOf(appState(ThemeId.LIGHT))
@@ -59,12 +60,17 @@ class SettingsScreenshotsTest {
                     KumihoAccent.BLUE,
                 ),
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.background,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    SettingsScreen(state = state, appState = app, actions = noOpActions())
-                }
+                // The real shell, so the capture shows the same top and bottom
+                // bars the app draws.
+                AppShell(
+                    state = ShellNavState(tab = Destination.Settings),
+                    onSelectTab = {},
+                    onOpenMoreRoute = {},
+                    onBack = { false },
+                    settings = {
+                        SettingsScreen(state = state, appState = app, actions = noOpActions())
+                    },
+                )
             }
         }
         val output = InstrumentationRegistry.getInstrumentation()
@@ -124,12 +130,10 @@ class SettingsScreenshotsTest {
         loading = false,
         loaded = true,
         snapshot = SETTINGS,
-        update = UpdateState.Available(
-            version = "0.6.0",
-            url = "https://github.com/benyamin-git/Kumiho/releases/tag/v0.6.0",
-        ),
-        appVersion = "0.5.0-debug",
-        engineVersion = "0.5.0",
+        // A release install shows the tag; the debug suffix and the git
+        // describe detail are build noise.
+        appVersion = releaseVersion,
+        engineVersion = "v$releaseVersion",
     )
 
     private fun appState(theme: ThemeId) = SettingsAppState(
