@@ -8,8 +8,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-02
+
 ### Changed
 
+- **New Kumiho artwork on every icon surface**: the Windows executable and tray
+  icon, the Android launcher (adaptive, monochrome and TV) and the TV
+  banner/channel logo now use the fox illustration.
 - **Download links are platform badges**: the README table and the generated
   release notes, which now start with the download table, show one badge per
   file.
