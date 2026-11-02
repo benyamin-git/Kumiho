@@ -121,10 +121,11 @@ them locally for any change under `android/`, `mobile/` or
   the WebView2 loader), builds and verifies the signed Android APKs with the
   five `ANDROID_*` secrets (including the certificate fingerprint), appends
   the APKs to `SHA256SUMS`, attaches all desktop and Android assets, and
-  creates the GitHub release. The signing material is removed by a step trap
-  and an `always()` step. Releases are published as full releases from
-  v0.8.0 so `/releases/latest` and the stable README download links resolve;
-  v0.7.2 and earlier remain prereleases. Hyphenated tags are not published.
+  creates a **draft** GitHub release. The signing material is removed by a
+  step trap and an `always()` step. The draft is published manually as the
+  latest release after the Android phone and TV builds pass, so
+  `/releases/latest` and the stable README download links resolve; v0.7.2 and
+  earlier remain prereleases. Hyphenated tags are not published.
   Assets use stable, version-free names; the release description is built from
   the matching `CHANGELOG.md` section plus a download table. The manual
   checklist (including the repository About panel) is
@@ -135,9 +136,10 @@ them locally for any change under `android/`, `mobile/` or
   `v0.7.0` release on 2026-10-28, the `v0.7.1` release on 2026-10-30, the
   `v0.7.2` release on 2026-10-30, the `v0.8.0` release on 2026-10-30, the
   `v0.8.1` release on 2026-10-30, the `v0.8.2` release on 2026-10-30, the
-  `v0.8.3` release on 2026-10-31, the `v0.9.0` release on 2026-10-31 and the
-  `v0.9.1` release on 2026-11-01; each release workflow published the desktop
-  and Android assets. See [docs/android-testing.md](docs/android-testing.md).
+  `v0.8.3` release on 2026-10-31, the `v0.9.0` release on 2026-10-31, the
+  `v0.9.1` release on 2026-11-01 and the `v0.9.2` release on 2026-11-02; each
+  release workflow uploaded the desktop and Android assets. See
+  [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
 
