@@ -63,13 +63,13 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.9.1
+## What's new in v0.9.2
 
-- **Android Locations looks like the rest of the app** — every server is its
-  own card with a hairline outline and a rounded selected highlight, and the
-  toolbar and section headings now follow the house layout.
-- **Android TV Locations matches too** — rounded focusable server cards,
-  Material star and check icons, and a single outline per card.
+- **New Kumiho artwork everywhere** — the fox now appears on the Windows app
+  and tray, the Android launcher (including themed and TV icons), the TV
+  banner and the channel logo.
+- **Release notes start with downloads** — each release now leads with a
+  platform download table.
 
 Older changes are in the [changelog](CHANGELOG.md).
 
