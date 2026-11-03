@@ -63,13 +63,11 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.9.2
+## What's new in v0.9.3
 
-- **New Kumiho artwork everywhere** — the fox now appears on the Windows app
-  and tray, the Android launcher (including themed and TV icons), the TV
-  banner and the channel logo.
-- **Release notes start with downloads** — each release now leads with a
-  platform download table.
+- **Steadier CI** — the TCP forwarding test is deterministic instead of
+  occasionally timing out, and Android toolchain setup retries a truncated SDK
+  download instead of failing the job. Nothing in the apps changed.
 
 Older changes are in the [changelog](CHANGELOG.md).
 
