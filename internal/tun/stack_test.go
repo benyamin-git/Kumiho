@@ -160,7 +160,7 @@ func TestEngineForwardsTCPFlowToDialer(t *testing.T) {
 
 	dev := newScriptedDevice()
 	defer dev.Close()
-	dev.feed(tcpPacket(src, dst, srcPort, dstPort, clientISN, 0, 0x02)) // SYN
+	syn := tcpPacket(src, dst, srcPort, dstPort, clientISN, 0, 0x02)
 
 	dialed := make(chan string, 1)
 	eng, err := Start(dev, 1500, func(_ context.Context, host string, port int) (net.Conn, error) {
@@ -190,12 +190,20 @@ func TestEngineForwardsTCPFlowToDialer(t *testing.T) {
 		}
 	}()
 
+	// Feed the SYN only after Start: the netstack drops packets to an
+	// unowned address until CreateStack has enabled promiscuous mode and
+	// spoofing, and the device reader starts before that point. A SYN
+	// queued earlier can be read inside that window, dropped, and then the
+	// test times out because nothing retransmits it (CI flake, D1).
+	dev.feed(syn)
+
 	select {
 	case got := <-dialed:
 		if got != "192.0.2.1:443" {
 			t.Fatalf("dialer got %q, want 192.0.2.1:443", got)
 		}
 	case <-time.After(10 * time.Second):
+		t.Logf("fed SYN % x", syn)
 		for {
 			select {
 			case pkt := <-dev.wrote:
