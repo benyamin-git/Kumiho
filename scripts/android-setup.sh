@@ -203,8 +203,22 @@ ensure_sdk_packages() {
 	# `yes` dies of SIGPIPE once sdkmanager accepts everything; that is fine.
 	set +o pipefail
 	yes | sdkmanager --licenses >/dev/null
-	say "installing ${missing[*]}"
-	yes | sdkmanager --install "${missing[@]}" >/dev/null
+	local attempt
+	for attempt in 1 2 3; do
+		say "installing ${missing[*]} (attempt $attempt)"
+		if yes | sdkmanager --install "${missing[@]}" >/dev/null; then
+			break
+		fi
+		# A truncated package download fails the whole job with
+		# "Error on ZipFile unknown archive" (android-tv, run 41106804477).
+		# Drop the cached archive and re-download instead of failing the
+		# build on Google's CDN; the third failure is real.
+		if [ "$attempt" -eq 3 ]; then
+			set -o pipefail
+			fail "sdkmanager could not install: ${missing[*]}"
+		fi
+		rm -rf "$ANDROID_HOME/.temp" "$HOME/.android/cache"
+	done
 	set -o pipefail
 	for pkg in "${missing[@]}"; do
 		ok "installed: $pkg"
