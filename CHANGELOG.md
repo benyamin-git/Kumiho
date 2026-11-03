@@ -8,6 +8,25 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-03
+
+A maintenance release: the TCP forwarding test no longer flakes in CI, and the
+Android toolchain setup survives a truncated SDK download. No app behavior
+changed.
+
+### Fixed
+
+- **The TCP forwarding test is deterministic.** The test queued its SYN before
+  the netstack had enabled promiscuous mode and spoofing; the packet could be
+  read and dropped inside that window, and CI then failed with
+  `the TCP flow never reached the proxy dialer`. The SYN is now fed once the
+  stack is ready, and a timeout logs the fed packet and everything the
+  netstack wrote.
+- **Android toolchain setup retries a corrupt download.** A truncated SDK
+  package (`Error on ZipFile unknown archive`) failed the whole `android-tv`
+  job before any test ran. Setup now drops the cached archive and retries the
+  install up to three times.
+
 ## [0.9.2] - 2026-11-02
 
 ### Changed
