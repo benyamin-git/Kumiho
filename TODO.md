@@ -4,7 +4,7 @@ Source: manual testing of the **v0.7.0 Android pre-release** on a phone.
 Captured: 2026-10-29.
 
 Status: implemented in the v0.8.0 work; A2 (browser sign-in) is fixed after
-v0.8.3 and needs one live sign-in to confirm. D1 and D2 remain open.
+v0.8.3 and needs one live sign-in to confirm. D1 and D2 are fixed (2026-11-03).
 UI polish applies to all clients where the surface exists: Android phone,
 Android TV, Windows GUI and the TUI.
 
@@ -145,7 +145,7 @@ Android TV, Windows GUI and the TUI.
 
 ## Engineering follow-ups
 
-- [ ] **D1 — Harden `TestEngineForwardsTCPFlowToDialer` against CI flakes**
+- [x] **D1 — Harden `TestEngineForwardsTCPFlowToDialer` against CI flakes**
   - Observed: the `build-test` race job failed at `d6f7c5c`
     ([run 41077607903](https://github.com/benyamin-git/Kumiho/actions/runs/41077607903),
     job `124137849026`) with
@@ -153,18 +153,27 @@ Android TV, Windows GUI and the TUI.
     `stack_test.go:204: the TCP flow never reached the proxy dialer`.
   - Detail: no packets were logged from `scriptedDevice.wrote`, so the
     SYN-ACK never arrived within the 10-second deadline.
-  - Action: make the handshake deterministic instead of timing-based — feed
-    the SYN once the stack's reader is confirmed running, retry the SYN-ACK
-    answer, and log the fed packet plus device state on timeout. A longer
-    deadline is a last resort.
-  - Passed locally and on the v0.8.2 tag (`fb0e5fd`).
+  - Cause: the test queued its SYN before `Start`. The netstack's device
+    reader starts inside `CreateStack` (when the NIC is created), while
+    promiscuous mode and spoofing are enabled afterwards; a packet to an
+    unowned address is dropped in that window, and nothing retransmits the
+    SYN. Reproduced at 9 failures in 100 runs under `-race`.
+  - Done (2026-11-03): the SYN is fed after `Start` returns (the reader is
+    running and both NIC flags are set), the timeout logs the fed packet and
+    every written packet, and `go test -race -count=300` passes under eight
+    CPU hogs. No deadline change and no retry loop.
 
-- [ ] **D2 — Investigate the `android-tv` connected-test flake**
+- [x] **D2 — Investigate the `android-tv` connected-test flake**
   - Observed: the `android-tv` job failed at `5b72aba`
     ([run 41106804477](https://github.com/benyamin-git/Kumiho/actions/runs/41106804477));
     `build-test`, `windows` and `android` passed on the same commit.
-  - Action: pull the connected-test report artifact and classify the failure
-    as a real test bug or emulator/boot timing before adding any retry.
+  - Done (2026-11-03): classified from the run log — the job died in **Set up
+    Android toolchain** after 44 s with `Warning: An error occurred while
+    preparing SDK package Android Emulator: Error on ZipFile unknown archive`,
+    before the emulator AAR was built. No connected test ran, so this was a
+    truncated SDK download, not a test bug or emulator/boot timing.
+    `scripts/android-setup.sh` now drops the cached archive and retries the
+    install up to three times; the third failure still fails the job.
 
 ## Decisions captured on 2026-10-29
 
