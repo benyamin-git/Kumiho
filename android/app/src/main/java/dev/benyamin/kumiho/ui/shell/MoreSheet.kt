@@ -47,7 +47,7 @@ fun MoreSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(bottom = Dimens.Space3),
+                .padding(bottom = Dimens.Space5),
         ) {
             KumihoSectionHeader(title = stringResource(R.string.more_title))
             overflow.forEach { destination ->
@@ -55,6 +55,7 @@ fun MoreSheet(
                     title = destination.label,
                     icon = destinationIcon(destination),
                     onClick = { onSelectTab(destination) },
+                    titleStyle = MaterialTheme.typography.titleMedium,
                 )
             }
             MoreRoute.entries.forEach { route ->
@@ -62,6 +63,7 @@ fun MoreSheet(
                     title = route.label,
                     icon = moreRouteIcon(route),
                     onClick = { onOpen(route) },
+                    titleStyle = MaterialTheme.typography.titleMedium,
                 )
             }
         }

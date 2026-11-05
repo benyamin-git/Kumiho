@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.ui.theme.Dimens
 
@@ -39,6 +40,7 @@ fun KumihoRow(
     icon: Painter? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    titleStyle: TextStyle = MaterialTheme.typography.bodyLarge,
 ) {
     val sized = modifier
         .fillMaxWidth()
@@ -66,7 +68,7 @@ fun KumihoRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = titleStyle,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 if (subtitle != null) {
@@ -107,7 +109,8 @@ fun KumihoSettingRow(
                 if (value != null) {
                     Text(
                         text = value,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium
+                            .copy(fontFeatureSettings = "tnum"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

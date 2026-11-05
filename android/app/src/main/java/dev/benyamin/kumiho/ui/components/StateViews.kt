@@ -38,7 +38,7 @@ fun KumihoEmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(Dimens.ScreenPadding),
+            .padding(Dimens.Space5),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
@@ -46,13 +46,13 @@ fun KumihoEmptyState(
             Icon(
                 painter = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(40.dp),
             )
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
         )

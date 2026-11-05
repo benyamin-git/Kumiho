@@ -1,6 +1,5 @@
 package dev.benyamin.kumiho.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -47,7 +46,7 @@ fun KumihoChip(
 enum class StatusTone { Profit, Loss, Warning, Neutral }
 
 /**
- * A status chip: a tinted pill with an icon and text, so meaning survives
+ * A status chip: a tonal pill with an icon and text, so meaning survives
  * without colour. Used for quota, connectivity and diagnostics results.
  */
 @Composable
@@ -57,11 +56,16 @@ fun KumihoStatusChip(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalKumihoColors.current
-    val accent: Color = when (tone) {
+    val scheme = MaterialTheme.colorScheme
+    val fill: Color = when (tone) {
         StatusTone.Profit -> colors.profit
         StatusTone.Loss -> colors.loss
         StatusTone.Warning -> colors.warning
-        StatusTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
+        StatusTone.Neutral -> scheme.primaryContainer
+    }
+    val content: Color = when (tone) {
+        StatusTone.Profit, StatusTone.Loss, StatusTone.Warning -> scheme.background
+        StatusTone.Neutral -> scheme.onPrimaryContainer
     }
     val glyph: ImageVector = when (tone) {
         StatusTone.Profit -> Icons.Filled.CheckCircle
@@ -72,8 +76,7 @@ fun KumihoStatusChip(
     Surface(
         modifier = modifier,
         shape = PillShape,
-        color = accent.copy(alpha = 0.16f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
+        color = fill,
     ) {
         Row(
             modifier = Modifier
@@ -85,10 +88,10 @@ fun KumihoStatusChip(
             Icon(
                 imageVector = glyph,
                 contentDescription = null,
-                tint = accent,
+                tint = content,
                 modifier = Modifier.size(16.dp),
             )
-            Text(text = label, style = MaterialTheme.typography.labelMedium, color = accent)
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = content)
         }
     }
 }

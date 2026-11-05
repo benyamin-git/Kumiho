@@ -19,8 +19,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -222,7 +224,8 @@ private fun BottomBar(
 ) {
     // A page that has moved into the More sheet keeps More marked.
     val marked = if (selected in tabs) selected else Destination.More
-    NavigationBar(modifier = modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+    val scheme = MaterialTheme.colorScheme
+    NavigationBar(modifier = modifier, containerColor = scheme.surfaceContainer) {
         tabs.forEach { destination ->
             NavigationBarItem(
                 selected = destination == marked,
@@ -230,6 +233,13 @@ private fun BottomBar(
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
                 label = { Text(destination.label) },
                 alwaysShowLabel = true,
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = scheme.onPrimaryContainer,
+                    selectedTextColor = scheme.onSurface,
+                    indicatorColor = scheme.primaryContainer,
+                    unselectedIconColor = scheme.onSurfaceVariant,
+                    unselectedTextColor = scheme.onSurfaceVariant,
+                ),
             )
         }
     }
@@ -241,7 +251,8 @@ private fun NavRail(
     onSelect: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    NavigationRail(modifier = modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+    val scheme = MaterialTheme.colorScheme
+    NavigationRail(modifier = modifier, containerColor = scheme.surfaceContainer) {
         Destination.tabs.forEach { destination ->
             NavigationRailItem(
                 selected = destination == selected,
@@ -249,6 +260,13 @@ private fun NavRail(
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
                 label = { Text(destination.label) },
                 alwaysShowLabel = true,
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = scheme.onPrimaryContainer,
+                    selectedTextColor = scheme.onSurface,
+                    indicatorColor = scheme.primaryContainer,
+                    unselectedIconColor = scheme.onSurfaceVariant,
+                    unselectedTextColor = scheme.onSurfaceVariant,
+                ),
             )
         }
     }
