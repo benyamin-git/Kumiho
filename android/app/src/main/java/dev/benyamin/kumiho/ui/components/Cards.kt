@@ -42,12 +42,16 @@ fun KumihoCard(
 fun KumihoSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(
+        horizontal = Dimens.Space4,
+        vertical = Dimens.Space2,
+    ),
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),
+            .padding(contentPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

@@ -34,8 +34,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +49,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalFocusManager
@@ -74,8 +77,12 @@ import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.components.KumihoEmptyState
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
+import dev.benyamin.kumiho.ui.components.KumihoSectionHeader
+import dev.benyamin.kumiho.ui.components.KumihoStatusChip
+import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
+import dev.benyamin.kumiho.ui.theme.PillShape
 
 /**
  * The Locations entry point. It waits for the app-scoped coordinator to bind
@@ -237,15 +244,22 @@ private fun SearchField(
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
-    OutlinedTextField(
+    TextField(
         value = query,
         onValueChange = onQueryChange,
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = Dimens.ControlHeight)
             .testTag(LocationsTags.SEARCH),
         label = { Text(stringResource(R.string.locations_search_label)) },
         placeholder = { Text(stringResource(R.string.locations_search_placeholder)) },
-        singleLine = true,
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
         trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(
@@ -259,6 +273,14 @@ private fun SearchField(
                 }
             }
         },
+        singleLine = true,
+        shape = MaterialTheme.shapes.medium,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+        ),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
     )
@@ -295,7 +317,7 @@ private fun Toolbar(state: LocationsState, actions: LocationsActions) {
             }
         }
         Spacer(modifier = Modifier.weight(1f))
-        OutlinedButton(
+        FilledTonalButton(
             onClick = actions.onPingAll,
             enabled = state.canPingAll,
             modifier = Modifier
@@ -354,8 +376,6 @@ private fun SelectionSummary(
                     CountryFlags.Flag(
                         code = selection.countryCode,
                         recommended = selection.recommended,
-                        width = 20.dp,
-                        height = 15.dp,
                     )
                 }
                 Text(
@@ -486,43 +506,52 @@ private fun ServerList(
 
 @Composable
 private fun SectionHeading(text: String, tag: String? = null) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    KumihoSectionHeader(
+        title = text,
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = Dimens.Space4, bottom = Dimens.Space1)
+            .padding(top = Dimens.Space4)
             .semantics { heading() }
             .then(if (tag != null) Modifier.testTag(tag) else Modifier),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = Dimens.Space2),
     )
 }
 
 @Composable
 private fun RecentHeading(onClear: () -> Unit) {
-    Row(
+    KumihoSectionHeader(
+        title = stringResource(R.string.locations_recent),
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = Dimens.Space4, bottom = Dimens.Space1),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(top = Dimens.Space4)
+            .semantics { heading() }
+            .testTag(LocationsTags.RECENT_HEADING),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = Dimens.Space2),
+        trailing = {
+            TextButton(
+                onClick = onClear,
+                modifier = Modifier
+                    .heightIn(min = Dimens.TouchTarget)
+                    .testTag(LocationsTags.CLEAR_RECENTS),
+            ) {
+                Text(stringResource(R.string.locations_clear_recents))
+            }
+        },
+    )
+}
+
+/** Latency as a tonal pill; the word or number stays the only signal. */
+@Composable
+private fun LatencyChip(text: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Text(
-            text = stringResource(R.string.locations_recent),
-            style = MaterialTheme.typography.titleMedium,
+            text = text,
+            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .weight(1f)
-                .semantics { heading() }
-                .testTag(LocationsTags.RECENT_HEADING),
+            modifier = Modifier.padding(horizontal = Dimens.Space2, vertical = 2.dp),
         )
-        TextButton(
-            onClick = onClear,
-            modifier = Modifier
-                .heightIn(min = Dimens.TouchTarget)
-                .testTag(LocationsTags.CLEAR_RECENTS),
-        ) {
-            Text(stringResource(R.string.locations_clear_recents))
-        }
     }
 }
 
@@ -540,11 +569,7 @@ private fun FastestRow(
     val shape = MaterialTheme.shapes.medium
     Surface(
         shape = shape,
-        color = if (fastest != null) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainer
-        },
+        color = MaterialTheme.colorScheme.surfaceContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
@@ -598,10 +623,8 @@ private fun FastestRow(
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                fastest != null -> Text(
+                fastest != null -> LatencyChip(
                     text = stringResource(R.string.locations_latency, fastest.milliseconds),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -669,20 +692,17 @@ private fun ServerRow(
         if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
         row.title,
     )
+    val scheme = MaterialTheme.colorScheme
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = if (selected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            lerp(scheme.surfaceContainer, scheme.primaryContainer, 0.22f)
         } else {
-            MaterialTheme.colorScheme.surfaceContainer
+            scheme.surfaceContainer
         },
         border = BorderStroke(
             1.dp,
-            if (selected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.outlineVariant
-            },
+            if (selected) scheme.primary else scheme.outlineVariant,
         ),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -734,22 +754,10 @@ private fun ServerRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (row.country.locked) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Text(
-                                text = stringResource(R.string.locations_locked),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        KumihoStatusChip(
+                            tone = StatusTone.Warning,
+                            label = stringResource(R.string.locations_locked),
+                        )
                     }
                 }
                 if (saved) {
@@ -759,11 +767,7 @@ private fun ServerRow(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 } else {
-                    Text(
-                        text = latencyText(latency),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    LatencyChip(text = latencyText(latency))
                     if (selected) {
                         Icon(
                             imageVector = Icons.Filled.Check,
