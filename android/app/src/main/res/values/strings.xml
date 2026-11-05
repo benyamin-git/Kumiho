@@ -276,6 +276,15 @@
     <string name="locations_selection_separator" translatable="false">" · "</string>
     <string name="locations_recommended">Recommended</string>
     <string name="locations_latency">%1$d ms</string>
+    <string name="diagnostics_chart_throughput">Throughput</string>
+    <string name="diagnostics_chart_latency">Latency</string>
+    <string name="diagnostics_chart_no_trace">No session data yet.</string>
+    <string name="diagnostics_chart_no_session">No live session; round trips are measured while connected.</string>
+    <string name="diagnostics_chart_no_cache">No cached round trips yet.</string>
+    <string name="diagnostics_chart_latency_unavailable">Cached round trips could not be read.</string>
+    <string name="diagnostics_chart_summary">Down %1$s · Up %2$s · Peak %3$s</string>
+    <string name="diagnostics_chart_ago">60 s ago</string>
+    <string name="diagnostics_chart_now">now</string>
     <string name="locations_latency_timeout">timeout</string>
     <string name="locations_latency_none" translatable="false">—</string>
     <string name="locations_retry">Retry</string>

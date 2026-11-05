@@ -50,12 +50,15 @@ import dev.benyamin.kumiho.engine.DoctorCheck
 import dev.benyamin.kumiho.engine.DoctorReport
 import dev.benyamin.kumiho.engine.DoctorStatus
 import dev.benyamin.kumiho.permissions.PermissionController
+import dev.benyamin.kumiho.ui.components.ChartNote
 import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.components.KumihoSectionHeader
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
+import dev.benyamin.kumiho.ui.components.LatencyChart
 import dev.benyamin.kumiho.ui.components.StatusTone
+import dev.benyamin.kumiho.ui.components.ThroughputChart
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.vpn.SplitMode
@@ -264,6 +267,9 @@ private fun DiagnosticsList(
                 modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
             )
         }
+        item(key = "charts") {
+            DiagnosticsCharts(state = state)
+        }
         item(key = "split") {
             SplitCard(
                 mode = splitMode,
@@ -299,6 +305,46 @@ private fun DiagnosticsList(
                 facts = facts,
                 actions = actions,
             )
+        }
+    }
+}
+
+/**
+ * The two live charts, drawn on the page background: the data roles are
+ * pre-composited there, so they never sit inside a raised card.
+ */
+@Composable
+private fun DiagnosticsCharts(state: DiagnosticsUiState) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space3),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
+    ) {
+        KumihoSectionHeader(
+            title = stringResource(R.string.diagnostics_chart_throughput),
+            modifier = Modifier.semantics { heading() },
+        )
+        ThroughputChart(samples = state.trace)
+        KumihoSectionHeader(
+            title = stringResource(R.string.diagnostics_chart_latency),
+            modifier = Modifier
+                .padding(top = Dimens.Space3)
+                .semantics { heading() },
+        )
+        if (state.latency.isEmpty()) {
+            ChartNote(
+                note = stringResource(
+                    when (state.chartNote ?: DiagnosticsChartNote.NO_CACHE) {
+                        DiagnosticsChartNote.NO_SESSION -> R.string.diagnostics_chart_no_session
+                        DiagnosticsChartNote.NO_CACHE -> R.string.diagnostics_chart_no_cache
+                        DiagnosticsChartNote.LATENCY_UNAVAILABLE ->
+                            R.string.diagnostics_chart_latency_unavailable
+                    },
+                ),
+            )
+        } else {
+            LatencyChart(bars = state.latency)
         }
     }
 }

@@ -1,11 +1,18 @@
 package dev.benyamin.kumiho.ui.diagnostics
 
 import dev.benyamin.kumiho.diagnostics.AndroidFacts
+import dev.benyamin.kumiho.engine.ByteRates
+import dev.benyamin.kumiho.engine.CachedPing
 import dev.benyamin.kumiho.engine.DoctorCheck
 import dev.benyamin.kumiho.engine.DoctorReport
 import dev.benyamin.kumiho.engine.DoctorStatus
+import dev.benyamin.kumiho.engine.EngineStatus
+import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.test.MainDispatcherRule
+import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -206,6 +213,82 @@ class DiagnosticsReducerTest {
         assertNull(viewModel.state.value.error)
     }
 
+    // ---- charts ----------------------------------------------------------
+
+    @Test
+    fun `latency bars drop failed probes, sort and cap at twelve`() {
+        val cache = buildMap {
+            put("failed", CachedPing(null, Instant.EPOCH))
+            put("nan", CachedPing(Double.NaN, Instant.EPOCH))
+            put("negative", CachedPing(-1.0, Instant.EPOCH))
+            (0 until 15).forEach { i ->
+                put("h$i", CachedPing((15 - i).toDouble(), Instant.EPOCH))
+            }
+        }
+
+        val bars = latencyBars(cache)
+
+        assertEquals(12, bars.size)
+        assertEquals("h14", bars.first().host)
+        assertEquals(1.0, bars.first().rttMs, 0.0)
+        assertEquals("h3", bars.last().host)
+    }
+
+    @Test
+    fun `chart notes are honest for no session, no cache and a failure`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+            assertEquals(DiagnosticsChartNote.NO_SESSION, viewModel.state.value.chartNote)
+
+            gateway.statusFlow.value = status("CONNECTED")
+            gateway.latency = emptyMap()
+            viewModel.rerun()
+            runCurrent()
+            assertEquals(DiagnosticsChartNote.NO_CACHE, viewModel.state.value.chartNote)
+
+            gateway.latencyError = IllegalStateException("cache locked")
+            viewModel.rerun()
+            runCurrent()
+            assertEquals(
+                DiagnosticsChartNote.LATENCY_UNAVAILABLE,
+                viewModel.state.value.chartNote,
+            )
+            assertTrue(viewModel.state.value.latency.isEmpty())
+        }
+
+    @Test
+    fun `cached latency becomes bars and clears the note`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.statusFlow.value = status("CONNECTED")
+            gateway.latency = mapOf(
+                "a.example" to CachedPing(42.0, Instant.EPOCH),
+                "b.example" to CachedPing(11.0, Instant.EPOCH),
+            )
+
+            val viewModel = viewModel()
+            runCurrent()
+
+            assertNull(viewModel.state.value.chartNote)
+            assertEquals(listOf("b.example", "a.example"), viewModel.state.value.latency.map { it.host })
+        }
+
+    @Test
+    fun `engine rates feed the live trace`() = runTest(mainRule.testDispatcher) {
+        val viewModel = viewModel()
+        runCurrent()
+
+        gateway.statusFlow.value = status("CONNECTED")
+            .copy(rates = ByteRates(up = 1.0, down = 2.0))
+        runCurrent()
+        assertEquals(1, viewModel.state.value.trace.size)
+        assertEquals(2.0, viewModel.state.value.trace.single().down, 0.0)
+
+        gateway.statusFlow.value = null
+        runCurrent()
+        assertTrue(viewModel.state.value.trace.isEmpty())
+    }
+
     // ---- fake ------------------------------------------------------------
 
     private class FakeGateway : DiagnosticsGateway {
@@ -214,6 +297,16 @@ class DiagnosticsReducerTest {
         var resetCalls = 0
         var doctorError: Exception? = null
         var resetError: Exception? = null
+        val statusFlow = MutableStateFlow<EngineStatus?>(null)
+        var latency: Map<String, CachedPing> = emptyMap()
+        var latencyError: Exception? = null
+
+        override suspend fun status(): StateFlow<EngineStatus?> = statusFlow
+
+        override suspend fun cachedLatency(): Map<String, CachedPing> {
+            latencyError?.let { throw it }
+            return latency
+        }
 
         override suspend fun facts(): AndroidFacts {
             factsCalls++
@@ -238,6 +331,27 @@ class DiagnosticsReducerTest {
     }
 
     private companion object {
+        fun status(state: String) = EngineStatus(
+            state = state,
+            authenticated = true,
+            email = "user@example.com",
+            since = 0L,
+            tokenExpires = 0L,
+            passExpires = 0L,
+            killSwitch = true,
+            autoconnect = true,
+            location = null,
+            server = null,
+            proxyOnly = false,
+            quota = Quota(limit = null, remaining = null, reset = null),
+            dns = null,
+            ipv6 = null,
+            exitIp = null,
+            exitCountry = null,
+            totals = null,
+            rates = null,
+        )
+
         fun sampleFacts() = AndroidFacts(
             device = "Google Pixel 8",
             sdk = 36,

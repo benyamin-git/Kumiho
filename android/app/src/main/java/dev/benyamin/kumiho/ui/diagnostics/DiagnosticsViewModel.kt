@@ -5,7 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.benyamin.kumiho.diagnostics.AndroidFacts
 import dev.benyamin.kumiho.diagnostics.AndroidFactsCollector
+import dev.benyamin.kumiho.engine.CachedPing
 import dev.benyamin.kumiho.engine.DoctorReport
+import dev.benyamin.kumiho.engine.EngineStatus
+import dev.benyamin.kumiho.ui.components.RateBuffer
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -26,6 +29,12 @@ interface DiagnosticsGateway {
 
     /** Clears caches and logs only; tokens and the account are never touched. */
     suspend fun resetState()
+
+    /** The engine's live status; the throughput chart reads its rates. */
+    suspend fun status(): StateFlow<EngineStatus?>
+
+    /** The engine's cached round trips, never a fresh ping. */
+    suspend fun cachedLatency(): Map<String, CachedPing>
 }
 
 /** The production gateway: Android facts in, the engine's doctor out. */
@@ -43,6 +52,11 @@ class CoordinatorDiagnosticsGateway(
     override suspend fun resetState() {
         coordinator.awaitEngine().resetState()
     }
+
+    override suspend fun status(): StateFlow<EngineStatus?> = coordinator.awaitEngine().status
+
+    override suspend fun cachedLatency(): Map<String, CachedPing> =
+        coordinator.awaitEngine().locationsResult(refresh = false).latency
 }
 
 /**
@@ -60,8 +74,22 @@ class DiagnosticsViewModel(
 
     private var loadJob: Job? = null
 
+    /** The live 60 s trace; memory only, cleared when the engine reports none. */
+    private val rateBuffer = RateBuffer()
+
     init {
         load()
+        viewModelScope.launch {
+            gateway.status().collect { status ->
+                val rates = status?.rates
+                if (rates != null) {
+                    rateBuffer.push(rates, System.currentTimeMillis())
+                } else {
+                    rateBuffer.clear()
+                }
+                mutableState.update { it.copy(trace = rateBuffer.snapshot()) }
+            }
+        }
     }
 
     /** Re-collects the facts and re-runs the doctor on demand. */
@@ -133,11 +161,27 @@ class DiagnosticsViewModel(
             try {
                 val facts = gateway.facts()
                 val report = gateway.doctor(facts)
+                val cached: Map<String, CachedPing>? = try {
+                    gateway.cachedLatency()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                val bars = cached?.let(::latencyBars).orEmpty()
+                val note = when {
+                    cached == null -> DiagnosticsChartNote.LATENCY_UNAVAILABLE
+                    !gateway.status().value.hasSession() -> DiagnosticsChartNote.NO_SESSION
+                    bars.isEmpty() -> DiagnosticsChartNote.NO_CACHE
+                    else -> null
+                }
                 mutableState.update {
                     it.copy(
                         loading = false,
                         facts = facts,
                         report = report,
+                        latency = bars,
+                        chartNote = note,
                         error = null,
                     )
                 }
@@ -153,6 +197,12 @@ class DiagnosticsViewModel(
                 }
             }
         }
+    }
+
+    /** True while a tunnel, proxy session or reconnect is live. */
+    private fun EngineStatus?.hasSession(): Boolean {
+        val state = this?.state?.uppercase() ?: return false
+        return state in setOf("CONNECTED", "PROXY_ONLY", "CONNECTING", "RECONNECTING", "WAITING")
     }
 
     private fun messageOf(error: Throwable): String =
