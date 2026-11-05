@@ -267,6 +267,15 @@ them locally for any change under `android/`, `mobile/` or
   advertised tunnel DNS in userspace (apps cannot bind port 53).
   Protocol v1, `internal/ipc`, the daemon and the desktop clients are
   untouched and stay byte-compatible.
+- **Design language** (v0.11.0): [docs/design.md](docs/design.md) is the
+  platform-neutral reference (Kumiho Design Language). `internal/gui/theme`
+  emits four data roles — `data-line`, `data-fill`, `data-grid`, `glow` — as
+  opaque hex pre-composited on `background`; charts and the glow sit on the
+  page, never on a raised container. The Android dashboard hero is
+  `ui/components/Gauge.kt` over `GaugeGeometry` (248 dp, 8 dp arc from −90°),
+  fed by the pure Kotlin `RateBuffer` (30 samples, 60 s window, 5 s gap reset)
+  and `ui/theme/Motion.kt`; Diagnostics reuses both for its live charts. The
+  launch wordmark is a vector outlined from Roboto SemiBold, Android 12+ only.
 - **Deliberate OS branches outside the seam** (all small and paired):
   `internal/cli/doctor.go` (`runtime.GOOS` branches) plus
   `doctor_{windows,other}.go` (doctor checks),
@@ -283,6 +292,10 @@ them locally for any change under `android/`, `mobile/` or
 
 ## Design
 
+- Language: [docs/design.md](docs/design.md) is the Kumiho Design Language —
+  palette incl. the four data roles, gauge anatomy, charts, motion, wordmark,
+  components and the accessibility floor. The Android phone app is the
+  reference implementation (v0.11.0); TV and the Windows GUI adapt it.
 - Palette: skill `design` — six accents, default blue
 - Themes: Light / Dark / OLED; first run follows prefers-color-scheme; OLED opt-in
 - Type: system-ui (Segoe UI Variable on Windows 11), one family
