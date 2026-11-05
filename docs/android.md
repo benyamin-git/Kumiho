@@ -157,16 +157,30 @@ system's light/dark preference, and OLED is opt-in.
 
 ## Dashboard
 
-The power control is the primary action: tap to connect or disconnect. The
-state word under it is the service's own state:
+The hero is one 248 dp gauge and the power control is its centre: tap it to
+connect or disconnect. The state word under it is the service's own state:
 
 - *Off*, *Connected*, *Proxy only*, *Connecting*, *Reconnecting*, *Waiting for
   network*, *Sign in required*, *Connection error*, *Service unavailable*,
   *VPN permission needed*, and *Starting…* while the app waits for the bound
   service. A proxy-only session also carries a **No VPN tunnel** badge.
 
+While a session is up the outer 8 dp arc shows the remaining quota (hidden
+when the quota is unknown or the phase is not active), and two bands inside
+the ring trace the last 60 seconds of throughput — download as a filled band,
+upload as a stroked line. The line under the state word repeats the current
+rates as `↓ 3.4 MiB/s ↑ 1.2 MiB/s` in tabular figures. A subtle primary glow
+breathes behind the gauge only while the app is in the foreground. Connecting
+and reconnecting rotate a state sweep around the ring; the gauge settles it
+into the quota position when the session connects. Under system **Remove
+animations** the sweep is static, the glow steady and every change snaps; the
+haptics and the numbers stay. The gauge is one TalkBack control labelled with
+the state, and every fact it draws is also text, so nothing depends on colour
+or the drawing alone.
+
 While connected the hero shows the real location and server and the session
-uptime. Four cards appear only when their data exists:
+uptime. Four cards appear only when their data exists (the live rates stay on
+the hero, not in Session):
 
 - **Location** — the country flag, country and city when the engine's server
   is known, with the `host:port` beneath it;
@@ -182,9 +196,17 @@ VPN*: the engine's desktop `autoconnect` setting is not used on Android.
 A connection command is one-way: the UI follows the service and never invents
 a connection. The app allows one session at a time, so while a session is
 active the options sheet says **Disconnect first to change location** and
-Connect is disabled. A failed connect is reported with the engine's own words
-and a Retry or Dismiss action; a transient status-refresh failure never
-replaces a live tunnel with an error.
+Connect is disabled; the Locations screen's switch dialog is the one place
+that performs that disconnect for you. A failed connect is reported with the
+engine's own words. A phase that needs a decision shows a **Next step** card
+under the hero with
+at most one filled primary action and one text action: **Retry** and
+**Diagnostics** for a connection error or an unavailable service, **Sign in**
+and **Diagnostics** when signed out, **Allow VPN** and **Open VPN settings**
+when consent is missing, and **Diagnostics** while waiting for a network. When
+there is a notice, the same card carries the engine's text and the **Dismiss**
+action. A transient status-refresh failure never replaces a live tunnel with
+an error.
 
 ### Connect options
 
@@ -257,9 +279,18 @@ scope. The current-selection summary keeps the flag and shows
 longer in the loaded list. There is no connected-location hint; the summary
 is the only current-selection display.
 
-Selecting a row saves it for the **next** connection — the current session
-keeps its server and exit IP — so the screen says to disconnect on Home and
-connect again.
+Selecting a row while no session is active saves it for the **next**
+connection. Tapping a row while a session is active (including proxy-only,
+connecting, reconnecting and waiting for a network) opens **Switch location?**
+with the target and the sentence that the current session ends. Nothing is
+persisted and nothing disconnects until **Switch**; **Cancel** leaves the
+session untouched. Confirming runs disconnect → wait for the engine to leave
+the connected family (bounded at 15 s) → select the row → connect, while the
+dialog shows **Ending the current session…** and **Connecting to …**. A
+failure keeps the target and offers **Retry** and **Close**; if the session
+does not stop in time the dialog says so and never connects. With Android
+lockdown on, the dialog warns that the phone has no tunnel until the new
+session is up.
 
 ## Home-screen widgets
 
@@ -560,10 +591,13 @@ proxies start and stop with the session.
 ## Account
 
 **Account** shows up to five accounts and the live Guardian entitlement for
-the active one. Each row carries the label/email, method, active marker,
-quota percent and a re-authentication warning. Run actions from the row
-overflow menu: **Use**, **Re-authenticate** (browser), **Rename** and
-**Remove**. **Add** offers browser sign-in (the default) or the password
+the active one. The active row carries an **Active** text chip and a primary
+outline; its quota reads **N% left** or **Quota unknown** in tabular figures,
+and a sign-in that needs re-authorization is a clickable **Re-authorize**
+warning chip rather than an easy-to-miss note. Every row shows the label/email,
+method and quota. Run actions from the row overflow menu: **Use**,
+**Re-authenticate** (browser), **Rename** and **Remove**. **Add** offers
+browser sign-in (the default) or the password
 pane. When the browser opens, the waiting card offers **Open again**, an
 expandable **Paste redirect URL instead** section with a **Redirect URL**
 field and **Continue**, **Use password**, and **Cancel**; completing the flow
@@ -582,17 +616,20 @@ sign-in removed. Add your Firefox account again.”** Password accounts and
 settings are untouched.
 
 The **Account rotation** card controls the same `account_rotation` and
-`rotation_threshold` settings mirrored in Settings → Connection. Rotation is
-off by default, runs before the next connect and never mid-session; the
-threshold is 1–50% (default 10) and is disabled while rotation is off.
+`rotation_threshold` settings mirrored in Settings → Connection. It names the
+active account and states what the threshold will do before the next connect.
+Rotation is off by default, runs before the next connect and never
+mid-session; the threshold is 1–50% (default 10) and is disabled while
+rotation is off.
 Threshold edits are debounced and saved through `accounts_set_rotation`.
 
 The entitlement card shows email, UID, subscription, quota remaining and
 limit, bandwidth (limited or unlimited) and token expiry. **Refresh** re-reads
 it with a 35-second timeout; on failure the last known fields stay visible
-with a notice. **Sign out** asks for confirmation, clears every account and
-the token files, asks Firefox Accounts to revoke the stored refresh tokens
-(best effort, with a short timeout), disconnects the tunnel and leaves you on
+with a notice. **Sign out all** is a tonal action that states the consequences
+first: it asks for confirmation, clears every account and the token files,
+asks Firefox Accounts to revoke the stored refresh tokens (best effort, with a
+short timeout), disconnects the tunnel and leaves you on
 Account in the signed-out state, where the browser/password sign-in pane lets
 you sign back in. An offline or failed revocation never blocks the local
 sign-out, and the app also clears the in-app WebView's Firefox Accounts
@@ -603,9 +640,10 @@ at any time. Removing one account leaves the others signed in.
 
 **More → Logs** shows the engine's log: a snapshot when the screen opens plus
 live lines while it is visible, capped at the newest **2000 entries**. Filter
-by **All / Debug / Info / Warn / Error**, search with the field, toggle
-**Follow**, **Clear** the engine ring, and **Share** the current buffer. Each
-line can be copied.
+with the tonal **All / Debug / Info / Warn / Error** controls, search with the
+field, toggle **Follow**, **Clear** the engine ring, and **Share** the current
+buffer. Rows use a 12 sp monospace face and tabular timestamps; each line can
+be copied.
 
 **Share** writes `kumiho-logs-<timestamp>.log` to the app's
 `cacheDir/exports/` and opens the Android share sheet with a `FileProvider`
@@ -629,6 +667,11 @@ once per visit (no polling), caching the result until you press **Re-run**:
 - status chips — **OK / Warn / Fail / Skip** — with detail and a **Fix:** line
   from the doctor where one exists, plus **Copy all** for the plain-text
   report;
+- two live charts over the same in-memory data as the dashboard: throughput
+  (download filled, upload stroked, grid baseline) and the engine's cached
+  latency as horizontal bars, longest first. The latency chart never starts a
+  ping, and a cache that cannot be read is replaced by an honest line rather
+  than an empty axis;
 - shortcuts to Android's VPN, notification and battery settings;
 - **Reset local state…**, which clears the cached server list, the log ring
   and the failure counters. It **never** signs you out and never touches your
@@ -637,6 +680,25 @@ once per visit (no polling), caching the result until you press **Re-run**:
 Diagnostics deliberately filters desktop-only doctor checks the phone cannot
 act on. It does not change Private DNS, the VPN flags or any system setting;
 the shortcuts are the only writes, and they open the system page for you.
+
+## Design
+
+The phone app is the reference implementation of the Kumiho Design Language;
+[design.md](design.md) records the palette roles (including the four data
+roles), the gauge anatomy, the chart encoding, the motion values, the
+wordmark rules, the component patterns and the accessibility floor. Light,
+Dark and OLED are first-class; every screen is reviewed in all three, and
+meaning is never carried by colour alone. Charts and the gauge glow sit on the
+page background because the data roles are pre-composited for it; they are
+never reused on a raised card.
+
+The only brand presence inside the app is the **Kumiho** wordmark on the
+launch screen. It is a vector outline tinted from `on-surface`, shown through
+the Android 12+ system splash branding image. Android 8–11 keep the icon-only
+splash; there is no in-app launch frame, and no fox artwork appears inside the
+app. The launcher icon and TV art are unchanged. Type is one family (the
+system face, Roboto on Android); monospace is reserved for machine data — log
+rows and server addresses — never for prose, headings or buttons.
 
 ## Privacy and security
 
@@ -775,10 +837,11 @@ report.
 
 ### A location change did not apply
 
-The app allows one session at a time. A location selected while connected is
-saved for the next connection and the current session keeps its server and
-exit IP; disconnect on Home, then connect again. The same is true for split
-tunneling and route exclusions.
+A switch that fails keeps its target and offers **Retry** and **Close**. The
+dashboard always shows the engine's real state, so check it after closing: a
+failure at the disconnect step can leave the old session up, while a later
+failure leaves the app disconnected until you reconnect from Home. Changes to
+split tunneling and route exclusions still apply on the next connect.
 
 ### The sign-in fails with a captcha
 

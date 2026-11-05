@@ -172,9 +172,10 @@ radius, 16 dp content padding. Cards separate by hairline, not shadow. The
 container ladder supplies raised steps only where they mean hierarchy; the page
 behind charts is always `background`.
 
-**Rows.** 56 dp list rows, 48 dp minimum touch target, leading icon, title and
-optional trailing value. A row never carries a second line of explanation that
-a section header could carry better.
+**Rows.** 56 dp single-line list rows, 48 dp minimum touch target, leading
+icon, title and optional trailing value. A row that carries a second line of
+state (as the Account rows do) is 64 dp. A row never carries a second line of
+explanation that a section header could carry better.
 
 **Chips.** Pills. A selectable chip is Material's filter chip at the 6 dp
 radius; a status chip is a 16% tint with a matching 50% border and always
@@ -182,8 +183,15 @@ carries an icon plus text, so its meaning survives without colour (`Profit`,
 `Loss`, `Warning`, `Neutral`).
 
 **Segmented control.** House component for two to four exclusive choices; the
-selected segment takes the primary tint and the group keeps the 8 dp radius.
-It is never used for navigation.
+selected segment takes the `primaryContainer` fill, `onPrimaryContainer`
+content and a 1 dp `primary` outline, and the group keeps Material's pill
+ends. It is never used for navigation.
+
+**Selected cards.** A selectable card (a location row, a split-tunnelling mode
+or an account) moves 18–22% from `surfaceContainer` toward
+`primaryContainer` and gains a 1 dp `primary` outline plus a check where the
+layout has room. The tint is derived in Compose from theme roles; it is not a
+separate token, and selection is still named in text for TalkBack.
 
 **State views.** Empty, error and loading states are explicit composables:
 glyph, one-sentence cause, one primary action. An error keeps the engine's own
@@ -198,6 +206,13 @@ version; it is described here so adaptations keep the same shape.
 
 **Density.** A 4 dp spacing scale, 16 dp screen padding, reading content capped
 at 720 dp, and the radius scale 6 / 8 / 12 / 16 / full.
+
+## Type
+
+One family: the platform system face (Roboto on Android, Segoe UI Variable on
+Windows 11). Weights and sizes carry hierarchy. Monospace is a functional
+face, not a second brand face: it is used only for machine data — log rows,
+timestamps and server addresses — and never for prose, headings or buttons.
 
 ## Accessibility
 

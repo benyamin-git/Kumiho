@@ -8,6 +8,57 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **The phone dashboard has a real gauge hero.** One 248 dp ring replaces the
+  flat power circle: the quota arc, a 60-second throughput trace, a connecting
+  sweep and a restrained glow, with the live `↓ … ↑ …` rates in tabular
+  figures. The arc settles in 900 ms, a successful connect adds one haptic tick,
+  and every animated value snaps under system "Remove animations".
+- **Diagnostics draws the live session.** A throughput chart over the same
+  in-memory 60-second buffer and a cached-latency bar chart; neither starts a
+  ping, and each degrades to an honest sentence instead of an empty axis.
+- **The launch screen carries the Kumiho wordmark on Android 12+** through the
+  system splash branding image. Android 8–11 keep the icon-only splash; no fox
+  artwork enters the app.
+- **Four data roles** (`data-line`, `data-fill`, `data-grid`, `glow`) are
+  generated in Go and consumed by Android and the GUI's CSS; they are
+  pre-composited on `background`.
+- **Locations can switch the server while connected.** Tapping a row opens a
+  confirmation naming the target; confirming disconnects, waits for the engine
+  to settle, selects the row and reconnects, with progress, a 15-second bound,
+  Retry/Close and a lockdown warning. Cancel never touches the session.
+- **Dashboard failures have a forward action.** A Next step card offers Retry
+  and Diagnostics for errors and an unavailable service, Sign in and
+  Diagnostics when signed out, Allow VPN and Open VPN settings without consent,
+  and Diagnostics while waiting for a network; the engine's text and Dismiss
+  stay on the same card.
+
+### Changed
+
+- **Every phone screen now follows the Kumiho Design Language.** House cards,
+  section headers, tonal chips, selected-card treatment, tabular numbers, a
+  four-dot setup indicator with "Step N of 4", restyled Logs filters and
+  monospace rows, and one shell across Dashboard, Locations, Account, Settings,
+  Setup, Logs and Diagnostics. TV and the Windows GUI are unchanged.
+- **Live rates moved from the Session card to the gauge.** The Session card
+  keeps uptime and totals; the hero owns the current numbers.
+
+### Fixed
+
+- **The Account screen is readable at a glance.** The active account carries an
+  Active chip and outline, a clickable Re-authorize chip replaces the easy-to-
+  miss warning, quota reads "N% left" or "Quota unknown" in tabular figures,
+  the rotation card names the active account and its threshold, and Sign out
+  all is a tonal action that states its consequences.
+
+### Accessibility
+
+- The gauge is one labelled control whose every fact is also text; charts
+  carry a written summary; selected and failed states use words and icons, not
+  colour alone; all new controls meet the 48 dp target; reduced motion is
+  honoured across the gauge, charts and transitions.
+
 ## [0.10.1] - 2026-11-05
 
 ### Fixed

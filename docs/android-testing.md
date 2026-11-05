@@ -5,8 +5,8 @@ Gradle commands, APK verification, signing, release automation and the
 physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
-> tree: **491 JVM tests / 157 phone + 21 TV connected testcases / lint 0
-> errors + 26 warnings**.
+> tree: **565 JVM tests / 171 phone + 21 TV connected testcases / lint 0
+> errors + 32 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
 > Galaxy S25 FE for v0.5.2; v0.6.0 physical acceptance is pending and the
 > sign-off is recorded below. The release automation is implemented:
@@ -128,11 +128,13 @@ cache is warm. The unit/lint/assemble gate directly:
 
 Current expected result on the current tree:
 
-- **491 JVM tests, 0 failures, 0 errors, 0 skipped**;
-- **lint 0 errors, 26 warnings** — dependency-update notices, the existing
-  `OldTargetApi`, `UnusedAttribute`, `ObsoleteSdkInt`, unused resources, four
-  `ModifierParameter` and four `UseKtx` notices, plus four generated-flag
-  `IconDuplicates` and one `IconMissingDensityFolder` from the bundled assets;
+- **565 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **lint 0 errors, 32 warnings** — dependency- and plugin-update notices, the
+  existing `OldTargetApi`, `UnusedAttribute` and `ObsoleteSdkInt`, six unused
+  resources, four `ModifierParameter` and four `UseKtx` notices, plus the
+  bundled-asset and Compose-drawing advisories (`IconDuplicates`,
+  `IconMissingDensityFolder`, `IconLauncherShape`, `VectorPath`, `Overdraw`,
+  `ComposableNaming`, `DisableBaselineAlignment`, `SetJavaScriptEnabled`);
 - `app/build/outputs/apk/debug/app-debug.apk`.
 
 The debug build is one APK containing the AAR's arm libraries and installs as
@@ -176,13 +178,27 @@ Then run:
     cd android
     ./gradlew --offline -PkumihoEmulator=true :app:connectedDebugAndroidTest
 
-Current expected result: **157 phone tests**, plus the 21 TV-only testcases
+Current expected result: **171 phone tests**, plus the 21 TV-only testcases
 which skip by assumption on the phone AVD; the Gradle task is green. The suite
-includes the AAR probe, setup, dashboard, the card Locations list and its
-connect targets, flags, search and Ping-all/speed-order paths, settings, split
-tunneling, account, logs, diagnostics, notification/tile reducers and the
-screenshot capture tests. A connected run uninstalls the app and its external
-files when it finishes.
+includes the AAR probe, setup, dashboard (including the gauge, rate line and
+recovery card), the card Locations list and its connect targets, flags, search,
+the switch-while-connected dialog and its lockdown variant, Ping-all/speed-
+order paths, settings, split tunneling, account clarity, logs, diagnostics
+(including both charts), notification/tile reducers and the screenshot capture
+tests. A connected run uninstalls the app and its external files when it
+finishes.
+
+The screenshot tests write to the app's external files directory and are not
+part of the committed tree:
+
+- `dashboard-screenshots/` — connected, off, permission, error and waiting;
+- `locations-screenshots/` — tree, search, switch dialog and switch-lockdown;
+- `settings-screenshots/` — the Kumiho app group.
+
+Each capture is written in Light, Dark and OLED. The three committed README
+images (`screenshots/android-phone/{dashboard,locations,settings}.png`) are the
+Dark captures reviewed at release time; pull the directory and review all
+themes before replacing them.
 
 ### API 26 and API 36 coverage
 
