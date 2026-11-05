@@ -1,6 +1,9 @@
 package doctor
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseCapEff(t *testing.T) {
 	status := "Name:\tkumiho\nCapEff:\t0000000000001000\n"
@@ -53,5 +56,14 @@ func TestWithoutLinuxOnlyDropsLinuxChecks(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("withoutLinuxOnly kept %v, want %v", got, want)
 		}
+	}
+}
+
+func TestIPv6DetailDescribesAAAA(t *testing.T) {
+	if !strings.Contains(ipv6EnabledDetail, "AAAA") {
+		t.Fatalf("ipv6 detail %q does not mention AAAA", ipv6EnabledDetail)
+	}
+	if strings.Contains(ipv6EnabledDetail, "no AAAA stripping") {
+		t.Fatalf("ipv6 detail %q still claims no AAAA stripping", ipv6EnabledDetail)
 	}
 }

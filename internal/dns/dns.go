@@ -494,6 +494,13 @@ func (s *Server) HandleQuery(req *mdns.Msg, overUDP bool) *mdns.Msg {
 		return resp
 	}
 	q := req.Question[0]
+	if q.Qtype == mdns.TypeAAAA {
+		empty := new(mdns.Msg)
+		empty.SetReply(req)
+		empty.Rcode = mdns.RcodeSuccess
+		s.logf(logging.Debug, "suppressed AAAA query for %s", q.Name)
+		return s.finishResponse(req, empty, overUDP)
+	}
 	key := queryKey(q)
 
 	resp, ok := s.cache.get(key)
@@ -508,6 +515,9 @@ func (s *Server) HandleQuery(req *mdns.Msg, overUDP bool) *mdns.Msg {
 			resp.SetRcode(req, mdns.RcodeServerFailure)
 		}
 		if resp != nil && resp.Rcode == mdns.RcodeSuccess {
+			if q.Qtype == mdns.TypeANY {
+				resp = withoutAAAA(resp)
+			}
 			if ttl, ok := cacheTTL(resp); ok {
 				s.cache.put(key, resp, ttl)
 			}
@@ -518,8 +528,26 @@ func (s *Server) HandleQuery(req *mdns.Msg, overUDP bool) *mdns.Msg {
 		resp = new(mdns.Msg)
 		resp.SetRcode(req, mdns.RcodeServerFailure)
 	}
-	resp.Id = req.Id
+	return s.finishResponse(req, resp, overUDP)
+}
 
+// withoutAAAA copies the message with its AAAA answers removed; the resolver
+// cache may still share the original record slice, so the input is untouched.
+func withoutAAAA(msg *mdns.Msg) *mdns.Msg {
+	answers := make([]mdns.RR, 0, len(msg.Answer))
+	for _, rr := range msg.Answer {
+		if rr.Header().Rrtype != mdns.TypeAAAA {
+			answers = append(answers, rr)
+		}
+	}
+	msg.Answer = answers
+	return msg
+}
+
+// finishResponse applies the transport rules shared by every success path:
+// request id, EDNS0 echo and UDP truncation.
+func (s *Server) finishResponse(req, resp *mdns.Msg, overUDP bool) *mdns.Msg {
+	resp.Id = req.Id
 	limit := 512
 	if opt := req.IsEdns0(); opt != nil {
 		if size := int(opt.UDPSize()); size > 512 {

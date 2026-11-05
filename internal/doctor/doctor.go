@@ -386,6 +386,8 @@ func checkTailscale() Check {
 	}
 }
 
+const ipv6EnabledDetail = "IPv6 enabled; the tunnel answers AAAA empty and blackholes IPv6"
+
 func checkIPv6() Check {
 	const name = "ipv6"
 	if runtime.GOOS != "linux" {
@@ -398,7 +400,7 @@ func checkIPv6() Check {
 	if strings.TrimSpace(string(data)) == "1" {
 		return Check{Name: name, Status: OK, Detail: "IPv6 disabled on this host"}
 	}
-	return Check{Name: name, Status: OK, Detail: "IPv6 enabled; kumiho will blackhole it (no AAAA stripping)"}
+	return Check{Name: name, Status: OK, Detail: ipv6EnabledDetail}
 }
 
 func checkDefaultRoute() Check {

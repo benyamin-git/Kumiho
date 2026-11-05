@@ -84,6 +84,85 @@ func TestUDPTruncationAndTCPPassthrough(t *testing.T) {
 	}
 }
 
+func TestAAAAIsEmptyNODATAAndNotCached(t *testing.T) {
+	var calls atomic.Int32
+	s := &Server{
+		cache: newCache(100),
+		Resolve: func(_ context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+			calls.Add(1)
+			msg := new(mdns.Msg)
+			msg.SetReply(req)
+			msg.Answer = append(msg.Answer, &mdns.AAAA{
+				Hdr:  mdns.RR_Header{Name: req.Question[0].Name, Rrtype: mdns.TypeAAAA, Class: mdns.ClassINET, Ttl: 60},
+				AAAA: net.ParseIP("2001:db8::1"),
+			})
+			return msg, nil
+		},
+	}
+	query := new(mdns.Msg)
+	query.SetQuestion("example.com.", mdns.TypeAAAA)
+
+	for i := 0; i < 2; i++ {
+		resp := s.HandleQuery(query, false)
+		if resp.Rcode != mdns.RcodeSuccess || len(resp.Answer) != 0 {
+			t.Fatalf("query %d: response = %+v, want NOERROR with no answers", i, resp)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("resolver calls = %d, want 0 (AAAA must not resolve or cache)", calls.Load())
+	}
+}
+
+func TestANYDropsAAAA(t *testing.T) {
+	var calls atomic.Int32
+	s := &Server{
+		cache: newCache(100),
+		Resolve: func(_ context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+			calls.Add(1)
+			msg := new(mdns.Msg)
+			msg.SetReply(req)
+			msg.Answer = append(msg.Answer,
+				&mdns.A{Hdr: mdns.RR_Header{Name: req.Question[0].Name, Rrtype: mdns.TypeA, Class: mdns.ClassINET, Ttl: 60}, A: net.ParseIP("93.184.216.34").To4()},
+				&mdns.AAAA{Hdr: mdns.RR_Header{Name: req.Question[0].Name, Rrtype: mdns.TypeAAAA, Class: mdns.ClassINET, Ttl: 60}, AAAA: net.ParseIP("2001:db8::1")},
+				&mdns.TXT{Hdr: mdns.RR_Header{Name: req.Question[0].Name, Rrtype: mdns.TypeTXT, Class: mdns.ClassINET, Ttl: 60}, Txt: []string{"x"}},
+			)
+			return msg, nil
+		},
+	}
+	query := new(mdns.Msg)
+	query.SetQuestion("example.com.", mdns.TypeANY)
+
+	for i := 0; i < 2; i++ {
+		resp := s.HandleQuery(query, false)
+		if len(resp.Answer) != 2 {
+			t.Fatalf("query %d: answers = %d, want 2 (A + TXT)", i, len(resp.Answer))
+		}
+		for _, rr := range resp.Answer {
+			if rr.Header().Rrtype == mdns.TypeAAAA {
+				t.Fatalf("query %d: ANY response still carries AAAA", i)
+			}
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("resolver calls = %d, want 1 (second query from cache)", calls.Load())
+	}
+}
+
+func TestAQueryIsUnaffected(t *testing.T) {
+	s := &Server{
+		cache: newCache(100),
+		Resolve: func(_ context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+			return aResponse(t, req.Question[0].Name, 60, 0), nil
+		},
+	}
+	query := new(mdns.Msg)
+	query.SetQuestion("example.com.", mdns.TypeA)
+	resp := s.HandleQuery(query, false)
+	if resp.Rcode != mdns.RcodeSuccess || len(resp.Answer) != 1 || resp.Answer[0].Header().Rrtype != mdns.TypeA {
+		t.Fatalf("A response = %+v", resp)
+	}
+}
+
 func TestEDNS0RaisesUDPLimit(t *testing.T) {
 	s := &Server{
 		cache: newCache(100),
