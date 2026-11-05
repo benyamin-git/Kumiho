@@ -247,6 +247,138 @@ class LocationsViewModelTest {
             assertTrue(gateway.selections.isEmpty())
         }
 
+    // ---- switching while connected ---------------------------------------
+
+    @Test
+    fun `a row tap while connected asks instead of saving`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.serviceState.value = snapshot("CONNECTED", "us", EDGE_ADDRESS)
+            runCurrent()
+
+            viewModel.select(US, NYC, SHARE)
+            runCurrent()
+
+            assertTrue(viewModel.state.value.sessionActive)
+            assertEquals(
+                SwitchTarget("us", "nyc", SHARE_ADDRESS, "United States · New York"),
+                viewModel.state.value.pending,
+            )
+            assertEquals(SwitchStep.Idle, viewModel.state.value.switchStep)
+            assertTrue(gateway.selections.isEmpty())
+            assertTrue(gateway.switchCalls.isEmpty())
+        }
+
+    @Test
+    fun `a session that is waiting for the network also asks first`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.serviceState.value = snapshot("WAITING_NETWORK", "us", EDGE_ADDRESS)
+            runCurrent()
+
+            viewModel.select(US, NYC, SHARE)
+            runCurrent()
+
+            assertTrue(viewModel.state.value.sessionActive)
+            assertEquals(SHARE_ADDRESS, viewModel.state.value.pending?.server)
+            assertTrue(gateway.selections.isEmpty())
+        }
+
+    @Test
+    fun `cancelling the dialog leaves the current session untouched`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.serviceState.value = snapshot("CONNECTED", "us", EDGE_ADDRESS)
+            runCurrent()
+            viewModel.select(US, NYC, SHARE)
+            runCurrent()
+
+            viewModel.dismissSwitch()
+            runCurrent()
+
+            assertNull(viewModel.state.value.pending)
+            assertTrue(viewModel.state.value.sessionActive)
+            assertTrue(gateway.switchCalls.isEmpty())
+            assertTrue(gateway.selections.isEmpty())
+        }
+
+    @Test
+    fun `confirming disconnects selects connects and closes the dialog`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.serviceState.value = snapshot("CONNECTED", "us", EDGE_ADDRESS)
+            runCurrent()
+            viewModel.select(US, NYC, SHARE)
+            runCurrent()
+
+            viewModel.confirmSwitch()
+            runCurrent()
+
+            assertEquals(
+                listOf("disconnect", "status", "select", "connect"),
+                gateway.switchCalls,
+            )
+            assertEquals(
+                listOf(SelectionRequest("us", "nyc", SHARE_ADDRESS)),
+                gateway.selections,
+            )
+            assertNull(viewModel.state.value.pending)
+            assertEquals(SwitchStep.Idle, viewModel.state.value.switchStep)
+        }
+
+    @Test
+    fun `a failed switch keeps the target and retry runs the whole sequence again`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.serviceState.value = snapshot("CONNECTED", "us", EDGE_ADDRESS)
+            runCurrent()
+            viewModel.select(US, NYC, SHARE)
+            runCurrent()
+            gateway.selectError = IllegalStateException("save failed")
+
+            viewModel.confirmSwitch()
+            runCurrent()
+
+            assertEquals(
+                SwitchStep.Failed("save failed"),
+                viewModel.state.value.switchStep,
+            )
+            assertEquals(SHARE_ADDRESS, viewModel.state.value.pending?.server)
+            assertFalse(gateway.switchCalls.contains("connect"))
+
+            gateway.selectError = null
+            viewModel.confirmSwitch()
+            runCurrent()
+
+            assertEquals(2, gateway.selections.size)
+            assertEquals("connect", gateway.switchCalls.last())
+            assertNull(viewModel.state.value.pending)
+            assertEquals(SwitchStep.Idle, viewModel.state.value.switchStep)
+        }
+
+    @Test
+    fun `lockdown is copied from the service for the dialog warning`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.countries = listOf(US)
+            val viewModel = viewModel()
+            runCurrent()
+
+            gateway.serviceState.value = snapshot("CONNECTED").copy(lockdown = true)
+            runCurrent()
+
+            assertTrue(viewModel.state.value.lockdown)
+        }
+
     // ---- filter and visit ------------------------------------------------
 
     @Test
@@ -698,6 +830,11 @@ private class FakeGateway : LocationsGateway {
     var fastestError: Exception? = null
     var lockedError: Exception? = null
     var pingError: Exception? = null
+    var statusError: Exception? = null
+    var disconnectError: Exception? = null
+    var connectError: Exception? = null
+    var engineStatusState = "IDLE"
+    var activeStatusCalls = 0
 
     var locationCalls = 0
     val refreshFlags = mutableListOf<Boolean>()
@@ -707,6 +844,8 @@ private class FakeGateway : LocationsGateway {
     val lockedWrites = mutableListOf<Boolean>()
     var fastestSelections = 0
     var clearRecentsCalls = 0
+    var statusCalls = 0
+    val switchCalls = mutableListOf<String>()
 
     override suspend fun locations(refresh: Boolean): LocationsResult {
         locationCalls++
@@ -722,6 +861,7 @@ private class FakeGateway : LocationsGateway {
     }
 
     override suspend fun selectLocation(countryCode: String, cityCode: String?, server: String) {
+        switchCalls += "select"
         selections += SelectionRequest(countryCode, cityCode, server)
         selectGate?.await()
         selectError?.let { throw it }
@@ -754,6 +894,56 @@ private class FakeGateway : LocationsGateway {
         pingCalls += hosts
         pingError?.let { throw it }
     }
+
+    override suspend fun status(): EngineStatus {
+        switchCalls += "status"
+        statusCalls++
+        statusError?.let { throw it }
+        val state = if (statusCalls <= activeStatusCalls) "CONNECTED" else engineStatusState
+        return statusOf(state)
+    }
+
+    override suspend fun disconnect() {
+        switchCalls += "disconnect"
+        disconnectError?.let { throw it }
+        engineStatusState = "IDLE"
+        serviceState.value = ServiceState(
+            binding = true,
+            engineReady = true,
+            status = statusOf("IDLE"),
+        )
+    }
+
+    override suspend fun connect() {
+        switchCalls += "connect"
+        connectError?.let { throw it }
+        serviceState.value = ServiceState(
+            binding = true,
+            engineReady = true,
+            status = statusOf("CONNECTED"),
+        )
+    }
+
+    private fun statusOf(state: String) = EngineStatus(
+        state = state,
+        authenticated = true,
+        email = "user@example.com",
+        since = 0L,
+        tokenExpires = 0L,
+        passExpires = 0L,
+        killSwitch = true,
+        autoconnect = true,
+        location = null,
+        server = null,
+        proxyOnly = false,
+        quota = Quota(limit = null, remaining = null, reset = null),
+        dns = null,
+        ipv6 = null,
+        exitIp = null,
+        exitCountry = null,
+        totals = null,
+        rates = null,
+    )
 
     suspend fun emitPing(host: String, rttMs: Double?) {
         pingSource.emit(PingResult(host = host, rttMs = rttMs))

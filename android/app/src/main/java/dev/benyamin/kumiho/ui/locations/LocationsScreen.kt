@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +65,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -138,6 +141,8 @@ fun LocationsRoute(
         onToggleFavorite = locationsViewModel::toggleFavorite,
         onClearRecents = locationsViewModel::clearRecents,
         onToggleLocked = locationsViewModel::toggleLocked,
+        onConfirmSwitch = locationsViewModel::confirmSwitch,
+        onDismissSwitch = locationsViewModel::dismissSwitch,
     )
     content(state, actions)
 }
@@ -156,6 +161,8 @@ data class LocationsActions(
     val onToggleFavorite: (LocationRow) -> Unit = {},
     val onClearRecents: () -> Unit = {},
     val onToggleLocked: () -> Unit = {},
+    val onConfirmSwitch: () -> Unit = {},
+    val onDismissSwitch: () -> Unit = {},
 )
 
 /**
@@ -231,6 +238,163 @@ fun LocationsScreen(
                 )
             }
         }
+    }
+
+    state.pending?.let { target ->
+        SwitchLocationDialog(
+            target = target,
+            step = state.switchStep,
+            lockdown = state.lockdown,
+            onConfirm = actions.onConfirmSwitch,
+            onDismiss = actions.onDismissSwitch,
+        )
+    }
+}
+
+/**
+ * The confirmation and progress dialog for a location change while a session
+ * is up. It never runs the choreography itself; every button is an action.
+ */
+@Composable
+private fun SwitchLocationDialog(
+    target: SwitchTarget,
+    step: SwitchStep,
+    lockdown: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val running = step.isRunning
+    AlertDialog(
+        onDismissRequest = { if (!running) onDismiss() },
+        modifier = Modifier.testTag(LocationsTags.SWITCH_DIALOG),
+        title = { Text(stringResource(R.string.locations_switch_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space2)) {
+                when (step) {
+                    SwitchStep.Idle -> {
+                        Text(
+                            text = stringResource(R.string.locations_switch_target, target.label),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = target.server,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = stringResource(R.string.locations_switch_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (lockdown) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = LocalKumihoColors.current.warning,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text(
+                                    text = stringResource(R.string.locations_switch_lockdown),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+
+                    SwitchStep.Disconnecting -> SwitchProgress(
+                        target = target,
+                        label = stringResource(R.string.locations_switch_ending),
+                    )
+
+                    is SwitchStep.Connecting -> SwitchProgress(
+                        target = target,
+                        label = stringResource(R.string.locations_switch_connecting, step.target),
+                    )
+
+                    is SwitchStep.Failed -> {
+                        Text(
+                            text = stringResource(R.string.locations_switch_failed),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = step.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when (step) {
+                SwitchStep.Idle -> Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.testTag(LocationsTags.SWITCH_CONFIRM),
+                ) {
+                    Text(stringResource(R.string.locations_switch_confirm))
+                }
+
+                is SwitchStep.Failed -> Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.testTag(LocationsTags.SWITCH_RETRY),
+                ) {
+                    Text(stringResource(R.string.locations_switch_retry))
+                }
+
+                else -> Unit
+            }
+        },
+        dismissButton = {
+            when (step) {
+                SwitchStep.Idle -> TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag(LocationsTags.SWITCH_DISMISS),
+                ) {
+                    Text(stringResource(R.string.locations_switch_cancel))
+                }
+
+                is SwitchStep.Failed -> TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag(LocationsTags.SWITCH_DISMISS),
+                ) {
+                    Text(stringResource(R.string.locations_switch_close))
+                }
+
+                else -> Unit
+            }
+        },
+    )
+}
+
+@Composable
+private fun SwitchProgress(target: SwitchTarget, label: String) {
+    Text(
+        text = target.label,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(20.dp),
+            strokeWidth = 2.dp,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

@@ -10,6 +10,8 @@ import dev.benyamin.kumiho.engine.LocationsResult
 import dev.benyamin.kumiho.engine.PingDone
 import dev.benyamin.kumiho.engine.PingResult
 import dev.benyamin.kumiho.engine.Server
+import dev.benyamin.kumiho.vpn.ConnectRequest
+import dev.benyamin.kumiho.vpn.EngineStates
 import dev.benyamin.kumiho.vpn.ServiceState
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import kotlinx.coroutines.CancellationException
@@ -53,6 +55,15 @@ interface LocationsGateway {
     suspend fun setAllowLocked(enabled: Boolean)
 
     suspend fun ping(hosts: List<String>)
+
+    /** The engine's fresh status; the switch polls it after disconnecting. */
+    suspend fun status(): EngineStatus
+
+    /** Ends the current session; the switch waits for the status to settle. */
+    suspend fun disconnect()
+
+    /** Connects again with the saved selection after a switch. */
+    suspend fun connect()
 }
 
 /** The real gateway over the app-scoped VPN coordinator. */
@@ -102,6 +113,16 @@ class CoordinatorLocationsGateway(
 
     override suspend fun ping(hosts: List<String>) {
         coordinator.awaitEngine().ping(hosts)
+    }
+
+    override suspend fun status(): EngineStatus = coordinator.awaitEngine().refreshStatus()
+
+    override suspend fun disconnect() {
+        coordinator.disconnect()
+    }
+
+    override suspend fun connect() {
+        coordinator.connect(ConnectRequest())
     }
 }
 
@@ -216,6 +237,14 @@ data class LocationsState(
     val recents: List<LocationRef> = emptyList(),
     /** Whether the locked rows are revealed. */
     val allowLocked: Boolean = false,
+    /** The service reports a session family; a row tap asks before switching. */
+    val sessionActive: Boolean = false,
+    /** Android's Always-on lockdown flag; the switch dialog warns when it is on. */
+    val lockdown: Boolean = false,
+    /** The row awaiting confirmation for a switch; null while there is no dialog. */
+    val pending: SwitchTarget? = null,
+    /** The choreography's current step; Idle when no switch is running or failed. */
+    val switchStep: SwitchStep = SwitchStep.Idle,
 ) {
     val hasTree: Boolean get() = countries.isNotEmpty()
 
@@ -299,6 +328,8 @@ class LocationsViewModel(
 
     private var loadJob: Job? = null
     private var pingJob: Job? = null
+    private var switchJob: Job? = null
+    private val switchLocation = SwitchLocation(gateway)
 
     init {
         viewModelScope.launch {
@@ -317,6 +348,10 @@ class LocationsViewModel(
 
     private fun onService(snapshot: ServiceState) {
         status = snapshot.status
+        val active = EngineStates.isActive(snapshot.status?.state)
+        mutableState.update {
+            it.copy(sessionActive = active, lockdown = snapshot.lockdown)
+        }
         refreshSelection()
     }
 
@@ -468,16 +503,66 @@ class LocationsViewModel(
 
     // ---- selection -------------------------------------------------------
 
-    /** A server row's tap; unusable servers are not selectable. */
+    /**
+     * A server row's tap; unusable servers are not selectable. While a session
+     * is active the tap only asks: nothing is persisted or disconnected until
+     * the dialog is confirmed.
+     */
     fun select(country: Country, city: City, server: Server) {
         if (!LocationTree.isUsable(server)) return
-        select(
-            SelectionRequest(
-                countryCode = country.code,
-                cityCode = city.code,
-                address = LocationTree.connectTarget(server) ?: return,
-            ),
+        val address = LocationTree.connectTarget(server) ?: return
+        val request = SelectionRequest(
+            countryCode = country.code,
+            cityCode = city.code,
+            address = address,
         )
+        if (mutableState.value.sessionActive) {
+            val row = LocationRow(country, city, server, address)
+            mutableState.update {
+                it.copy(
+                    pending = SwitchTarget(
+                        countryCode = request.countryCode,
+                        cityCode = request.cityCode,
+                        server = request.address,
+                        label = row.title,
+                    ),
+                    switchStep = SwitchStep.Idle,
+                )
+            }
+            return
+        }
+        select(request)
+    }
+
+    /**
+     * The dialog's Switch and Retry. It runs the choreography once, keeps the
+     * target on failure so Retry repeats it, and closes only on success.
+     */
+    fun confirmSwitch() {
+        val current = mutableState.value
+        val target = current.pending ?: return
+        if (current.switchStep.isRunning) return
+        mutableState.update { it.copy(switchStep = SwitchStep.Disconnecting) }
+        switchJob?.cancel()
+        switchJob = viewModelScope.launch {
+            val result = switchLocation.run(target) { step ->
+                mutableState.update { it.copy(switchStep = step) }
+            }
+            val failure = result.exceptionOrNull()
+            mutableState.update {
+                if (failure == null) {
+                    it.copy(pending = null, switchStep = SwitchStep.Idle)
+                } else {
+                    it.copy(switchStep = SwitchStep.Failed(messageOf(failure)))
+                }
+            }
+        }
+    }
+
+    /** Cancel or Close; never interrupts a running step and never reconnects. */
+    fun dismissSwitch() {
+        if (mutableState.value.switchStep.isRunning) return
+        mutableState.update { it.copy(pending = null, switchStep = SwitchStep.Idle) }
     }
 
     /**

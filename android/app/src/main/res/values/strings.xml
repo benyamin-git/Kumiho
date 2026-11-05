@@ -270,6 +270,18 @@
     <string name="locations_refresh">Refresh locations</string>
     <string name="locations_refresh_action">Refresh</string>
     <string name="locations_ping_all">Ping all</string>
+
+    <string name="locations_switch_title">Switch location?</string>
+    <string name="locations_switch_target">Switch to %1$s?</string>
+    <string name="locations_switch_body">The current session ends before Kumiho connects to the new location.</string>
+    <string name="locations_switch_lockdown">Lockdown is on. The device has no tunnel until the new session is up.</string>
+    <string name="locations_switch_ending">Ending the current session…</string>
+    <string name="locations_switch_connecting">Connecting to %1$s…</string>
+    <string name="locations_switch_failed">The switch did not finish.</string>
+    <string name="locations_switch_confirm">Switch</string>
+    <string name="locations_switch_retry">Retry</string>
+    <string name="locations_switch_cancel">Cancel</string>
+    <string name="locations_switch_close">Close</string>
     <string name="locations_pinging_all">Pinging %1$d…</string>
     <string name="locations_summary_label">Current selection</string>
     <string name="locations_selection_none">No server selected yet — the dashboard uses Recommended</string>

@@ -543,6 +543,10 @@ object LocationsTags {
     const val CLEAR_RECENTS = "locations_clear_recents"
     const val LOCKED_TOGGLE = "locations_locked_toggle"
     const val LIST_HEADING = "locations_list_heading"
+    const val SWITCH_DIALOG = "locations_switch_dialog"
+    const val SWITCH_CONFIRM = "locations_switch_confirm"
+    const val SWITCH_RETRY = "locations_switch_retry"
+    const val SWITCH_DISMISS = "locations_switch_dismiss"
 
     const val SERVER_PREFIX = "locations_server_"
 

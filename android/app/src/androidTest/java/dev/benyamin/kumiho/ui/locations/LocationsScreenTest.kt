@@ -327,6 +327,72 @@ class LocationsScreenTest {
         rule.onNodeWithTag(tag).assertDoesNotExist()
     }
 
+    @Test
+    fun theSwitchDialogNamesTheTargetAndExplainsTheDisconnect() {
+        show(
+            state(
+                sessionActive = true,
+                pending = SwitchTarget("us", "nyc", EDGE_ADDRESS, "United States · New York"),
+            ),
+        )
+
+        rule.onNodeWithText(text(R.string.locations_switch_title)).assertExists()
+        rule.onNodeWithText(
+            text(R.string.locations_switch_target).format("United States · New York"),
+        ).assertExists()
+        rule.onNodeWithText(EDGE_ADDRESS).assertExists()
+        rule.onNodeWithText(text(R.string.locations_switch_body)).assertExists()
+
+        rule.onNodeWithTag(LocationsTags.SWITCH_CONFIRM).performClick()
+        rule.onNodeWithTag(LocationsTags.SWITCH_DISMISS).performClick()
+        assertEquals(listOf("confirm-switch", "dismiss-switch"), calls)
+    }
+
+    @Test
+    fun theSwitchDialogWarnsWhenLockdownIsOn() {
+        show(
+            state(
+                sessionActive = true,
+                lockdown = true,
+                pending = SwitchTarget("us", "nyc", EDGE_ADDRESS, "United States · New York"),
+            ),
+        )
+
+        rule.onNodeWithText(text(R.string.locations_switch_lockdown)).assertExists()
+    }
+
+    @Test
+    fun aRunningSwitchShowsTheStepAndOffersNoButtons() {
+        show(
+            state(
+                sessionActive = true,
+                pending = SwitchTarget("us", "nyc", EDGE_ADDRESS, "United States · New York"),
+                switchStep = SwitchStep.Connecting("United States · New York"),
+            ),
+        )
+
+        rule.onNodeWithText("Connecting to United States · New York…").assertExists()
+        assertNoTag(LocationsTags.SWITCH_CONFIRM)
+        assertNoTag(LocationsTags.SWITCH_DISMISS)
+    }
+
+    @Test
+    fun aFailedSwitchOffersRetryAndClose() {
+        show(
+            state(
+                sessionActive = true,
+                pending = SwitchTarget("us", "nyc", EDGE_ADDRESS, "United States · New York"),
+                switchStep = SwitchStep.Failed("save failed"),
+            ),
+        )
+
+        rule.onNodeWithText(text(R.string.locations_switch_failed)).assertExists()
+        rule.onNodeWithText("save failed").assertExists()
+        rule.onNodeWithTag(LocationsTags.SWITCH_RETRY).performClick()
+        rule.onNodeWithTag(LocationsTags.SWITCH_DISMISS).performClick()
+        assertEquals(listOf("confirm-switch", "dismiss-switch"), calls)
+    }
+
     private fun scrollTo(tag: String) {
         rule.onNodeWithTag(LocationsTags.LIST).performScrollToNode(hasTestTag(tag))
         rule.waitForIdle()
@@ -349,6 +415,8 @@ class LocationsScreenTest {
         onToggleFavorite = { calls += "favorite-${it.address}" },
         onClearRecents = { calls += "clear-recents" },
         onToggleLocked = { calls += "toggle-locked" },
+        onConfirmSwitch = { calls += "confirm-switch" },
+        onDismissSwitch = { calls += "dismiss-switch" },
     )
 
     private fun state(
@@ -368,6 +436,10 @@ class LocationsScreenTest {
         favorites: List<LocationRef> = emptyList(),
         recents: List<LocationRef> = emptyList(),
         allowLocked: Boolean = false,
+        sessionActive: Boolean = false,
+        lockdown: Boolean = false,
+        pending: SwitchTarget? = null,
+        switchStep: SwitchStep = SwitchStep.Idle,
     ) = LocationsState(
         loading = loading,
         refreshing = false,
@@ -386,6 +458,10 @@ class LocationsScreenTest {
         favorites = favorites,
         recents = recents,
         allowLocked = allowLocked,
+        sessionActive = sessionActive,
+        lockdown = lockdown,
+        pending = pending,
+        switchStep = switchStep,
     )
 
     private companion object {

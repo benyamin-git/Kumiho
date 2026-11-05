@@ -78,6 +78,12 @@ class LocationsScreenshotsTest {
 
         rule.runOnIdle { state = searchState() }
         capture(output, "filter")
+
+        rule.runOnIdle { state = switchState() }
+        capture(output, "switch")
+
+        rule.runOnIdle { state = switchState().copy(lockdown = true) }
+        capture(output, "switch-lockdown")
     }
 
     private fun capture(output: File, screen: String) {
@@ -110,6 +116,11 @@ class LocationsScreenshotsTest {
 
     private fun noticeState() = treeState().copy(
         notice = LocationsNotice.refreshFailed("the engine did not answer"),
+    )
+
+    private fun switchState() = treeState().copy(
+        sessionActive = true,
+        pending = SwitchTarget("de", "ber", BER_ADDRESS, "Germany · Berlin"),
     )
 
     private fun noOpActions() = LocationsActions(
