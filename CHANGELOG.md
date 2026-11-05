@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **The home-screen widgets are true black on OLED.** Their fill used the
+  raised surface-container step (`#101012`); OLED now uses the ladder's
+  true-black step, while Light and Dark keep the existing card fill.
+
 ## [0.10.0] - 2026-11-05
 
 Android polish: home-screen widgets, no IPv6 DNS stalls, a calmer keepalive

@@ -14,6 +14,7 @@ import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.permissions.PermissionController
 import dev.benyamin.kumiho.ui.theme.KumihoColors
+import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.VpnStatusCache
 
 /**
@@ -51,6 +52,11 @@ object WidgetRefresh {
         }
     }
 
+    /** OLED fills with the ladder's true black; Light and Dark keep the card step. */
+    private fun widgetBackground(colors: KumihoColors): Int =
+        (if (colors.theme == ThemeId.OLED) colors.surfaceContainerLowest else colors.surfaceContainer)
+            .toArgb()
+
     private fun toggleIds(context: Context, manager: AppWidgetManager): IntArray =
         manager.getAppWidgetIds(ComponentName(context, KumihoToggleWidgetProvider::class.java))
 
@@ -63,7 +69,7 @@ object WidgetRefresh {
         colors: KumihoColors,
     ): RemoteViews {
         val remote = RemoteViews(context.packageName, R.layout.widget_toggle)
-        remote.setInt(R.id.widget_root, "setBackgroundColor", colors.surfaceContainer.toArgb())
+        remote.setInt(R.id.widget_root, "setBackgroundColor", widgetBackground(colors))
         remote.setImageViewResource(
             R.id.widget_icon,
             if (view.active) R.drawable.ic_widget_on else R.drawable.ic_widget_off,
@@ -84,7 +90,7 @@ object WidgetRefresh {
         colors: KumihoColors,
     ): RemoteViews {
         val remote = RemoteViews(context.packageName, R.layout.widget_status)
-        remote.setInt(R.id.widget_root, "setBackgroundColor", colors.surfaceContainer.toArgb())
+        remote.setInt(R.id.widget_root, "setBackgroundColor", widgetBackground(colors))
         remote.setImageViewResource(
             R.id.widget_icon,
             if (view.active) R.drawable.ic_widget_on else R.drawable.ic_widget_off,
