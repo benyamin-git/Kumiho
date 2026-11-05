@@ -309,7 +309,10 @@ a television.
 - Physical Sony X90L acceptance of the TV shell and the watchdog redial step
   is still pending.
 
-## [0.6.1] - unreleased
+## [0.6.1] - shipped inside v0.7.0
+
+No separate v0.6.1 tag exists; these changes are part of the published v0.7.0
+release.
 
 Direct Firefox Accounts OAuth replaces the v0.6.0 browser sign-in. Browser
 accounts now carry ordinary FxA access and refresh tokens, refresh like a
