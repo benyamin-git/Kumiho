@@ -45,6 +45,7 @@ object VpnStatusCache {
                 proxyOnly = uiState == VpnUiState.PROXY_ONLY ||
                     state.status?.proxyOnly == true,
                 connectInFlight = inFlight(nowMillis),
+                quota = state.status?.quota,
             )
             snapshot = next
             next
