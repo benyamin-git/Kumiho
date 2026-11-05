@@ -295,8 +295,8 @@ and
       Resolve-DnsName example.com -Type AAAA | Select-Object Name,Type,IPAddress
 
   Expect: `False` for the TCP test (IPv6 has no path around the tunnel and
-  times out; allow ~20 s), while the AAAA lookup still resolves — IPv6 is
-  blackholed but DNS works.
+  times out; allow ~20 s), while the AAAA lookup returns no records (NODATA) —
+  IPv6 is blackholed and the tunnel resolver suppresses AAAA.
 
 ## 9. DNS parity (criterion 4)
 

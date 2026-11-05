@@ -33,7 +33,7 @@ Kumiho is an unofficial Linux CLI/TUI client for the free Firefox-account VPN pr
 | 10 | LAN / Tailscale | Tailscale = **SSH + peer access only** (no exit node, no subnet router); LAN and tailnet traffic must bypass the tunnel; SSH must never break |
 | 11 | Split tunneling | **CIDR exclude list** (per-app later phase) |
 | 12 | DNS | **Automatic, resolved-first**: configure `foxy0` via systemd-resolved; never touch `/etc/resolv.conf`; Tailscale MagicDNS split DNS preserved |
-| 13 | IPv6 | **Blackhole only** (exact FoxyVPN behavior; no AAAA stripping) |
+| 13 | IPv6 | **Blackhole only**; the resolver answers `AAAA` empty (NOERROR, no records) |
 | 14 | Autostart | Toggle; **remember last state** (first install = **ON**) — user update 2026-10-05 (originally OFF) |
 | 15 | SOCKS listener | **Loopback only** (`127.0.0.1:1080`) |
 | 16 | Daemon privileges | **Dedicated system user `kumiho` + `CAP_NET_ADMIN` only** + polkit rule for resolved |
@@ -132,7 +132,7 @@ no interactive captcha UI.
 - Client SETTINGS: initial window 16 MiB, max frame 256 KiB, push disabled.
 - Per flow: open stream, send `:method CONNECT`, `:authority host:port`, `proxy-authorization: Bearer <proxy_pass>`; 2xx → raw byte tunnel (DATA frames both ways); non-2xx → `UpstreamConnectRejectedException(status)`.
 - Keepalive: check every 3 s; if idle ≥ 15 s send PING payload `0x466F787956504E`; if no ack within 10 s (`standard`) or 25 s (`slow`) → session dead. Answer server PINGs.
-- `keepalive_profile` is read at connect time: `standard` (default) 10 s, `slow` 25 s; idle 15 s and the 3 s check are unchanged.
+- `keepalive_profile` is read at connect time: `slow` (default) 25 s, `standard` 10 s; idle 15 s and the 3 s check are unchanged.
 - `upstream_proxy` wraps only the edge TCP dial, after which TLS SNI and the H2 `:authority` remain the edge hostname. `socks5://`/`socks5h://` use SOCKS5 CONNECT and `http://` uses HTTP CONNECT; URL credentials become SOCKS5 user/pass or `Proxy-Authorization: Basic`; scheme default ports are 1080/80. The proxy resolves the edge hostname remotely. With `edge_address` pinned the proxy receives that IP while SNI/authority keep the hostname. Control-plane, Remote Settings, DoH and bootstrap dials never use this hop.
 - `tls_split` (`off|first-byte|sni`, default off) is a best-effort ClientHello fragmentation wrapper applied to the final edge connection — after the proxy hop, before the TLS handshake — and to control-plane dials. DoH and bootstrap dials stay unsplit.
 - `SETTINGS_MAX_CONCURRENT_STREAMS` honored (queue new flows up to 15 s for a slot).
@@ -234,7 +234,9 @@ Two roles:
    - 8 s per query, 4 s per endpoint; cache with TTL (10 000 entries, min TTL
      5 s, max 1 h); UDP truncation handled by setting TC and letting clients
      retry TCP;
-   - AAAA answers passed through unchanged (blackhole-only decision).
+   - `AAAA` queries are answered NOERROR with no records and are not resolved
+     or cached; `ANY` replies have `AAAA` records removed (blackhole-only
+     decision).
 3. Custom DNS and provider semantics: a user-provided `dns_upstream` IP is always
    queried as DoH at `https://<ip>/dns-query`, whether or not it belongs to a
    known DoH operator. `doh_provider=off` with no custom upstream leaves no
@@ -244,7 +246,7 @@ Two roles:
 
 ### 3.6 IPv6
 
-- Blackhole only: IPv6 default route into `foxy0` table; packets are silently dropped by the stack (FoxyVPN parity). No AAAA stripping.
+- Blackhole only: IPv6 default route into `foxy0` table; packets are silently dropped by the stack (FoxyVPN parity). The in-tunnel resolver answers `AAAA` queries empty, so nothing ever routes over IPv6.
 - Kill switch drops marked IPv6 on non-tunnel interfaces.
 
 ### 3.7 Stack engine
@@ -381,7 +383,7 @@ kumiho version
 | `http_proxy` | `false` | local HTTP proxy; next connect |
 | `http_proxy_port` | `8080` | 1–65535 |
 | `solve_challenges` | `true` | read per control-plane request |
-| `keepalive_profile` | `standard` | `standard\|slow`; next connect |
+| `keepalive_profile` | `slow` | `standard\|slow`; next connect |
 
 The five v0.4.0 keys (`tls_split`, `http_proxy`, `http_proxy_port`,
 `solve_challenges`, `keepalive_profile`) are additive runtime overrides in
