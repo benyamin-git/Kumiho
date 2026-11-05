@@ -63,19 +63,13 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.10.0
+## What's new in v0.10.1
 
-- **Home-screen widgets** — a 1×1 toggle and a 2×1 status card that share the
-  Quick Settings tile's state, country and quota, follow the stored theme and
-  ask for consent when it is missing.
-- **No IPv6 stall** — the in-tunnel resolver answers `AAAA` queries empty and
-  strips `AAAA` from `ANY` replies, so apps fall back to IPv4 immediately.
-- **Calmer keepalive** — the 25 s `keepalive_profile = "slow"` is now the
-  default on every platform; users can still choose `standard`.
-- **R46 anchor** — the edge trust pool carries both GlobalSign Root E46 and
-  Root R46 for Android TV images with an old CA store.
+- **Widgets on OLED** — the home-screen widgets fill true black in the OLED
+  theme instead of the raised surface step.
 
-Older changes are in the [changelog](CHANGELOG.md).
+v0.10.0 added the widgets and the DNS, keepalive and root changes; see the
+[changelog](CHANGELOG.md) for details.
 
 ## Install
 
