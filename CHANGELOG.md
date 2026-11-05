@@ -309,7 +309,7 @@ a television.
 - Physical Sony X90L acceptance of the TV shell and the watchdog redial step
   is still pending.
 
-## [0.6.1] - shipped inside v0.7.0
+## 0.6.1 - shipped inside v0.7.0
 
 No separate v0.6.1 tag exists; these changes are part of the published v0.7.0
 release.
@@ -779,15 +779,20 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.3
+[0.9.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.2
+[0.9.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.1
+[0.9.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.0
+[0.8.3]: https://github.com/benyamin-git/kumiho/releases/tag/v0.8.3
+[0.8.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.8.2
+[0.8.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.8.1
 [0.8.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.8.0
 [0.7.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.2
 [0.7.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.1
 [0.7.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.7.0
 [0.6.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0
 [0.5.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.2
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.9.1...HEAD
-[0.9.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.1
-[0.9.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.0
 [0.5.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.1
 [0.5.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.5.0
 [0.4.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.4.1
