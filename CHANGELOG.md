@@ -8,6 +8,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-05
+
+Android design language: a gauge hero, live charts, motion, the launch
+wordmark and a phone-wide restyle, plus switch-location and recovery paths.
+
 ### Added
 
 - **The phone dashboard has a real gauge hero.** One 248 dp ring replaces the
@@ -866,7 +871,10 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.11.0
+[0.10.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.10.1
+[0.10.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.10.0
 [0.9.3]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.3
 [0.9.2]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.2
 [0.9.1]: https://github.com/benyamin-git/kumiho/releases/tag/v0.9.1

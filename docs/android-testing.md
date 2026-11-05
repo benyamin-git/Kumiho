@@ -8,23 +8,21 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 > tree: **565 JVM tests / 171 phone + 21 TV connected testcases / lint 0
 > errors + 32 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
-> Galaxy S25 FE for v0.5.2; v0.6.0 physical acceptance is pending and the
+> Galaxy S25 FE for v0.5.2; v0.11.0 physical acceptance is pending and the
 > sign-off is recorded below. The release automation is implemented:
 > `android-verify-apk.sh`, `android-release.sh`, the five Makefile targets, an
 > Android CI job and Android signing steps in the release workflow. The scripts
 > were exercised end to end with a throwaway signing key. The production-signed
-> `v0.6.0`
-> [release](https://github.com/benyamin-git/kumiho/releases/tag/v0.6.0) was
-> published on 2026-10-24 with three Android APKs and `SHA256SUMS`; the `v0.5.2`
-> release was published on 2026-10-23, `v0.5.1` on 2026-10-23 and `v0.5.0` on
-> 2026-10-22. The production signing key and GitHub Actions secret values
-> remain user-owned.
+> v0.6.0 release was published on 2026-10-24 with three Android APKs and
+> `SHA256SUMS`, and every release through v0.10.1 used the same path. The
+> v0.11.0 release is built by the tagged workflow. The production signing key
+> and GitHub Actions secret values remain user-owned.
 
 ## Versions
 
 | Piece | Pin | Where |
 |---|---|---|
-| App | `0.7.2`, `versionCode` 702 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
+| App | `0.11.0`, `versionCode` 1100 | `android/app/build.gradle.kts` (`-PkumihoVersion`) |
 | Package | `dev.benyamin.kumiho` (debug: `.debug`) | `android/app/build.gradle.kts` |
 | minSdk | 26 (Android 8.0) | `android/app/build.gradle.kts` |
 | targetSdk | 36 | `android/app/build.gradle.kts` |
