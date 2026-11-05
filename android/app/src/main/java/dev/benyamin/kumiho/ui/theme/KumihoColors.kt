@@ -47,6 +47,10 @@ enum class KumihoAccent(val id: String, val label: String) {
  * house map has no standalone token for are derived from those roles
  * ([errorContainer], [outlineVariant], the container ladder) rather than
  * invented. No raw hex lives outside [PaletteMapping].
+ *
+ * The four data roles ([dataLine], [dataFill], [dataGrid], [glow]) are opaque
+ * and pre-composited on [background]: draw charts and the gauge glow on the
+ * page background, never on a raised container.
  */
 @Immutable
 data class KumihoColors(
@@ -83,6 +87,11 @@ data class KumihoColors(
     val profit: Color,
     val loss: Color,
     val warning: Color,
+    // Data-visualisation roles, pre-composited on background.
+    val dataLine: Color,
+    val dataFill: Color,
+    val dataGrid: Color,
+    val glow: Color,
 ) {
     /** The page surface is the house background. */
     val surface: Color get() = background
@@ -205,6 +214,7 @@ object PaletteMapping {
         "surface-container-1", "surface-container-2", "surface-container-3",
         "surface-container-4", "surface-container-5",
         "profit", "loss", "warning",
+        "data-line", "data-fill", "data-grid", "glow",
     )
 
     /** Maps a role map to [KumihoColors], requiring every role. */
@@ -242,6 +252,10 @@ object PaletteMapping {
             profit = role("profit"),
             loss = role("loss"),
             warning = role("warning"),
+            dataLine = role("data-line"),
+            dataFill = role("data-fill"),
+            dataGrid = role("data-grid"),
+            glow = role("glow"),
         )
     }
 

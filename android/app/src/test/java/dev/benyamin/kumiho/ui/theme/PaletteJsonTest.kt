@@ -3,6 +3,7 @@ package dev.benyamin.kumiho.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -196,6 +197,22 @@ class PaletteJsonTest {
     }
 
     @Test
+    fun `data roles are the documented composites over background`() {
+        themes.forEach { theme ->
+            accents.forEach { accent ->
+                val roles = rolesFor(theme, accent)
+                val where = "$theme/$accent"
+                val primary = roles.getValue("primary")
+                val background = roles.getValue("background")
+                assertEquals(where, primary, roles.getValue("data-line"))
+                assertEquals(where, blend(primary, background, 0.18), roles.getValue("data-fill"))
+                assertEquals(where, blend(roles.getValue("outline"), background, 0.32), roles.getValue("data-grid"))
+                assertEquals(where, blend(primary, background, 0.16), roles.getValue("glow"))
+            }
+        }
+    }
+
+    @Test
     fun `text roles clear the contrast floor in every theme`() {
         val textPairs: List<Pair<String, String>> = listOf(
             "on-primary" to "primary",
@@ -223,6 +240,15 @@ class PaletteJsonTest {
             }
         }
     }
+
+    /** [fg] painted at [alpha] over the opaque [bg], as #rrggbb (Go's rule). */
+    private fun blend(fg: String, bg: String, alpha: Double): String =
+        "#" + (0..2).joinToString("") { i ->
+            val f = fg.substring(1 + i * 2, 3 + i * 2).toInt(16)
+            val b = bg.substring(1 + i * 2, 3 + i * 2).toInt(16)
+            // roundToInt is Go's math.Round for these non-negative channels.
+            "%02x".format((f * alpha + b * (1 - alpha)).roundToInt())
+        }
 
     private fun readFixture(): String =
         checkNotNull(PaletteJsonTest::class.java.getResourceAsStream("/palette.json")) {

@@ -1,8 +1,12 @@
 {
-  "_comment": "Generated from the real Go palette: each (theme, accent) pair is the JSON returned by mobile.Palette(theme, accent), which wraps internal/gui/theme. Themes: light, dark, oled. Accents: blue, teal, green, orange, rose, violet. Roles are the 25 frozen house roles. Regenerate by calling mobile.Palette for every pair and marshalling the result; do not hand-edit this file.",
+  "_comment": "Generated from the real Go palette: each (theme, accent) pair is the JSON returned by mobile.Palette(theme, accent), which wraps internal/gui/theme. Themes: light, dark, oled. Accents: blue, teal, green, orange, rose, violet. Roles are the 29 frozen house roles. Regenerate with KUMIHO_UPDATE_PALETTE_FIXTURE=1 go test ./mobile -run TestWritePaletteFixture; do not hand-edit this file.",
   "dark": {
     "blue": {
       "background": "#1c1b1f",
+      "data-fill": "#2d3544",
+      "data-grid": "#424046",
+      "data-line": "#7daeec",
+      "glow": "#2c3340",
       "inverse-primary": "#35639c",
       "loss": "#f2b8b5",
       "on-primary": "#203550",
@@ -30,6 +34,10 @@
     },
     "green": {
       "background": "#1c1b1f",
+      "data-fill": "#243a29",
+      "data-grid": "#424046",
+      "data-line": "#4bc957",
+      "glow": "#243728",
       "inverse-primary": "#3c703f",
       "loss": "#f2b8b5",
       "on-primary": "#04400e",
@@ -57,6 +65,10 @@
     },
     "orange": {
       "background": "#1c1b1f",
+      "data-fill": "#40312e",
+      "data-grid": "#424046",
+      "data-line": "#e29572",
+      "glow": "#3c2f2c",
       "inverse-primary": "#924c2b",
       "loss": "#f2b8b5",
       "on-primary": "#4b2b1c",
@@ -84,6 +96,10 @@
     },
     "rose": {
       "background": "#1c1b1f",
+      "data-fill": "#403034",
+      "data-grid": "#424046",
+      "data-line": "#e58f95",
+      "glow": "#3c2e32",
       "inverse-primary": "#94464e",
       "loss": "#f2b8b5",
       "on-primary": "#601221",
@@ -111,6 +127,10 @@
     },
     "teal": {
       "background": "#1c1b1f",
+      "data-fill": "#2a383b",
+      "data-grid": "#424046",
+      "data-line": "#69bbba",
+      "glow": "#283538",
       "inverse-primary": "#127070",
       "loss": "#f2b8b5",
       "on-primary": "#163b3b",
@@ -138,6 +158,10 @@
     },
     "violet": {
       "background": "#1c1b1f",
+      "data-fill": "#373242",
+      "data-grid": "#424046",
+      "data-line": "#b49ce1",
+      "glow": "#34303e",
       "inverse-primary": "#7638c0",
       "loss": "#f2b8b5",
       "on-primary": "#3d2460",
@@ -167,6 +191,10 @@
   "light": {
     "blue": {
       "background": "#fffbfe",
+      "data-fill": "#dbe0ec",
+      "data-grid": "#d4d0d5",
+      "data-line": "#35639c",
+      "glow": "#dfe3ee",
       "inverse-primary": "#a8ccfa",
       "loss": "#b3261e",
       "on-primary": "#ffffff",
@@ -194,6 +222,10 @@
     },
     "green": {
       "background": "#fffbfe",
+      "data-fill": "#dce2dc",
+      "data-grid": "#d4d0d5",
+      "data-line": "#3c703f",
+      "glow": "#e0e5df",
       "inverse-primary": "#8ee090",
       "loss": "#b3261e",
       "on-primary": "#ffffff",
@@ -221,6 +253,10 @@
     },
     "orange": {
       "background": "#fffbfe",
+      "data-fill": "#ebdcd8",
+      "data-grid": "#d4d0d5",
+      "data-line": "#924c2b",
+      "glow": "#eedfdc",
       "inverse-primary": "#f4baa1",
       "loss": "#b3261e",
       "on-primary": "#ffffff",
@@ -248,6 +284,10 @@
     },
     "rose": {
       "background": "#fffbfe",
+      "data-fill": "#ecdade",
+      "data-grid": "#d4d0d5",
+      "data-line": "#94464e",
+      "glow": "#eedee2",
       "inverse-primary": "#f6b5b9",
       "loss": "#b3261e",
       "on-primary": "#ffffff",
@@ -275,6 +315,10 @@
     },
     "teal": {
       "background": "#fffbfe",
+      "data-fill": "#d4e2e4",
+      "data-grid": "#d4d0d5",
+      "data-line": "#127070",
+      "glow": "#d9e5e7",
       "inverse-primary": "#5be0e0",
       "loss": "#b3261e",
       "on-primary": "#ffffff",
@@ -302,6 +346,10 @@
     },
     "violet": {
       "background": "#fffbfe",
+      "data-fill": "#e6d8f3",
+      "data-grid": "#d4d0d5",
+      "data-line": "#7638c0",
+      "glow": "#e9dcf4",
       "inverse-primary": "#d0bff2",
       "loss": "#b3261e",
       "on-primary": "#ffffff",
@@ -331,6 +379,10 @@
   "oled": {
     "blue": {
       "background": "#000000",
+      "data-fill": "#171f2a",
+      "data-grid": "#242225",
+      "data-line": "#7daeec",
+      "glow": "#141c26",
       "inverse-primary": "#35639c",
       "loss": "#ffb4ab",
       "on-primary": "#203550",
@@ -358,6 +410,10 @@
     },
     "green": {
       "background": "#000000",
+      "data-fill": "#0e2410",
+      "data-grid": "#242225",
+      "data-line": "#4bc957",
+      "glow": "#0c200e",
       "inverse-primary": "#3c703f",
       "loss": "#ffb4ab",
       "on-primary": "#04400e",
@@ -385,6 +441,10 @@
     },
     "orange": {
       "background": "#000000",
+      "data-fill": "#291b15",
+      "data-grid": "#242225",
+      "data-line": "#e29572",
+      "glow": "#241812",
       "inverse-primary": "#924c2b",
       "loss": "#ffb4ab",
       "on-primary": "#4b2b1c",
@@ -412,6 +472,10 @@
     },
     "rose": {
       "background": "#000000",
+      "data-fill": "#291a1b",
+      "data-grid": "#242225",
+      "data-line": "#e58f95",
+      "glow": "#251718",
       "inverse-primary": "#94464e",
       "loss": "#ffb4ab",
       "on-primary": "#601221",
@@ -439,6 +503,10 @@
     },
     "teal": {
       "background": "#000000",
+      "data-fill": "#132221",
+      "data-grid": "#242225",
+      "data-line": "#69bbba",
+      "glow": "#111e1e",
       "inverse-primary": "#127070",
       "loss": "#ffb4ab",
       "on-primary": "#163b3b",
@@ -466,6 +534,10 @@
     },
     "violet": {
       "background": "#000000",
+      "data-fill": "#201c29",
+      "data-grid": "#242225",
+      "data-line": "#b49ce1",
+      "glow": "#1d1924",
       "inverse-primary": "#7638c0",
       "loss": "#ffb4ab",
       "on-primary": "#3d2460",
