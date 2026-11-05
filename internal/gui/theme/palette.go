@@ -3,6 +3,7 @@ package theme
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -128,6 +129,36 @@ var cssOrder = []string{
 	"surface-container-1", "surface-container-2", "surface-container-3",
 	"surface-container-4", "surface-container-5",
 	"profit", "loss", "warning",
+	"data-line", "data-fill", "data-grid", "glow",
+}
+
+// Data-visualisation alphas. Charts and the gauge glow sit on the page
+// background, so these four roles are opaque and pre-composited there.
+const (
+	dataFillAlpha = 0.18
+	dataGridAlpha = 0.32
+	glowAlpha     = 0.16
+)
+
+// compositeOver returns fg painted at alpha over the opaque bg as #rrggbb.
+// Both inputs are package hex constants; invalid input yields black.
+func compositeOver(fg, bg string, alpha float64) string {
+	f, _ := strconv.ParseUint(fg[1:], 16, 24)
+	b, _ := strconv.ParseUint(bg[1:], 16, 24)
+	blend := func(shift uint) uint64 {
+		return uint64(math.Round(
+			float64((f>>shift)&0xff)*alpha + float64((b>>shift)&0xff)*(1-alpha)))
+	}
+	return fmt.Sprintf("#%02x%02x%02x", blend(16), blend(8), blend(0))
+}
+
+// dataRoles fills the four data roles in v, which must already hold primary,
+// background and outline.
+func dataRoles(v map[string]string) {
+	v["data-line"] = v["primary"]
+	v["data-fill"] = compositeOver(v["primary"], v["background"], dataFillAlpha)
+	v["data-grid"] = compositeOver(v["outline"], v["background"], dataGridAlpha)
+	v["glow"] = compositeOver(v["primary"], v["background"], glowAlpha)
 }
 
 // values assembles the palette for a validated theme and accent, keyed by
@@ -155,6 +186,7 @@ func values(t Theme, a Accent) map[string]string {
 	v["profit"] = s.profit
 	v["loss"] = s.loss
 	v["warning"] = s.warning
+	dataRoles(v)
 	return v
 }
 

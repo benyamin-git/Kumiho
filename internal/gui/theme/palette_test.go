@@ -1,6 +1,9 @@
 package theme
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
 // TestPaletteKeySet checks that every theme × accent returns exactly the
 // cssOrder key set, without the -- prefix.
@@ -118,6 +121,39 @@ func TestPaletteMatchesCSS(t *testing.T) {
 				if v[key] != vars["--"+key] {
 					t.Errorf("Palette(%s, %s)[%q] = %s; CSS --%s = %s",
 						th, a.Name, key, v[key], key, vars["--"+key])
+				}
+			}
+		}
+	}
+}
+
+// TestDataRoles checks the four data roles for every theme and accent: all
+// present as opaque hex, the line is the primary, and each composite differs
+// from its source. The exact blue values are pinned by TestCSSBlock.
+func TestDataRoles(t *testing.T) {
+	hex := regexp.MustCompile(`^#[0-9a-f]{6}$`)
+	for _, th := range []Theme{Light, Dark, OLED} {
+		for _, a := range Accents {
+			v, err := Palette(th, a.Name)
+			if err != nil {
+				t.Fatalf("Palette(%s, %s) error = %v", th, a.Name, err)
+			}
+			for _, name := range []string{"data-line", "data-fill", "data-grid", "glow"} {
+				if !hex.MatchString(v[name]) {
+					t.Errorf("Palette(%s, %s)[%q] = %q; want #rrggbb",
+						th, a.Name, name, v[name])
+				}
+			}
+			if v["data-line"] != v["primary"] {
+				t.Errorf("Palette(%s, %s) data-line = %s; want primary %s",
+					th, a.Name, v["data-line"], v["primary"])
+			}
+			for name, src := range map[string]string{
+				"data-fill": "primary", "data-grid": "outline", "glow": "primary",
+			} {
+				if v[name] == v[src] {
+					t.Errorf("Palette(%s, %s) %s = %s; want a composite over background",
+						th, a.Name, name, v[name])
 				}
 			}
 		}
