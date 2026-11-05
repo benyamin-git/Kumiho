@@ -9,6 +9,7 @@ import android.service.quicksettings.TileService
 import androidx.core.content.ContextCompat
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.EngineClient
+import dev.benyamin.kumiho.widget.WidgetRefresh
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,9 +69,17 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         // an unchanged presentation does not wake the system tile.
         scope.launch {
             var last: TileSnapshot? = null
+            var lastWidget: TileSnapshot? = null
             state.collect { snapshot ->
                 val tile = VpnStatusCache.update(snapshot)
-                val presentation = tile.copy(connectInFlight = false)
+                // Widgets show the country and quota the tile omits, so their
+                // comparison includes the quota; the tile's stays quota-free.
+                val widgetState = tile.copy(connectInFlight = false)
+                if (widgetState != lastWidget) {
+                    lastWidget = widgetState
+                    WidgetRefresh.request(appContext)
+                }
+                val presentation = tile.copy(connectInFlight = false, quota = null)
                 if (presentation != last) {
                     last = presentation
                     requestTileRefresh()

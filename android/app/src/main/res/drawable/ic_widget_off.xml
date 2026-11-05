@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget glyph for the off state: outlined cells plus a slash. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M3,3h8v8H3V3zM5,5v4h4V5H5zM13,3h8v8h-8V3zM15,5v4h4V5H15zM3,13h8v8H3V13zM5,15v4h4V15H5zM13,13h8v8h-8V13zM15,15v4h4V15H15z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4.1,2.7l17.2,17.2 -1.4,1.4 -17.2,-17.2z" />
+</vector>

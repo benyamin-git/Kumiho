@@ -89,6 +89,38 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+        <!-- Home-screen widgets (phone). The launcher sends APPWIDGET_UPDATE;
+             exported=false still accepts system broadcasts, and the tap target
+             is the app's own transparent activity. -->
+        <receiver
+            android:name=".widget.KumihoToggleWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_toggle_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_toggle_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.KumihoStatusWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_status_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_status_info" />
+        </receiver>
+        <!-- Widget taps land here first; it shows no UI and settles consent. -->
+        <activity
+            android:name=".widget.WidgetConnectActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- Shares one exported log file from cacheDir/exports as a content
              URI; the provider is not exported and grants read per URI. -->
         <provider

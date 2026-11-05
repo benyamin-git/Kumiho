@@ -62,6 +62,12 @@
     <string name="tile_subtitle_unavailable">Service unavailable</string>
     <string name="tile_subtitle_error">Connection error</string>
 
+    <!-- Home-screen widgets (phone). -->
+    <string name="widget_toggle_label">Kumiho toggle</string>
+    <string name="widget_status_label">Kumiho status</string>
+    <string name="widget_toggle_description">Connect or disconnect Kumiho</string>
+    <string name="widget_status_description">Kumiho connection status</string>
+
     <!-- Four-step setup (T10). -->
     <string name="setup_title">Set up Kumiho</string>
     <string name="setup_loading">Starting the local engine…</string>

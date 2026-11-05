@@ -5,15 +5,19 @@ import android.content.res.Configuration
 import dev.benyamin.kumiho.data.AllowBypassRepository
 import dev.benyamin.kumiho.data.AppPrefs
 import dev.benyamin.kumiho.data.InstalledAppsRepository
+import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.BypassSettingsProvider
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
+import dev.benyamin.kumiho.widget.WidgetRefresh
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * The manual application-scoped container. It owns the process-wide coroutine
@@ -76,6 +80,13 @@ class AppContainer(context: Context) {
         themeRepository.start()
         splitTunnelRepository.start()
         allowBypassRepository.start()
+        // A widget cannot render before the palette is ready; repaint both
+        // whenever the theme or accent resolves, including after a change.
+        scope.launch {
+            themeRepository.state.collect { state ->
+                if (state is PaletteState.Ready) WidgetRefresh.request(appContext)
+            }
+        }
     }
 }
 
