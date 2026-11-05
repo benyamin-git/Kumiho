@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!--
       The splash theme holds the first frame until the palette is loaded, then
       hands off to Theme.Kumiho.Main. The window background is the house
@@ -8,6 +8,7 @@
     <style name="Theme.Kumiho" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/kumiho_background</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenBrandingImage" tools:ignore="NewApi">@drawable/ic_wordmark</item>
         <item name="postSplashScreenTheme">@style/Theme.Kumiho.Main</item>
     </style>
 
