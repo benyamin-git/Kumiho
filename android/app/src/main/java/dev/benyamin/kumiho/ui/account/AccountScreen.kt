@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +47,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -443,11 +446,10 @@ private fun AccountsBody(state: AccountUiState, actions: AccountActions) {
                             },
                         )
                     }
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = actions.onSignOut,
                         enabled = !state.signingOut,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = loss),
-                        border = BorderStroke(1.dp, loss.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.filledTonalButtonColors(contentColor = loss),
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = Dimens.ControlHeight)
@@ -532,131 +534,179 @@ private fun AccountListRow(
 ) {
     var menu by remember(account.id) { mutableStateOf(false) }
     val loss = LocalKumihoColors.current.loss
+    val scheme = MaterialTheme.colorScheme
     val label = account.label.ifBlank { account.email }
-    Row(
+    val active = account.id == activeID
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = Dimens.Space2)
             .testTag(AccountTags.accountRow(account.id)),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+        shape = MaterialTheme.shapes.medium,
+        color = if (active) {
+            lerp(scheme.surfaceContainer, scheme.primaryContainer, 0.18f)
+        } else {
+            Color.Transparent
+        },
+        border = if (active) BorderStroke(1.dp, scheme.primary) else null,
     ) {
-        RadioButton(
-            selected = account.id == activeID,
-            onClick = { actions.onUse(account.id) },
-            modifier = Modifier.testTag(AccountTags.active(account.id)),
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
+        Row(
+            modifier = Modifier
+                .padding(horizontal = Dimens.Space2, vertical = Dimens.Space2)
+                .heightIn(min = 64.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+            RadioButton(
+                selected = active,
+                onClick = { actions.onUse(account.id) },
+                modifier = Modifier.testTag(AccountTags.active(account.id)),
             )
-            if (label != account.email) {
-                Text(
-                    text = account.email,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
             ) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
                 ) {
                     Text(
-                        text = if (account.method == "browser") {
-                            stringResource(R.string.account_method_browser)
-                        } else {
-                            stringResource(R.string.account_method_password)
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier
-                            .padding(horizontal = Dimens.Space2, vertical = 2.dp)
-                            .testTag(AccountTags.method(account.id)),
+                        text = label,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (active) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.account_active),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(
+                                    horizontal = Dimens.Space2,
+                                    vertical = 2.dp,
+                                ),
+                            )
+                        }
+                    }
+                }
+                if (label != account.email) {
+                    Text(
+                        text = account.email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    text = AccountFormat.quotaPercent(account.quota)?.let { percent ->
-                        stringResource(R.string.account_row_quota_left, percent)
-                    } ?: stringResource(R.string.account_row_quota_unknown),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag(AccountTags.rowQuota(account.id)),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Text(
+                            text = if (account.method == "browser") {
+                                stringResource(R.string.account_method_browser)
+                            } else {
+                                stringResource(R.string.account_method_password)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier
+                                .padding(horizontal = Dimens.Space2, vertical = 2.dp)
+                                .testTag(AccountTags.method(account.id)),
+                        )
+                    }
+                    Text(
+                        text = AccountFormat.quotaPercent(account.quota)?.let { percent ->
+                            stringResource(R.string.account_row_quota_left, percent)
+                        } ?: stringResource(R.string.account_row_quota_unknown),
+                        style = MaterialTheme.typography.bodySmall
+                            .copy(fontFeatureSettings = "tnum"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag(AccountTags.rowQuota(account.id)),
+                    )
+                }
+                if (account.reauthRequired) {
+                    Surface(
+                        onClick = { actions.onReauth(account) },
+                        shape = RoundedCornerShape(999.dp),
+                        color = LocalKumihoColors.current.warning,
+                        modifier = Modifier.testTag(AccountTags.reauth(account.id)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(
+                                horizontal = Dimens.Space2,
+                                vertical = 2.dp,
+                            ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = scheme.background,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.account_reauthorize),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.background,
+                            )
+                        }
+                    }
+                }
             }
-            if (account.reauthRequired) {
-                TextButton(
-                    onClick = { actions.onReauth(account) },
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier.testTag(AccountTags.reauth(account.id)),
+            Box {
+                IconButton(
+                    onClick = { menu = true },
+                    modifier = Modifier.testTag(AccountTags.overflow(account.id)),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = LocalKumihoColors.current.warning,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.account_reauth_required),
-                        style = MaterialTheme.typography.labelMedium,
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(R.string.account_actions),
                     )
                 }
-            }
-        }
-        Box {
-            IconButton(
-                onClick = { menu = true },
-                modifier = Modifier.testTag(AccountTags.overflow(account.id)),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = stringResource(R.string.account_actions),
-                )
-            }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (account.id != activeID) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    if (account.id != activeID) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.account_use)) },
+                            onClick = {
+                                menu = false
+                                actions.onUse(account.id)
+                            },
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.account_use)) },
+                        text = { Text(stringResource(R.string.account_reauth)) },
                         onClick = {
                             menu = false
-                            actions.onUse(account.id)
+                            actions.onReauth(account)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.account_rename)) },
+                        onClick = {
+                            menu = false
+                            actions.onRenameRequest(account)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.account_remove),
+                                color = loss,
+                            )
+                        },
+                        onClick = {
+                            menu = false
+                            actions.onRemoveRequest(account)
                         },
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.account_reauth)) },
-                    onClick = {
-                        menu = false
-                        actions.onReauth(account)
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.account_rename)) },
-                    onClick = {
-                        menu = false
-                        actions.onRenameRequest(account)
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.account_remove),
-                            color = loss,
-                        )
-                    },
-                    onClick = {
-                        menu = false
-                        actions.onRemoveRequest(account)
-                    },
-                )
             }
         }
     }
@@ -665,6 +715,7 @@ private fun AccountListRow(
 @Composable
 private fun RotationCard(state: AccountUiState, actions: AccountActions) {
     val accounts = state.accounts ?: return
+    val active = AccountFormat.activeAccountSummary(accounts)
     KumihoCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -678,8 +729,20 @@ private fun RotationCard(state: AccountUiState, actions: AccountActions) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = stringResource(R.string.account_rotation_hint),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = when {
+                        active == null -> stringResource(R.string.account_rotation_hint)
+                        active.quotaPercent == null -> stringResource(
+                            R.string.account_rotation_state_unknown,
+                            active.label,
+                        )
+                        else -> stringResource(
+                            R.string.account_rotation_state_quota,
+                            active.label,
+                            active.quotaPercent,
+                        )
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                        .copy(fontFeatureSettings = "tnum"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -807,7 +870,7 @@ private fun AccountRow(label: String, value: String, tag: String) {
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1.6f),

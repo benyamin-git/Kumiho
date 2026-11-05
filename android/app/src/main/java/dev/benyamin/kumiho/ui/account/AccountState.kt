@@ -96,6 +96,13 @@ data class AccountUiState(
  * Pure account presentation rules. Formatting reuses the dashboard's desktop
  * wording, so the Account card and the Home quota card cannot disagree.
  */
+/** The active account's display facts, derived without Android or the engine. */
+data class ActiveAccountSummary(
+    val label: String,
+    val quotaPercent: Int?,
+    val reauthRequired: Boolean,
+)
+
 object AccountFormat {
     /** The engine's local wording for a missing session (`Account` error). */
     const val NOT_SIGNED_IN = "not signed in"
@@ -135,6 +142,20 @@ object AccountFormat {
         val remaining = quota.remaining ?: return null
         if (limit <= 0L) return null
         return ((remaining.coerceAtLeast(0L) * 100L) / limit).toInt().coerceIn(0, 100)
+    }
+
+    /**
+     * The active account's label and the facts the rotation card states:
+     * remaining quota and whether the stored sign-in needs re-authorizing.
+     * Null when there is no stored account or no active id to select.
+     */
+    fun activeAccountSummary(accounts: Accounts?): ActiveAccountSummary? {
+        val active = accounts?.accounts?.firstOrNull { it.id == accounts.active } ?: return null
+        return ActiveAccountSummary(
+            label = active.label.ifBlank { active.email },
+            quotaPercent = quotaPercent(active.quota),
+            reauthRequired = active.reauthRequired,
+        )
     }
 
     /** The account that becomes active after removing the active one. */

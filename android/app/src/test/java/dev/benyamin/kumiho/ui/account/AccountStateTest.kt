@@ -1,8 +1,10 @@
 package dev.benyamin.kumiho.ui.account
 
 import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.test.MainDispatcherRule
 import dev.benyamin.kumiho.ui.setup.SignInPhase
 import java.time.Instant
@@ -48,6 +50,54 @@ class AccountStateTest {
         assertFalse(AccountFormat.isSignedIn(null))
         assertTrue(AccountFormat.isNotSignedIn(signedOut))
         assertFalse(AccountFormat.isNotSignedIn(signedIn))
+    }
+
+    @Test
+    fun `the active account summary names the account and its quota and reauth state`() {
+        fun summary(
+            id: String,
+            label: String,
+            email: String,
+            active: Boolean,
+            reauth: Boolean,
+            quota: Quota?,
+        ) = AccountSummary(
+            id = id,
+            email = email,
+            label = label,
+            method = "browser",
+            active = active,
+            reauthRequired = reauth,
+            lastUsedAt = 0L,
+            quota = quota,
+        )
+
+        val accounts = Accounts(
+            accounts = listOf(
+                summary("a", "", "a@example.com", true, true, Quota(100L, 42L, null)),
+                summary("b", "Work", "b@example.com", false, false, null),
+            ),
+            active = "a",
+            rotation = true,
+            threshold = 15,
+            lastMethod = "browser",
+            notice = null,
+            error = null,
+        )
+
+        val active = AccountFormat.activeAccountSummary(accounts)!!
+        assertEquals("a@example.com", active.label)
+        assertEquals(42, active.quotaPercent)
+        assertTrue(active.reauthRequired)
+
+        val noQuota = AccountFormat.activeAccountSummary(accounts.copy(active = "b"))!!
+        assertEquals("Work", noQuota.label)
+        assertNull(noQuota.quotaPercent)
+        assertFalse(noQuota.reauthRequired)
+
+        assertNull(AccountFormat.activeAccountSummary(null))
+        assertNull(AccountFormat.activeAccountSummary(accounts.copy(active = "missing")))
+        assertNull(AccountFormat.activeAccountSummary(accounts.copy(accounts = emptyList())))
     }
 
     @Test
