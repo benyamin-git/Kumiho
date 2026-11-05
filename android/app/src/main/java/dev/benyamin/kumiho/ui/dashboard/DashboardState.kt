@@ -66,6 +66,57 @@ enum class DashboardPhase(val active: Boolean) {
     }
 }
 
+/** One forward action for a phase that is stuck or needs consent. */
+enum class RecoveryAction {
+    RETRY,
+    SIGN_IN,
+    ALLOW_VPN,
+    OPEN_DIAGNOSTICS,
+    OPEN_LOGS,
+    OPEN_VPN_SETTINGS,
+}
+
+/**
+ * The primary (filled) and secondary (text) recovery actions for one phase.
+ * A live session never gets a recovery card; a failed refresh keeps the tunnel
+ * and its notice instead.
+ */
+data class RecoveryActions(val primary: RecoveryAction?, val secondary: RecoveryAction?) {
+    val isEmpty: Boolean get() = primary == null && secondary == null
+
+    companion object {
+        fun forPhase(phase: DashboardPhase): RecoveryActions = when (phase) {
+            DashboardPhase.ERROR -> RecoveryActions(
+                RecoveryAction.RETRY,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            )
+            DashboardPhase.NOT_SIGNED_IN -> RecoveryActions(
+                RecoveryAction.SIGN_IN,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            )
+            DashboardPhase.PERMISSION_NEEDED -> RecoveryActions(
+                RecoveryAction.ALLOW_VPN,
+                RecoveryAction.OPEN_VPN_SETTINGS,
+            )
+            DashboardPhase.SERVICE_UNAVAILABLE -> RecoveryActions(
+                RecoveryAction.RETRY,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            )
+            DashboardPhase.WAITING -> RecoveryActions(
+                null,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            )
+            DashboardPhase.CONNECTED,
+            DashboardPhase.PROXY_ONLY,
+            DashboardPhase.OFF,
+            DashboardPhase.LOADING,
+            DashboardPhase.CONNECTING,
+            DashboardPhase.RECONNECTING,
+            -> RecoveryActions(null, null)
+        }
+    }
+}
+
 /** What a tap on the power control means in the current phase. */
 enum class PowerAction {
     /** Nothing: the phase is loading or already connecting. */
@@ -263,6 +314,9 @@ data class DashboardState(
     /** The live 60 s trace, oldest first. Empty when no session is up. */
     val trace: List<RateSample> = emptyList(),
 ) {
+    /** The forward actions this phase offers; empty when nothing is wrong. */
+    val recovery: RecoveryActions get() = RecoveryActions.forPhase(phase)
+
     /** The power control's visible state word and its accessible description. */
     val powerAction: PowerAction
         get() = when (phase) {
@@ -410,6 +464,10 @@ object DashboardTags {
     const val NOTICE = "dashboard_notice"
     const val NOTICE_ACTION = "dashboard_notice_action"
     const val NOTICE_DISMISS = "dashboard_notice_dismiss"
+
+    const val RECOVERY = "dashboard_recovery"
+    const val RECOVERY_PRIMARY = "dashboard_recovery_primary"
+    const val RECOVERY_SECONDARY = "dashboard_recovery_secondary"
 
     const val CARD_LOCATION = "dashboard_card_location"
     const val CARD_EXIT = "dashboard_card_exit"

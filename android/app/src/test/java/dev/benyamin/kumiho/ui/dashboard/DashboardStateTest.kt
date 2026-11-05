@@ -514,6 +514,49 @@ class DashboardStateTest {
         assertEquals(DashboardPhase.CONNECTED, state.phase)
     }
 
+    // ---- recovery --------------------------------------------------------
+
+    @Test
+    fun everyPhaseHasAnExplicitRecoveryTable() {
+        val expected = mapOf(
+            DashboardPhase.ERROR to RecoveryActions(
+                RecoveryAction.RETRY,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            ),
+            DashboardPhase.NOT_SIGNED_IN to RecoveryActions(
+                RecoveryAction.SIGN_IN,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            ),
+            DashboardPhase.PERMISSION_NEEDED to RecoveryActions(
+                RecoveryAction.ALLOW_VPN,
+                RecoveryAction.OPEN_VPN_SETTINGS,
+            ),
+            DashboardPhase.SERVICE_UNAVAILABLE to RecoveryActions(
+                RecoveryAction.RETRY,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            ),
+            DashboardPhase.WAITING to RecoveryActions(
+                null,
+                RecoveryAction.OPEN_DIAGNOSTICS,
+            ),
+            DashboardPhase.CONNECTED to RecoveryActions(null, null),
+            DashboardPhase.PROXY_ONLY to RecoveryActions(null, null),
+            DashboardPhase.OFF to RecoveryActions(null, null),
+            DashboardPhase.LOADING to RecoveryActions(null, null),
+            DashboardPhase.CONNECTING to RecoveryActions(null, null),
+            DashboardPhase.RECONNECTING to RecoveryActions(null, null),
+        )
+
+        assertEquals(DashboardPhase.entries.size, expected.size)
+        DashboardPhase.entries.forEach { phase ->
+            assertEquals(phase.name, expected.getValue(phase), RecoveryActions.forPhase(phase))
+            assertEquals(phase.name, expected.getValue(phase), DashboardState(phase = phase).recovery)
+        }
+        assertTrue(RecoveryActions.forPhase(DashboardPhase.CONNECTED).isEmpty)
+        assertFalse(RecoveryActions.forPhase(DashboardPhase.WAITING).isEmpty)
+        assertNull(RecoveryActions.forPhase(DashboardPhase.CONNECTED).primary)
+    }
+
     // ---- helpers ---------------------------------------------------------
 
     private fun DashboardNotice.messageCode(): DashboardMessage? =

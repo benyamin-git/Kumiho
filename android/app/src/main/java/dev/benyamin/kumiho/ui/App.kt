@@ -37,6 +37,8 @@ import dev.benyamin.kumiho.ui.logs.LogsRoute
 import dev.benyamin.kumiho.ui.settings.SettingsRoute
 import dev.benyamin.kumiho.ui.setup.SetupRoute
 import dev.benyamin.kumiho.ui.shell.AppShell
+import dev.benyamin.kumiho.ui.shell.Destination
+import dev.benyamin.kumiho.ui.shell.MoreRoute
 import dev.benyamin.kumiho.ui.shell.ShellNavigation
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
@@ -84,7 +86,14 @@ fun KumihoApp(
                     false -> SetupRoute(container)
                     true -> AppShell(
                         nav = nav,
-                        home = { DashboardRoute(container) },
+                        home = {
+                            DashboardRoute(
+                                container = container,
+                                onOpenDiagnostics = { nav.openMoreRoute(MoreRoute.Diagnostics) },
+                                onOpenLogs = { nav.openMoreRoute(MoreRoute.Logs) },
+                                onSignIn = { nav.selectTab(Destination.Account) },
+                            )
+                        },
                         locations = { LocationsRoute(container) },
                         account = { AccountRoute(container) },
                         settings = { SettingsRoute(container) },

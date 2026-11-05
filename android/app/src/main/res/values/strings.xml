@@ -252,6 +252,10 @@
     <string name="dashboard_message_locations_failed">The location list did not load.</string>
     <string name="dashboard_message_settings_unavailable">Android\'s VPN settings could not be opened.</string>
     <string name="dashboard_message_engine_notice">The engine reported a problem.</string>
+    <string name="dashboard_recovery_title">Next step</string>
+    <string name="dashboard_recovery_waiting">Kumiho is waiting for a network. Diagnostics shows what the engine sees.</string>
+    <string name="dashboard_recovery_diagnostics">Diagnostics</string>
+    <string name="dashboard_recovery_logs">Logs</string>
 
     <!-- Dashboard lockdown disconnect explanation. -->
     <string name="dashboard_lockdown_title">Disconnect under lockdown?</string>

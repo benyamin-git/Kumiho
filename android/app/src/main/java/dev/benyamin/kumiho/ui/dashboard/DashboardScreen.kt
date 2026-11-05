@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -64,6 +66,9 @@ import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 fun DashboardRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
+    onOpenDiagnostics: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
+    onSignIn: () -> Unit = {},
     content: @Composable (DashboardState, DashboardActions) -> Unit = { state, actions ->
         DashboardScreen(state = state, actions = actions, modifier = modifier)
     },
@@ -142,6 +147,16 @@ fun DashboardRoute(
         onCancelLockdown = dashboardViewModel::cancelLockdownPrompt,
         onDismissNotice = dashboardViewModel::dismissNotice,
         onRetryNotice = dashboardViewModel::retryNotice,
+        onRecovery = { action ->
+            when (action) {
+                RecoveryAction.RETRY -> dashboardViewModel.onPower()
+                RecoveryAction.SIGN_IN -> onSignIn()
+                RecoveryAction.ALLOW_VPN -> dashboardViewModel.onPower()
+                RecoveryAction.OPEN_DIAGNOSTICS -> onOpenDiagnostics()
+                RecoveryAction.OPEN_LOGS -> onOpenLogs()
+                RecoveryAction.OPEN_VPN_SETTINGS -> dashboardViewModel.openVpnSettings()
+            }
+        },
     )
     content(state, actions)
 }
@@ -163,6 +178,7 @@ data class DashboardActions(
     val onCancelLockdown: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onRetryNotice: () -> Unit,
+    val onRecovery: (RecoveryAction) -> Unit = {},
 )
 
 /**
@@ -202,11 +218,21 @@ fun DashboardScreen(
             onOpenOptions = actions.onOpenOptions,
             pulseToken = pulseToken,
         )
-        state.notice?.let { notice ->
-            NoticeRow(
-                notice = notice,
-                onAction = actions.onRetryNotice,
-                onDismiss = actions.onDismissNotice,
+        if (state.recovery.isEmpty) {
+            state.notice?.let { notice ->
+                NoticeRow(
+                    notice = notice,
+                    onAction = actions.onRetryNotice,
+                    onDismiss = actions.onDismissNotice,
+                )
+            }
+        } else {
+            RecoveryCard(
+                phase = state.phase,
+                recovery = state.recovery,
+                notice = state.notice,
+                onAction = actions.onRecovery,
+                onDismissNotice = actions.onDismissNotice,
             )
         }
         SummaryCards(state = state, onOpenOptions = actions.onOpenOptions)
@@ -236,6 +262,156 @@ fun DashboardScreen(
         )
     }
 }
+
+/**
+ * The forward path out of a stuck phase: the phase word, one sentence, and at
+ * most one filled primary action plus one text secondary. The notice above it
+ * keeps the engine's own words and the dismiss action.
+ */
+@Composable
+private fun RecoveryCard(
+    phase: DashboardPhase,
+    recovery: RecoveryActions,
+    notice: DashboardNotice?,
+    onAction: (RecoveryAction) -> Unit,
+    onDismissNotice: () -> Unit,
+) {
+    val colors = LocalKumihoColors.current
+    val warning = phase == DashboardPhase.ERROR ||
+        phase == DashboardPhase.SERVICE_UNAVAILABLE ||
+        phase == DashboardPhase.PERMISSION_NEEDED
+    val accent = if (warning) colors.warning else MaterialTheme.colorScheme.primary
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(DashboardTags.RECOVERY),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(Dimens.Space3),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = if (warning) Icons.Filled.Warning else Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .size(20.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
+                ) {
+                    Text(
+                        text = stringResource(R.string.dashboard_recovery_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = notice?.let { noticeText(it.text) } ?: recoveryBody(phase),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val detail = (notice?.text as? NoticeText.Local)?.detail
+                    if (!detail.isNullOrBlank()) {
+                        Text(
+                            text = detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(
+                    Dimens.Space1,
+                    Alignment.End,
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (notice != null) {
+                    TextButton(
+                        onClick = onDismissNotice,
+                        modifier = Modifier
+                            .heightIn(min = Dimens.TouchTarget)
+                            .testTag(DashboardTags.NOTICE_DISMISS),
+                    ) {
+                        Text(stringResource(R.string.dashboard_notice_dismiss))
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                recovery.secondary?.let { action ->
+                    TextButton(
+                        onClick = { onAction(action) },
+                        modifier = Modifier
+                            .heightIn(min = Dimens.TouchTarget)
+                            .testTag(DashboardTags.RECOVERY_SECONDARY),
+                    ) {
+                        Text(recoveryLabel(action))
+                    }
+                }
+                recovery.primary?.let { action ->
+                    if (action.isFilled) {
+                        Button(
+                            onClick = { onAction(action) },
+                            modifier = Modifier
+                                .heightIn(min = Dimens.TouchTarget)
+                                .testTag(DashboardTags.RECOVERY_PRIMARY),
+                        ) {
+                            Text(recoveryLabel(action))
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { onAction(action) },
+                            modifier = Modifier
+                                .heightIn(min = Dimens.TouchTarget)
+                                .testTag(DashboardTags.RECOVERY_PRIMARY),
+                        ) {
+                            Text(recoveryLabel(action))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val RecoveryAction.isFilled: Boolean
+    get() = this == RecoveryAction.RETRY ||
+        this == RecoveryAction.SIGN_IN ||
+        this == RecoveryAction.ALLOW_VPN
+
+@Composable
+private fun recoveryBody(phase: DashboardPhase): String = stringResource(
+    when (phase) {
+        DashboardPhase.ERROR -> R.string.dashboard_message_engine_notice
+        DashboardPhase.NOT_SIGNED_IN -> R.string.dashboard_message_sign_in
+        DashboardPhase.PERMISSION_NEEDED -> R.string.dashboard_message_permission_denied
+        DashboardPhase.SERVICE_UNAVAILABLE -> R.string.dashboard_message_unavailable
+        DashboardPhase.WAITING -> R.string.dashboard_recovery_waiting
+        else -> R.string.dashboard_message_engine_notice
+    },
+)
+
+@Composable
+private fun recoveryLabel(action: RecoveryAction): String = stringResource(
+    when (action) {
+        RecoveryAction.RETRY -> R.string.dashboard_notice_retry
+        RecoveryAction.SIGN_IN -> R.string.setup_step_sign_in
+        RecoveryAction.ALLOW_VPN -> R.string.dashboard_notice_grant
+        RecoveryAction.OPEN_DIAGNOSTICS -> R.string.dashboard_recovery_diagnostics
+        RecoveryAction.OPEN_LOGS -> R.string.dashboard_recovery_logs
+        RecoveryAction.OPEN_VPN_SETTINGS -> R.string.dashboard_lockdown_open_settings
+    },
+)
 
 /** The latest notice with its icon, words and the one retry it can offer. */
 @Composable

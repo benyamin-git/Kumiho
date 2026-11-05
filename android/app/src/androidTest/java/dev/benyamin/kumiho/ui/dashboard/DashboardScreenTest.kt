@@ -76,7 +76,8 @@ class DashboardScreenTest {
         rule.onNodeWithText("203.0.113.7").assertExists()
         rule.onNodeWithText("12.3 GiB remaining of 50.0 GiB").assertExists()
         rule.onNodeWithText("up 12.3 MiB / down 45.6 MiB").assertExists()
-        rule.onNodeWithText("up 1.2 MiB/s / down 3.4 MiB/s").assertExists()
+        rule.onNodeWithText("↓ 3.4 MiB/s").assertExists()
+        rule.onNodeWithText("↑ 1.2 MiB/s").assertExists()
     }
 
     @Test
@@ -118,7 +119,10 @@ class DashboardScreenTest {
         show(
             DashboardState.fromService(
                 snapshot(state = STATE_PROXY_ONLY).copy(status = status(state = STATE_PROXY_ONLY)),
-            ).copy(locations = LocationLoad.Ready(COUNTRIES)),
+            ).copy(
+        locations = LocationLoad.Ready(COUNTRIES),
+        rates = ByteRates(up = 1.2 * MIB, down = 3.4 * MIB),
+    ),
         )
 
         rule.onNodeWithText(text(R.string.dashboard_state_proxy_only)).assertExists()
@@ -154,6 +158,48 @@ class DashboardScreenTest {
         rule.onNodeWithTag(DashboardTags.NOTICE).assertExists()
         rule.onNodeWithTag(DashboardTags.NOTICE_ACTION).assertDoesNotExist()
         rule.onNodeWithTag(DashboardTags.NOTICE_DISMISS).assertExists()
+    }
+
+    @Test
+    fun theErrorPhaseOffersRetryAndDiagnostics() {
+        show(
+            DashboardState.fromService(snapshot(state = "FATAL")).copy(
+                notice = DashboardNotice.serviceError("the engine stopped"),
+            ),
+        )
+
+        rule.onNodeWithTag(DashboardTags.RECOVERY).assertExists()
+        rule.onNodeWithTag(DashboardTags.NOTICE).assertDoesNotExist()
+        rule.onNodeWithText("the engine stopped").assertExists()
+        rule.onNodeWithTag(DashboardTags.RECOVERY_PRIMARY).performClick()
+        rule.onNodeWithTag(DashboardTags.RECOVERY_SECONDARY).performClick()
+        rule.onNodeWithTag(DashboardTags.NOTICE_DISMISS).performClick()
+
+        assertEquals(
+            listOf(
+                "recovery-RETRY",
+                "recovery-OPEN_DIAGNOSTICS",
+                "dismiss",
+            ),
+            calls,
+        )
+    }
+
+    @Test
+    fun waitingOffersOnlyDiagnostics() {
+        show(DashboardState.fromService(snapshot(state = "WAITING_NETWORK")))
+
+        rule.onNodeWithTag(DashboardTags.RECOVERY).assertExists()
+        rule.onNodeWithTag(DashboardTags.RECOVERY_SECONDARY).performClick()
+        rule.onNodeWithTag(DashboardTags.RECOVERY_PRIMARY).assertDoesNotExist()
+        assertEquals(listOf("recovery-OPEN_DIAGNOSTICS"), calls)
+    }
+
+    @Test
+    fun aLiveTunnelHasNoRecoveryCard() {
+        show(connectedState())
+
+        rule.onNodeWithTag(DashboardTags.RECOVERY).assertDoesNotExist()
     }
 
     // ---- permission ------------------------------------------------------
@@ -313,6 +359,7 @@ class DashboardScreenTest {
         onCancelLockdown = { calls += "cancel-lockdown" },
         onDismissNotice = { calls += "dismiss" },
         onRetryNotice = { calls += "retry" },
+        onRecovery = { calls += "recovery-$it" },
     )
 
     private fun text(id: Int): String = rule.activity.getString(id)
@@ -328,7 +375,10 @@ class DashboardScreenTest {
                 exitIp = "203.0.113.7",
             ),
         ),
-    ).copy(locations = LocationLoad.Ready(COUNTRIES))
+    ).copy(
+        locations = LocationLoad.Ready(COUNTRIES),
+        rates = ByteRates(up = 1.2 * MIB, down = 3.4 * MIB),
+    )
 
     private fun snapshot(
         state: String,

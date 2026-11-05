@@ -107,6 +107,31 @@ class DashboardScreenshotsTest {
                 ServiceState(
                     binding = true,
                     engineReady = true,
+                    status = status(state = "FATAL"),
+                ),
+            ).copy(
+                locations = LocationLoad.Ready(COUNTRIES),
+                notice = DashboardNotice.serviceError("The engine stopped: TLS handshake failed"),
+            )
+        }
+        capture(output, "error")
+
+        rule.runOnIdle {
+            state = DashboardState.fromService(
+                ServiceState(
+                    binding = true,
+                    engineReady = true,
+                    status = status(state = STATE_WAITING),
+                ),
+            ).copy(locations = LocationLoad.Ready(COUNTRIES))
+        }
+        capture(output, "waiting")
+
+        rule.runOnIdle {
+            state = DashboardState.fromService(
+                ServiceState(
+                    binding = true,
+                    engineReady = true,
                     status = status(state = STATE_IDLE, location = "us"),
                 ),
             ).copy(
@@ -210,6 +235,7 @@ class DashboardScreenshotsTest {
     private companion object {
         const val STATE_IDLE = "IDLE"
         const val STATE_CONNECTED = "CONNECTED"
+        const val STATE_WAITING = "WAITING_NETWORK"
         const val GIB = 1024L * 1024L * 1024L
         const val MIB = 1024.0 * 1024.0
 
