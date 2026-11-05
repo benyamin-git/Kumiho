@@ -158,6 +158,9 @@ them locally for any change under `android/`, `mobile/` or
   also serves the DNS-only `UDP ASSOCIATE` relay, and `http_proxy=on` starts
   the local HTTP proxy alongside the tunnel; both start and stop with the
   tunnel and stay out of the `internal/platform` seam.
+- **In-tunnel DNS** (`internal/dns`): the resolver answers `AAAA` queries
+  empty (NOERROR/NODATA) without resolving or caching them, strips `AAAA`
+  from `ANY` replies, and leaves IPv6 blackholed on every platform.
 - **v0.6.1 sign-in/accounts**: `internal/fxa` owns direct Firefox Accounts
   OAuth (authorization URL, PKCE S256, code exchange, profile lookup and
   best-effort refresh-token destroy) alongside the existing password client
@@ -237,7 +240,9 @@ them locally for any change under `android/`, `mobile/` or
   a git-ignored AAR under `android/app/libs/`; Gradle never runs Go. The app
   (`android/app/src/main/java/dev/benyamin/kumiho/`) is Kotlin/Compose:
   `vpn/` owns `KumihoVpnService`, the bridge, the interface spec, the
-  coordinator, notifications and the QS tile; `engine/` is the pure-JVM client
+  coordinator, notifications and the QS tile; `widget/` owns the two
+  phone-only home-screen providers, the pure `WidgetState` reducer and the
+  transparent consent activity; `engine/` is the pure-JVM client
   over the facade; `ui/` is the shell and screens; `data/` holds DataStore
   preferences and split tunneling; `crash/` the local crash log;
   `diagnostics/` the Android facts. Browser sign-in is a full-screen in-app

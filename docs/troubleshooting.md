@@ -177,10 +177,11 @@ unaffected.
 
 ## Connection drops on a slow link
 
-The standard keepalive profile times out an unanswered ping after 10 s, which
-a very slow or lossy link can trip. Set `keepalive_profile=slow` (25 s) and
-reconnect; it applies on the next connect. The ping schedule itself is
-unchanged: 15 s idle before the first ping, checked every 3 s.
+The default slow keepalive profile allows 25 s for an unanswered ping. If you
+switched to the 10 s `standard` profile, a very slow or lossy link can trip;
+set `keepalive_profile=slow` and reconnect. It applies on the next connect. The
+ping schedule itself is unchanged: 15 s idle before the first ping, checked
+every 3 s.
 
 ## Traffic is blocked but the state says CONNECTED
 

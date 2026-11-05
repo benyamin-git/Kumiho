@@ -63,11 +63,17 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.9.3
+## What's new in v0.10.0
 
-- **Steadier CI** — the TCP forwarding test is deterministic instead of
-  occasionally timing out, and Android toolchain setup retries a truncated SDK
-  download instead of failing the job. Nothing in the apps changed.
+- **Home-screen widgets** — a 1×1 toggle and a 2×1 status card that share the
+  Quick Settings tile's state, country and quota, follow the stored theme and
+  ask for consent when it is missing.
+- **No IPv6 stall** — the in-tunnel resolver answers `AAAA` queries empty and
+  strips `AAAA` from `ANY` replies, so apps fall back to IPv4 immediately.
+- **Calmer keepalive** — the 25 s `keepalive_profile = "slow"` is now the
+  default on every platform; users can still choose `standard`.
+- **R46 anchor** — the edge trust pool carries both GlobalSign Root E46 and
+  Root R46 for Android TV images with an old CA store.
 
 Older changes are in the [changelog](CHANGELOG.md).
 
@@ -142,8 +148,8 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
   failover; no plaintext fallback.
 - **Desktop comfort** — systemd or Windows service, a Bubble Tea TUI and CLI,
   and a native Windows GUI with tray, logs and diagnostics.
-- **Android everywhere** — phone and TV shells, Quick Settings tile, status
-  notification, logs sharing and diagnostics.
+- **Android everywhere** — phone and TV shells, home-screen widgets, Quick
+  Settings tile, status notification, logs sharing and diagnostics.
 
 ## Documentation
 

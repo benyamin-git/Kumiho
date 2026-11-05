@@ -261,6 +261,30 @@ Selecting a row saves it for the **next** connection — the current session
 keeps its server and exit IP — so the screen says to disconnect on Home and
 connect again.
 
+## Home-screen widgets
+
+The phone app places two widgets; Android TV launchers do not host home-screen
+widgets. Add them from the launcher's widget picker under **Kumiho**:
+
+| Widget | Size | Shows | Taps |
+|---|---|---|---|
+| **Kumiho toggle** | 1×1 | A solid grid while the service has a session (including connecting) and an outlined, slashed grid while it is off; the icon carries the state and its content description is the state word | Toggles: connect the saved selection, or disconnect an active session |
+| **Kumiho status** | 2×1 | The state word on line 1, and `Country · N% left` or `Country · Quota unknown` on line 2 when the tunnel reports those facts; the quota is hidden while off and while a connect is in flight | The icon toggles; the text area opens the app |
+
+Both widgets share the tile's snapshot, so they never invent a state the
+service did not report. A tap that needs VPN consent opens Android's system
+dialog; a denied tap does nothing. A signed-out or unavailable widget opens the
+app instead of attempting a connect, and a tap while a connect is in flight is
+ignored.
+
+There is no periodic refresh: the widgets repaint when the service reports a
+change, and when the stored Light/Dark/OLED palette or accent resolves. They
+paint only after the palette is ready, so they never flash a guessed theme.
+After Android kills the app process, the launcher keeps the last painted frame
+until the app runs and the service reports again; open the app once to restore
+it. The state words, quota and consent behavior match the Quick Settings tile
+exactly.
+
 ## Settings
 
 Settings has five groups: **Kumiho app**, **Connection**, **Region**,
@@ -361,7 +385,7 @@ the real state.
 | `http_proxy` | on/off | off | next connect |
 | `http_proxy_port` | 1–65535 | 8080 | next connect |
 | `solve_challenges` | on/off | on | immediately |
-| `keepalive_profile` | standard, slow | standard | next connect |
+| `keepalive_profile` | standard, slow | slow | next connect |
 | `log_level` | debug, info, warn, error | info | immediately |
 | `redact_targets` | on/off | on | immediately |
 
@@ -724,6 +748,16 @@ re-tap. A second tap while a connect is in flight is ignored, and a signed-out
 or unavailable tile opens the app instead of attempting a doomed connect. The
 tile can disconnect an existing proxy-only session (it shows *Proxy only*).
 
+### Home-screen widget is missing or stale
+
+Add **Kumiho toggle** or **Kumiho status** from the launcher's widget picker.
+Both are phone widgets; Android TV launchers do not host home-screen widgets.
+The widgets repaint on service changes rather than on a timer. After Android
+kills the app process they can show the last painted frame until the service
+reports again — open the app once. If a widget stays blank, check that the
+palette loads (open the app; a palette error is shown there), then remove and
+re-add the widget.
+
 ### VPN permission was revoked
 
 Revoking Kumiho's VPN access in Android settings ends the session: the service
@@ -772,13 +806,14 @@ daemon or your Firefox Account.
 
 ## Limitations
 
-- **IPv6 is captured and blackholed**, not tunneled. DNS may still return
-  `AAAA` records, so an app that tries IPv6 first can wait for its connection
-  attempt to fail before falling back to IPv4. There is no IPv6 leak, but
-  there is also no IPv6 connectivity.
+- **IPv6 is captured and blackholed**, not tunneled. The in-tunnel resolver
+  answers `AAAA` queries empty (NOERROR with no records) and strips `AAAA`
+  from `ANY` replies, so an app that tries IPv6 first falls back to IPv4
+  without waiting for a timeout. There is no IPv6 leak, but there is also no
+  IPv6 connectivity.
 - **English-only** UI (logical start/end layout, but no translations).
-- **No home-screen widget and no launcher long-press shortcuts**; the Quick
-  Settings tile is the fast path.
+- **No launcher long-press shortcuts**; the home-screen widgets and Quick
+  Settings tile are the fast paths.
 - **No auto-update and no in-app APK install.** The update check only opens
   the release page.
 - **Sideload only** — no Play/F-Droid distribution, so no store update
@@ -823,7 +858,7 @@ sign-off has happened.
 | Tray/lifecycle/window | Foreground service, notification, Quick Settings tile, Always-on |
 | Kill switch/autoconnect | Read-only Always-on/lockdown rows and Android VPN settings |
 | Split tunneling | Off / Exclude / Include with a per-app picker |
-| IPv6 | Captured and blackholed; DNS `AAAA` falls back to IPv4 |
+| IPv6 | Captured and blackholed; DNS answers `AAAA` empty |
 | Local SOCKS/HTTP proxies | Engine settings rows with a device-wide warning |
 | Version/update | App and engine version, manual update check |
 | Crash/diagnostics | Local `crash.log` replayed into the engine log |

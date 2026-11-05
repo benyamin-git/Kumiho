@@ -801,7 +801,7 @@ default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
 `redact_targets=true`, `quota_poll_minutes=15`, `account_rotation=false`,
 `rotation_threshold=10`, `tls_split="off"`, `http_proxy=false`,
 `http_proxy_port=8080`, `solve_challenges=true`,
-`keepalive_profile="standard"`.
+`keepalive_profile="slow"`.
 - `account_rotation` and `rotation_threshold` are edited from the CLI
   (`accounts rotation`/`accounts threshold`), the TUI Account screen and the
   GUI/Android Account cards; they are not TUI Settings rows. The threshold is

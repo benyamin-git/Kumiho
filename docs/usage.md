@@ -221,7 +221,7 @@ as per-user overrides and can be set as defaults in `config.toml`.
 | `http_proxy` | on/off (Settings); `true`/`false` (config.toml) | off | next connect |
 | `http_proxy_port` | 1–65535 | 8080 | next connect |
 | `solve_challenges` | on/off (Settings); `true`/`false` (config.toml) | on | immediately |
-| `keepalive_profile` | `standard`, `slow` | `standard` | next connect |
+| `keepalive_profile` | `standard`, `slow` | `slow` | next connect |
 | `upstream_proxy` | `socks5://`, `socks5h://` or `http://` URL | empty (direct) | next connect |
 
 **`tls_split`** is best-effort TLS ClientHello fragmentation for networks
@@ -251,8 +251,8 @@ operator objects to the solver traffic.
 
 **`keepalive_profile`** sets the keepalive ping timeout. The ping is sent
 after 15 s idle and checked every 3 s in both profiles; an unanswered ping
-times out after 10 s on `standard` and 25 s on `slow`. Use `slow` on lossy or
-high-latency links.
+times out after 10 s on `standard` and 25 s on `slow`. `slow` is the default;
+choose `standard` only when you want a faster failure on a reliable link.
 
 **`upstream_proxy`** carries the edge connection through a proxy. The scheme
 can be `socks5://`, `socks5h://` or `http://`; `user:pass@` is optional; the
