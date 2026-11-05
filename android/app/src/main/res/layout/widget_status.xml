@@ -8,15 +8,23 @@
     android:background="@color/kumiho_background"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="8dp">
+    android:padding="4dp">
 
-    <ImageView
-        android:id="@+id/widget_icon"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_widget_off"
-        tools:ignore="ContentDescription" />
+    <FrameLayout
+        android:id="@+id/widget_toggle_target"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:contentDescription="@string/widget_toggle_description">
+
+        <ImageView
+            android:id="@+id/widget_icon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_widget_off"
+            tools:ignore="ContentDescription" />
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/widget_text"
@@ -24,6 +32,8 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
         android:orientation="vertical">
 
         <TextView

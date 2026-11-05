@@ -70,6 +70,21 @@ class WidgetStateTest {
     }
 
     @Test
+    fun `location stays visible while reconnecting waiting and error`() {
+        for (state in listOf(VpnUiState.RECONNECTING, VpnUiState.WAITING, VpnUiState.ERROR)) {
+            val view = WidgetState.reduce(
+                TileSnapshot(state, location = "jp", quota = Quota(100, 40, null)),
+                consentGranted = true,
+            )
+            assertEquals("$state location", "JP", view.location)
+            assertEquals("$state quota", WidgetQuota.Percent(40), view.quota)
+        }
+
+        val connecting = WidgetState.reduce(TileSnapshot(VpnUiState.CONNECTING, location = "jp"), true)
+        assertNull(connecting.location)
+    }
+
+    @Test
     fun `proxy-only never shows a location`() {
         val view = WidgetState.reduce(
             TileSnapshot(VpnUiState.PROXY_ONLY, location = "DE", quota = Quota(100, 25, null)),

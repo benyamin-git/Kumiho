@@ -114,12 +114,15 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_status_info" />
         </receiver>
-        <!-- Widget taps land here first; it shows no UI and settles consent. -->
+        <!-- Widget taps land here first; it shows no UI and settles consent.
+             Its own empty affinity keeps the app task from surfacing, and it
+             stays alive while the system consent dialog is open so the result
+             can arrive. -->
         <activity
             android:name=".widget.WidgetConnectActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:noHistory="true"
+            android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- Shares one exported log file from cacheDir/exports as a content
              URI; the provider is not exported and grants read per URI. -->

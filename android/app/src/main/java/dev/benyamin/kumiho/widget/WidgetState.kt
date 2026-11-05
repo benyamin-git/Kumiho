@@ -48,14 +48,23 @@ data class WidgetPresentation(
 object WidgetState {
     fun reduce(snapshot: TileSnapshot?, consentGranted: Boolean): WidgetPresentation {
         val tile = TileState.reduce(snapshot, consentGranted)
+        val label = label(tile.subtitle)
         return WidgetPresentation(
             active = tile.active,
-            label = label(tile.subtitle),
-            location = (tile.subtitle as? TileSubtitle.Connected)?.location,
+            label = label,
+            location = if (label in LOCATION_STATES) TileState.location(snapshot?.location) else null,
             quota = quota(snapshot),
             action = tile.action,
         )
     }
+
+    /** States whose 2x1 line names the country the engine last reported. */
+    private val LOCATION_STATES = setOf(
+        WidgetLabel.CONNECTED,
+        WidgetLabel.RECONNECTING,
+        WidgetLabel.WAITING,
+        WidgetLabel.ERROR,
+    )
 
     private fun label(subtitle: TileSubtitle): WidgetLabel = when (subtitle) {
         TileSubtitle.NotConnected -> WidgetLabel.NOT_CONNECTED

@@ -73,7 +73,7 @@ object WidgetRefresh {
             "setColorFilter",
             (if (view.active) colors.primary else colors.onSurface).toArgb(),
         )
-        remote.setContentDescription(R.id.widget_icon, description(context, view))
+        remote.setContentDescription(R.id.widget_root, description(context, view))
         remote.setOnClickPendingIntent(R.id.widget_root, toggleIntent(context))
         return remote
     }
@@ -94,14 +94,14 @@ object WidgetRefresh {
             "setColorFilter",
             (if (view.active) colors.primary else colors.onSurface).toArgb(),
         )
-        remote.setContentDescription(R.id.widget_icon, description(context, view))
+        remote.setContentDescription(R.id.widget_toggle_target, description(context, view))
         remote.setTextColor(R.id.widget_line1, colors.onSurface.toArgb())
         remote.setTextColor(R.id.widget_line2, colors.onSurface.toArgb())
         remote.setTextViewText(R.id.widget_line1, stateWord(context, view))
         val detail = detailLine(context, view)
         remote.setTextViewText(R.id.widget_line2, detail)
         remote.setViewVisibility(R.id.widget_line2, if (detail.isEmpty()) View.GONE else View.VISIBLE)
-        remote.setOnClickPendingIntent(R.id.widget_icon, toggleIntent(context))
+        remote.setOnClickPendingIntent(R.id.widget_toggle_target, toggleIntent(context))
         remote.setOnClickPendingIntent(
             R.id.widget_text,
             PendingIntent.getActivity(

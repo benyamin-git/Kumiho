@@ -152,7 +152,7 @@ object TileState {
     }
 
     /** The state word the tile shows for a country code, if it has one. */
-    private fun location(value: String?): String? {
+    internal fun location(value: String?): String? {
         val code = value?.trim().orEmpty()
         if (code.isEmpty() || code.equals(RECOMMENDED, ignoreCase = true)) return null
         return code.uppercase(Locale.ROOT)
