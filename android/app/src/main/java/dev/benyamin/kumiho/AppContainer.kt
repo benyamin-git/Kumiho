@@ -80,6 +80,9 @@ class AppContainer(context: Context) {
         themeRepository.start()
         splitTunnelRepository.start()
         allowBypassRepository.start()
+        // Starts the tile/widget collector only after `container` is published,
+        // so its first widget refresh can read the container back safely.
+        vpnServiceCoordinator.start()
         // A widget cannot render before the palette is ready; repaint both
         // whenever the theme or accent resolves, including after a change.
         scope.launch {

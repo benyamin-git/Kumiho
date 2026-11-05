@@ -50,6 +50,7 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
     private val bindLock = Any()
     private var pendingEngine = CompletableDeferred<EngineClient>()
     private var stateJob: Job? = null
+    private var collectorJob: Job? = null
     private var binder: KumihoVpnService.LocalBinder? = null
 
     init {
@@ -63,11 +64,17 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         if (!bound) {
             loseBinding(appContext.getString(R.string.vpn_error_service_unavailable))
         }
-        // The Quick Settings tile reads this cache; refresh a visible tile on
-        // every real service change, and drop it when the service is gone.
-        // Status pushes also carry traffic counters, which the tile ignores, so
-        // an unchanged presentation does not wake the system tile.
-        scope.launch {
+    }
+
+    /**
+     * Starts the state collector that feeds the tile and widget caches.
+     * Called by [AppContainer][dev.benyamin.kumiho.AppContainer] after it has
+     * published itself, because the first emission refreshes widgets and reads
+     * the container back from the application.
+     */
+    fun start() {
+        if (collectorJob?.isActive == true) return
+        collectorJob = scope.launch {
             var last: TileSnapshot? = null
             var lastWidget: TileSnapshot? = null
             state.collect { snapshot ->
