@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-05
+
 ### Fixed
 
 - **The home-screen widgets are true black on OLED.** Their fill used the

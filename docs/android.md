@@ -6,21 +6,21 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.9.1**
-(`versionCode` 901); the README carries the latest published release and
+This guide describes the app as implemented for **v0.10.1**
+(`versionCode` 1001); the README carries the latest published release and
 download links. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. Physical acceptance for v0.6.0 through v0.9.1 is still pending.
+> full pass. Physical acceptance for v0.6.0 through v0.10.1 is still pending.
 > The production-signed
-> [v0.9.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.9.1)
+> [v0.10.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.10.1)
 > ships the three Android APKs with `SHA256SUMS`. The signing key and GitHub
 > Actions secret values remain user-owned. Local builds are test builds, not
 > published releases. The direct Firefox Accounts OAuth browser flow described
-> below replaced the v0.6.0 flow and is in the published v0.9.1 APK.
+> below replaced the v0.6.0 flow and is in the published v0.10.1 APK.
 
 ## Requirements
 
