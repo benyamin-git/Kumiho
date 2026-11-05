@@ -15,7 +15,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -201,7 +203,7 @@ private fun DisplayValue(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag(SettingsTags.value(key)),
         )
@@ -235,7 +237,7 @@ private fun OverrideMark(
             label = stringResource(R.string.settings_overridden),
             modifier = Modifier.testTag(SettingsTags.override(key)),
         )
-        TextButton(
+        FilledTonalButton(
             onClick = onReset,
             enabled = enabled,
             modifier = Modifier
@@ -366,6 +368,7 @@ fun SettingEditorDialog(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = Dimens.ControlHeight)
                             .testTag(SettingsTags.DIALOG_FIELD),
                         singleLine = true,
                         maxLines = 1,
@@ -411,7 +414,7 @@ fun SettingEditorDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = apply,
                 enabled = !locked,
                 modifier = Modifier

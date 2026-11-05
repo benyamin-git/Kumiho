@@ -18,9 +18,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +31,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.ui.components.KumihoSegmentedControl
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.ThemeId
@@ -66,29 +64,21 @@ fun ThemeSetting(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SingleChoiceSegmentedButtonRow(
+        KumihoSegmentedControl(
+            options = ThemeId.entries.toList(),
+            selected = theme,
+            onSelect = onThemeSelected,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = Dimens.Space1)
                 .testTag(SettingsTags.THEME_CONTROL),
-        ) {
-            ThemeId.entries.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = option == theme,
-                    onClick = { onThemeSelected(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeId.entries.size),
-                    label = {
-                        Text(
-                            text = themeLabel(option),
-                            maxLines = 1,
-                        )
-                    },
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = Dimens.TouchTarget)
-                        .testTag(SettingsTags.themeOption(option.id)),
-                )
-            }
-        }
+            label = { themeLabel(it) },
+            optionModifier = {
+                Modifier
+                    .defaultMinSize(minHeight = Dimens.TouchTarget)
+                    .testTag(SettingsTags.themeOption(it.id))
+            },
+        )
     }
 }
 
@@ -158,7 +148,7 @@ private fun AccentChoice(
     val border = if (selected) {
         MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.outlineVariant
+        MaterialTheme.colorScheme.outline
     }
     Surface(
         modifier = modifier

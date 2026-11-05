@@ -23,7 +23,8 @@ fun <T> KumihoSegmentedControl(
     selected: T,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
-    label: (T) -> String = { it.toString() },
+    label: @Composable (T) -> String = { it.toString() },
+    optionModifier: (T) -> Modifier = { Modifier },
 ) {
     val scheme = MaterialTheme.colorScheme
     val colors = SegmentedButtonDefaults.colors(
@@ -42,6 +43,7 @@ fun <T> KumihoSegmentedControl(
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                 colors = colors,
                 label = { Text(label(option)) },
+                modifier = optionModifier(option),
             )
         }
     }

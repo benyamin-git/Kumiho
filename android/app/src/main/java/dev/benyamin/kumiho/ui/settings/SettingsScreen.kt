@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -69,6 +70,8 @@ import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.permissions.PermissionController
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoCard
+import dev.benyamin.kumiho.ui.components.KumihoSectionHeader
+import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.theme.Dimens
@@ -671,20 +674,16 @@ private fun BypassNotice(
 
 @Composable
 private fun GroupHeader(titleRes: Int, tag: String) {
-    Text(
-        text = stringResource(titleRes),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    KumihoSectionHeader(
+        title = stringResource(titleRes),
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = Dimens.ScreenPadding,
-                end = Dimens.ScreenPadding,
-                top = Dimens.Space5,
-                bottom = Dimens.Space1,
-            )
+            .padding(top = Dimens.Space4)
             .semantics { heading() }
             .testTag(tag),
+        contentPadding = PaddingValues(
+            horizontal = Dimens.ScreenPadding,
+            vertical = Dimens.Space2,
+        ),
     )
 }
 
@@ -710,8 +709,8 @@ private fun AdvancedHeader(expanded: Boolean, onToggle: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.settings_group_advanced),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.04.em),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .semantics { heading() }
                         .testTag(SettingsTags.GROUP_ADVANCED),
@@ -843,10 +842,9 @@ private fun SecretRelayRow(
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    Text(
-                        text = settingDisplayValue(spec, state.valueOf(spec.key)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    KumihoStatusChip(
+                        tone = StatusTone.Neutral,
+                        label = settingDisplayValue(spec, state.valueOf(spec.key)),
                         modifier = Modifier.testTag(SettingsTags.value(spec.key)),
                     )
                 }
