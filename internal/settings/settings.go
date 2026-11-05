@@ -122,7 +122,7 @@ func DefaultConfig() Config {
 		HTTPProxy:         false,
 		HTTPProxyPort:     8080,
 		SolveChallenges:   true,
-		KeepaliveProfile:  "standard",
+		KeepaliveProfile:  "slow",
 		AccountRotation:   false,
 		RotationThreshold: 10,
 	}

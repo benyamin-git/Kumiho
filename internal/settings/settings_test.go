@@ -627,8 +627,8 @@ func TestV040SettingsDefaults(t *testing.T) {
 	if !cfg.SolveChallenges {
 		t.Error("SolveChallenges should default to true")
 	}
-	if cfg.KeepaliveProfile != "standard" {
-		t.Errorf("KeepaliveProfile = %q, want standard", cfg.KeepaliveProfile)
+	if cfg.KeepaliveProfile != "slow" {
+		t.Errorf("KeepaliveProfile = %q, want slow", cfg.KeepaliveProfile)
 	}
 }
 
@@ -690,7 +690,7 @@ func TestV040SettingsRoundTrip(t *testing.T) {
 		t.Fatalf("effective config = %+v", cfg)
 	}
 	admin := st.Config()
-	if admin.TLSSplit != "off" || admin.HTTPProxy || admin.HTTPProxyPort != 8080 || !admin.SolveChallenges || admin.KeepaliveProfile != "standard" {
+	if admin.TLSSplit != "off" || admin.HTTPProxy || admin.HTTPProxyPort != 8080 || !admin.SolveChallenges || admin.KeepaliveProfile != "slow" {
 		t.Fatalf("admin config must stay untouched: %+v", admin)
 	}
 
@@ -716,7 +716,7 @@ func TestV040SettingsRoundTrip(t *testing.T) {
 		t.Fatalf("overrides after reset = %v, want none", got)
 	}
 	def := reopened.EffectiveConfig()
-	if def.TLSSplit != "off" || def.HTTPProxy || def.HTTPProxyPort != 8080 || !def.SolveChallenges || def.KeepaliveProfile != "standard" {
+	if def.TLSSplit != "off" || def.HTTPProxy || def.HTTPProxyPort != 8080 || !def.SolveChallenges || def.KeepaliveProfile != "slow" {
 		t.Fatalf("reset did not restore the defaults: %+v", def)
 	}
 }

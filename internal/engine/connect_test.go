@@ -1235,7 +1235,7 @@ func TestKeepaliveProfiles(t *testing.T) {
 		profile string // empty leaves the default config untouched
 		timeout time.Duration
 	}{
-		{name: "default", timeout: 10 * time.Second},
+		{name: "default", timeout: 25 * time.Second},
 		{name: "standard", profile: "standard", timeout: 10 * time.Second},
 		{name: "slow", profile: "slow", timeout: 25 * time.Second},
 	}
@@ -1272,17 +1272,17 @@ func TestKeepaliveProfileReadAtConnectTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertKeepalive(t, before, 10*time.Second)
+	assertKeepalive(t, before, 25*time.Second)
 
-	if err := ctrl.store.SetOverride("keepalive_profile", "slow"); err != nil {
-		t.Fatalf("set keepalive_profile=slow: %v", err)
+	if err := ctrl.store.SetOverride("keepalive_profile", "standard"); err != nil {
+		t.Fatalf("set keepalive_profile=standard: %v", err)
 	}
 
 	after, err := ctrl.upstreamOptions(context.Background(), cand, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertKeepalive(t, after, 25*time.Second)
+	assertKeepalive(t, after, 10*time.Second)
 	if after.KeepaliveIdle != before.KeepaliveIdle || after.KeepaliveCheck != before.KeepaliveCheck {
 		t.Fatalf("idle/check changed with the profile: before=%s/%s after=%s/%s",
 			before.KeepaliveIdle, before.KeepaliveCheck, after.KeepaliveIdle, after.KeepaliveCheck)

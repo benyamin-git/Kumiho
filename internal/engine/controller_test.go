@@ -554,7 +554,7 @@ func TestSetV040Settings(t *testing.T) {
 		{"http_proxy", "on", true, false, func(v api.SettingsView) any { return v.HTTPProxy }},
 		{"http_proxy_port", "9090", 9090, 8080, func(v api.SettingsView) any { return v.HTTPProxyPort }},
 		{"solve_challenges", "off", false, true, func(v api.SettingsView) any { return v.SolveChallenges }},
-		{"keepalive_profile", "slow", "slow", "standard", func(v api.SettingsView) any { return v.KeepaliveProfile }},
+		{"keepalive_profile", "standard", "standard", "slow", func(v api.SettingsView) any { return v.KeepaliveProfile }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {
