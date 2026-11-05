@@ -5,6 +5,7 @@ import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -39,6 +40,18 @@ object KumihoMotionSpec {
         easing = FastOutSlowInEasing,
     )
 
+    /** The gauge arc settle: a 900 ms sweep, not a spring. */
+    val GaugeSweep: FiniteAnimationSpec<Float> = tween(
+        durationMillis = 900,
+        easing = LinearEasing,
+    )
+
+    /** A phase cross-fade. */
+    val PhaseFade: FiniteAnimationSpec<Float> = tween(
+        durationMillis = 180,
+        easing = FastOutSlowInEasing,
+    )
+
     /** No animation at all. */
     val Snap: FiniteAnimationSpec<Float> = snap()
 }
@@ -57,6 +70,17 @@ class KumihoMotion internal constructor(val animationsEnabled: Boolean) {
     /** A short tween, or snap under reduced motion. */
     val quick: FiniteAnimationSpec<Float>
         get() = if (animationsEnabled) KumihoMotionSpec.Quick else KumihoMotionSpec.Snap
+
+    /** The gauge arc settle, or snap under reduced motion. */
+    val gaugeSweep: FiniteAnimationSpec<Float>
+        get() = if (animationsEnabled) KumihoMotionSpec.GaugeSweep else KumihoMotionSpec.Snap
+
+    /** A phase cross-fade, or snap under reduced motion. */
+    val phaseFade: FiniteAnimationSpec<Float>
+        get() = if (animationsEnabled) KumihoMotionSpec.PhaseFade else KumihoMotionSpec.Snap
+
+    /** The 6 s glow runs only when the system allows motion. */
+    val glowEnabled: Boolean get() = animationsEnabled
 }
 
 /**

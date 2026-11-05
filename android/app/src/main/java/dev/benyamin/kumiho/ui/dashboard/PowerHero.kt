@@ -1,5 +1,9 @@
 package dev.benyamin.kumiho.ui.dashboard
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,11 +23,12 @@ import dev.benyamin.kumiho.ui.components.KumihoGauge
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.rememberMotion
 
 /**
- * The power hero: one large power control, the state word, and only the facts
- * that are real right now (location, server, uptime, the proxy-only badge).
- * The state word and the icon carry the state; colour is never the only signal.
+ * The power hero: one gauge, the state word, and only the facts that are real
+ * right now (rates, location, uptime, the proxy-only badge). The state word and
+ * the icon carry the state; colour is never the only signal.
  */
 @Composable
 fun PowerHero(
@@ -31,7 +36,9 @@ fun PowerHero(
     onPower: () -> Unit,
     onOpenOptions: () -> Unit,
     modifier: Modifier = Modifier,
+    pulseToken: Int = 0,
 ) {
+    val motion = rememberMotion()
     val label = phaseLabel(state.phase)
     val status = state.status
     val location = when {
@@ -76,6 +83,7 @@ fun PowerHero(
             busy = state.powerBusy,
             enabled = state.powerEnabled,
             modifier = Modifier.testTag(DashboardTags.POWER),
+            pulseToken = pulseToken,
         )
         Text(
             text = label,
@@ -84,47 +92,62 @@ fun PowerHero(
             textAlign = TextAlign.Center,
             modifier = Modifier.testTag(DashboardTags.STATE_WORD),
         )
-        val rates = if (state.phase.active) state.rates else null
-        if (rates != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
-                Text(
-                    text = stringResource(
-                        R.string.dashboard_rate_down,
-                        DashboardFormat.rateLabel(rates.down),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.dashboard_rate_up,
-                        DashboardFormat.rateLabel(rates.up),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+        AnimatedContent(
+            targetState = state.phase,
+            transitionSpec = {
+                fadeIn(motion.phaseFade) togetherWith fadeOut(motion.phaseFade)
+            },
+            label = "heroFacts",
+        ) { phase ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
+            ) {
+                val rates = if (phase.active) state.rates else null
+                if (rates != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
+                        Text(
+                            text = stringResource(
+                                R.string.dashboard_rate_down,
+                                DashboardFormat.rateLabel(rates.down),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                                .copy(fontFeatureSettings = "tnum"),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.dashboard_rate_up,
+                                DashboardFormat.rateLabel(rates.up),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                                .copy(fontFeatureSettings = "tnum"),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+                if (phase == DashboardPhase.PROXY_ONLY) {
+                    KumihoStatusChip(
+                        tone = StatusTone.Neutral,
+                        label = stringResource(R.string.dashboard_proxy_only_chip),
+                    )
+                }
+                if (connectionLine != null) {
+                    Text(
+                        text = connectionLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                if (uptime != null) {
+                    Text(
+                        text = stringResource(R.string.dashboard_uptime, uptime),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-        }
-        if (state.phase == DashboardPhase.PROXY_ONLY) {
-            KumihoStatusChip(
-                tone = StatusTone.Neutral,
-                label = stringResource(R.string.dashboard_proxy_only_chip),
-            )
-        }
-        if (connectionLine != null) {
-            Text(
-                text = connectionLine,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
-        if (uptime != null) {
-            Text(
-                text = stringResource(R.string.dashboard_uptime, uptime),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

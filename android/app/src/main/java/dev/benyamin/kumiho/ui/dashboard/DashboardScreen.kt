@@ -29,11 +29,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -171,6 +176,17 @@ fun DashboardScreen(
     actions: DashboardActions,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
+    var previousPhase by remember { mutableStateOf(state.phase) }
+    var pulseToken by remember { mutableIntStateOf(0) }
+    LaunchedEffect(state.phase) {
+        if (ConnectPulse.shouldPulse(previousPhase, state.phase)) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            pulseToken++
+        }
+        previousPhase = state.phase
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -184,6 +200,7 @@ fun DashboardScreen(
             state = state,
             onPower = actions.onPower,
             onOpenOptions = actions.onOpenOptions,
+            pulseToken = pulseToken,
         )
         state.notice?.let { notice ->
             NoticeRow(

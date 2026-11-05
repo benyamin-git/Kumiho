@@ -1,7 +1,11 @@
 package dev.benyamin.kumiho.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -15,10 +19,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,6 +42,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.GaugeGeometry.ARC_STROKE_DP
 import dev.benyamin.kumiho.ui.components.GaugeGeometry.START_DEGREES
@@ -68,12 +78,46 @@ fun KumihoGauge(
     busy: Boolean = false,
     enabled: Boolean = true,
     size: Dp = 248.dp,
+    pulseToken: Int = 0,
 ) {
     val colors = LocalKumihoColors.current
     val scheme = MaterialTheme.colorScheme
     val motion = rememberMotion()
     val description = stringResource(R.string.gauge_description, stateLabel)
     val interactive = enabled && !busy
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val resumed = lifecycleState == Lifecycle.State.RESUMED
+
+    val quotaAngle by animateFloatAsState(
+        targetValue = quotaSweep(quotaFraction ?: 0f),
+        animationSpec = motion.gaugeSweep,
+        label = "gaugeQuota",
+    )
+
+    val glowAlpha = if (connected && motion.glowEnabled && resumed) {
+        val transition = rememberInfiniteTransition(label = "gaugeGlow")
+        val alpha by transition.animateFloat(
+            initialValue = 0.55f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(6_000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "gaugeGlowAlpha",
+        )
+        alpha
+    } else {
+        1f
+    }
+
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(pulseToken) {
+        if (pulseToken > 0 && motion.animationsEnabled) {
+            pulse.snapTo(1f)
+            pulse.animateTo(1.06f, tween(90))
+            pulse.animateTo(1f, tween(90))
+        }
+    }
 
     val spin = if (busy && motion.animationsEnabled) {
         val transition = rememberInfiniteTransition(label = "gaugeBusy")
@@ -129,10 +173,13 @@ fun KumihoGauge(
 
             // The glow sits outside the arc, on the page background only.
             if (connected) {
-                if (motion.animationsEnabled) {
+                if (motion.glowEnabled && resumed) {
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(colors.glow, Color.Transparent),
+                            colors = listOf(
+                                colors.glow.copy(alpha = glowAlpha),
+                                Color.Transparent,
+                            ),
                             center = centre,
                             radius = diameter / 2f,
                         ),
@@ -162,7 +209,7 @@ fun KumihoGauge(
                 drawArc(
                     color = scheme.primary,
                     startAngle = START_DEGREES,
-                    sweepAngle = quotaSweep(quotaFraction),
+                    sweepAngle = quotaAngle,
                     useCenter = false,
                     topLeft = arcTopLeft,
                     size = arcSize,
@@ -235,6 +282,7 @@ fun KumihoGauge(
         Box(
             modifier = Modifier
                 .size(96.dp)
+                .scale(pulse.value)
                 .clip(PillShape)
                 .background(container),
             contentAlignment = Alignment.Center,
