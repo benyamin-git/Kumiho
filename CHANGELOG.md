@@ -8,6 +8,34 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-05
+
+Android polish: home-screen widgets, no IPv6 DNS stalls, a calmer keepalive
+default and a second edge root anchor.
+
+### Added
+
+- **Android home-screen widgets.** A 1x1 connect toggle and a 2x1 status card
+  share the Quick Settings tile's process-local state. The status card shows
+  the state word plus `Country · N% left` when the engine reports a quota. Taps
+  toggle the service or open the app; a missing VPN consent opens Android's
+  dialog, and both widgets follow the stored Light/Dark/OLED palette and accent.
+  Phone only.
+- **GlobalSign Root R46 is anchored for edge dials.** The edge trust pool now
+  carries Root E46 and Root R46, so Android TV images with an old CA store can
+  complete the Fastly certificate chain. Both PEMs are pinned by fingerprint
+  tests.
+
+### Changed
+
+- **The in-tunnel resolver answers `AAAA` queries empty.** It returns NOERROR
+  with no records and does not resolve or cache the query, and `ANY` replies
+  are stripped of `AAAA`. IPv6 stays blackholed; apps fall back to IPv4
+  immediately instead of waiting for a failed IPv6 attempt.
+- **`keepalive_profile` defaults to `slow` on every platform.** The 25 s ping
+  timeout is now the built-in default; `standard` (10 s) remains available for
+  reliable links and still applies on the next connect.
+
 ## [0.9.3] - 2026-11-03
 
 A maintenance release: the TCP forwarding test no longer flakes in CI, and the
