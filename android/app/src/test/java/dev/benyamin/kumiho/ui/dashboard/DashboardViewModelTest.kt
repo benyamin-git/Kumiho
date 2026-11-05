@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.dashboard
 
+import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
@@ -66,6 +67,53 @@ class DashboardViewModelTest {
             assertEquals(LocationLoad.Ready(COUNTRIES), viewModel.state.value.locations)
             assertEquals(1, gateway.locationCalls)
         }
+
+    @Test
+    fun `a connected status feeds the live trace`() = runTest(mainRule.testDispatcher) {
+        val viewModel = viewModel()
+        runCurrent()
+
+        val connected = connected()
+        gateway.serviceState.value = connected.copy(
+            status = connected.status!!.copy(rates = ByteRates(up = 10.0, down = 20.0)),
+        )
+        runCurrent()
+
+        assertEquals(1, viewModel.state.value.trace.size)
+        assertEquals(20.0, viewModel.state.value.trace.single().down, 0.0)
+        assertEquals(20.0, viewModel.state.value.rates?.down ?: 0.0, 0.0)
+    }
+
+    @Test
+    fun `a disconnect clears the trace`() = runTest(mainRule.testDispatcher) {
+        val viewModel = viewModel()
+        runCurrent()
+        val connected = connected()
+        gateway.serviceState.value = connected.copy(
+            status = connected.status!!.copy(rates = ByteRates(up = 1.0, down = 2.0)),
+        )
+        runCurrent()
+        assertTrue(viewModel.state.value.trace.isNotEmpty())
+
+        gateway.serviceState.value = snapshot(state = STATE_IDLE)
+        runCurrent()
+
+        assertTrue(viewModel.state.value.trace.isEmpty())
+        assertNull(viewModel.state.value.rates)
+    }
+
+    @Test
+    fun `a non-active status with rates pushes nothing`() = runTest(mainRule.testDispatcher) {
+        val viewModel = viewModel()
+        runCurrent()
+        val connecting = snapshot(state = STATE_CONNECTING)
+        gateway.serviceState.value = connecting.copy(
+            status = connecting.status!!.copy(rates = ByteRates(up = 1.0, down = 2.0)),
+        )
+        runCurrent()
+
+        assertTrue(viewModel.state.value.trace.isEmpty())
+    }
 
     @Test
     fun `a resume refreshes the status and re-reads the Android policy`() =

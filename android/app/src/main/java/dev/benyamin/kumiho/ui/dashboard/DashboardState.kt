@@ -1,8 +1,10 @@
 package dev.benyamin.kumiho.ui.dashboard
 
+import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.Notice
+import dev.benyamin.kumiho.ui.components.RateSample
 import dev.benyamin.kumiho.vpn.ConnectRequest
 import dev.benyamin.kumiho.vpn.ServiceState
 import dev.benyamin.kumiho.vpn.VpnStateReducer
@@ -256,6 +258,10 @@ data class DashboardState(
     val locations: LocationLoad = LocationLoad.Loading,
     /** The lockdown disconnect explanation is on screen. */
     val lockdownPrompt: Boolean = false,
+    /** The engine's latest rates; the gauge prints them as text. */
+    val rates: ByteRates? = null,
+    /** The live 60 s trace, oldest first. Empty when no session is up. */
+    val trace: List<RateSample> = emptyList(),
 ) {
     /** The power control's visible state word and its accessible description. */
     val powerAction: PowerAction

@@ -21,6 +21,8 @@
     <!-- Shared components. -->
     <string name="power_description">Power</string>
     <string name="gauge_description">Connection gauge, %1$s</string>
+    <string name="dashboard_rate_down">↓ %1$s</string>
+    <string name="dashboard_rate_up">↑ %1$s</string>
 
     <!-- VPN service (T9). -->
     <string name="notification_channel_status">Connection status</string>

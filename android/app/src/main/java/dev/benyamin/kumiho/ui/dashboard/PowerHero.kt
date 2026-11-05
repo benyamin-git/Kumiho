@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import dev.benyamin.kumiho.R
-import dev.benyamin.kumiho.ui.components.KumihoPowerButton
+import dev.benyamin.kumiho.ui.components.KumihoGauge
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.theme.Dimens
@@ -63,9 +63,15 @@ fun PowerHero(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Dimens.Space3),
     ) {
-        KumihoPowerButton(
+        KumihoGauge(
             stateLabel = label,
             connected = state.powerConnected,
+            quotaFraction = if (state.phase.active) {
+                DashboardFormat.quotaFraction(status?.quota)
+            } else {
+                null
+            },
+            samples = state.trace,
             onToggle = onPower,
             busy = state.powerBusy,
             enabled = state.powerEnabled,
@@ -78,6 +84,27 @@ fun PowerHero(
             textAlign = TextAlign.Center,
             modifier = Modifier.testTag(DashboardTags.STATE_WORD),
         )
+        val rates = if (state.phase.active) state.rates else null
+        if (rates != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
+                Text(
+                    text = stringResource(
+                        R.string.dashboard_rate_down,
+                        DashboardFormat.rateLabel(rates.down),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(
+                        R.string.dashboard_rate_up,
+                        DashboardFormat.rateLabel(rates.up),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
         if (state.phase == DashboardPhase.PROXY_ONLY) {
             KumihoStatusChip(
                 tone = StatusTone.Neutral,

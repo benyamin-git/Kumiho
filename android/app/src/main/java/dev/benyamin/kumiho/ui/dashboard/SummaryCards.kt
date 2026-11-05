@@ -202,7 +202,6 @@ private fun QuotaCard(state: DashboardState, modifier: Modifier = Modifier) {
 private fun SessionCard(state: DashboardState, modifier: Modifier = Modifier) {
     val status = state.status
     val totals = DashboardFormat.totalsLabel(status?.totals)
-    val rates = DashboardFormat.ratesLabel(status?.rates)
     val uptime = DashboardFormat.uptimeLabel(
         since = status?.since ?: 0L,
         nowSeconds = System.currentTimeMillis() / 1000,
@@ -214,13 +213,6 @@ private fun SessionCard(state: DashboardState, modifier: Modifier = Modifier) {
                 text = totals,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        if (rates != null) {
-            Text(
-                text = rates,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (uptime != null) {

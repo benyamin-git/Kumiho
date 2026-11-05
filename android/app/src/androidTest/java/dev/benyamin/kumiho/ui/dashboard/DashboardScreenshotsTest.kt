@@ -17,6 +17,7 @@ import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.engine.Server
+import dev.benyamin.kumiho.ui.components.RateSample
 import dev.benyamin.kumiho.ui.shell.AppShell
 import dev.benyamin.kumiho.ui.shell.Destination
 import dev.benyamin.kumiho.ui.shell.ShellNavState
@@ -26,6 +27,8 @@ import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.ServiceState
 import java.io.File
+import kotlin.math.cos
+import kotlin.math.sin
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -149,18 +152,34 @@ class DashboardScreenshotsTest {
         onRetryNotice = {},
     )
 
-    private fun connectedState(): DashboardState = DashboardState.fromService(
-        ServiceState(
-            binding = true,
-            engineReady = true,
-            status = status(
-                state = STATE_CONNECTED,
-                location = "us",
-                server = "edge.example.net:443",
-                exitIp = "203.0.113.7",
-            ),
-        ),
-    ).copy(locations = LocationLoad.Ready(COUNTRIES))
+    private fun connectedState(): DashboardState {
+        val status = status(
+            state = STATE_CONNECTED,
+            location = "us",
+            server = "edge.example.net:443",
+            exitIp = "203.0.113.7",
+        )
+        return DashboardState.fromService(
+            ServiceState(binding = true, engineReady = true, status = status),
+        ).copy(
+            locations = LocationLoad.Ready(COUNTRIES),
+            rates = status.rates,
+            trace = traceSamples(),
+        )
+    }
+
+    /** A representative 48 s trace, so the capture shows the real gauge shape. */
+    private fun traceSamples(): List<RateSample> {
+        val now = System.currentTimeMillis()
+        return (0 until 24).map { i ->
+            val phase = i / 24.0 * 2.0 * Math.PI
+            RateSample(
+                atMillis = now - (23 - i) * 2_000L,
+                down = (2.2 + 1.4 * sin(phase)) * MIB,
+                up = (0.7 + 0.4 * cos(phase)) * MIB,
+            )
+        }
+    }
 
     private fun status(
         state: String,

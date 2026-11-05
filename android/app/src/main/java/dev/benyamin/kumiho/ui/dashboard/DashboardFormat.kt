@@ -77,6 +77,12 @@ object DashboardFormat {
         return "up ${humanBytes(rates.up.toLong())}/s / down ${humanBytes(rates.down.toLong())}/s"
     }
 
+    /** One direction's live rate, `45.6 MiB/s`; zero is a real rate. */
+    fun rateLabel(bytesPerSecond: Double): String {
+        val bytes = if (bytesPerSecond.isFinite()) bytesPerSecond.coerceAtLeast(0.0) else 0.0
+        return "${humanBytes(bytes.toLong())}/s"
+    }
+
     /** `up 12.3 MiB / down 45.6 MiB`; null when the engine has no totals. */
     fun totalsLabel(totals: ByteCounters?): String? {
         if (totals == null) return null

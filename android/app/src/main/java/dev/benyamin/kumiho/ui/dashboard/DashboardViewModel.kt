@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.Notice
+import dev.benyamin.kumiho.ui.components.RateBuffer
 import dev.benyamin.kumiho.vpn.ConnectRequest
 import dev.benyamin.kumiho.vpn.ServiceState
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
@@ -115,6 +116,9 @@ class DashboardViewModel(
 
     private val mutableState = MutableStateFlow(DashboardState.fromService(gateway.service.value))
 
+    /** The live 60 s trace; memory only, cleared whenever the session leaves. */
+    private val rateBuffer = RateBuffer()
+
     /** The whole screen state; the UI only reads it. */
     val state: StateFlow<DashboardState> = mutableState.asStateFlow()
 
@@ -152,12 +156,21 @@ class DashboardViewModel(
     private fun onService(snapshot: ServiceState) {
         val phase = DashboardPhase.from(snapshot)
         val error = snapshot.error
+        val rates = snapshot.status?.rates
+        if (phase.active && rates != null) {
+            rateBuffer.push(rates, System.currentTimeMillis())
+        } else {
+            rateBuffer.clear()
+        }
+        val trace = rateBuffer.snapshot()
         mutableState.update { current ->
             var next = current.copy(
                 phase = phase,
                 status = snapshot.status,
                 alwaysOn = snapshot.alwaysOn,
                 lockdown = snapshot.lockdown,
+                rates = rates,
+                trace = trace,
             )
             // A new service error supersedes whatever the row showed; a
             // dismissed one stays dismissed until the service reports a new one.
