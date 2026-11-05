@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -48,7 +49,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -63,7 +63,6 @@ import dev.benyamin.kumiho.ui.account.MozillaAccountBrowserDialog
 import dev.benyamin.kumiho.ui.account.openBrowserSignIn
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.theme.Dimens
-import dev.benyamin.kumiho.ui.theme.PillShape
 import dev.benyamin.kumiho.vpn.ConnectRequest
 
 /**
@@ -381,23 +380,18 @@ private fun SetupBar(
         ) {
             Text(
                 text = stringResource(R.string.setup_title),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(R.string.setup_step_position, state.step.number),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
 /**
- * The step indicator. The numbers are the real sequence (Ban 11 carve-out:
- * this is a genuine ordered flow), the current step is marked by a filled
- * badge and a heavier label as well as the accent, and the whole row reads as
- * one accessible sentence.
+ * The step indicator: four dots and the words "Step N of 4". The dots are the
+ * real sequence (Ban 11 carve-out: this is a genuine ordered flow); the current
+ * dot is filled and named in the label, so the position never depends on
+ * colour alone.
  */
 @Composable
 private fun StepIndicator(step: SetupStep) {
@@ -406,73 +400,39 @@ private fun StepIndicator(step: SetupStep) {
         step.number,
         stepLabel(step),
     )
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2)
             .testTag(SetupTags.STEP_INDICATOR)
             .clearAndSetSemantics { contentDescription = description },
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
-        SetupStep.entries.forEach { entry ->
-            StepBadge(
-                step = entry,
-                current = entry == step,
-                modifier = Modifier.weight(1f),
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space2)) {
+            SetupStep.entries.forEach { entry ->
+                StepDot(current = entry == step)
+            }
         }
+        Text(
+            text = stringResource(R.string.setup_step_position, step.number),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
 @Composable
-private fun StepBadge(
-    step: SetupStep,
-    current: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
-    ) {
-        Surface(
-            shape = PillShape,
-            color = if (current) MaterialTheme.colorScheme.primary else Color.Transparent,
-            border = BorderStroke(
-                1.dp,
-                if (current) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                },
-            ),
-            modifier = Modifier.size(24.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = step.number.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (current) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-        }
-        Text(
-            text = stepLabel(step),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (current) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
-    }
+private fun StepDot(current: Boolean) {
+    Surface(
+        shape = CircleShape,
+        color = if (current) MaterialTheme.colorScheme.primary else Color.Transparent,
+        border = BorderStroke(
+            1.dp,
+            if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        ),
+        modifier = Modifier.size(8.dp),
+    ) {}
 }
 
 @Composable

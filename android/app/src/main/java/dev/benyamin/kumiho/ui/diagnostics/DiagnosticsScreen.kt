@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.diagnostics
 
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -32,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -55,9 +59,7 @@ import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.components.KumihoSectionHeader
-import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.LatencyChart
-import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.components.ThroughputChart
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
@@ -360,7 +362,7 @@ private fun ReportHeader(report: DoctorReport, checks: List<DoctorCheck>) {
     ) {
         Text(
             text = stringResource(R.string.diagnostics_summary_title),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
@@ -385,7 +387,7 @@ private fun ReportHeader(report: DoctorReport, checks: List<DoctorCheck>) {
                 counts[DoctorStatus.WARN] ?: 0,
                 counts[DoctorStatus.SKIP] ?: 0,
             ),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = Dimens.Space2),
         )
@@ -487,7 +489,7 @@ private fun FactRow(label: String, value: String) {
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1.4f),
@@ -568,6 +570,7 @@ private fun CheckRow(check: DoctorCheck, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(
             modifier = Modifier.padding(Dimens.Space3),
@@ -577,21 +580,28 @@ private fun CheckRow(check: DoctorCheck, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(check.status.dotColor()),
+                )
                 Text(
                     text = checkTitle(check.name),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-                KumihoStatusChip(
-                    tone = check.status.tone(),
-                    label = stringResource(check.status.labelRes()),
+                Text(
+                    text = stringResource(check.status.labelRes()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
                 text = check.detail,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (!check.remediation.isNullOrBlank()) {
                 Text(
@@ -704,8 +714,8 @@ private fun DiagnosticsBanner(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        color = warning.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, warning.copy(alpha = 0.5f)),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(Dimens.Space3),
@@ -722,15 +732,15 @@ private fun DiagnosticsBanner(
                 if (title.isNotBlank()) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = warning,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 if (detail != null) {
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -858,11 +868,12 @@ internal fun DoctorStatus.labelRes(): Int = when (this) {
     DoctorStatus.UNKNOWN -> R.string.diagnostics_status_unknown
 }
 
-private fun DoctorStatus.tone(): StatusTone = when (this) {
-    DoctorStatus.OK -> StatusTone.Profit
-    DoctorStatus.WARN -> StatusTone.Warning
-    DoctorStatus.FAIL -> StatusTone.Loss
-    DoctorStatus.SKIP, DoctorStatus.UNKNOWN -> StatusTone.Neutral
+@Composable
+private fun DoctorStatus.dotColor(): Color = when (this) {
+    DoctorStatus.OK -> LocalKumihoColors.current.profit
+    DoctorStatus.WARN -> LocalKumihoColors.current.warning
+    DoctorStatus.FAIL -> LocalKumihoColors.current.loss
+    DoctorStatus.SKIP, DoctorStatus.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 /** The callbacks the stateless screen needs. */

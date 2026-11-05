@@ -40,7 +40,7 @@ fun PermissionsStep(
     ) {
         Text(
             text = stringResource(R.string.permissions_title),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(

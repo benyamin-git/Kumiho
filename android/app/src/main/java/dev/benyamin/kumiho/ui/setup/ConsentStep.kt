@@ -36,7 +36,7 @@ fun ConsentStep(
     ) {
         Text(
             text = stringResource(R.string.consent_title),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(

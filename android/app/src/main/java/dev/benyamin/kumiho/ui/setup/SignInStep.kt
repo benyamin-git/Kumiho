@@ -52,7 +52,7 @@ fun SignInStep(
     ) {
         Text(
             text = stringResource(R.string.setup_step_sign_in),
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         if (!notice.isNullOrBlank()) {

@@ -44,6 +44,11 @@ fun AlwaysOnStep(
         verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
     ) {
         Text(
+            text = stringResource(R.string.setup_step_always_on),
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
             text = stringResource(R.string.always_on_intro),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
