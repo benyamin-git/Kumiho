@@ -369,30 +369,33 @@ func TestOAuthErrorParsing(t *testing.T) {
 	})
 }
 
-// TestRefreshEndpointIsNotProvenInterchangeable pins the current split and
-// deliberately proves nothing about D39: the authorization-code exchange uses
-// the OAuth token endpoint while Refresh uses the auth-server one. Gate G1 must
-// complete a browser sign-in, force an access-token refresh and verify the
-// stored refresh token is accepted; only then can a refresh-endpoint change be
-// considered.
-func TestRefreshEndpointIsNotProvenInterchangeable(t *testing.T) {
-	var gotPath string
+// Refresh and the authorization-code exchange share the OAuth server's
+// standard form endpoint. The legacy auth-server /v1/oauth/token route is now
+// hard-blocked by Fastly (empty 406, no challenge page); a real
+// password-issued refresh token is accepted at api.accounts.firefox.com/v1/token.
+func TestRefreshUsesStandardTokenEndpoint(t *testing.T) {
+	var gotPath, gotContentType string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
 		fmt.Fprint(w, `{"access_token":"access-2","expires_in":3600}`)
 	}))
 	defer srv.Close()
 
 	c := NewClient()
 	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
 	c.TokenEndpoint = "https://oauth.invalid/v1/token"
 	if _, err := c.Refresh(context.Background(), "the-refresh-token"); err != nil {
 		t.Fatal(err)
 	}
-	if gotPath != "/v1/oauth/token" {
-		t.Fatalf("Refresh path = %q, want the auth-server /v1/oauth/token", gotPath)
+	if gotPath != "/v1/token" {
+		t.Fatalf("Refresh path = %q, want the OAuth server /v1/token", gotPath)
 	}
-	if DefaultTokenEndpoint != "https://oauth.accounts.firefox.com/v1/token" {
-		t.Fatalf("DefaultTokenEndpoint = %q; Gate G1 must rerun if this changes", DefaultTokenEndpoint)
+	if !strings.HasPrefix(gotContentType, "application/x-www-form-urlencoded") {
+		t.Fatalf("Content-Type = %q, want a form grant", gotContentType)
+	}
+	if DefaultTokenEndpoint != "https://api.accounts.firefox.com/v1/token" {
+		t.Fatalf("DefaultTokenEndpoint = %q, want the answering api host", DefaultTokenEndpoint)
 	}
 }

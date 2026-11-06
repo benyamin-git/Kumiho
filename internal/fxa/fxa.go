@@ -18,7 +18,8 @@ const (
 	// host (HTTP 406 with an empty body and no challenge page, which no
 	// solved challenge can clear) while the oauth host keeps answering with
 	// the identical auth-server build. The fallback is tried after a 406 and
-	// before any solve, so the normal path never depends on it.
+	// before any solve, so the normal path never depends on it. It is not a
+	// usable refresh host: the oauth host also hard-blocks /v1/token.
 	DefaultFallbackBaseURL = "https://oauth.accounts.firefox.com/v1"
 	// ClientID is Firefox Desktop's OAuth client. The password flow uses it,
 	// and it is the legacy default for accounts created before browser tokens
@@ -44,12 +45,12 @@ const (
 
 	// DefaultAuthorizationEndpoint is the FxA browser consent page.
 	DefaultAuthorizationEndpoint = "https://accounts.firefox.com/authorization"
-	// DefaultTokenEndpoint exchanges an authorization code for tokens. It is
-	// distinct from the auth-server BaseURL used by the password flow and by
-	// Refresh. D39 assumes the resulting refresh token is accepted there; that
-	// is unproven until Gate G1 signs in, forces a refresh and verifies it.
-	// Do not change the refresh endpoint without that evidence.
-	DefaultTokenEndpoint = "https://oauth.accounts.firefox.com/v1/token"
+	// DefaultTokenEndpoint is the OAuth server's standard RFC 6749 endpoint.
+	// The api host serves the same OAuth server and answers where Fastly now
+	// hard-blocks the oauth host and the legacy auth-server /oauth/token route
+	// (empty 406, no challenge page), so both the authorization-code exchange
+	// and refresh use it.
+	DefaultTokenEndpoint = "https://api.accounts.firefox.com/v1/token"
 	// OAuthRedirectURI is the HTTPS success page registered for OAuthClientID.
 	// FxA navigates here with the authorization code and state in the query,
 	// which a browser can display and the user can paste back. This replaces

@@ -206,6 +206,13 @@ and only spends a solve when every host still answers `406`. A dropped
 connection on that sibling is retried once. `[fastly]` lines in the log show
 each solve step; the sibling attempt is silent unless it also fails.
 
+Token refresh does not use the legacy auth-server `/v1/oauth/token` route:
+Fastly now answers that route on both hosts with an empty `406` hard block,
+which has no challenge page and cannot be solved. Kumiho refreshes with the
+OAuth server's standard form grant at
+`https://api.accounts.firefox.com/v1/token` instead, falling back to the oauth
+host only when the api host is challenged.
+
 If it still fails the error is explicit: `could not solve the anti-bot
 challenge; retry or disable solve_challenges`. A captcha or an unknown
 challenge type cannot be solved and fails the same way. Setting

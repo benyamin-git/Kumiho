@@ -168,43 +168,30 @@ func (c *Client) OAuthToken(ctx context.Context, sessionToken string) (*Tokens, 
 	return tokens, nil
 }
 
-// Refresh renews a legacy or password-account access token (POST
-// /oauth/token, grant_type=refresh_token, no Hawk) with Firefox Desktop's
-// client. New callers should use RefreshWithClient so a browser token is
-// refreshed by the client that issued it.
+// Refresh renews a legacy or password-account access token (the standard
+// /v1/token form grant, no Hawk) with Firefox Desktop's client. New callers
+// should use RefreshWithClient so a browser token is refreshed by the client
+// that issued it.
 func (c *Client) Refresh(ctx context.Context, refreshToken string) (*Tokens, error) {
 	return c.RefreshWithClient(ctx, refreshToken, ClientID)
 }
 
 // RefreshWithClient renews the access token with the OAuth client recorded on
-// the token set. Browser tokens were issued by OAuthClientID at the OAuth
-// token endpoint, so they refresh there with the same client; password and
-// legacy tokens keep the auth-server path and ClientID.
+// the token set. It posts the standard RFC 6749 refresh-token grant to
+// /v1/token. The legacy auth-server /v1/oauth/token route now answers Fastly's
+// empty 406 hard block (no challenge page, so no solve can clear it) on both
+// hosts; the OAuth server's form endpoint on the api host still answers.
 func (c *Client) RefreshWithClient(ctx context.Context, refreshToken, clientID string) (*Tokens, error) {
 	clientID = strings.TrimSpace(clientID)
 	if clientID == "" {
 		clientID = ClientID
 	}
-	body := map[string]string{
-		"client_id":     clientID,
-		"grant_type":    "refresh_token",
-		"refresh_token": refreshToken,
-		"scope":         Scope,
-	}
-	var (
-		raw []byte
-		err error
-	)
-	if clientID == OAuthClientID {
-		raw, err = c.doEndpointForm(ctx, c.tokenEndpoint(), url.Values{
-			"client_id":     {clientID},
-			"grant_type":    {"refresh_token"},
-			"refresh_token": {refreshToken},
-			"scope":         {Scope},
-		})
-	} else {
-		raw, err = c.doJSON(ctx, http.MethodPost, "/oauth/token", "", body)
-	}
+	raw, err := c.refreshToken(ctx, url.Values{
+		"client_id":     {clientID},
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"scope":         {Scope},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +201,28 @@ func (c *Client) RefreshWithClient(ctx context.Context, refreshToken, clientID s
 	}
 	tokens.ClientID = clientID
 	return tokens, nil
+}
+
+// refreshToken posts a form grant to the standard token endpoint on each base
+// in order. A challenge or transport failure moves to the sibling host; a real
+// API answer (for example 401 for a dead refresh token) is final.
+func (c *Client) refreshToken(ctx context.Context, values url.Values) ([]byte, error) {
+	var lastErr error
+	for _, base := range c.baseURLs() {
+		raw, err := c.doEndpointForm(ctx, strings.TrimRight(base, "/")+"/token", values)
+		if err == nil {
+			return raw, nil
+		}
+		var chErr *ChallengeError
+		if !errors.As(err, &chErr) && !isTransportError(err) {
+			return nil, err
+		}
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 // AccessTokenValid reports whether the token set stays valid for at least
@@ -347,9 +356,9 @@ func (c *Client) doEndpointJSON(ctx context.Context, method, endpoint, bearerTok
 	return c.doRequest(ctx, method, endpoint, "", bearerToken, payload, true)
 }
 
-// doEndpointForm sends an application/x-www-form-urlencoded request to a full
-// endpoint. RFC 6749 token endpoints require form encoding; the auth-server
-// JSON endpoints remain on doRequest.
+// doEndpointForm sends an application/x-www-form-urlencoded request. RFC 6749
+// token endpoints require form encoding; the auth-server JSON endpoints remain
+// on doRequest.
 func (c *Client) doEndpointForm(ctx context.Context, endpoint string, values url.Values) ([]byte, error) {
 	return c.doRequestBytes(ctx, http.MethodPost, endpoint, "", "", []byte(values.Encode()), "application/x-www-form-urlencoded", true)
 }

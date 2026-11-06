@@ -94,7 +94,7 @@ func loginOKHandler(t *testing.T) http.HandlerFunc {
 				t.Errorf("email = %v", body["email"])
 			}
 			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
-		case "/v1/oauth/token":
+		case "/v1/oauth/token", "/v1/token":
 			fmt.Fprint(w, `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600,"scope":"profile"}`)
 		default:
 			http.NotFound(w, r)
@@ -222,7 +222,7 @@ func TestLogoutClearsSession(t *testing.T) {
 func TestStartupRefresh(t *testing.T) {
 	var refreshCalls atomic.Int32
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/oauth/token" {
+		if r.URL.Path == "/v1/token" {
 			refreshCalls.Add(1)
 			fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"refresh-2","expires_in":7200}`)
 			return

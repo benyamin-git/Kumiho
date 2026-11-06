@@ -150,7 +150,7 @@ func enableRotation(t *testing.T, ctrl *Controller, threshold int) {
 func newRotationController(t *testing.T, accounts []*Account, activeID string, replies map[string]quotaReply, threshold int) (*Controller, settings.Paths, *quotaTracker) {
 	t.Helper()
 	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/oauth/token" {
+		if r.URL.Path == "/v1/token" {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, `{"errno":110,"message":"invalid refresh token"}`)
 			return
@@ -532,7 +532,7 @@ func TestQuotaPollUpdatesSnapshot(t *testing.T) {
 func TestQuotaPoll401MarksReauthAndStops(t *testing.T) {
 	now := time.Now()
 	reauthHandler := func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/oauth/token" {
+		if r.URL.Path == "/v1/token" {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, `{"errno":110,"message":"invalid refresh token"}`)
 			return
@@ -589,7 +589,7 @@ func TestQuotaPoll401RefreshesPasswordOnce(t *testing.T) {
 	a := rotationPasswordAccount("poll", "poll@example.com", "old-token", now)
 	var refreshCalls atomic.Int32
 	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/oauth/token" {
+		if r.URL.Path != "/v1/token" {
 			http.NotFound(w, r)
 			return
 		}

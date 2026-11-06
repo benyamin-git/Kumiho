@@ -285,7 +285,7 @@ func TestLogoutDuringTokenRefreshKeepsSnapshotClean(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/account/login":
 			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
-		case "/v1/oauth/token":
+		case "/v1/oauth/token", "/v1/token":
 			if oauthCalls.Add(1) == 1 {
 				fmt.Fprint(w, `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`)
 				return

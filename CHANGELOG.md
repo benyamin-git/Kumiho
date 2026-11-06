@@ -8,6 +8,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **Token refresh survives Mozilla's new edge block.** The legacy
+  auth-server `/v1/oauth/token` route now answers with an empty `406` hard
+  block (no challenge page) on both Firefox Accounts hosts, so an expired
+  access token could not be renewed and the tunnel stayed down. Refresh now
+  posts the OAuth server's standard form grant to
+  `https://api.accounts.firefox.com/v1/token`, falls back to the oauth host
+  only when that host is challenged, and the browser sign-in code exchange
+  uses the same answering host.
+
 ## [0.10.1] - 2026-11-05
 
 ### Fixed

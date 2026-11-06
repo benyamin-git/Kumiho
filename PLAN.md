@@ -74,7 +74,7 @@ All facts below were read directly from `Vauth/FoxyVPN` (Kotlin, MIT) and its cr
 | Login body | `{email, authPW: hex, verificationMethod: "email-2fa"}`; on errno 107 retry without `verificationMethod` |
 | 2FA | `POST /session/verify_code` `{code}` with Hawk; if server answers method `email` (link flow) tell user to click the link and press Enter |
 | OAuth grant | `POST /oauth/token` `{client_id, grant_type:"fxa-credentials", scope, access_type:"offline"}` with Hawk |
-| Refresh | `POST /oauth/token` `{client_id, grant_type:"refresh_token", refresh_token, scope}` (no Hawk) |
+| Refresh | `POST /v1/token` form `{client_id, grant_type:"refresh_token", refresh_token, scope}` (no Hawk); the legacy auth-server `/oauth/token` JSON route is hard-blocked by Fastly (empty 406, no challenge page) |
 | Token TTL | `expires_in` (typically 86400 s), treat invalid 60 s before expiry |
 | Guardian | `https://vpn.mozilla.org` `GET /api/v1/fpn/token`, `GET /api/v1/fpn/status`, `POST /api/v1/fpn/activate`; `Authorization: Bearer <access_token>` |
 | Proxy pass | response `{token}` JWT; expiry from `expires_at` or JWT `exp`; quota from `X-Quota-Limit`, `X-Quota-Remaining`, `X-Quota-Reset` |
@@ -118,7 +118,11 @@ no interactive captcha UI.
   a hostname the block does not cover — therefore answers first in the common
   hard-block case, before any solve is spent. A transport-level failure on
   that sibling (the edge can reset the connection after challenging the
-  primary) is retried once after 500 ms. `solve_challenges` defaults on and is
+  primary) is retried once after 500 ms. Refresh uses the OAuth server's
+  standard `/v1/token` form grant: the legacy auth-server `/oauth/token` route
+  is hard-blocked on both hosts, and the oauth host now hard-blocks
+  `/v1/token` too, so the api host answers first and the sibling is only a
+  fallback. `solve_challenges` defaults on and is
   read per control-plane request, so it applies immediately; off restores the
   immediate, clearly worded failure on the primary host, and the fallback is
   still tried.

@@ -139,7 +139,7 @@ func TestRefreshSendsNoHawkAndKeepsOldRefreshToken(t *testing.T) {
 	}
 }
 
-func TestRefreshWithBrowserClientUsesOAuthEndpoint(t *testing.T) {
+func TestRefreshWithBrowserClientUsesStandardTokenEndpoint(t *testing.T) {
 	var gotPath, gotClientID, gotContentType string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -153,8 +153,9 @@ func TestRefreshWithBrowserClientUsesOAuthEndpoint(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient()
-	c.BaseURL = "http://127.0.0.1:1/v1" // the auth-server path must not be used
-	c.TokenEndpoint = srv.URL + "/v1/token"
+	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
+	c.TokenEndpoint = "https://oauth.invalid/v1/token" // refresh must not use the exchange endpoint
 	c.Now = func() time.Time { return time.Unix(2000, 0) }
 
 	toks, err := c.RefreshWithClient(context.Background(), "browser-refresh", OAuthClientID)
@@ -175,6 +176,41 @@ func TestRefreshWithBrowserClientUsesOAuthEndpoint(t *testing.T) {
 		toks.ClientID != OAuthClientID ||
 		toks.ExpiresAt != 9200 {
 		t.Errorf("tokens = %+v", toks)
+	}
+}
+
+// A challenged primary host still falls back to the sibling for refresh, and
+// only a real API answer ends the loop.
+func TestRefreshFallsBackToSiblingHost(t *testing.T) {
+	var primaryHits, fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		if r.URL.Path != "/v1/token" {
+			t.Errorf("fallback path = %s, want /v1/token", r.URL.Path)
+		}
+		fmt.Fprint(w, `{"access_token":"atok2","expires_in":7200}`)
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	toks, err := c.Refresh(context.Background(), "old-refresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if toks.AccessToken != "atok2" || toks.RefreshToken != "old-refresh" {
+		t.Fatalf("tokens = %+v", toks)
+	}
+	if primaryHits != 1 || fallbackHits != 1 {
+		t.Fatalf("primary hits = %d, fallback hits = %d; want 1 and 1",
+			primaryHits, fallbackHits)
 	}
 }
 

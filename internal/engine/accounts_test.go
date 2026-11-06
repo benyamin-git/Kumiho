@@ -517,7 +517,7 @@ func multiLoginHandler(t *testing.T) http.HandlerFunc {
 				t.Errorf("login email missing: %v", body)
 			}
 			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
-		case "/v1/oauth/token":
+		case "/v1/oauth/token", "/v1/token":
 			n := tokenSeq.Add(1)
 			fmt.Fprintf(w, `{"access_token":"access-%d","refresh_token":"refresh-%d","expires_in":3600}`, n, n)
 		default:
@@ -953,18 +953,17 @@ func TestBrowserRefreshUsesFxaRefresh(t *testing.T) {
 	t.Run("rotates the refresh token", func(t *testing.T) {
 		var oauthCalls atomic.Int32
 		ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/v1/oauth/token" {
+			if r.URL.Path != "/v1/token" {
 				http.NotFound(w, r)
 				return
 			}
 			oauthCalls.Add(1)
-			var body map[string]string
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Errorf("decode refresh body: %v", err)
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse refresh body: %v", err)
 				return
 			}
-			if body["grant_type"] != "refresh_token" || body["refresh_token"] != "old-refresh" {
-				t.Errorf("refresh body = %v", body)
+			if r.PostForm.Get("grant_type") != "refresh_token" || r.PostForm.Get("refresh_token") != "old-refresh" {
+				t.Errorf("refresh body = %v", r.PostForm)
 			}
 			fmt.Fprint(w, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`)
 		})
@@ -1001,7 +1000,7 @@ func TestBrowserRefreshUsesFxaRefresh(t *testing.T) {
 
 	t.Run("permanent rejection keeps the account and marks reauth", func(t *testing.T) {
 		ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/v1/oauth/token" {
+			if r.URL.Path != "/v1/token" {
 				http.NotFound(w, r)
 				return
 			}
@@ -1364,7 +1363,7 @@ func TestAccountRotationSettings(t *testing.T) {
 
 func TestPermanentRefreshDropsOnlyActiveAccount(t *testing.T) {
 	ctrl, paths := newTestController(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/oauth/token" {
+		if r.URL.Path == "/v1/token" {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, `{"errno":110,"message":"invalid refresh token"}`)
 			return
