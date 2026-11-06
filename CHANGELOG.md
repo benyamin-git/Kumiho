@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-06
+
 ### Fixed
 
 - **Token refresh survives Mozilla's new edge block.** The legacy
