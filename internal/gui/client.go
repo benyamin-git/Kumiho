@@ -260,6 +260,20 @@ func (c *DaemonClient) RelayTest(ctx context.Context) (api.RelayTestResult, erro
 	return res, err
 }
 
+// RegionCheck implements Daemon.
+func (c *DaemonClient) RegionCheck(ctx context.Context) (api.RegionCheckResult, error) {
+	var res api.RegionCheckResult
+	err := c.dec(ctx, ipc.TypeRegionCheck, nil, &res)
+	return res, err
+}
+
+// Prepare implements Daemon.
+func (c *DaemonClient) Prepare(ctx context.Context) (api.PrepareResult, error) {
+	var res api.PrepareResult
+	err := c.dec(ctx, ipc.TypePrepare, nil, &res)
+	return res, err
+}
+
 // Account implements Daemon.
 func (c *DaemonClient) Account(ctx context.Context) (api.AccountInfo, error) {
 	var info api.AccountInfo

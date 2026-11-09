@@ -87,6 +87,7 @@ registerScreen("account", () => import("./screens/account.js"), "css/screens/acc
 registerScreen("logs", () => import("./screens/logs.js"), "css/screens/logs.css");
 registerScreen("diagnostics", () => import("./screens/diagnostics.js"), "css/screens/diagnostics.css");
 registerScreen("onboarding", () => import("./screens/onboarding.js"), "css/screens/onboarding.css");
+registerScreen("blocked-region", () => import("./screens/blocked-region.js"), "css/screens/blocked-region.css");
 
 /** Parse a location hash into {id, hint}, tolerating anything malformed. */
 export function parseHash(hash) {
@@ -200,6 +201,10 @@ export function initRouter(opts) {
    * step. */
   function effectiveRoute(requested) {
     if (!wizardPending()) return requested;
+    // The Blocked region guide is part of first run: the consent step opens
+    // it before sign-in, and it must stay reachable while the wizard owns
+    // every other route.
+    if (requested.id === "blocked-region") return requested;
     return { id: WIZARD_SCREEN, hint: requested.id === WIZARD_SCREEN ? requested.hint : "" };
   }
 

@@ -34,6 +34,8 @@ const (
 	ActionSettingsGet      = "settings_get"
 	ActionSettingsSet      = "settings_set"
 	ActionRelayTest        = "relay_test"
+	ActionRegionCheck      = "region_check"
+	ActionPrepare          = "prepare"
 	ActionLoginEmail       = "login_email"
 	ActionLoginPassword    = "login_password"
 	ActionLogin2FA         = "login_2fa"
@@ -94,6 +96,8 @@ var actionNames = []string{
 	ActionSettingsGet,
 	ActionSettingsSet,
 	ActionRelayTest,
+	ActionRegionCheck,
+	ActionPrepare,
 	ActionLoginEmail,
 	ActionLoginPassword,
 	ActionLogin2FA,
@@ -223,6 +227,13 @@ type State struct {
 
 	// RelayTest is the last control-plane relay probe result.
 	RelayTest *api.RelayTestResult `json:"relay_test,omitempty"`
+
+	// RegionCheck is the last Blocked region probe result; nil until the
+	// guide or the wizard requests one.
+	RegionCheck *api.RegionCheckResult `json:"region_check,omitempty"`
+
+	// Prepare is the last successful prepare result (no pass token).
+	Prepare *api.PrepareResult `json:"prepare,omitempty"`
 
 	// Logs is the retained log buffer (the daemon snapshot merged with live
 	// entries, capped at 2000).

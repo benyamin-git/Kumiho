@@ -57,6 +57,9 @@ var frozenActions = []string{
 	"login_status",
 	"login_cancel",
 	"login_complete",
+	// v0.11.0 blocked-region first run.
+	"region_check",
+	"prepare",
 }
 
 // TestEncodeStateEnvelopeShape pins the host → UI wire shape for the zero
@@ -255,8 +258,8 @@ func TestDecodeActionRejects(t *testing.T) {
 // the three v0.9.0 region actions: same members, same count, and every one
 // decodes.
 func TestFrozenActionVocabulary(t *testing.T) {
-	if len(frozenActions) != 41 {
-		t.Fatalf("frozenActions has %d entries, want 41", len(frozenActions))
+	if len(frozenActions) != 43 {
+		t.Fatalf("frozenActions has %d entries, want 43", len(frozenActions))
 	}
 	if len(actionNames) != len(frozenActions) {
 		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))

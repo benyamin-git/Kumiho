@@ -28,6 +28,8 @@ const (
 	pingTimeout            = 10 * time.Second
 	selectLocationTimeout  = 10 * time.Second
 	settingsTimeout        = 15 * time.Second
+	regionTimeout          = 25 * time.Second
+	prepareTimeout         = 90 * time.Second
 	accountTimeout         = 35 * time.Second
 	loginTimeout           = 60 * time.Second
 	logoutTimeout          = 15 * time.Second
@@ -79,6 +81,8 @@ type Daemon interface {
 	Ping(context.Context, []string) (api.Result, error)
 	Settings(context.Context) (api.SettingsView, error)
 	RelayTest(context.Context) (api.RelayTestResult, error)
+	RegionCheck(context.Context) (api.RegionCheckResult, error)
+	Prepare(context.Context) (api.PrepareResult, error)
 	SetSetting(context.Context, api.SettingsSetPayload) (api.Result, error)
 	Account(context.Context) (api.AccountInfo, error)
 	AccountsList(context.Context) (api.AccountsView, error)
@@ -137,6 +141,7 @@ type StatusView struct {
 	Totals         string `json:"totals,omitempty"`
 	TokenExpiry    string `json:"token_expiry,omitempty"`
 	PassExpiry     string `json:"pass_expiry,omitempty"`
+	PassExpires    int64  `json:"pass_expires,omitempty"`
 	QuotaText      string `json:"quota_text,omitempty"`
 	QuotaRemaining *int64 `json:"quota_remaining,omitempty"`
 	QuotaLimit     *int64 `json:"quota_limit,omitempty"`
@@ -283,6 +288,8 @@ type Controller struct {
 	pingBusy         bool
 	pingDoneSeq      int
 	relayTest        *api.RelayTestResult
+	regionCheck      *api.RegionCheckResult
+	prepareResult    *api.PrepareResult
 
 	// Settings snapshot.
 	settings        *api.SettingsView
@@ -390,6 +397,8 @@ func (c *Controller) Snapshot() State {
 		PingBusy:          c.pingBusy,
 		PingDoneSeq:       c.pingDoneSeq,
 		RelayTest:         copyRelayTest(c.relayTest),
+		RegionCheck:       copyRegionCheck(c.regionCheck),
+		Prepare:           copyPrepare(c.prepareResult),
 		RTTs:              copyRTTs(c.rtts),
 		LogsLoaded:        c.logsLoaded,
 		Onboarded:         c.onboarded,
@@ -446,6 +455,10 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchSettingsSet(act)
 	case ActionRelayTest:
 		return c.dispatchRelayTest(act)
+	case ActionRegionCheck:
+		return c.dispatchRegionCheck(act)
+	case ActionPrepare:
+		return c.dispatchPrepare(act)
 	case ActionUpdateCheck:
 		return c.dispatchUpdateCheck()
 	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA,
@@ -627,6 +640,91 @@ func (c *Controller) dispatchClearRecents(act Action) error {
 	c.setNotice(slotLocations, "Recent locations cleared", toneGood, c.opts.NoticeTTL)
 	c.loadLocations(context.Background(), false, true)
 	return nil
+}
+
+func (c *Controller) dispatchRegionCheck(act Action) error {
+	if _, err := decodePayload[struct{}](act); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), regionTimeout)
+	defer cancel()
+	res, err := c.d.RegionCheck(ctx)
+	if err != nil {
+		c.observe(err)
+		c.setNotice(slotShared, "could not check Mozilla's hosts: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	cp := res
+	if res.Hosts != nil {
+		cp.Hosts = append([]api.RegionHostStatus(nil), res.Hosts...)
+	}
+	if res.Blocked != nil {
+		cp.Blocked = append([]string(nil), res.Blocked...)
+	}
+	c.mu.Lock()
+	c.regionCheck = &cp
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *Controller) dispatchPrepare(act Action) error {
+	if _, err := decodePayload[struct{}](act); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), prepareTimeout)
+	defer cancel()
+	res, err := c.d.Prepare(ctx)
+	if err != nil {
+		c.observe(err)
+		c.setNotice(slotShared, "could not prepare: "+err.Error(), toneBad, 0)
+		return err
+	}
+	c.observe(nil)
+	cp := res
+	c.mu.Lock()
+	c.prepareResult = &cp
+	c.mu.Unlock()
+	c.setNotice(slotShared, "Prepared. Turn off the other VPN, then connect.", toneGood, c.opts.NoticeTTL)
+	// Refresh the status so the pass expiry lands in the handoff card.
+	if st, serr := c.d.Status(ctx); serr == nil {
+		c.applyStatus(st)
+	}
+	return nil
+}
+
+func copyRegionCheck(r *api.RegionCheckResult) *api.RegionCheckResult {
+	if r == nil {
+		return nil
+	}
+	cp := *r
+	cp.Hosts = append([]api.RegionHostStatus(nil), r.Hosts...)
+	cp.Blocked = append([]string(nil), r.Blocked...)
+	return &cp
+}
+
+func copyPrepare(p *api.PrepareResult) *api.PrepareResult {
+	if p == nil {
+		return nil
+	}
+	cp := *p
+	if p.Quota != nil {
+		q := *p.Quota
+		if p.Quota.Remaining != nil {
+			v := *p.Quota.Remaining
+			q.Remaining = &v
+		}
+		if p.Quota.Limit != nil {
+			v := *p.Quota.Limit
+			q.Limit = &v
+		}
+		if p.Quota.Reset != nil {
+			v := *p.Quota.Reset
+			q.Reset = &v
+		}
+		cp.Quota = &q
+	}
+	return &cp
 }
 
 func (c *Controller) dispatchRelayTest(act Action) error {
@@ -1946,6 +2044,7 @@ func (c *Controller) statusViewLocked(now time.Time) *StatusView {
 	}
 	if st.PassExpires > 0 {
 		v.PassExpiry = time.Unix(st.PassExpires, 0).UTC().Format(time.RFC3339)
+		v.PassExpires = st.PassExpires
 	}
 	v.QuotaText, v.QuotaRemaining, v.QuotaLimit = quotaView(st.Quota)
 	if st.Quota != nil && st.Quota.Reset != nil {

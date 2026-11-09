@@ -1,0 +1,125 @@
+/* Blocked region guide (v0.11.0). Cards in a single readable column; the
+ * check list is the only tabular element, and the handoff card is the one
+ * tinted surface. */
+
+.region {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 860px;
+  padding-block-end: var(--space-6);
+}
+
+/* The hidden attribute must beat the author display rules on the guide's
+ * buttons (the Sign in button disappears once the status is known). */
+.region [hidden] {
+  display: none !important;
+}
+
+.region__check,
+.region__handoff,
+.region__path {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.region__summary {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.region__summary[data-tone="good"] {
+  color: var(--profit);
+}
+
+.region__summary[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.region__hosts {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.region__host {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 32px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-input);
+  background: var(--surface-container-2);
+}
+
+.region__hostname {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.region__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.region__handoff[hidden] {
+  display: none;
+}
+
+.region__handoff {
+  border-color: color-mix(in srgb, var(--profit) 30%, var(--hairline));
+  background: color-mix(in srgb, var(--profit) 6%, var(--surface-container-1));
+}
+
+.region__steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  line-height: 1.5;
+}
+
+.region__field {
+  max-width: 520px;
+}
+
+.region__inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.region__inline .input {
+  flex: 1 1 260px;
+}
+
+.region__relay-result {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.region__relay-result[data-tone="good"] {
+  color: var(--profit);
+}
+
+.region__relay-result[data-tone="bad"] {
+  color: var(--loss);
+}
+
+@media (max-width: 620px) {
+  .region__host {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-block: var(--space-2);
+  }
+}

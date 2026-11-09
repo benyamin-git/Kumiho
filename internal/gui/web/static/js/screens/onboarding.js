@@ -475,6 +475,10 @@ export default {
       finishTimer: 0,
       finishError: "",
       checksStarted: false,
+      // The consent step's region preflight: true while region_check is in
+      // flight, and the branch navigates to the guide only once.
+      regionChecking: false,
+      regionChecked: false,
       listKey: null,
       statusText: null,
       statusTone: null,
@@ -920,8 +924,30 @@ export default {
       switch (currentStep) {
         case STEP_WELCOME:
           // The consent gate is enforced here too, not only on the button.
-          if (!consentTicked) return;
-          goTo(STEP_LOGIN);
+          if (!consentTicked || view.regionChecking) return;
+          {
+            const snapshot = ctx.store.get() || {};
+            const check = view.regionChecked ? null : snapshot.region_check;
+            if (check) {
+              view.regionChecked = true;
+              if ((check.blocked && check.blocked.length) || check.browser_blocked) {
+                ctx.navigate("blocked-region");
+                return;
+              }
+              goTo(STEP_LOGIN);
+              return;
+            }
+            view.regionChecking = true;
+            render();
+            ctx.send("region_check", {}).then(function (err) {
+              if (!err) return;
+              // A daemon that cannot probe must never trap the wizard.
+              view.regionChecking = false;
+              view.regionChecked = true;
+              goTo(STEP_LOGIN);
+              render();
+            });
+          }
           break;
         case STEP_LOGIN: {
           const page = view.page || derivePage(ctx.store.get());
@@ -1355,10 +1381,11 @@ export default {
           label = "Continue";
         }
       }
-      if (ui.primary.textContent !== label) ui.primary.textContent = label;
-      const busy = !!view.busy || view.logoutBusy || view.finishBusy;
+      const busy = !!view.busy || view.logoutBusy || view.finishBusy || view.regionChecking;
       const consentOK = currentStep !== STEP_WELCOME || consentTicked;
       const disabled = busy || !consentOK || waiting;
+      if (currentStep === STEP_WELCOME && view.regionChecking) label = "Checking Mozilla's hosts…";
+      if (ui.primary.textContent !== label) ui.primary.textContent = label;
       if (ui.primary.disabled !== disabled) ui.primary.disabled = disabled;
       if (ui.back.disabled !== (!!view.busy || view.logoutBusy)) {
         ui.back.disabled = !!view.busy || view.logoutBusy;
@@ -1369,6 +1396,7 @@ export default {
       const snapshot = ctx.store.get();
       settleGuards(snapshot);
       autoAdvance(snapshot);
+      maybeRegionBranch(snapshot);
       renderStep();
       renderConsent();
       renderLogin(snapshot);
@@ -1376,6 +1404,22 @@ export default {
       renderAutoconnect(snapshot);
       renderStatus(snapshot);
       renderNav();
+    }
+
+    // maybeRegionBranch consumes the consent preflight once it lands: a
+    // blocked or unknown browser page opens the reusable Blocked region guide
+    // before sign-in; a clear region proceeds silently.
+    function maybeRegionBranch(snapshot) {
+      if (!view.regionChecking) return;
+      const check = snapshot.region_check;
+      if (!check) return;
+      view.regionChecking = false;
+      view.regionChecked = true;
+      if ((check.blocked && check.blocked.length) || check.browser_blocked) {
+        ctx.navigate("blocked-region");
+        return;
+      }
+      goTo(STEP_LOGIN);
     }
 
     // -------------------------------------------------------------- events

@@ -181,8 +181,14 @@ function build(host) {
   const retry = el("button", "button button--tonal dash__retry", "Retry");
   retry.type = "button";
   retry.hidden = true;
+  const guide = el("button", "button button--tonal dash__retry", "Blocked region guide");
+  guide.type = "button";
+  guide.hidden = true;
+  guide.addEventListener("click", function () {
+    ctx.navigate("blocked-region");
+  });
   const noticeRow = el("div", "dash__notice-row");
-  noticeRow.append(notice, retry);
+  noticeRow.append(notice, retry, guide);
 
   root.append(actions, card, noticeRow);
   host.append(root);
@@ -201,6 +207,7 @@ function build(host) {
     rows: rows,
     notice: notice,
     retry: retry,
+    guide: guide,
   };
 }
 
@@ -428,6 +435,11 @@ export default {
       // Retry (same action as Refresh) only for a failed first status load
       // on a reachable daemon; the unreachable case is the shell's gate.
       ui.retry.hidden = !(snapshot.status === undefined && notice && snapshot.reachable === true);
+      // The region fix lives in the reusable guide: offer it beside the
+      // notice for the two bootstrap errors.
+      const message = (notice && notice.message) || "";
+      ui.guide.hidden = !(notice && notice.tone === "bad" &&
+        /HTTP 451|prepared pass|region/i.test(message));
     }
 
     function optionsPayload() {

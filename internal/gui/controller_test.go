@@ -52,6 +52,14 @@ type fakeDaemon struct {
 	relayErr       error
 	relayCalls     int
 
+	regionResult api.RegionCheckResult
+	regionErr    error
+	regionCalls  int
+
+	prepareResult api.PrepareResult
+	prepareErr    error
+	prepareCalls  int
+
 	settings      api.SettingsView
 	settingsErr   error
 	settingsCalls int
@@ -298,6 +306,24 @@ func (f *fakeDaemon) RelayTest(context.Context) (api.RelayTestResult, error) {
 	f.calls = append(f.calls, "relay_test")
 	f.relayCalls++
 	return f.relayResult, f.relayErr
+}
+
+// RegionCheck implements Daemon.
+func (f *fakeDaemon) RegionCheck(context.Context) (api.RegionCheckResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "region_check")
+	f.regionCalls++
+	return f.regionResult, f.regionErr
+}
+
+// Prepare implements Daemon.
+func (f *fakeDaemon) Prepare(context.Context) (api.PrepareResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "prepare")
+	f.prepareCalls++
+	return f.prepareResult, f.prepareErr
 }
 
 func (f *fakeDaemon) Ping(_ context.Context, hosts []string) (api.Result, error) {

@@ -579,9 +579,20 @@ function build(host, handlers) {
   testArea.append(testButton, testResult);
   testRow.append(testLabel, testArea);
 
+  const guideRow = el("div", "set__row");
+  guideRow.title = "Open the first-run guide: another VPN or the relay, then prepare and connect";
+  const guideLabel = el("span", "set__label", "Blocked region");
+  const guideArea = el("div", "set__control");
+  const guideButton = el("button", "button button--tonal set__apply", "Open guide");
+  guideButton.type = "button";
+  guideButton.setAttribute("aria-label", "Open the Blocked region guide");
+  guideButton.addEventListener("click", () => handlers.onOpenGuide());
+  guideArea.append(guideButton);
+  guideRow.append(guideLabel, guideArea);
+
   const regionSection = el("div", "set__section");
   regionSection.append(heading("Region"));
-  regionSection.append(regionRow, relayRow, tokenRow, testRow);
+  regionSection.append(guideRow, regionRow, relayRow, tokenRow, testRow);
 
   pane.append(appSection, serviceSection, regionSection);
 
@@ -1012,6 +1023,10 @@ export default {
         run("relay_test", {}).then(function (err) {
           if (err) console.warn("kumiho: settings relay_test refused: " + err);
         });
+      },
+
+      onOpenGuide() {
+        ctx.navigate("blocked-region");
       },
     };
 

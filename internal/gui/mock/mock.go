@@ -52,6 +52,9 @@ type Mock struct {
 
 	lastConnect api.ConnectPayload
 	haveConnect bool
+	// passExpires is set by Prepare so the handoff card and the dashboard
+	// show a live countdown; zero means no prepared pass.
+	passExpires int64
 
 	// browserStep is the fixture's current browser flow: "" when none exists,
 	// "browser" while waiting for the pasted redirect URL, "done" after a
@@ -203,7 +206,13 @@ func (m *Mock) Status(ctx context.Context) (api.Status, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.Status{}, err
 	}
-	return statusFor(m.currentScenario()), nil
+	st := statusFor(m.currentScenario())
+	m.mu.Lock()
+	if m.passExpires > 0 {
+		st.PassExpires = m.passExpires
+	}
+	m.mu.Unlock()
+	return st, nil
 }
 
 // Connect implements gui.Daemon. It records the payload and acknowledges; it
@@ -369,6 +378,54 @@ func (m *Mock) RelayTest(ctx context.Context) (api.RelayTestResult, error) {
 	}
 	ms := 42.0
 	return api.RelayTestResult{OK: true, Status: 200, LatencyMS: &ms}, nil
+}
+
+// RegionCheck implements gui.Daemon with a deterministic blocked fixture:
+// the VPN and account API hosts answer 451, the browser page is blocked, and
+// the relay is configured only after the harness saves URL and token.
+func (m *Mock) RegionCheck(ctx context.Context) (api.RegionCheckResult, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.RegionCheckResult{}, err
+	}
+	m.mu.Lock()
+	relay := m.settings.RelayURL != "" && m.settings.RelayTokenSet
+	m.mu.Unlock()
+	hosts := []api.RegionHostStatus{
+		{Host: "api.accounts.firefox.com", Status: api.RegionBlocked, Detail: "HTTP 451"},
+		{Host: "oauth.accounts.firefox.com", Status: api.RegionReachable, Detail: "HTTP 200"},
+		{Host: "profile.accounts.firefox.com", Status: api.RegionReachable, Detail: "HTTP 200"},
+		{Host: "vpn.mozilla.org", Status: api.RegionBlocked, Detail: "HTTP 451"},
+		{Host: "firefox.settings.services.mozilla.com", Status: api.RegionReachable, Detail: "HTTP 200"},
+		{Host: "accounts.firefox.com", Status: api.RegionBlocked, Detail: "HTTP 451"},
+	}
+	return api.RegionCheckResult{
+		Hosts:           hosts,
+		Blocked:         []string{"api.accounts.firefox.com", "vpn.mozilla.org", "accounts.firefox.com"},
+		BrowserBlocked:  true,
+		RelayConfigured: relay,
+	}, nil
+}
+
+// Prepare implements gui.Daemon: it sets a ten-minute pass and returns the
+// no-token result the guide's handoff card renders.
+func (m *Mock) Prepare(ctx context.Context) (api.PrepareResult, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.PrepareResult{}, err
+	}
+	expires := mockEpoch.Add(10 * time.Minute).Unix()
+	m.mu.Lock()
+	m.passExpires = expires
+	q := quota(quotaRemaining)
+	m.mu.Unlock()
+	return api.PrepareResult{
+		Email:               demoEmail,
+		ExpiresAt:           expires,
+		Quota:               q,
+		Locations:           94,
+		Servers:             412,
+		ServerListRefreshed: true,
+		ProfileRefreshed:    true,
+	}, nil
 }
 
 // Account implements gui.Daemon: the ScenarioError scenario reports a failed
