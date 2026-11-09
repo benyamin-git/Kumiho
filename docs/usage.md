@@ -15,6 +15,8 @@ app process. Its guide is [android.md](android.md).
     kumiho login                # browser or password Firefox Accounts sign-in
     kumiho login --browser      # print/open the URL, then paste the redirect URL
     kumiho login --password     # email → password → 2FA/TOTP code
+    kumiho guide                # the Blocked region first-run instructions
+    kumiho prepare [--json]     # server list + profile + one Guardian pass
     kumiho accounts             # list accounts and the active one
     kumiho accounts add [--browser|--password] [--account <id|email>] [--no-open]
     kumiho accounts use <id|email>
@@ -67,7 +69,9 @@ edge-451 limitation.
 
 `space` connect/disconnect, `o` locations, `s` settings, `a` account,
 `g` logs, `l` login, `r` refresh, `?` help overlay, `q` quit. Inside screens:
-arrows/`hjkl` move, `enter` select/change, `esc` back.
+arrows/`hjkl` move, `enter` select/change, `esc` back. Enter on the dashboard's
+blocked-region notice opens the guide; the dashboard also shows the prepared
+pass countdown when a pass is stored.
 
 - **Locations** — pinned **Fastest**, **Favorites**, **Recent** and the full
   flat server list. `P` pings every usable server and switches only the full
@@ -84,7 +88,8 @@ arrows/`hjkl` move, `enter` select/change, `esc` back.
   proxy, excluded CIDRs, allow-LAN, MTU, SOCKS port, quota poll, TLS split,
   HTTP proxy and its port, challenge solving, keepalive profile, and the
   Region block (`allow_locked`, `relay_url`, write-only `relay_token`, Test
-  relay). `d` resets a row to the config default; `*` marks values changed
+  relay, and the reusable Blocked region guide). `d` resets a row to the
+  config default; `*` marks values changed
   from `config.toml`.
   The row list keeps a viewport and scrolls in short terminals (`pgup`/
   `pgdown`, `home`/`end`).
@@ -272,18 +277,40 @@ For example, one of:
 
 Replace the placeholder credentials with your own.
 
-## Blocked regions and the relay
+## Blocked regions and the first run
 
-A control-plane HTTP 451 is terminal after one optional relay retry. Configure
-`relay_url` and, if the Worker requires it, the write-only `relay_token` in
-Settings → Region (or with `kumiho settings set`), then use **Test relay** /
-`kumiho relay test`. Without a relay the error tells you to set one; with a
-failed relay it names the failure. Normal traffic is never sent through the
-relay, and the browser sign-in page is opened directly.
+A region that answers HTTP 451 has two working paths. The guide leads with
+**Option 1** because it needs no server:
+
+1. Turn on another VPN.
+2. Sign in: `kumiho login`.
+3. Prepare once: `kumiho prepare`. This fetches the server list, the account
+   profile and a Guardian pass in that order. Only the pass is persisted, in
+   `pass.json` beside `tokens.json` with mode 0600; the token is never printed
+   or sent over IPC.
+4. When prepare reports the expiry, turn the other VPN off.
+5. Connect: `kumiho connect`. While the tunnel is up, every Mozilla
+   control-plane request dials through Kumiho's own SOCKS5 listener first and
+   falls back to the relay only after a 451. Renewal at about five minutes
+   keeps the session alive, so the other VPN is needed again only if Kumiho
+   stays off past the pass lifetime (about ten minutes).
+
+`kumiho guide` prints the same steps, and Enter on the TUI's region notice or
+Settings → Region → Blocked region opens the interactive version.
+
+**Option 2** is the user-operated relay, useful for password sign-in when no
+other VPN is available. Set `relay_url` and, if the Worker requires it, the
+write-only `relay_token` under Settings → Region (or with
+`kumiho settings set`), then use **Test relay** / `kumiho relay test`. Without
+a relay the error tells you to configure one; with a failed relay it names the
+failure. The relay carries only blocked Mozilla control-plane requests, never
+VPN traffic, and it does not proxy `accounts.firefox.com`: browser sign-in
+still needs another VPN or another device. Deployment, the Worker allowlist,
+token header and trust boundary are in [relay.md](relay.md).
 
 An edge 451 is different: the VPN data path still comes from your network, so
-changing the relay cannot help. The full deployment guide, Worker allowlist,
-token header and trust boundary are in [relay.md](relay.md).
+neither another-VPN preparation nor the relay can help. Connect from a
+supported region.
 
 ## DNS over SOCKS5 UDP
 

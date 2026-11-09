@@ -187,6 +187,19 @@ them locally for any change under `android/`, `mobile/` or
   before-connect quota rotation and the connected quota poller; it never
   rotates mid-session. `logout` best-effort destroys every stored FxA refresh
   token, then always clears local state.
+- **v0.11.0 blocked-region first run**: `internal/engine/passfile.go` owns
+  `pass.json` beside `tokens.json` (0600, atomic, account-bound, ten-minute
+  TTL), cached-pass reuse while more than 60 seconds remain, startup cleanup,
+  and deletion on logout/account switch. `internal/engine/region.go` owns
+  `region_check` (six unauthenticated probes, 5 s each/20 s total) and
+  `prepare` (server list → profile → pass, only the pass persisted).
+  `internal/engine/connect.go` dials the control plane through the local
+  SOCKS5 listener while a session is connected, direct otherwise, then retries
+  once through the relay on HTTP 451; a failed connect after a prepared pass
+  reports `bootstrap_required`. The reusable **Blocked region** guide is a TUI
+  modal, a GUI `#/blocked-region` route, and an Android app-scoped overlay
+  shared by phone and TV; `kumiho prepare [--json]` and `kumiho guide` are
+  additive CLI commands. Protocol v1 stays byte-compatible.
 - **v0.9.0 region truth**: `internal/relay` is an `http.RoundTripper` that
   sends a control-plane request through the user's Worker only after HTTP 451,
   with exactly one retry, the five-host allowlist and
@@ -262,7 +275,10 @@ them locally for any change under `android/`, `mobile/` or
   Settings has 25 catalog rows (23 engine rows, 22 writes plus the Test relay
   action, and 2 Android-owned read-only rows); the Region group owns
   `allow_locked`, `relay_url`, the write-only `relay_token` and `relay_test`,
-  and Favorites/Recent/Fastest/locked are shared engine state rendered by
+  and a **Blocked region** guide action outside the catalog. The app-scoped
+  `GuideController`/`AppContainer.guide` overlay is shared by phone and TV and
+  is opened from setup consent, Settings → Region and the dashboard notice.
+  Favorites/Recent/Fastest/locked are shared engine state rendered by
   `LocationTree.sections`.
   `res/xml/network_security_config.xml` permits cleartext only for
   `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android

@@ -271,6 +271,23 @@ Global CLI mechanics (apply to every subcommand):
 - The keys are the TUI setting rows (including the Region rows) plus the
   read-only `relay_token_set`; `relay_token` is accepted on `set`/`reset`.
 
+## `kumiho prepare [--json]`
+- Daemon required. Sends a `prepare` request; the engine fetches the server
+  list, the account profile and a Guardian pass in that order. Only the pass
+  is persisted (`pass.json` beside `tokens.json`, mode 0600, account-bound);
+  the token never crosses IPC or appears in any output.
+- Success: `Prepared.` with the email, expiry, location/server counts and
+  `kumiho connect`; `--json` prints `api.PrepareResult` (indent 2), which also
+  has no token. Exit 0.
+- Refusals: connected → `Disconnect first, then prepare.`; signed out →
+  `Sign in first, then prepare.`; both exit 1. Extra arguments exit 2.
+
+## `kumiho guide`
+- Standalone (no daemon): prints the Blocked region instructions to stdout:
+  Option 1 (another VPN: sign in, prepare, turn it off, connect), Option 2
+  (the relay, URL/token/Test), the browser sign-in boundary and the six hosts.
+- Exit 0. Any argument is rejected with exit 2.
+
 ## `kumiho relay test`
 - Daemon required. Sends a `relay_test` request; the engine performs one
   direct request through the configured relay to the server-list head
@@ -480,6 +497,7 @@ line shown under the list for the focused row, verbatim):
 | `relay_url` | relay URL | inline text edit | HTTPS origin; empty = none | HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page |
 | `relay_token` | relay token | masked inline edit, empty cancels | any non-empty token; `d` deletes it | write-only secret used only after HTTP 451; does not proxy the browser sign-in page |
 | `relay_test` | test relay | action (`enter`/`space`) | — | send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page |
+| — | blocked region | action (`enter`/`space`) | — | open the reusable first-run guide (another VPN or relay, prepare, connect) |
 
 Display specials: empty `dns_upstream` → `(provider default)`, empty
 `edge_address` → `(resolve)`, empty `upstream_proxy` → `(direct)`, empty
@@ -596,8 +614,8 @@ Keys (idle):
 ## Help overlay (`?`)
 Full-screen replacement listing:
 - `global       ? help • q / ctrl+c quit`
-- `dashboard    space connect/disconnect • l login • o locations • s settings
-  • a account • g logs • r refresh`
+- `dashboard    space connect/disconnect • enter blocked-region guide • l login
+  • o locations • s settings • a account • g logs • r refresh`
 - `locations    arrows/hjkl move • enter select/Fastest • f favorite • c clear
   recents • L show/hide locked • P ping all • / filter • r refresh • esc back`
 - `settings     arrows move • enter change/test relay • d reset/clear • r

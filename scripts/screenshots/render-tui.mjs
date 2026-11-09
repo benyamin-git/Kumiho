@@ -6,8 +6,8 @@
 //
 // The ANSI is the real Bubble Tea view (see internal/tui/capture_test.go);
 // this script only draws a terminal frame around it and converts the SGR
-// colour codes to spans. Playwright is resolved through npx, the same cache
-// scripts/visual/README.md documents.
+// colour codes to spans. Playwright is resolved through npx, pinned to the
+// version scripts/visual/README.md documents, so the cached browser matches.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -32,6 +32,7 @@ const SCREENS = [
   { name: "dashboard", title: "kumiho — TUI" },
   { name: "locations", title: "kumiho — TUI" },
   { name: "settings", title: "kumiho — TUI" },
+  { name: "region", title: "kumiho — TUI" },
 ];
 
 // The TUI's dark theme emits ANSI 208/42/214/203/244. Map those to the house
@@ -208,7 +209,7 @@ for (const screen of SCREENS) {
     "npx",
     [
       "-y",
-      "playwright",
+      "playwright@1.64.1",
       "screenshot",
       "--full-page",
       "--viewport-size=1800,600",

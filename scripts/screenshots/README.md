@@ -1,6 +1,6 @@
 # README screenshots
 
-`capture.sh` regenerates the six desktop images under `screenshots/`:
+`capture.sh` regenerates the eight desktop images under `screenshots/`:
 
 - `screenshots/windows-gui/` — the real GUI assets served by the Windows
   WebView2 shell, captured in the Linux dev harness at 1280×800 in the Dark
@@ -14,7 +14,7 @@ Run from the repository root:
 
     scripts/screenshots/capture.sh
 
-The script rebuilds the web harness with the v0.9.0 UI target label (override
+The script rebuilds the web harness with the v0.11.0 UI target label (override
 with `KUMIHO_CAPTURE_VERSION`), starts it on `0.0.0.0:7407`, and restarts it
 before each screen so a notice from one state cannot leak into the next. It
 stops the harness when done. The label is a screenshot target, not an app
@@ -47,17 +47,18 @@ The GUI images come from the existing visual-review manifest:
 | `windows-gui/dashboard.png` | `dashboard/dark-connected.png` |
 | `windows-gui/locations.png` | `locations/dark-speed-order.png` |
 | `windows-gui/settings.png` | `settings/dark-settings-region.png` |
+| `windows-gui/blocked-region.png` | `blocked-region/dark-prepared.png` |
 
 The TUI side runs the normal test package with `KUMIHO_TUI_CAPTURE_DIR` set,
-which makes `TestCaptureViews` write raw ANSI for the dashboard, locations and
-settings views. `render-tui.mjs` converts the SGR colour codes to styled spans,
+which makes `TestCaptureViews` write raw ANSI for the dashboard, locations,
+settings and Blocked region guide views. `render-tui.mjs` converts the SGR colour codes to styled spans,
 draws the terminal frame, and asks Playwright for a full-page PNG. It maps the
 TUI's ANSI accents (42, 203, 208, 214, 244) to the house palette so the
 terminal and GUI captures sit together. The TUI sample data is fixed and uses
 the reserved `example.com` domain, `user@example.com` and TEST-NET-3 addresses.
 
 The full visual-review output stays under `/tmp/opencode/captures` and is not
-committed; this script copies only the six selected desktop images into
+committed; this script copies only the eight selected desktop images into
 `screenshots/`.
 
 ## Android captures

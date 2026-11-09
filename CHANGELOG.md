@@ -8,6 +8,54 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-09
+
+Blocked-region first run: sign in, prepare once, connect, and let Kumiho renew
+its own control-plane access through the tunnel it just opened. Every client
+gets the same reusable **Blocked region** guide.
+
+### Added
+
+- **A first run that survives HTTP 451.** The engine now classifies the five
+  Mozilla control-plane hosts plus `accounts.firefox.com` without credentials
+  (`region_check`). The guide leads with the recommended path — turn on another
+  VPN, sign in, run **Prepare**, turn the other VPN off, connect — and keeps
+  the Cloudflare relay as the fallback for password sign-in. Browser sign-in
+  still needs another VPN or another device; the relay does not proxy the
+  browser page.
+- **`kumiho prepare`** fetches the server list, the account profile and a
+  Guardian pass in one handoff and persists only the pass
+  (`pass.json` beside `tokens.json`, mode 0600, account-bound). `--json`
+  prints the same result without the token. `kumiho guide` prints the guide
+  text. Prepare refuses while connected and tells the user to disconnect
+  first.
+- **A reusable Blocked region guide in all five clients.** The TUI opens it
+  with Enter on the region notice or Settings → Region; the Windows GUI has a
+  `#/blocked-region` screen opened by the onboarding consent preflight,
+  Settings → Region and the dashboard notice; Android phone and TV share an
+  in-app guide from setup, Settings → Region and the dashboard notice. The
+  guide shows the six host results, the prepared-pass countdown that survives
+  a restart, the other-VPN steps first, and the relay URL/token/Test controls
+  second.
+- **Tunnel-first control plane after connect.** While a live session exists,
+  every control-plane request dials through Kumiho's own SOCKS5 listener, then
+  falls back to the relay only after HTTP 451. Disconnected requests still go
+  direct (then the relay), so a redial can fetch a fresh pass.
+- **Cached passes cover reconnects and restarts.** Connect and redial reuse a
+  prepared pass while more than 60 seconds remain instead of fetching a new
+  one. Every successfully fetched pass is persisted, so an app restart inside
+  the pass lifetime can connect again.
+- **Doctor names the blocked hosts.** `kumiho doctor` probes the six hosts and
+  reports HTTP 451 as a warning with the guide as remediation instead of
+  failing with an opaque edge error.
+
+### Changed
+
+- A failed connect after a prepared pass now reports `bootstrap_required` with
+  the guide's name; a user who never prepared keeps `region_blocked`.
+- The setup wizard's step count is unchanged. The guide is a separate screen
+  reached from the consent preflight, not a fifth step.
+
 ## [0.10.3] - 2026-11-09
 
 ### Fixed

@@ -6,7 +6,7 @@
 # port) and is restarted before each screen so no notice leaks between
 # captures. The script stops it when done.
 #
-# The GUI binary is rebuilt with the v0.9.0 UI target label (override with
+# The GUI binary is rebuilt with the v0.11.0 UI target label (override with
 # KUMIHO_CAPTURE_VERSION) so the Settings screenshot shows the release label,
 # not the git-describe development label. This does not bump the app version.
 #
@@ -21,7 +21,7 @@ cd "$repo"
 
 captures="${KUMIHO_CAPTURES_DIR:-/tmp/opencode/captures}"
 tui_tmp="${KUMIHO_TUI_CAPTURE_DIR:-/tmp/opencode/kumiho-tui-capture}"
-version="${KUMIHO_CAPTURE_VERSION:-v0.9.0}"
+version="${KUMIHO_CAPTURE_VERSION:-v0.11.0}"
 commit="$(git rev-parse --short HEAD)"
 date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -49,7 +49,7 @@ go build -trimpath \
   -ldflags "-s -w -X github.com/benyamin-git/kumiho/internal/version.Version=$version -X github.com/benyamin-git/kumiho/internal/version.Commit=$commit -X github.com/benyamin-git/kumiho/internal/version.Date=$date" \
   -o dist/kumiho-gui-web-linux-amd64 ./cmd/kumiho-gui-web
 
-for screen in dashboard locations settings; do
+for screen in dashboard locations settings blocked-region; do
   echo "capturing the $screen screen"
   "$repo/scripts/dev-gui-web.sh" start >/dev/null
   node "$repo/scripts/visual/capture.mjs" --only "$screen"
@@ -58,6 +58,7 @@ done
 cp "$captures/dashboard/dark-connected.png" "$repo/screenshots/windows-gui/dashboard.png"
 cp "$captures/locations/dark-speed-order.png" "$repo/screenshots/windows-gui/locations.png"
 cp "$captures/settings/dark-settings-region.png" "$repo/screenshots/windows-gui/settings.png"
+cp "$captures/blocked-region/dark-prepared.png" "$repo/screenshots/windows-gui/blocked-region.png"
 
 echo "capturing the TUI views"
 KUMIHO_TUI_CAPTURE_DIR="$tui_tmp" go test ./internal/tui -run TestCaptureViews -count=1
@@ -67,9 +68,11 @@ for file in \
   "$repo/screenshots/windows-gui/dashboard.png" \
   "$repo/screenshots/windows-gui/locations.png" \
   "$repo/screenshots/windows-gui/settings.png" \
+  "$repo/screenshots/windows-gui/blocked-region.png" \
   "$repo/screenshots/linux-tui/dashboard.png" \
   "$repo/screenshots/linux-tui/locations.png" \
-  "$repo/screenshots/linux-tui/settings.png"; do
+  "$repo/screenshots/linux-tui/settings.png" \
+  "$repo/screenshots/linux-tui/region.png"; do
   [[ -s "$file" ]] || { echo "missing capture: $file" >&2; exit 1; }
   printf '  %s (%s bytes)\n' "${file#"$repo/"}" "$(stat -c %s "$file")"
 done

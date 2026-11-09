@@ -112,8 +112,11 @@ disabled **Continue** so it is always visible.
    tunnel goes to a Kumiho proxy server), what stays on the phone (tokens,
    settings, server list and logs in private storage; no telemetry) and the
    local-proxy warning. Tick *I understand what Kumiho routes…* to enable
-   **Continue**. The tick is not persisted; quitting before finishing starts
-   the wizard here again.
+   **Continue**. Continue runs a silent six-host region preflight; a blocked
+   network opens the **Blocked region** guide before or immediately after the
+   sign-in step. The guide is not a numbered step, so the wizard still has
+   four. The tick is not persisted; quitting before finishing starts the
+   wizard here again.
 2. **Sign in.** Choose **Continue in browser** (the default) or **Use
    password**. Browser sign-in opens a full-screen in-app **Mozilla account**
    page; complete captcha, password, TOTP or unblock there. Mozilla then
@@ -292,8 +295,10 @@ Settings has five groups: **Kumiho app**, **Connection**, **Region**,
 desktop engine's settings, one row per key, plus two Android-owned read-only
 rows and the Region **Test relay** action; there are **25 catalog rows** (23
 engine rows, of which 22 write a setting, and the 2 Android-owned
-Always-on/lockdown rows). The Kumiho app group also has the Split tunneling
-shortcut and the app-owned Keep connections outside the tunnel setting.
+Always-on/lockdown rows). The Region group also links to the **Blocked
+region** guide; that link is a screen action, not a catalog row. The Kumiho
+app group also has the Split tunneling shortcut and the app-owned Keep
+connections outside the tunnel setting.
 
 ### Kumiho app
 
@@ -334,14 +339,25 @@ shortcut and the app-owned Keep connections outside the tunnel setting.
 `10.8.0.1` always stays inside the tunnel, even when one of those ranges or a
 user exclusion would otherwise cover it.
 
-### Region (3 settings + 1 action)
+### Region (3 settings + 2 actions)
 
 | Row | Values | Default | Applies |
 |---|---|---|---|
+| Blocked region | action: opens the reusable guide | — | on tap |
 | `allow_locked` | on/off | off | immediately; next Locations read |
 | `relay_url` | HTTPS origin, empty = none | empty | immediately |
 | `relay_token` | write-only secret | not set | immediately |
 | `relay_test` | action, not a setting | — | on tap |
+
+**Blocked region** is the same screen the first run opens. It lists the six
+host results, leads with Option 1 (another VPN: sign in, **Prepare**, turn the
+other VPN off, **Connect**) and keeps the relay as Option 2 with inline URL,
+token and **Test relay** controls. **Prepare** fetches the server list, the
+profile and a Guardian pass; the pass is stored in `pass.json` beside
+`tokens.json` in the app-private no-backup state (0600, account-bound), and
+the handoff card counts it down. The pass lasts about ten minutes and survives
+an app restart inside that window. After connect, Kumiho renews through its
+own tunnel, so the other VPN is needed again only after ten minutes off.
 
 `allow_locked` reveals servers the server-list version filter marks locked;
 the same footer action also lives at the bottom of Locations. `relay_url` must

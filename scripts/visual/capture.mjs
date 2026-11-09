@@ -76,6 +76,7 @@ const SCREENS = [
   { name: "account", hash: "#/account" },
   { name: "logs", hash: "#/logs" },
   { name: "diagnostics", hash: "#/diagnostics", wait: ".diag__check" },
+  { name: "blocked-region", hash: "#/blocked-region" },
   { name: "onboarding", hash: "#/onboarding" },
 ];
 
@@ -389,6 +390,17 @@ const STATES = [
     screen: "settings",
     theme: "dark",
     scrollInto: ".set__section:last-child",
+  },
+  {
+    // The v0.11.0 Blocked region guide with a live prepared-pass handoff.
+    // The mock's region_check is blocked and Prepare sets a ten-minute pass,
+    // so the README capture shows the countdown and Connect.
+    name: "prepared",
+    screen: "blocked-region",
+    theme: "dark",
+    waitFor: ".region__host",
+    action: { name: "prepare" },
+    waitAfter: ".region__handoff:not([hidden])",
   },
   {
     // The settings rows pane scrolled to its bottom (T0.4): the five v0.4.0

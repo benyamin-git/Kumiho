@@ -103,30 +103,47 @@ It is best effort, off by default, and applies on the next connect.
 ## Mozilla answers HTTP 451
 
 Kumiho classifies a 451 as `region_blocked` and distinguishes the control
-plane from the VPN edge:
+plane from the VPN edge.
+
+**Start with the guide.** On a blocked network the first run opens **Blocked
+region** (CLI/TUI: Enter on the notice or Settings → Region; GUI: the same
+screen; Android phone/TV: setup, Settings → Region or the dashboard notice).
+It lists the six host results and leads with Option 1:
+
+1. Turn on another VPN (or use the relay).
+2. Sign in.
+3. Run `kumiho prepare` (or **Prepare**). It fetches the server list, the
+   profile and a Guardian pass; only the pass is persisted, in `pass.json`
+   beside `tokens.json` (0600, account-bound).
+4. Turn the other VPN off when the pass is reported ready.
+5. Connect. Kumiho renews through its own tunnel.
+
+A prepared pass lasts about ten minutes. Connect and redial reuse it while
+more than 60 seconds remain; a restart inside that window can connect again.
+After ten minutes off, repeat the guide.
 
 - **Control plane** (accounts, profile, Remote Settings, the server list) —
-  Kumiho tries the direct path once. If it is blocked and a relay is
-  configured, it retries exactly once through the relay; if that also fails,
-  the error is
-  `Mozilla returned HTTP 451 and the configured relay failed: <detail>. Check
-  the relay URL and token in Settings → Region.` With no relay the error is
+  while connected, requests dial through Kumiho's SOCKS5 listener first; if a
+  request still answers 451 and a relay is configured, Kumiho retries it
+  exactly once through the relay. A user who prepared before but can no longer
+  fetch a pass gets `bootstrap_required` (open the guide); a first-time blocked
+  user gets `region_blocked`. With no relay and no other VPN, the error is
   `This region is blocking Mozilla's servers (HTTP 451). Set a control-plane
   relay in Settings → Region, or deploy the relay from docs/relay.md, then
-  retry.` There is no stale-cache fallback for this failure.
+  retry.`
 - **VPN edge** — the tunnel still originates from your network, so the error
   is `The VPN edge refused this region (HTTP 451). A control-plane relay
   cannot fix the VPN data path; connect from a supported region.` The
   watchdog parks the session instead of redialing.
 
-For the control plane, set **Settings → Region → Control-plane relay** to the
+For the relay path, set **Settings → Region → Control-plane relay** to the
 Worker HTTPS origin and the write-only token, then use **Test relay** or
 `kumiho relay test`. `Relay rejected the token` means the Worker's
 `RELAY_TOKEN` and the stored token differ; `relay_url is not set` means the URL
 is empty; `Relay unreachable: <detail>` is DNS, TLS, Worker or upstream. The
-relay does not proxy `accounts.firefox.com`, so browser sign-in still opens
-directly. Deployment, allowlist and trust boundaries are in
-[relay.md](relay.md).
+relay does not proxy `accounts.firefox.com`, so browser sign-in still needs
+another VPN or another device. Deployment, allowlist and trust boundaries are
+in [relay.md](relay.md).
 
 ## Fastest is disabled or Ping all finds nothing
 

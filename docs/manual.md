@@ -103,6 +103,22 @@ DNS stays encrypted. There is no plaintext fallback: if every encrypted
 resolver fails, names stop resolving rather than leak. The technical detail
 is in [usage.md](usage.md).
 
+## New in v0.11.0: the blocked-region first run
+
+If Mozilla blocks sign-in or the server list with HTTP 451, Kumiho now opens a
+**Blocked region** guide in every client. The recommended path is another VPN:
+
+1. Turn on another VPN.
+2. Sign in.
+3. Choose **Prepare** (or run `kumiho prepare`). Kumiho fetches the server
+   list, your profile and a ten-minute Guardian pass; only the pass is stored.
+4. Turn the other VPN off when the pass is ready.
+5. Connect. Kumiho renews through its own tunnel.
+
+The relay remains the fallback. Browser sign-in still needs another VPN or
+another device because the relay does not proxy the browser page. Full steps:
+[usage.md](usage.md#blocked-regions-and-the-first-run).
+
 ## New settings in v0.9.0
 
 These are also under settings (`s`), in the **Region** group, and in the GUI
@@ -134,6 +150,8 @@ The full steps and the free Cloudflare Worker template are in
     kumiho locations --favorites
     kumiho locations --recent
     kumiho relay test     # check the optional relay
+    kumiho prepare        # server list + profile + one Guardian pass
+    kumiho guide          # the Blocked region instructions
     kumiho logs -f        # watch what the app is doing (ctrl+c stops)
 
 `kumiho locations --ping` waits until every probe has finished; a timeout can

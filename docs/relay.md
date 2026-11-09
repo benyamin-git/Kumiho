@@ -25,6 +25,22 @@ The browser sign-in page at `accounts.firefox.com` is also deliberately not
 proxied. Kumiho opens it directly; the relay handles only the engine's HTTP
 requests after the browser hands back the redirect URL.
 
+## Relay vs. another VPN
+
+The relay is the guide's **Option 2**. The recommended first run is **Option
+1**: turn on another VPN, sign in, run `kumiho prepare` (or choose **Prepare**
+in any client), turn the other VPN off, and connect. Prepare stores a
+ten-minute pass, and after connect Kumiho renews its own control-plane
+requests through the tunnel; the relay is then needed only when a request
+still answers 451.
+
+Because the relay does not proxy the browser page, a blocked region cannot
+complete browser sign-in through the relay alone. Password sign-in uses the
+relay for its API calls and works; browser sign-in still needs another VPN or
+another device. The full first-run steps are in
+[usage.md](usage.md#blocked-regions-and-the-first-run) and
+[troubleshooting.md](troubleshooting.md#mozilla-answers-http-451).
+
 ## Deploy the Worker
 
 The template has no npm dependencies. From `contrib/relay-worker/`:

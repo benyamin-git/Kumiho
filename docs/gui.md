@@ -73,7 +73,9 @@ the screens. The rail and header are hidden while it runs. Its steps are:
 
 1. **Welcome to Kumiho** — the consent gate. Read the two panels (*What
    Kumiho does* and *What to keep in mind*), then tick **I understand** to
-   unlock **Continue**. The tick itself is not persisted: if you quit before
+   unlock **Continue**. Continue first probes Mozilla's control-plane hosts;
+   if this network answers HTTP 451, the reusable **Blocked region** screen
+   opens before sign-in. The tick itself is not persisted: if you quit before
    finishing, the wizard starts at this step again next launch.
 2. **Sign in** — sign in with the Firefox account that holds the VPN. The
    first page offers **Continue in browser** (the default) or **Use
@@ -246,6 +248,7 @@ row returns to the admin `config.toml` (or built-in) default. The rows are:
 | Solve challenges | on/off; answers the Firefox Accounts and edge challenges automatically; applies immediately |
 | Keepalive profile | `standard`, `slow`; keepalive ping timeout profile; next connect |
 | Allow locked locations | on/off; reveals the server-list records marked locked; applies immediately |
+| Blocked region | opens the reusable guide: another VPN or the relay, then Prepare and Connect |
 | Control-plane relay | HTTPS origin used only after HTTP 451; empty = none; applies immediately |
 | Relay token | write-only shared secret; **Set** opens a masked field, **Clear** deletes the stored `relay.token`; never displays its value |
 | Test relay | one-shot probe; shows `Relay OK — N ms`, `Relay rejected the token`, `relay_url is not set` or `Relay unreachable: <detail>`; never writes a setting |
@@ -255,6 +258,13 @@ does not proxy the browser sign-in page. A relay URL must be an HTTPS origin
 with no path, query, fragment or userinfo. The token file is `relay.token`
 beside `tokens.json` (mode 0600) and the GUI only ever receives
 `relay_token_set`.
+
+**Blocked region** opens the guide described in [usage.md](usage.md#blocked-regions-and-the-first-run):
+the six host results, Option 1 (another VPN) first, Option 2 (relay) second,
+a **Prepare** action, and a live pass countdown with **Connect**. The guide is
+also reached from the dashboard notice after a region error and from the
+setup consent preflight. It is a route (`#/blocked-region`) outside the
+numbered wizard, so the wizard still has five steps.
 
 A status line under the rows reports the last change, including `Applying...`
 while a change is in flight. Only one change runs at a time.

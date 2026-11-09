@@ -43,6 +43,8 @@ Captured in the Dark theme with sample data.
 
 ![Windows GUI settings: the Region relay controls and the background service rows](screenshots/windows-gui/settings.png)
 
+![Windows GUI Blocked region guide: host results, Option 1 another VPN, Option 2 relay and a prepared-pass countdown](screenshots/windows-gui/blocked-region.png)
+
 ### Linux TUI
 
 | Dashboard | Locations |
@@ -50,6 +52,8 @@ Captured in the Dark theme with sample data.
 | ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: Fastest, Favorites and Recent sections above flagged rows, a locked badge and ping times](screenshots/linux-tui/locations.png) |
 
 ![Linux TUI settings: the Region relay rows with their region-only hint](screenshots/linux-tui/settings.png)
+
+![Linux TUI Blocked region guide: host results, the other-VPN steps and a prepared-pass countdown](screenshots/linux-tui/region.png)
 
 ### Android phone
 
@@ -63,15 +67,20 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.10.3
+## What's new in v0.11.0
 
-- **A challenged password sign-in continues in the browser** — when Mozilla's
-  edge rejects the native password API with an anti-bot challenge, Kumiho
-  starts the existing browser flow for the same account instead of stopping on
-  an error. Normal wrong-password errors stay on the form.
+- **A blocked region no longer dead-ends the first run** — sign in through
+  another VPN (or the relay), run `kumiho prepare` once, turn the other VPN
+  off, and connect. Kumiho renews its own control-plane requests through the
+  tunnel. The same **Blocked region** guide is in the CLI/TUI, Windows GUI,
+  Android phone and Android TV.
+- **Prepare is one command** — `kumiho prepare` fetches the server list, your
+  profile and a Guardian pass, persists only the pass (0600), and reports the
+  handoff without ever printing the token. `kumiho guide` prints the same
+  instructions.
 
-v0.10.2 fixed access-token refresh through Mozilla's OAuth form endpoint; see
-the [changelog](CHANGELOG.md) for details.
+v0.10.3 made a challenged password sign-in continue in the browser; see the
+[changelog](CHANGELOG.md) for details.
 
 ## Install
 
@@ -130,9 +139,10 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 - **Mozilla's edge challenge handled** — solves the Fastly challenge and
   retries a blocked auth host; if the challenge still blocks the password
   API, the same sign-in continues in the browser instead of dead-ending.
-- **Blocked-region control plane** — HTTP 451 is reported honestly, with one
-  optional retry through a user-operated relay, a Worker template, and a Test
-  relay action. The relay never carries VPN traffic or the browser sign-in
+- **Blocked-region first run** — HTTP 451 is reported honestly, with a reusable
+  **Blocked region** guide that signs in through another VPN, prepares a pass
+  once, and then renews through Kumiho's own tunnel. The user-operated relay
+  remains the fallback and never carries VPN traffic or the browser sign-in
   page. See [the relay guide](docs/relay.md).
 - **Real system tunnel** — TUN on Linux, Wintun on Windows and `VpnService` on
   Android; optional kill switch, split tunneling on Android, and a local SOCKS5

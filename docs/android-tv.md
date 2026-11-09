@@ -51,7 +51,9 @@ rejects it.
 
 ## First run
 
-1. Accept the consent step.
+1. Accept the consent step. Continue runs the six-host region preflight; a
+   blocked network opens the same **Blocked region** guide as the phone (a
+   separate screen, not a fifth step).
 2. Sign in with Firefox Accounts. **Continue in browser** opens the in-app
    WebView; the HTTPS Firefox Accounts success redirect is intercepted and
    returns to the app. If the WebView cannot start, use **Paste redirect URL
@@ -106,10 +108,13 @@ colour: rows scale and gain a border when focused.
   focus stays on the list after a search or a speed-order switch. The speed
   order applies only to the full list when the engine emits `ping_done`; there
   is no timer.
-- Settings includes **Region**: `allow_locked`, the HTTPS `relay_url`, a
+- Settings includes **Region**: a **Blocked region** guide action, then
+  `allow_locked`, the HTTPS `relay_url`, a
   write-only `relay_token` with Set/Clear, and a **Test relay** action with
   its inline result. Region help text states that the relay is used only
-  after HTTP 451 and does not proxy the browser sign-in page.
+  after HTTP 451 and does not proxy the browser sign-in page. The guide is
+  fully D-pad reachable: another VPN and Prepare first, relay URL/token/Test
+  second, and the prepared-pass countdown with Connect.
 - Proxy-only mode remains available but needs a local client; a TV usually
   has none, so the normal use is a full tunnel.
 - IPv6 is blackholed, non-DNS UDP is blocked, and DNS runs as DoH inside the
