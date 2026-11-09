@@ -8,6 +8,7 @@ import dev.benyamin.kumiho.data.InstalledAppsRepository
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
+import dev.benyamin.kumiho.ui.guide.GuideController
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.BypassSettingsProvider
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
@@ -30,6 +31,9 @@ class AppContainer(context: Context) {
 
     /** The app preferences DataStore. */
     val appPrefs = AppPrefs(appContext)
+
+    /** The shared Blocked region guide visibility (v0.11.0). */
+    val guide = GuideController()
 
     /** The theme pipeline: stored choice, Go palette, cache. */
     val themeRepository = ThemeRepository(

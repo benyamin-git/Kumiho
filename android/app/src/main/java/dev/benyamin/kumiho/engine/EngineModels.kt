@@ -125,6 +125,39 @@ data class RelayTest(
     val error: String?,
 )
 
+/** One Mozilla control-plane host probe (`api.RegionHostStatus`). */
+data class RegionHost(
+    val host: String,
+    val status: String,
+    val detail: String?,
+)
+
+/**
+ * The blocked-region preflight (`api.RegionCheckResult`). [blocked] lists the
+ * hosts that answered HTTP 451; [browserBlocked] is the sign-in page. A guide
+ * is required when either is set.
+ */
+data class RegionCheck(
+    val hosts: List<RegionHost>,
+    val blocked: List<String>,
+    val browserBlocked: Boolean,
+    val relayConfigured: Boolean,
+) {
+    val needsGuide: Boolean get() = blocked.isNotEmpty() || browserBlocked
+}
+
+/** The reply to prepare (`api.PrepareResult`); it never carries the pass token. */
+data class PrepareResult(
+    val email: String?,
+    val expiresAt: Long,
+    val quota: Quota?,
+    val locations: Int,
+    val servers: Int,
+    val serverListRefreshed: Boolean,
+    val profileRefreshed: Boolean,
+    val relayUsed: Boolean,
+)
+
 /**
  * The location tree (`serverlist.Country`/`City`/`Server`). `REC` arrives as a
  * normal country whose code is `rec`; the UI decides how to present it.

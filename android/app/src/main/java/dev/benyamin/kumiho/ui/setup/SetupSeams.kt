@@ -7,6 +7,7 @@ import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineClient
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.engine.RegionCheck
 import dev.benyamin.kumiho.permissions.PermissionController
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 
@@ -38,6 +39,9 @@ interface SetupEngine {
     suspend fun accountsList(): Accounts
 
     suspend fun refreshStatus(): EngineStatus
+
+    /** The no-credentials blocked-region preflight (v0.11.0). */
+    suspend fun regionCheck(): RegionCheck
 }
 
 /** The production [SetupEngine]: a thin adapter over [EngineClient]. */
@@ -61,6 +65,8 @@ class EngineSetupEngine(private val client: EngineClient) : SetupEngine {
     override suspend fun accountsList(): Accounts = client.accountsList()
 
     override suspend fun refreshStatus(): EngineStatus = client.refreshStatus()
+
+    override suspend fun regionCheck(): RegionCheck = client.regionCheck()
 }
 
 /**

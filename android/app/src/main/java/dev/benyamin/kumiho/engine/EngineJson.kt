@@ -251,6 +251,34 @@ object EngineJson {
         error = string(fields, "error"),
     )
 
+    fun regionCheck(json: String): RegionCheck = regionCheck(parseObject(json, "region check"))
+
+    fun regionCheck(fields: JSONObject): RegionCheck = RegionCheck(
+        hosts = objectsIn(arrayOrNull(fields, "hosts")).map(::regionHost),
+        blocked = stringList(fields, "blocked"),
+        browserBlocked = boolean(fields, "browser_blocked"),
+        relayConfigured = boolean(fields, "relay_configured"),
+    )
+
+    private fun regionHost(fields: JSONObject): RegionHost = RegionHost(
+        host = stringOrEmpty(fields, "host"),
+        status = stringOrEmpty(fields, "status"),
+        detail = string(fields, "detail"),
+    )
+
+    fun prepare(json: String): PrepareResult = prepare(parseObject(json, "prepare"))
+
+    fun prepare(fields: JSONObject): PrepareResult = PrepareResult(
+        email = string(fields, "email"),
+        expiresAt = longOrNull(fields, "expires_at") ?: 0L,
+        quota = quotaOrNull(fields),
+        locations = int(fields, "locations"),
+        servers = int(fields, "servers"),
+        serverListRefreshed = boolean(fields, "server_list_refreshed"),
+        profileRefreshed = boolean(fields, "profile_refreshed"),
+        relayUsed = boolean(fields, "relay_used"),
+    )
+
     private fun cachedLatency(fields: JSONObject?): Map<String, CachedPing> {
         if (fields == null) return emptyMap()
         val out = LinkedHashMap<String, CachedPing>()

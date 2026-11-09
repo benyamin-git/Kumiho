@@ -239,6 +239,7 @@
     <string name="dashboard_notice_retry">Retry</string>
     <string name="dashboard_notice_grant">Allow VPN</string>
     <string name="dashboard_notice_reload">Reload</string>
+    <string name="dashboard_notice_guide">Open guide</string>
     <string name="dashboard_notice_dismiss">Dismiss</string>
     <string name="dashboard_message_sign_in">Kumiho needs a signed-in Firefox Account to connect.</string>
     <string name="dashboard_message_unavailable">The VPN service is unavailable.</string>
@@ -333,6 +334,9 @@
     <string name="settings_relay_ok">Relay OK</string>
     <string name="settings_relay_ok_latency">Relay OK — %1$.0f ms</string>
     <string name="settings_relay_rejected">Relay rejected the token</string>
+    <string name="settings_label_blocked_region">Blocked region</string>
+    <string name="settings_hint_blocked_region">Another VPN or the relay, then prepare and connect.</string>
+    <string name="settings_open_guide">Open guide</string>
     <string name="settings_relay_unreachable">Relay unreachable</string>
     <string name="settings_relay_unreachable_detail">Relay unreachable: %1$s</string>
     <string name="settings_advanced_hint">Proxy and low-level engine settings</string>
@@ -732,4 +736,48 @@
     <string name="account_webview_paste_hint">Close this screen and paste the redirect URL on the sign-in screen if sign-in does not finish.</string>
 
     <string name="more_title">More</string>
+
+    <!-- Blocked region guide (v0.11.0). -->
+    <string name="guide_title">Blocked region</string>
+    <string name="guide_close">Close guide</string>
+    <string name="guide_check_title">This network</string>
+    <string name="guide_checking">Checking Mozilla\'s hosts…</string>
+    <string name="guide_check_clear">Mozilla\'s hosts are reachable from this network.</string>
+    <string name="guide_check_blocked">%1$d of Mozilla\'s hosts answer HTTP 451 from this network.</string>
+    <string name="guide_check_error">Could not check Mozilla\'s hosts: %1$s</string>
+    <string name="guide_recheck">Recheck</string>
+    <string name="guide_status_blocked">blocked</string>
+    <string name="guide_status_unknown">unknown</string>
+    <string name="guide_status_reachable">reachable</string>
+    <string name="guide_pass_title">Prepared pass</string>
+    <string name="guide_pass_ready">Pass ready — valid for %1$s. Turn off the other VPN, then connect.</string>
+    <string name="guide_pass_expired">The prepared pass expired. Turn on your other VPN and prepare again.</string>
+    <string name="guide_prepare">Prepare</string>
+    <string name="guide_preparing">Preparing…</string>
+    <string name="guide_prepare_done">Prepared. The server list, profile and pass are ready.</string>
+    <string name="guide_requires_sign_in">Sign in first, then prepare.</string>
+    <string name="guide_disconnect_first">Disconnect first, then prepare.</string>
+    <string name="guide_connect">Connect</string>
+    <string name="guide_option_one">Option 1: I have another VPN (recommended)</string>
+    <string name="guide_option_one_step1">Turn on your other VPN.</string>
+    <string name="guide_option_one_step2">Sign in to Kumiho with the Firefox account that has the VPN.</string>
+    <string name="guide_option_one_step3">Choose Prepare. Kumiho fetches the server list, your profile, then the pass.</string>
+    <string name="guide_option_one_step4">When the pass is ready, turn the other VPN off.</string>
+    <string name="guide_option_one_step5">Choose Connect. Kumiho keeps renewing through its own tunnel.</string>
+    <string name="guide_option_one_note">You need the other VPN again only if Kumiho stays off for more than 10 minutes.</string>
+    <string name="guide_option_two">Option 2: Use a relay</string>
+    <string name="guide_option_two_intro">Deploy docs/relay.md or use a relay you trust. It only handles blocked Mozilla requests.</string>
+    <string name="guide_relay_url">Relay URL</string>
+    <string name="guide_relay_save_url">Save URL</string>
+    <string name="guide_relay_token">Relay token</string>
+    <string name="guide_relay_save_token">Save token</string>
+    <string name="guide_relay_test">Test relay</string>
+    <string name="guide_relay_testing">Testing…</string>
+    <string name="guide_relay_ok">Relay OK</string>
+    <string name="guide_relay_ok_latency">Relay OK — %1$.0f ms</string>
+    <string name="guide_relay_rejected">Relay rejected the token</string>
+    <string name="guide_relay_unreachable">Relay unreachable: %1$s</string>
+    <string name="guide_relay_note">Only blocked Mozilla requests use the relay; VPN traffic never does.</string>
+    <string name="guide_browser_note">Browser sign-in still needs another VPN or another device; the relay does not proxy the browser page.</string>
+    <string name="guide_close_to_sign_in">Close this guide to sign in, then prepare.</string>
 </resources>

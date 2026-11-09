@@ -36,6 +36,12 @@ class SetupViewModel(
     private val persistSetupComplete: suspend () -> Unit,
     private val connectNow: () -> Unit,
     private val openExternalBrowser: (String) -> Boolean = { false },
+    /**
+     * Opens the app-scoped Blocked region guide after a blocked consent
+     * preflight (v0.11.0). The wizard has already advanced to sign-in, so
+     * closing the guide lands on the form.
+     */
+    private val onRegionBlocked: () -> Unit = {},
     private val pollIntervalMillis: Long = DEFAULT_POLL_INTERVAL_MS,
     private val browserPollIntervalMillis: Long = DEFAULT_BROWSER_POLL_INTERVAL_MS,
 ) : ViewModel() {
@@ -62,6 +68,9 @@ class SetupViewModel(
     private var browserJob: Job? = null
     private var browserAdoptionAttempted = false
 
+    /** The consent preflight answers once per setup session (v0.11.0). */
+    private var regionChecked = false
+
     // ---- consent --------------------------------------------------------
 
     /** Records the required consent tick; Continue stays disabled until true. */
@@ -80,7 +89,7 @@ class SetupViewModel(
         val current = mutableState.value
         if (!current.canContinue) return
         when (current.step) {
-            SetupStep.CONSENT -> enterSignIn()
+            SetupStep.CONSENT -> checkRegionThenSignIn()
             SetupStep.SIGN_IN -> advanceTo(SetupStep.PERMISSIONS)
             SetupStep.PERMISSIONS -> {
                 refreshPermissions()
@@ -91,9 +100,35 @@ class SetupViewModel(
         }
     }
 
+    /**
+     * The consent preflight (v0.11.0): probes Mozilla's control-plane hosts
+     * once, then advances to sign-in either way. A blocked or partially
+     * blocked result opens the guide; a failure never traps the wizard.
+     */
+    private fun checkRegionThenSignIn() {
+        if (regionChecked) {
+            enterSignIn()
+            return
+        }
+        mutableState.update { it.copy(regionChecking = true) }
+        viewModelScope.launch {
+            val blocked = try {
+                engine.regionCheck().needsGuide
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A daemon that cannot probe must not block setup.
+                false
+            }
+            regionChecked = true
+            mutableState.update { it.copy(regionChecking = false) }
+            enterSignIn()
+            if (blocked) onRegionBlocked()
+        }
+    }
+
     /** Goes back one step. False at the first step, where the UI exits. */
-    fun back(): Boolean {
-        val previous = mutableState.value.step.previous ?: return false
+    fun back(): Boolean {        val previous = mutableState.value.step.previous ?: return false
         stopPolling()
         if (mutableState.value.step == SetupStep.SIGN_IN) cancelBrowser()
         mutableState.update { it.copy(step = previous, error = null) }

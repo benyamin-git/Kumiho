@@ -96,6 +96,9 @@ sealed interface DashboardEvent {
 
     /** Open Android's VPN settings for Always-on/lockdown. */
     data object OpenVpnSettings : DashboardEvent
+
+    /** Open the app-scoped Blocked region guide (v0.11.0). */
+    data object OpenRegionGuide : DashboardEvent
 }
 
 /**
@@ -342,6 +345,10 @@ class DashboardViewModel(
             DashboardNoticeAction.RELOAD_LOCATIONS -> {
                 mutableState.update { it.copy(notice = null) }
                 loadLocations()
+            }
+            DashboardNoticeAction.OPEN_REGION_GUIDE -> {
+                mutableState.update { it.copy(notice = null) }
+                eventFlow.tryEmit(DashboardEvent.OpenRegionGuide)
             }
             DashboardNoticeAction.NONE -> Unit
         }

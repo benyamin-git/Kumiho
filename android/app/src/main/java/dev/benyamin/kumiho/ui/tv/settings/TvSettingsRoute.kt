@@ -287,6 +287,10 @@ fun TvSettingsScreen(
                 }
 
                 GroupHeader(stringResource(R.string.settings_group_region), SettingsTags.GROUP_REGION)
+                DetailAction(
+                    label = stringResource(R.string.settings_open_guide),
+                    onClick = actions.onOpenGuide,
+                )
                 SettingsCatalog.specsIn(SettingsGroup.REGION).forEach { spec ->
                     when (spec.kind) {
                         SettingKind.SECRET -> TvSecretRow(

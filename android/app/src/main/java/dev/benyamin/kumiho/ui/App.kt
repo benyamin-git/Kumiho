@@ -32,6 +32,7 @@ import dev.benyamin.kumiho.ui.account.AccountRoute
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.dashboard.DashboardRoute
 import dev.benyamin.kumiho.ui.diagnostics.DiagnosticsRoute
+import dev.benyamin.kumiho.ui.guide.BlockedRegionGuide
 import dev.benyamin.kumiho.ui.locations.LocationsRoute
 import dev.benyamin.kumiho.ui.logs.LogsRoute
 import dev.benyamin.kumiho.ui.settings.SettingsRoute
@@ -69,28 +70,43 @@ fun KumihoApp(
     when (val state = paletteState) {
         PaletteState.Loading -> KumihoLoadingSurface()
         is PaletteState.Error -> PaletteErrorSurface(state.message, container.themeRepository::retry)
-        is PaletteState.Ready -> if (isTv) {
-            TvKumihoTheme(colors = state.colors) {
-                TvRoot(
-                    container = container,
-                    tvConnectRequested = tvConnectRequested,
-                    onConnectConsumed = onTvConnectConsumed,
-                )
-            }
-        } else {
-            KumihoTheme(colors = state.colors) {
-                when (setupComplete) {
-                    null -> SetupGateLoading()
-                    false -> SetupRoute(container)
-                    true -> AppShell(
-                        nav = nav,
-                        home = { DashboardRoute(container) },
-                        locations = { LocationsRoute(container) },
-                        account = { AccountRoute(container) },
-                        settings = { SettingsRoute(container) },
-                        logs = { LogsRoute(container) },
-                        diagnostics = { DiagnosticsRoute(container) },
-                    )
+        is PaletteState.Ready -> {
+            val guideOpen by container.guide.visible.collectAsStateWithLifecycle()
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (isTv) {
+                    TvKumihoTheme(colors = state.colors) {
+                        TvRoot(
+                            container = container,
+                            tvConnectRequested = tvConnectRequested,
+                            onConnectConsumed = onTvConnectConsumed,
+                        )
+                    }
+                } else {
+                    KumihoTheme(colors = state.colors) {
+                        when (setupComplete) {
+                            null -> SetupGateLoading()
+                            false -> SetupRoute(container)
+                            true -> AppShell(
+                                nav = nav,
+                                home = { DashboardRoute(container) },
+                                locations = { LocationsRoute(container) },
+                                account = { AccountRoute(container) },
+                                settings = { SettingsRoute(container) },
+                                logs = { LogsRoute(container) },
+                                diagnostics = { DiagnosticsRoute(container) },
+                            )
+                        }
+                    }
+                }
+                // The guide covers the wizard and both shells; it is reached
+                // from setup, Settings → Region and the dashboard notice.
+                if (guideOpen) {
+                    KumihoTheme(colors = state.colors) {
+                        BlockedRegionGuide(
+                            container = container,
+                            onClose = container.guide::close,
+                        )
+                    }
                 }
             }
         }

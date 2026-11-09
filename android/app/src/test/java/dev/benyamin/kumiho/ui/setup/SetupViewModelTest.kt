@@ -3,6 +3,8 @@ package dev.benyamin.kumiho.ui.setup
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.engine.RegionCheck
+import dev.benyamin.kumiho.engine.RegionHost
 import dev.benyamin.kumiho.test.MainDispatcherRule
 import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -39,12 +41,14 @@ class SetupViewModelTest {
 
     private fun viewModel(
         openExternalBrowser: (String) -> Boolean = { false },
+        onRegionBlocked: () -> Unit = {},
     ): SetupViewModel = SetupViewModel(
         engine = engine,
         permissions = permissions,
         persistSetupComplete = { effects += "persist" },
         connectNow = { effects += "connect" },
         openExternalBrowser = openExternalBrowser,
+        onRegionBlocked = onRegionBlocked,
     )
 
     private fun failingPersistViewModel(): SetupViewModel = SetupViewModel(
@@ -74,8 +78,37 @@ class SetupViewModelTest {
     }
 
     @Test
-    fun `unticking consent blocks Continue again`() = runTest(mainRule.testDispatcher) {
-        val viewModel = viewModel()
+    fun `blocked region preflight advances and opens the guide`() = runTest(mainRule.testDispatcher) {
+        engine.region = RegionCheck(
+            hosts = listOf(RegionHost("vpn.mozilla.org", "blocked", "HTTP 451")),
+            blocked = listOf("vpn.mozilla.org"),
+            browserBlocked = false,
+            relayConfigured = false,
+        )
+        var opened = 0
+        val viewModel = viewModel(onRegionBlocked = { opened++ })
+        viewModel.setConsentAccepted(true)
+        viewModel.next()
+        runCurrent()
+        assertEquals(1, opened)
+        assertEquals(SetupStep.SIGN_IN, viewModel.state.value.step)
+        assertFalse(viewModel.state.value.regionChecking)
+    }
+
+    @Test
+    fun `region preflight failure never traps setup`() = runTest(mainRule.testDispatcher) {
+        engine.regionFailure = IllegalStateException("daemon down")
+        var opened = 0
+        val viewModel = viewModel(onRegionBlocked = { opened++ })
+        viewModel.setConsentAccepted(true)
+        viewModel.next()
+        runCurrent()
+        assertEquals(0, opened)
+        assertEquals(SetupStep.SIGN_IN, viewModel.state.value.step)
+    }
+
+    @Test
+    fun `unticking consent blocks Continue again`() = runTest(mainRule.testDispatcher) {        val viewModel = viewModel()
         viewModel.setConsentAccepted(true)
         viewModel.setConsentAccepted(false)
         assertFalse(viewModel.state.value.canContinue)
@@ -831,6 +864,8 @@ private class FakeEngine : SetupEngine {
 
     var status: EngineStatus = status()
     var statusFailure: Exception? = null
+    var region: RegionCheck = RegionCheck(emptyList(), emptyList(), false, false)
+    var regionFailure: Exception? = null
     var emailFailure: Exception? = null
     var passwordFailure: Exception? = null
     var codeFailure: Exception? = null
@@ -867,6 +902,11 @@ private class FakeEngine : SetupEngine {
     override suspend fun refreshStatus(): EngineStatus {
         statusFailure?.let { throw it }
         return status
+    }
+
+    override suspend fun regionCheck(): RegionCheck {
+        regionFailure?.let { throw it }
+        return region
     }
 
     override suspend fun accountsList(): Accounts {

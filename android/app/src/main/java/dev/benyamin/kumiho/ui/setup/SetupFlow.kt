@@ -99,6 +99,7 @@ fun SetupRoute(
             persistSetupComplete = { container.appPrefs.setSetupComplete(true) },
             connectNow = { container.vpnServiceCoordinator.connect(ConnectRequest()) },
             openExternalBrowser = { url -> openBrowserSignIn(appContext, url) },
+            onRegionBlocked = container.guide::open,
         )
     }
     SetupFlow(viewModel = setupViewModel, modifier = modifier)

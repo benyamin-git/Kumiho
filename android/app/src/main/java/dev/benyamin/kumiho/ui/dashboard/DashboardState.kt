@@ -154,7 +154,7 @@ sealed interface NoticeText {
 enum class DashboardNoticeTone { INFO, WARNING, ERROR }
 
 /** The one meaningful retry a notice can offer. */
-enum class DashboardNoticeAction { NONE, RETRY_REFRESH, RETRY_CONNECT, GRANT_PERMISSION, RELOAD_LOCATIONS }
+enum class DashboardNoticeAction { NONE, RETRY_REFRESH, RETRY_CONNECT, GRANT_PERMISSION, RELOAD_LOCATIONS, OPEN_REGION_GUIDE }
 
 /** The latest advisory message, from the service, the engine or a local call. */
 data class DashboardNotice(
@@ -183,6 +183,16 @@ data class DashboardNotice(
             val text = notice.message?.takeIf { it.isNotBlank() }
                 ?.let { NoticeText.Raw(it) }
                 ?: NoticeText.Local(DashboardMessage.ENGINE_NOTICE)
+            // A blocked region or an expired prepared pass is fixed by the
+            // reusable guide, not by a blind retry (v0.11.0).
+            val region = notice.message?.let(::isRegionMessage) == true
+            if (region) {
+                return DashboardNotice(
+                    text = text,
+                    tone = DashboardNoticeTone.WARNING,
+                    action = DashboardNoticeAction.OPEN_REGION_GUIDE,
+                )
+            }
             return when (notice.type) {
                 NOTICE_FATAL -> DashboardNotice(
                     text = text,
@@ -191,6 +201,16 @@ data class DashboardNotice(
                 )
                 else -> DashboardNotice(text = text, tone = DashboardNoticeTone.WARNING)
             }
+        }
+
+        /** True for the engine's two bootstrap errors (HTTP 451 text). */
+        fun isRegionMessage(message: String): Boolean {
+            val lower = message.lowercase()
+            return lower.contains("451") ||
+                lower.contains("blocked region") ||
+                lower.contains("prepared pass") ||
+                lower.contains("bootstrap_required") ||
+                lower.contains("region_blocked")
         }
 
         fun statusRefreshFailed(detail: String): DashboardNotice = DashboardNotice(

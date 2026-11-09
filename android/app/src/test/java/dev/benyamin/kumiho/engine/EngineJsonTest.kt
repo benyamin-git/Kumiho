@@ -631,6 +631,57 @@ class EngineJsonTest {
     }
 
     @Test
+    fun `region check and prepare parse the bootstrap replies`() {
+        val check = EngineJson.regionCheck(
+            """
+            {
+              "hosts": [
+                {"host": "vpn.mozilla.org", "status": "blocked", "detail": "HTTP 451"},
+                {"host": "profile.accounts.firefox.com", "status": "reachable", "detail": "HTTP 200"},
+                {"host": "accounts.firefox.com", "status": "unknown"}
+              ],
+              "blocked": ["vpn.mozilla.org"],
+              "browser_blocked": true,
+              "relay_configured": true
+            }
+            """,
+        )
+        assertEquals(3, check.hosts.size)
+        assertEquals("blocked", check.hosts.first().status)
+        assertEquals("HTTP 451", check.hosts.first().detail)
+        assertEquals(listOf("vpn.mozilla.org"), check.blocked)
+        assertTrue(check.browserBlocked)
+        assertTrue(check.relayConfigured)
+        assertTrue(check.needsGuide)
+
+        val clean = EngineJson.regionCheck("""{"hosts":[],"browser_blocked":false}""")
+        assertFalse(clean.needsGuide)
+
+        val prepared = EngineJson.prepare(
+            """
+            {
+              "email": "user@example.com",
+              "expires_at": 1730000000,
+              "quota": {"limit": 1000, "remaining": 900},
+              "locations": 12,
+              "servers": 64,
+              "server_list_refreshed": true,
+              "profile_refreshed": true,
+              "relay_used": false
+            }
+            """,
+        )
+        assertEquals("user@example.com", prepared.email)
+        assertEquals(1730000000L, prepared.expiresAt)
+        assertEquals(12, prepared.locations)
+        assertEquals(64, prepared.servers)
+        assertEquals(900L, prepared.quota?.remaining)
+        assertTrue(prepared.serverListRefreshed)
+        assertTrue(prepared.profileRefreshed)
+        assertFalse(prepared.relayUsed)
+    }
+
+    @Test
     fun `doctor reports parse checks and counts`() {
         val report = EngineJson.doctorReport(
             """

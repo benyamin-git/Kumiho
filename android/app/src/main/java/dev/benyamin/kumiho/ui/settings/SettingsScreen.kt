@@ -234,6 +234,7 @@ fun SettingsRoute(
         onDismissLaunchError = { launchError = null },
         onToggleBypass = container.allowBypassRepository::setEnabled,
         onOpenSplitTunneling = { splitOpen = true },
+        onOpenGuide = container.guide::open,
     )
     content(state, appState, actions)
 }
@@ -420,6 +421,7 @@ private fun SettingsList(
             }
             item(key = "region_card") {
                 SettingsCard {
+                    GuideActionRow(onOpen = actions.onOpenGuide)
                     SettingsCatalog.specsIn(SettingsGroup.REGION).forEach { spec ->
                         RegionRow(
                             spec = spec,
@@ -766,9 +768,40 @@ private fun EngineRow(
     )
 }
 
+/** The Region group's guide entry: the same screen the first run opens. */
 @Composable
-private fun RegionRow(
-    spec: SettingSpec,
+private fun GuideActionRow(onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2)
+            .testTag(SettingsTags.REGION_GUIDE),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.settings_label_blocked_region),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.settings_hint_blocked_region),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(
+            onClick = onOpen,
+            modifier = Modifier.heightIn(min = Dimens.TouchTarget),
+        ) {
+            Text(stringResource(R.string.settings_open_guide))
+        }
+    }
+}
+
+@Composable
+private fun RegionRow(    spec: SettingSpec,
     state: SettingsState,
     actions: SettingsActions,
     onEdit: (SettingSpec) -> Unit,

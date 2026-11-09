@@ -435,6 +435,19 @@ class DashboardStateTest {
     }
 
     @Test
+    fun aRegionBlockedNoticeOpensTheGuideInsteadOfRetrying() {
+        val notice = DashboardNotice.engineNotice(
+            Notice(
+                "fatal",
+                STATE_ERROR,
+                "Blocked region: vpn.mozilla.org answered HTTP 451. Open the Blocked region guide.",
+            ),
+        )
+        assertEquals(DashboardNoticeTone.WARNING, notice.tone)
+        assertEquals(DashboardNoticeAction.OPEN_REGION_GUIDE, notice.action)
+    }
+
+    @Test
     fun anAdvisoryEngineNoticeCannotBeRetriedFromHere() {
         val notice = DashboardNotice.engineNotice(Notice("signed_out", STATE_IDLE, "tokens expired"))
         assertEquals(NoticeText.Raw("tokens expired"), notice.text)

@@ -213,6 +213,15 @@ class EngineClient(
     /** Probes the configured control-plane relay once (HTTP 451 fallback). */
     suspend fun relayTest(): RelayTest = EngineJson.relayTest(command("relay_test"))
 
+    /** Classifies Mozilla's control-plane hosts without credentials. */
+    suspend fun regionCheck(): RegionCheck = EngineJson.regionCheck(command("region_check"))
+
+    /**
+     * Fetches the server list, profile and a Guardian pass once (v0.11.0).
+     * The pass token stays in the engine; only its expiry is returned.
+     */
+    suspend fun prepare(): PrepareResult = EngineJson.prepare(command("prepare"))
+
     /** Starts 24-way latency probes; results stream through [pings]. */
     suspend fun ping(hosts: List<String>) {
         command("ping", JSONObject().put("hosts", JSONArray(hosts)))

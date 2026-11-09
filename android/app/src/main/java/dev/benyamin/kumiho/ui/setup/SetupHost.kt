@@ -88,6 +88,7 @@ fun SetupHost(
             persistSetupComplete = { container.appPrefs.setSetupComplete(true) },
             connectNow = { container.vpnServiceCoordinator.connect(ConnectRequest()) },
             openExternalBrowser = { url -> openBrowserSignIn(appContext, url) },
+            onRegionBlocked = container.guide::open,
         )
     }
     val state by setupViewModel.state.collectAsStateWithLifecycle()

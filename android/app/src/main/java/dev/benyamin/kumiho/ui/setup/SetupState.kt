@@ -89,6 +89,12 @@ data class PermissionState(
 data class SetupState(
     val step: SetupStep = SetupStep.CONSENT,
     val consentAccepted: Boolean = false,
+    /**
+     * The consent step is probing Mozilla's hosts (v0.11.0). Continue stays
+     * disabled until the answer lands; a blocked result opens the guide after
+     * the wizard advances to sign-in.
+     */
+    val regionChecking: Boolean = false,
     val signIn: SignInPaneState = SignInPaneState(),
     val permissions: PermissionState = PermissionState(),
     /** Android's Always-on VPN state, mirrored from the service. */
@@ -133,7 +139,7 @@ data class SetupState(
      */
     val canContinue: Boolean
         get() = when (step) {
-            SetupStep.CONSENT -> consentAccepted
+            SetupStep.CONSENT -> consentAccepted && !regionChecking
             SetupStep.SIGN_IN -> signedIn
             SetupStep.PERMISSIONS, SetupStep.ALWAYS_ON -> true
         }

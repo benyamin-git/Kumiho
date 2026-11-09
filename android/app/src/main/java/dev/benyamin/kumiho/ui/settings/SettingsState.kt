@@ -185,6 +185,8 @@ data class SettingsActions(
     val onToggleBypass: (Boolean) -> Unit,
     val onOpenSplitTunneling: (() -> Unit)? = null,
     val onTestRelay: () -> Unit = {},
+    /** Opens the app-scoped Blocked region guide (v0.11.0). */
+    val onOpenGuide: () -> Unit = {},
 )
 
 /** Stable test tags for the Compose tests; all live under `settings_`. */
@@ -210,6 +212,7 @@ object SettingsTags {
     const val RELAY_RESULT = "settings_relay_result"
     const val RELAY_TOKEN_SET = "settings_relay_token_set"
     const val RELAY_TOKEN_CLEAR = "settings_relay_token_clear"
+    const val REGION_GUIDE = "settings_region_guide"
 
     const val THEME_CONTROL = "settings_theme_control"
     const val VERSION_APP = "settings_version_app"

@@ -117,6 +117,7 @@ fun DashboardRoute(
                         dashboardViewModel.onSettingsUnavailable()
                     }
                 }
+                DashboardEvent.OpenRegionGuide -> container.guide.open()
             }
         }
     }
@@ -316,6 +317,7 @@ internal fun noticeActionLabel(action: DashboardNoticeAction): String = stringRe
         -> R.string.dashboard_notice_retry
         DashboardNoticeAction.GRANT_PERMISSION -> R.string.dashboard_notice_grant
         DashboardNoticeAction.RELOAD_LOCATIONS -> R.string.dashboard_notice_reload
+        DashboardNoticeAction.OPEN_REGION_GUIDE -> R.string.dashboard_notice_guide
         DashboardNoticeAction.NONE -> R.string.dashboard_notice_retry
     },
 )
