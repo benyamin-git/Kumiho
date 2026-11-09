@@ -85,6 +85,8 @@ var settingItems = []settingItem{
 		hint: "write-only secret used only after HTTP 451; does not proxy the browser sign-in page"},
 	{key: "relay_test", label: "test relay", kind: settingAction,
 		hint: "send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page"},
+	{key: "blocked_region", label: "blocked region", kind: settingAction,
+		hint: "open the first-run guide: another VPN or the relay, then prepare and connect"},
 }
 
 // settingsState is the Settings screen state (PLAN.md §6).
@@ -385,6 +387,9 @@ func (m *Model) activateSetting() tea.Cmd {
 		s.editBuf = "" // never prefill a secret into the editable buffer
 		return nil
 	case settingAction:
+		if item.key == "blocked_region" {
+			return m.openGuide()
+		}
 		return testRelay(m.client)
 	default:
 		s.editing = true
@@ -484,6 +489,8 @@ func (s *settingsState) displayValue(key string) string {
 		return dimStyle.Render("(not set)")
 	case "relay_test":
 		return dimStyle.Render("enter to test")
+	case "blocked_region":
+		return dimStyle.Render("enter to open")
 	case "kill_switch", "autoconnect", "redact_targets", "exit_check", "allow_lan",
 		"http_proxy", "solve_challenges", "allow_locked":
 		return onoffLabel(s.boolValue(key))

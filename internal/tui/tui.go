@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -70,6 +71,20 @@ type Model struct {
 	status   api.Status
 	haveStat bool
 	notice   string
+	// noticeWarn renders the dashboard notice with the warning tone (region
+	// and tunnel errors) instead of the success tone.
+	noticeWarn bool
+	// noticeRegion marks a region/blocked notice so Enter opens the guide.
+	noticeRegion bool
+
+	// guide is the reusable Blocked region screen. It is a modal over any
+	// screen so the first-run wizard, Settings and the dashboard all share it.
+	guide          bool
+	guideCheck     api.RegionCheckResult
+	guideHaveCheck bool
+	guideChecking  bool
+	guideErr       string
+	guideNotice    string
 
 	loc locationsState
 	st  settingsState
@@ -166,10 +181,34 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusMsg:
 		if msg.err != nil {
 			m.notice = "daemon error: " + msg.err.Error()
+			m.noticeWarn = true
+			m.noticeRegion = false
 			return m, nil
 		}
 		m.status = msg.status
 		m.haveStat = true
+		return m, nil
+	case regionCheckMsg:
+		m.guideChecking = false
+		if msg.err != nil {
+			m.guideErr = msg.err.Error()
+			return m, nil
+		}
+		m.guideCheck = msg.result
+		m.guideHaveCheck = true
+		return m, nil
+	case prepareMsg:
+		if msg.err != nil {
+			m.guideNotice = msg.err.Error()
+			return m, nil
+		}
+		m.guideNotice = fmt.Sprintf("Prepared. Pass valid for %s. Turn off the other VPN and press c to connect.",
+			shortClock(time.Until(time.Unix(msg.result.ExpiresAt, 0))))
+		return m, fetchStatus(m.client)
+	case guideTickMsg:
+		if m.guide {
+			return m, guideTick()
+		}
 		return m, nil
 	case eventMsg:
 		switch msg.env.Type {
@@ -249,9 +288,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, fetchLocations(m.client, false)
 	case tunnelDoneMsg:
+		m.noticeWarn = false
+		m.noticeRegion = false
 		switch {
 		case msg.err != nil:
 			m.notice = "tunnel: " + msg.err.Error()
+			m.noticeWarn = true
+			var re *api.RemoteError
+			if errors.As(msg.err, &re) && (re.Code == api.CodeRegionBlocked || re.Code == api.CodeBootstrapRequired) {
+				m.noticeRegion = true
+				m.notice += " — press Enter for the Blocked region guide"
+			}
 		case msg.disconnected:
 			m.notice = "disconnected"
 		default:
@@ -466,6 +513,9 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	if m.guide {
+		return m.handleGuideKey(k)
+	}
 	// "?" opens the help overlay everywhere except while free-text input is
 	// active (login fields, browser redirect input, settings edits, log search,
 	// location filter).
@@ -565,6 +615,11 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
+	case "enter":
+		if m.noticeRegion {
+			return m, m.openGuide()
+		}
+		return m, nil
 	case "l":
 		if !m.status.Authenticated {
 			m.screen = screenLogin
@@ -813,6 +868,10 @@ func (m *Model) View() string {
 		m.renderHelp(&b)
 		return b.String()
 	}
+	if m.guide {
+		m.renderGuide(&b)
+		return b.String()
+	}
 	if m.screen == screenLogin {
 		m.renderLogin(&b)
 		return b.String()
@@ -866,7 +925,14 @@ func (m *Model) renderDashboard(b *strings.Builder) {
 			fmt.Fprintf(b, "location:     %s\n", loc)
 		}
 		if m.status.PassExpires > 0 {
-			fmt.Fprintf(b, "pass expiry:  %s\n", time.Unix(m.status.PassExpires, 0).UTC().Format(time.RFC3339))
+			remaining := time.Until(time.Unix(m.status.PassExpires, 0))
+			line := "pass expiry:  " + time.Unix(m.status.PassExpires, 0).UTC().Format(time.RFC3339)
+			if remaining > 0 {
+				line += " (" + shortClock(remaining) + " left)"
+			} else {
+				line += " (expired)"
+			}
+			fmt.Fprintln(b, line)
 		}
 		if q := m.status.Quota; q != nil && (q.Remaining != nil || q.Limit != nil) {
 			line := "quota:        "
@@ -907,7 +973,11 @@ func (m *Model) renderDashboard(b *strings.Builder) {
 	}
 
 	if m.notice != "" {
-		fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.notice))
+		if m.noticeWarn {
+			fmt.Fprintf(b, "\n%s\n", warnStyle.Render(m.notice))
+		} else {
+			fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.notice))
+		}
 	}
 	fmt.Fprintln(b)
 	connectHint := "space connect"

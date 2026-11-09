@@ -189,6 +189,31 @@ func TestCaptureViews(t *testing.T) {
 				st: captureSettings(), width: captureWidth, height: captureHeight,
 			},
 		},
+		{
+			name: "region",
+			m: &Model{
+				screen: screenDashboard, haveStat: true,
+				status: func() api.Status {
+					s := status
+					s.PassExpires = now.Add(9 * time.Minute).Unix()
+					return s
+				}(),
+				guide: true, guideHaveCheck: true,
+				guideCheck: api.RegionCheckResult{
+					Hosts: []api.RegionHostStatus{
+						{Host: "api.accounts.firefox.com", Status: api.RegionBlocked, Detail: "HTTP 451"},
+						{Host: "oauth.accounts.firefox.com", Status: api.RegionReachable, Detail: "HTTP 200"},
+						{Host: "profile.accounts.firefox.com", Status: api.RegionReachable, Detail: "HTTP 200"},
+						{Host: "vpn.mozilla.org", Status: api.RegionBlocked, Detail: "HTTP 451"},
+						{Host: "firefox.settings.services.mozilla.com", Status: api.RegionReachable, Detail: "HTTP 200"},
+						{Host: "accounts.firefox.com", Status: api.RegionBlocked, Detail: "HTTP 451"},
+					},
+					Blocked:        []string{"api.accounts.firefox.com", "vpn.mozilla.org", "accounts.firefox.com"},
+					BrowserBlocked: true,
+				},
+				width: captureWidth, height: captureHeight,
+			},
+		},
 	}
 
 	for _, item := range models {

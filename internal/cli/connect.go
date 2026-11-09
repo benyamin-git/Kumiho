@@ -92,6 +92,10 @@ func connectWithClient(ctx context.Context, client *ipc.Client, opts connectOpti
 	fmt.Fprintln(stderr, "connecting (this can take up to ~30s)...")
 	if _, err := client.Call(ctx, ipc.TypeConnect, payload); err != nil {
 		fmt.Fprintf(stderr, "kumiho connect: %v\n", err)
+		var re *api.RemoteError
+		if errors.As(err, &re) && (re.Code == api.CodeRegionBlocked || re.Code == api.CodeBootstrapRequired) {
+			fmt.Fprintln(stderr, "Next: run `kumiho guide`, turn on your other VPN, then run `kumiho prepare`.")
+		}
 		return 1
 	}
 

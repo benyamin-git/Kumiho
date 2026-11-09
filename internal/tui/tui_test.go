@@ -480,8 +480,8 @@ func assertViewport(t *testing.T, m *Model) {
 }
 
 func TestSettingsShortHeightShowsCues(t *testing.T) {
-	if len(settingItems) != 23 {
-		t.Fatalf("settingItems = %d rows, want 23", len(settingItems))
+	if len(settingItems) != 24 {
+		t.Fatalf("settingItems = %d rows, want 24", len(settingItems))
 	}
 	m := testSettingsModel()
 	m.screen = screenSettings

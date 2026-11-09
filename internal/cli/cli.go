@@ -23,6 +23,8 @@ Commands:
   locations     List VPN locations (--ping for latency, --json)
   connect       Connect the tunnel (--proxy-only keeps system routing untouched)
   disconnect    Tear the tunnel down
+  prepare       Fetch the server list, profile and Guardian pass for first run
+  guide         Explain the Blocked region paths (another VPN or a relay)
   cleanup       Remove stale routes/rules/nftables/DNS state (crash recovery)
   login         Sign in to Firefox Accounts through the daemon
   accounts      List and manage up to five accounts
@@ -65,6 +67,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runConnect(rest, stdout, stderr)
 	case "disconnect":
 		return runDisconnect(rest, stdout, stderr)
+	case "prepare":
+		return runPrepare(rest, stdout, stderr)
+	case "guide":
+		return runGuide(rest, stdout, stderr)
 	case "cleanup":
 		return runCleanup(rest, stdout, stderr)
 	case "locations":
