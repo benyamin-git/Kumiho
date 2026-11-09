@@ -41,6 +41,8 @@ const (
 	TypeSettingsGet         = "settings_get"
 	TypeSettingsSet         = "settings_set"
 	TypeRelayTest           = "relay_test"
+	TypeRegionCheck         = "region_check"
+	TypePrepare             = "prepare"
 	TypeLogsSnapshot        = "logs_snapshot"
 	TypeLogsSubscribe       = "logs_subscribe"
 	TypeLogsUnsubscribe     = "logs_unsubscribe"

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -58,6 +59,7 @@ const (
 	regionBlockedNoRelayMessage = "This region is blocking Mozilla's servers (HTTP 451). Set a control-plane relay in Settings → Region, or deploy the relay from docs/relay.md, then retry."
 	regionBlockedRelayFailed    = "Mozilla returned HTTP 451 and the configured relay failed: %s. Check the relay URL and token in Settings → Region."
 	edgeBlockedMessage          = "The VPN edge refused this region (HTTP 451). A control-plane relay cannot fix the VPN data path; connect from a supported region."
+	bootstrapRequiredMessage    = "The prepared pass expired. Open Blocked region and prepare again."
 )
 
 var firefoxVersionPattern = regexp.MustCompile(`Firefox/([0-9][^\s;)]*)`)
@@ -116,6 +118,11 @@ type Controller struct {
 	// guards it because control-plane transports read it off the request path.
 	relayMu    sync.RWMutex
 	relayToken string
+	// relayUsed records whether the last prepare fetched a control-plane
+	// request through the relay.
+	relayUsed atomic.Bool
+	// profile is the last Firefox Account identity fetched by prepare.
+	profile *fxa.Profile
 
 	guardian             *guardian.Client
 	rotationBudget       time.Duration
@@ -185,6 +192,7 @@ type Controller struct {
 	socksSrv     *socks.Server
 	resources    *tunnelResources
 	pass         *guardian.Pass
+	passPrepared bool
 	quota        *api.Quota
 	exitIP       string
 	exitCountry  string
@@ -488,12 +496,16 @@ func (c *Controller) Start(_ context.Context) error {
 		c.activeID = ""
 		c.email = ""
 		c.tokens = nil
+		c.pass = nil
+		c.passPrepared = false
+		_ = os.Remove(c.store.PassPath())
 		c.state = StateUnauthenticated
 		return nil
 	}
 	c.activeID = active.ID
 	c.email = active.Email
 	c.tokens = active.Tokens()
+	c.startPassLocked()
 	if c.accountSessionUsable(active) {
 		c.state = StateIdle
 		c.log.Logf(logging.Info, "auth", "restored session for %s", c.email)
@@ -1290,6 +1302,7 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	// session fields. c.mu is held throughout, so no client can observe the
 	// temporary active ID.
 	previousActive := c.activeID
+	previousEmail := c.email
 	c.activeID = account.ID
 	account.LastUsedAt = time.Now()
 	if err := c.saveAccountsLocked(true); err != nil {
@@ -1303,6 +1316,9 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	activeEmail := account.Email
 	c.mu.Unlock()
 
+	if !strings.EqualFold(previousEmail, activeEmail) {
+		c.deletePassFile()
+	}
 	c.log.Logf(logging.Info, "auth", "signed in as %s", activeEmail)
 	c.notify()
 	return api.LoginState{Step: "done", Email: activeEmail}
@@ -1353,11 +1369,14 @@ func (c *Controller) UseAccount(id string) error {
 		return badRequestError("disconnect first; switching accounts needs the tunnel off")
 	}
 	c.setActiveLocked(a)
+	c.pass = nil
+	c.passPrepared = false
 	err := c.saveAccountsLocked(true)
 	c.mu.Unlock()
 	if err != nil {
 		return err
 	}
+	c.deletePassFile()
 	c.notify()
 	return nil
 }
@@ -1395,6 +1414,8 @@ func (c *Controller) RemoveAccount(id string) error {
 	c.accounts.Accounts = kept
 	if activeRemoved {
 		c.setActiveLocked(mostRecentlyUsedAccount(c.accounts))
+		c.pass = nil
+		c.passPrepared = false
 	}
 	if c.pending != nil && c.pending.targetID == a.ID {
 		c.pending = nil
@@ -1403,6 +1424,9 @@ func (c *Controller) RemoveAccount(id string) error {
 	c.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if activeRemoved {
+		c.deletePassFile()
 	}
 	c.notify()
 	return nil
@@ -1588,6 +1612,7 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	c.ratesUp = 0
 	c.ratesDown = 0
 	c.pass = nil
+	c.passPrepared = false
 	c.mu.Unlock()
 
 	c.stopTunnel("session cleared")
@@ -1601,6 +1626,9 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	if c.authGen == clearedGen {
 		cleared = true
 		clearErr = clearTokens(c.store.Paths().Tokens)
+		if rmErr := os.Remove(c.store.PassPath()); rmErr != nil && !os.IsNotExist(rmErr) {
+			c.log.Logf(logging.Warn, "auth", "could not remove the prepared pass: %v", rmErr)
+		}
 		if err := os.Remove(accountsPath(c.store.Paths())); err != nil && !os.IsNotExist(err) {
 			accountsErr = err
 		}

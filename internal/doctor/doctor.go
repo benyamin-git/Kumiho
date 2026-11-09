@@ -516,11 +516,14 @@ func checkReachability() Check {
 	const name = "endpoints"
 	targets := []string{
 		"https://api.accounts.firefox.com/",
+		"https://oauth.accounts.firefox.com/",
+		"https://profile.accounts.firefox.com/",
 		"https://vpn.mozilla.org/api/v1/fpn/status",
 		"https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/vpn-serverlist/records",
+		"https://accounts.firefox.com/",
 	}
 	client := &http.Client{Timeout: 8 * time.Second}
-	var reachable, unreachable []string
+	var reachable, blocked, unreachable []string
 	for _, target := range targets {
 		req, err := http.NewRequest(http.MethodGet, target, nil)
 		if err != nil {
@@ -533,14 +536,30 @@ func checkReachability() Check {
 			continue
 		}
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusUnavailableForLegalReasons {
+			blocked = append(blocked, fmt.Sprintf("%s (HTTP 451)", hostOf(target)))
+			continue
+		}
 		reachable = append(reachable, fmt.Sprintf("%s (HTTP %d)", hostOf(target), resp.StatusCode))
 	}
 	if len(unreachable) > 0 {
+		detail := "unreachable: " + strings.Join(unreachable, ", ")
+		if len(blocked) > 0 {
+			detail += "; blocked by region: " + strings.Join(blocked, ", ")
+		}
 		return Check{
 			Name:        name,
 			Status:      Fail,
-			Detail:      "unreachable: " + strings.Join(unreachable, ", "),
+			Detail:      detail,
 			Remediation: "Check connectivity, DNS and any upstream proxy. FxA, Guardian and Remote Settings must all be reachable.",
+		}
+	}
+	if len(blocked) > 0 {
+		return Check{
+			Name:        name,
+			Status:      Warn,
+			Detail:      "blocked by region: " + strings.Join(blocked, ", "),
+			Remediation: "This region blocks Mozilla's servers (HTTP 451). Run `kumiho guide` and prepare through another VPN or the relay.",
 		}
 	}
 	return Check{Name: name, Status: OK, Detail: "reachable: " + strings.Join(reachable, ", ")}

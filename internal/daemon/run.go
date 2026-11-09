@@ -493,6 +493,22 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		defer cancel()
 		_ = conn.Reply(env.ID, ipc.TypeRelayTest, h.ctrl.TestRelay(rctx))
 
+	case ipc.TypeRegionCheck:
+		rctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		defer cancel()
+		_ = conn.Reply(env.ID, ipc.TypeRegionCheck, h.ctrl.RegionCheck(rctx))
+
+	case ipc.TypePrepare:
+		pctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		res, err := h.ctrl.Prepare(pctx)
+		if err != nil {
+			replyCtrlErr(err)
+			return
+		}
+		_ = conn.Reply(env.ID, ipc.TypePrepare, res)
+		h.broadcastStatus()
+
 	case ipc.TypeLogsSubscribe:
 		var p api.LogsSubscribePayload
 		if err := env.DecodePayload(&p); err != nil {

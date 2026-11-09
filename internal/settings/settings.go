@@ -727,6 +727,12 @@ func (s *Store) RelayTokenPath() string {
 	return filepath.Join(filepath.Dir(s.paths.Tokens), relayTokenFile)
 }
 
+// PassPath returns the prepared Guardian pass file beside tokens.json. It is
+// a short-lived secret and lives in the same app-private directory.
+func (s *Store) PassPath() string {
+	return filepath.Join(filepath.Dir(s.paths.Tokens), "pass.json")
+}
+
 // RelayToken reads the relay token. A missing file returns the underlying
 // not-exist error untouched.
 func (s *Store) RelayToken() (string, error) {

@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"time"
 
+	"github.com/benyamin-git/kumiho/internal/guardian"
 	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/serverlist"
 )
@@ -191,19 +192,29 @@ func (c *Controller) enterReconnecting() bool {
 // publish the result or retry it.
 var errSessionEnded = errors.New("kumiho: connection generation ended")
 
-// redialOnce makes one redial attempt: a fresh Guardian pass (this also
-// surfaces quota/token fatals and heals a stale bearer), then one dial to the
-// current edge (PLAN.md §2.4).
+// redialOnce makes one redial attempt: a cached pass while it is comfortably
+// valid (a fresh Guardian pass when the edge rejected the old one), then one
+// dial to the current edge (PLAN.md §2.4).
 func (c *Controller) redialOnce(stop <-chan struct{}) (upstreamSession, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pass, err := c.acquirePass(ctx)
-	if stopped(stop) {
-		return nil, errSessionEnded
+	c.mu.Lock()
+	rejected := c.authRejected
+	c.mu.Unlock()
+	var pass *guardian.Pass
+	if !rejected {
+		pass = c.cachedPass()
 	}
-	if err != nil {
-		return nil, err
+	if pass == nil {
+		var err error
+		pass, err = c.acquirePass(ctx)
+		if stopped(stop) {
+			return nil, errSessionEnded
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	c.mu.Lock()
 	// stopTunnel closes stop under this same mutex: either the publish

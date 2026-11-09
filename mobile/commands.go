@@ -25,6 +25,8 @@ const (
 	disconnectTimeout     = 20 * time.Second
 	settingsSetTimeout    = 20 * time.Second
 	relayTimeout          = 20 * time.Second
+	regionTimeout         = 25 * time.Second
+	prepareTimeout        = 90 * time.Second
 	accountTimeout        = 35 * time.Second
 	accountsTimeout       = 10 * time.Second
 	accountCommandTimeout = 10 * time.Second
@@ -121,6 +123,21 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		rctx, cancel := context.WithTimeout(ctx, relayTimeout)
 		defer cancel()
 		return encodeResponse("relay_test", f.ctrl.TestRelay(rctx))
+
+	case "region_check":
+		rctx, cancel := context.WithTimeout(ctx, regionTimeout)
+		defer cancel()
+		return encodeResponse("region_check", f.ctrl.RegionCheck(rctx))
+
+	case "prepare":
+		pctx, cancel := context.WithTimeout(ctx, prepareTimeout)
+		defer cancel()
+		res, err := f.ctrl.Prepare(pctx)
+		if err != nil {
+			return f.fail(err)
+		}
+		f.pushStatus()
+		return encodeResponse("prepare", res)
 
 	case "ping":
 		var p api.PingPayload

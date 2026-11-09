@@ -322,6 +322,7 @@ func (c *Controller) finishBrowserSuccess(b *browserLogin, gen uint64, tokens *f
 	// Save accounts.json and the compatibility tokens.json before publishing
 	// the new active session. c.mu keeps the temporary active id invisible.
 	previousActive := c.activeID
+	previousEmail := c.email
 	c.activeID = account.ID
 	account.LastUsedAt = time.Now()
 	if err := c.saveAccountsLocked(true); err != nil {
@@ -346,6 +347,9 @@ func (c *Controller) finishBrowserSuccess(b *browserLogin, gen uint64, tokens *f
 	activeEmail := account.Email
 	c.mu.Unlock()
 
+	if !strings.EqualFold(previousEmail, activeEmail) {
+		c.deletePassFile()
+	}
 	c.log.Logf(logging.Info, "auth", "signed in as %s (browser)", activeEmail)
 	c.notify()
 	return nil

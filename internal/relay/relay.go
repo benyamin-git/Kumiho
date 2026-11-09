@@ -106,6 +106,7 @@ type Transport struct {
 	base  http.RoundTripper
 	cfg   func() Config
 	logFn func(string, ...any)
+	onUse func()
 }
 
 // NewTransport wraps base. cfg is read on every request so a settings change
@@ -123,6 +124,11 @@ func NewTransport(base http.RoundTripper, cfg func() Config, logf func(string, .
 // Unwrap exposes the wrapped transport for callers that need the underlying
 // dialer (tests and transport inspection).
 func (t *Transport) Unwrap() http.RoundTripper { return t.base }
+
+// SetUseHook installs a callback fired whenever a request is actually
+// retried through the relay. The engine uses it to report relay_used without
+// inspecting request paths.
+func (t *Transport) SetUseHook(fn func()) { t.onUse = fn }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req)
@@ -182,6 +188,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	discardBody(resp.Body)
 	t.logf("HTTP 451 from %s; retrying through the relay", req.URL.Host)
+	if t.onUse != nil {
+		t.onUse()
+	}
 	relayResp, relayErr := t.base.RoundTrip(out)
 	if relayErr != nil {
 		if req.Context().Err() != nil {

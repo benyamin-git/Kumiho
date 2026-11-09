@@ -18,6 +18,7 @@ const (
 	CodeNotAuthenticated   = "not_authenticated"
 	CodeForbidden          = "forbidden"
 	CodeRegionBlocked      = "region_blocked"
+	CodeBootstrapRequired  = "bootstrap_required"
 	CodeUnsupportedSetting = "unsupported_setting"
 	CodeInternal           = "internal"
 )
@@ -233,6 +234,41 @@ type RelayTestResult struct {
 	Status    int      `json:"status,omitempty"`
 	LatencyMS *float64 `json:"latency_ms,omitempty"`
 	Error     string   `json:"error,omitempty"`
+}
+
+// Region probe statuses.
+const (
+	RegionReachable = "reachable"
+	RegionBlocked   = "blocked"
+	RegionUnknown   = "unknown"
+)
+
+// RegionHostStatus is one control-plane reachability probe.
+type RegionHostStatus struct {
+	Host   string `json:"host"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// RegionCheckResult classifies every control-plane host without credentials.
+// RelayConfigured reports that both the relay URL and token are set.
+type RegionCheckResult struct {
+	Hosts           []RegionHostStatus `json:"hosts"`
+	Blocked         []string           `json:"blocked,omitempty"`
+	BrowserBlocked  bool               `json:"browser_blocked"`
+	RelayConfigured bool               `json:"relay_configured"`
+}
+
+// PrepareResult is the reply to prepare. It never carries the pass token.
+type PrepareResult struct {
+	Email               string `json:"email,omitempty"`
+	ExpiresAt           int64  `json:"expires_at"`
+	Quota               *Quota `json:"quota,omitempty"`
+	Locations           int    `json:"locations"`
+	Servers             int    `json:"servers"`
+	ServerListRefreshed bool   `json:"server_list_refreshed"`
+	ProfileRefreshed    bool   `json:"profile_refreshed"`
+	RelayUsed           bool   `json:"relay_used"`
 }
 
 // SettingsSetPayload changes one runtime setting. Reset drops the persisted

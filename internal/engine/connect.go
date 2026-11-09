@@ -124,10 +124,27 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		return err
 	}
 
+	// A prepared or recently fetched pass covers a restart within its
+	// lifetime. Resolve the server list from the disk cache in that window:
+	// the bootstrap data was refreshed by prepare, so a blocked refresh must
+	// not defeat the pass we already hold.
+	pass := c.cachedPass()
+
 	countries, err := c.Locations(ctx, false)
 	if err != nil {
-		c.connectFailed(err)
-		return err
+		if pass != nil {
+			if cached, ferr := c.diskCacheFallback(err); ferr == nil {
+				countries = cached
+				c.mu.Lock()
+				c.locations = cached
+				c.mu.Unlock()
+				err = nil
+			}
+		}
+		if err != nil {
+			c.connectFailed(err)
+			return err
+		}
 	}
 	if req.Fastest {
 		fastest, ferr := c.fastestCandidate(countries)
@@ -145,13 +162,13 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		return err
 	}
 
-	pass, err := c.acquirePass(ctx)
-	if err != nil {
-		if re := c.regionBlocked(err); re != nil {
-			err = re
+	if pass == nil {
+		pass, err = c.acquirePass(ctx)
+		if err != nil {
+			err = c.mapPassError(err)
+			c.connectFailed(err)
+			return err
 		}
-		c.connectFailed(err)
-		return err
 	}
 
 	// Initial dial: up to 4 attempts with full-jitter backoff, alternating
@@ -531,13 +548,31 @@ func (c *Controller) ReapplyNetcfg(ctx context.Context) error {
 }
 
 // controlPlaneDial returns the DialContext shared by every control-plane HTTP
-// client. It applies TCP_NODELAY best-effort and wraps the connection for TLS
-// ClientHello fragmentation, reading the effective mode on every dial so an
-// override applies to the next request without a restart. base is the marked
-// platform dialer in production and a fake in tests.
+// client. While a live tunnel exists, it dials the target through the local
+// SOCKS5 listener (remote name resolution, marked bypass dialer as the
+// loopback hop), so every control-plane request travels through the tunnel.
+// While disconnected or reconnecting it uses the marked dialer directly.
+// base is the marked platform dialer in production and a fake in tests.
 func (c *Controller) controlPlaneDial(base func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		conn, err := base(ctx, network, addr)
+		var conn net.Conn
+		var err error
+		c.mu.Lock()
+		srv, sess := c.socksSrv, c.session
+		c.mu.Unlock()
+		if srv != nil && sess != nil && sess.IsConnected() {
+			proxyAddr := srv.Addr()
+			if proxyAddr == nil {
+				return nil, errors.New("control plane: the local proxy is not listening")
+			}
+			proxy, perr := newProxyDialer("socks5h://"+proxyAddr.String(), c.upstreamDialer, c.log.Logf)
+			if perr != nil {
+				return nil, perr
+			}
+			conn, err = proxy.DialContext(ctx, network, addr)
+		} else {
+			conn, err = base(ctx, network, addr)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -567,9 +602,11 @@ func (c *Controller) UseBypassDialer() {
 			DialContext:       dialContext,
 			ForceAttemptHTTP2: true,
 		}
+		tr := relay.NewTransport(base, c.relayConfig, relayLogf)
+		tr.SetUseHook(func() { c.relayUsed.Store(true) })
 		return &http.Client{
 			Timeout:   timeout,
-			Transport: relay.NewTransport(base, c.relayConfig, relayLogf),
+			Transport: tr,
 		}
 	}
 	c.httpClient = newClient(20 * time.Second)
@@ -763,9 +800,19 @@ func (c *Controller) connectFailed(err error) {
 	c.notify()
 }
 
-// acquirePass fetches a Guardian proxy pass, mirroring the reference retry
-// chain: 401/403 → refresh access token → retry → activate → retry once.
+// acquirePass fetches a Guardian proxy pass and persists it for reconnects
+// within its lifetime. The fetch mirrors the reference retry chain:
+// 401/403 → refresh access token → retry → activate → retry once.
 func (c *Controller) acquirePass(ctx context.Context) (*guardian.Pass, error) {
+	pass, err := c.fetchPass(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c.persistPass(pass)
+	return pass, nil
+}
+
+func (c *Controller) fetchPass(ctx context.Context) (*guardian.Pass, error) {
 	tokens := c.currentTokens()
 	if tokens == nil {
 		return nil, &api.RemoteError{Code: api.CodeNotAuthenticated, Message: "sign in first (kumiho login)"}

@@ -176,6 +176,12 @@ func TestWatchdogFatalStopsTunnel(t *testing.T) {
 	}
 	loginProxyOnly(t, ctrl)
 
+	// Force the redial to fetch a new pass: the cached pass would otherwise
+	// keep the session alive, which is the new reuse behaviour.
+	ctrl.mu.Lock()
+	ctrl.authRejected = true
+	ctrl.mu.Unlock()
+
 	_ = live.Close()
 
 	waitFor(t, 3*time.Second, func() bool {
