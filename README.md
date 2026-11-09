@@ -63,15 +63,15 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.10.2
+## What's new in v0.10.3
 
-- **Access-token refresh survives Mozilla's edge block** — the old
-  `/v1/oauth/token` route returns an empty `406`, so refresh now uses the
-  OAuth server's form endpoint on `api.accounts.firefox.com`, and the tunnel
-  reconnects instead of asking for sign-in.
+- **A challenged password sign-in continues in the browser** — when Mozilla's
+  edge rejects the native password API with an anti-bot challenge, Kumiho
+  starts the existing browser flow for the same account instead of stopping on
+  an error. Normal wrong-password errors stay on the form.
 
-v0.10.1 fixed the OLED widget fill; see the [changelog](CHANGELOG.md) for
-details.
+v0.10.2 fixed access-token refresh through Mozilla's OAuth form endpoint; see
+the [changelog](CHANGELOG.md) for details.
 
 ## Install
 
