@@ -8,6 +8,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-11-09
+
+### Fixed
+
+- **A challenged password sign-in continues in the browser.** Mozilla's edge
+  can reject the native password API with an anti-bot challenge, which used to
+  stop sign-in on an error. Kumiho now abandons the password attempt and starts
+  the existing browser flow for the same account; normal credential rejections
+  still stay on the password form. If the browser cannot start, the real
+  reason (an active tunnel, the five-account limit or an invalid email) is
+  shown instead of the generic challenge message.
+
 ## [0.10.2] - 2026-11-06
 
 ### Fixed
