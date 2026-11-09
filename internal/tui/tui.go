@@ -366,19 +366,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		state := msg.state
 		if state.Step == "browser" {
-			m.ac.browserURL = state.URL
-			m.ac.browserID = state.LoginID
-			m.ac.browserInput, m.ac.browserError, m.ac.browserSubmitting = "", "", false
-			m.ac.polling = true
-			m.ac.err = ""
-			m.loginErr = ""
-			if state.Error != "" {
-				m.ac.browserError = state.Error
-			}
-			if msg.adding {
-				return m, pollBrowserLogin(m.client, state.LoginID)
-			}
-			return m, pollLoginBrowser(m.client, state.LoginID)
+			return m.enterBrowserFlow(state, msg.adding)
 		}
 		switch state.Step {
 		case "done":
@@ -691,6 +679,27 @@ func (m *Model) advanceLogin() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// enterBrowserFlow adopts an engine browser flow, whether it was started
+// explicitly or returned by a password login that hit Mozilla's anti-bot
+// edge, and starts the matching poll.
+func (m *Model) enterBrowserFlow(state api.LoginState, adding bool) (tea.Model, tea.Cmd) {
+	m.busy = false
+	m.ac.adding = adding
+	m.ac.browserURL = state.URL
+	m.ac.browserID = state.LoginID
+	m.ac.browserInput, m.ac.browserError, m.ac.browserSubmitting = "", "", false
+	m.ac.polling = true
+	m.ac.err = ""
+	m.loginErr = ""
+	if state.Error != "" {
+		m.ac.browserError = state.Error
+	}
+	if adding {
+		return m, pollBrowserLogin(m.client, state.LoginID)
+	}
+	return m, pollLoginBrowser(m.client, state.LoginID)
+}
+
 func (m *Model) handleLoginState(msg loginStateMsg) (tea.Model, tea.Cmd) {
 	m.busy = false
 	if msg.err != nil {
@@ -698,6 +707,9 @@ func (m *Model) handleLoginState(msg loginStateMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	ls := msg.state
+	if ls.Step == "browser" {
+		return m.enterBrowserFlow(ls, m.ac.adding)
+	}
 	if ls.Error != "" {
 		m.loginErr = ls.Error
 	}

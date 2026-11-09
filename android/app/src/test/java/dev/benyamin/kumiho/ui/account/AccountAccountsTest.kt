@@ -93,6 +93,52 @@ class AccountAccountsTest {
         }
 
     @Test
+    fun `password challenge adopts the engine browser flow`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = { account() }
+            gateway.accountsResult = { accounts() }
+            gateway.passwordResult = LoginState(
+                "browser",
+                "user@example.com",
+                null,
+                null,
+                null,
+                method = "browser",
+                url = URL,
+                loginId = "fallback-1",
+            )
+            val viewModel = viewModel()
+            runCurrent()
+            val before = gateway.accountsCalls
+
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("hunter2")
+            runCurrent()
+
+            val state = viewModel.state.value
+            assertEquals("fallback-1", state.browser?.id)
+            assertEquals(URL, state.browser?.url)
+            assertEquals(URL, state.browserLaunchURL)
+            assertTrue(
+                "a challenged password login opens the in-app browser",
+                state.browserWebViewOpen,
+            )
+            assertFalse(state.addDialog)
+            assertNull(state.signIn.error)
+            assertTrue("the engine flow is reused, not restarted", gateway.addStartCalls.isEmpty())
+
+            gateway.statusResult = { LoginState("done", "user@example.com", null, null, null) }
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            assertNull(viewModel.state.value.browser)
+            assertNull(viewModel.state.value.browserLaunchURL)
+            assertTrue(gateway.accountsCalls > before)
+            assertEquals(SignInPhase.AUTHENTICATED, viewModel.state.value.signIn.phase)
+        }
+
+    @Test
     fun `browser done with an error is a failure and survives the reload`() =
         runTest(mainRule.testDispatcher) {
             gateway.accountResult = {

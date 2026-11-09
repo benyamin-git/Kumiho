@@ -905,6 +905,35 @@ func TestDispatchLoginFlow(t *testing.T) {
 	})
 }
 
+// A password login that hits Mozilla's anti-bot edge returns the browser
+// step; the projection must carry that flow so the waiting card opens and
+// polls instead of showing a password error.
+func TestDispatchLoginPasswordBrowserFallback(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.loginReplies["login_email"] = api.LoginState{Step: "password", Email: "user@example.com"}
+		d.loginReplies["login_password"] = api.LoginState{
+			Step:    "browser",
+			Method:  "browser",
+			URL:     "https://example.test/login",
+			LoginID: "fallback-1",
+		}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionLoginEmail, Payload: []byte(`{"email":"user@example.com"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_email) = %v", err)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLoginPassword, Payload: []byte(`{"password":"hunter2"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_password) = %v", err)
+	}
+	l := ctrl.Snapshot().Login
+	if l == nil || l.Step != "browser" || l.Method != "browser" ||
+		l.URL != "https://example.test/login" || l.ID != "fallback-1" || l.Error != "" {
+		t.Fatalf("login = %+v, want the browser fallback flow", l)
+	}
+}
+
 func TestDispatchLoginTransportError(t *testing.T) {
 	f := newFakeDaemon()
 	f.set(func(d *fakeDaemon) { d.loginErr = errors.New("pipe broke") })

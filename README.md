@@ -128,8 +128,8 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 - **Your Firefox account** — password or browser sign-in, 2FA, up to five
   accounts with labels, quota rotation and a session-wide sign-out.
 - **Mozilla's edge challenge handled** — solves the Fastly challenge and
-  retries a blocked auth host, so password sign-in works on restrictive
-  networks.
+  retries a blocked auth host; if the challenge still blocks the password
+  API, the same sign-in continues in the browser instead of dead-ending.
 - **Blocked-region control plane** — HTTP 451 is reported honestly, with one
   optional retry through a user-operated relay, a Worker template, and a Test
   relay action. The relay never carries VPN traffic or the browser sign-in

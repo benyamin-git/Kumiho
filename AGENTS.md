@@ -170,8 +170,12 @@ them locally for any change under `android/`, `mobile/` or
   success redirect URL.
   Clients only open the returned URL and poll `login_status`/
   `accounts_add_status`; desktop clients paste the success-page URL, while
-  Android intercepts it in the in-app WebView. Browser sign-in uses the public
-  Firefox for Android client `a2270f727f45f648` and its HTTPS success page;
+  Android intercepts it in the in-app WebView. A password login challenged by
+  Mozilla's edge is not terminal: the engine drops the password pending state
+  and returns this browser flow for the same email/account, so clients must
+  accept `step: browser` from `login_password` and poll that flow. Browser
+  sign-in uses the public Firefox for Android client `a2270f727f45f648` and its
+  HTTPS success page;
   password sign-in keeps `5882386c6d801776`. `Tokens.ClientID` records the
   issuing client so each token refreshes through the right endpoint.
   `internal/webauth` is gone.

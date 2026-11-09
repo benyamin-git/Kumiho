@@ -5,8 +5,8 @@ Gradle commands, APK verification, signing, release automation and the
 physical acceptance checklist. The user guide is [android.md](android.md).
 
 > **Status.** The app builds and both test suites are green on the current
-> tree: **491 JVM tests / 157 phone + 21 TV connected testcases / lint 0
-> errors + 26 warnings**.
+> tree: **526 JVM tests / 157 phone + 21 TV connected testcases / lint 0
+> errors + 31 warnings**.
 > Physical acceptance is a **partial pass with user-accepted exceptions** on a
 > Galaxy S25 FE for v0.5.2; v0.6.0 physical acceptance is pending and the
 > sign-off is recorded below. The release automation is implemented:
@@ -128,8 +128,8 @@ cache is warm. The unit/lint/assemble gate directly:
 
 Current expected result on the current tree:
 
-- **491 JVM tests, 0 failures, 0 errors, 0 skipped**;
-- **lint 0 errors, 26 warnings** — dependency-update notices, the existing
+- **526 JVM tests, 0 failures, 0 errors, 0 skipped**;
+- **lint 0 errors, 31 warnings** — dependency-update notices, the existing
   `OldTargetApi`, `UnusedAttribute`, `ObsoleteSdkInt`, unused resources, four
   `ModifierParameter` and four `UseKtx` notices, plus four generated-flag
   `IconDuplicates` and one `IconMissingDensityFolder` from the bundled assets;
@@ -499,8 +499,9 @@ remain open.
 - [ ] Sign-in completes with email → password; a 2FA account completes the
       code step; an email-link account shows the waiting state and signs in
       after the link is confirmed or **Re-check**.
-- [ ] A wrong password and a captcha error are shown inline; the form stays
-      usable and no browser opens.
+- [ ] A wrong password is shown inline and the form stays usable. When Mozilla
+      challenges the password API, the app continues in the browser sign-in
+      flow for the same account instead of stopping on the form.
 - [ ] Denying VPN consent and notification permission still allows **Finish**;
       the state reads *Not granted* / *Not allowed*, not a fake grant.
 - [ ] Granting both and using **Finish and connect** reaches the dashboard and

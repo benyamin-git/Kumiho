@@ -1078,6 +1078,18 @@ export default {
         resetAddForm();
         return;
       }
+      if (step === "browser") {
+        // A password add that hit Mozilla's anti-bot edge continues in the
+        // engine-owned browser flow: close the password card and let the
+        // waiting card own the flow.
+        view.addMethod = "browser";
+        view.addStep = "browser";
+        view.addEmail = (login && login.email) || view.addEmail;
+        view.addError = "";
+        view.formError = "";
+        endStarting();
+        return;
+      }
       if (view.addMethod !== "password") return;
       if (step === "password") {
         if (view.addStep !== "password") ui.password.input.value = "";

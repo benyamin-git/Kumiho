@@ -398,6 +398,26 @@ class AccountViewModel(
                     restartEmailPolling(immediate = false)
                 }
             }
+            STEP_BROWSER -> {
+                // A challenged password login is not a dead end: the engine
+                // replaced it with the browser flow. Adopt that flow instead
+                // of leaving the password form stuck on an error.
+                stopEmailPolling()
+                if (login.loginId.isNullOrBlank() || login.url.isNullOrBlank()) {
+                    mutableState.update {
+                        it.copy(
+                            addingAccount = false,
+                            signIn = it.signIn.copy(
+                                busy = false,
+                                error = login.error ?: "browser sign-in did not start",
+                                message = null,
+                            ),
+                        )
+                    }
+                } else {
+                    adoptBrowserLogin(login)
+                }
+            }
             STEP_DONE -> {
                 val failure = login.error
                 if (!failure.isNullOrBlank()) {
@@ -512,21 +532,7 @@ class AccountViewModel(
                 }
                 when {
                     login.step == STEP_BROWSER && !login.loginId.isNullOrBlank() -> {
-                        val browser = BrowserSignIn(login.loginId, login.url, login.error)
-                        mutableState.update {
-                            it.copy(
-                                browser = browser,
-                                browserLaunchURL = login.url ?: it.browserLaunchURL,
-                                browserWebViewOpen = login.url != null && login.error == null,
-                                browserPasteOpen = false,
-                                browserPasteValue = "",
-                                browserPasteError = null,
-                                browserPasteMessage = null,
-                                browserSubmitting = false,
-                                browserFallback = false,
-                            )
-                        }
-                        if (browser.error == null) restartBrowserPolling(immediate = false)
+                        adoptBrowserLogin(login)
                     }
                     login.step == STEP_DONE -> {
                         clearBrowser()
@@ -554,6 +560,35 @@ class AccountViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Shows an engine-owned browser flow that is already active (a fresh
+     * browser start or a password login escalated after a challenge) and
+     * starts polling it.
+     */
+    private fun adoptBrowserLogin(login: LoginState) {
+        val id = login.loginId ?: return
+        val browser = BrowserSignIn(id, login.url, login.error)
+        mutableState.update {
+            it.copy(
+                addDialog = false,
+                addingAccount = false,
+                browser = browser,
+                browserLaunchURL = login.url ?: it.browserLaunchURL,
+                browserWebViewOpen = login.url != null && login.error == null,
+                browserPasteOpen = false,
+                browserPasteValue = "",
+                browserPasteError = null,
+                browserPasteMessage = null,
+                browserSubmitting = false,
+                browserFallback = false,
+                message = null,
+                error = null,
+                signIn = it.signIn.copy(busy = false, error = null, message = null),
+            )
+        }
+        if (browser.error == null) restartBrowserPolling(immediate = false)
     }
 
     fun reauth(account: AccountSummary) {

@@ -315,6 +315,10 @@ Unix socket `/run/kumiho/control.sock`, mode `0660`, owner `kumiho:kumiho` (inst
 | `log {ts, level, tag, msg}` | streamed entries |
 | `error {code, message}` | recoverable errors |
 
+A password step that hits Mozilla's anti-bot edge returns `step: browser` from
+`login_password` with the browser flow already active; clients poll the
+returned `login_id` instead of calling `login_start` again.
+
 ---
 
 ## 6. TUI specification (Bubble Tea)

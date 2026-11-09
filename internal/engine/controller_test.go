@@ -1156,17 +1156,23 @@ func TestChallengeSolveSettingConsultedPerCall(t *testing.T) {
 	}
 	ctrl, _ := newTestController(t, handler)
 	ctx := context.Background()
+	authPW := fxa.AuthPW("user@example.com", "pw")
 
-	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
-		t.Fatalf("login step = %+v", st)
-	}
+	// The controller's password flow now escalates a challenge to the
+	// browser, so this test targets the FxA client directly: the solver
+	// setting is still consulted on every LoginWithAuthPW call, and the
+	// challenge wording still reflects it.
 	login := func() string {
 		t.Helper()
-		ls := ctrl.LoginPassword(ctx, "pw")
-		if ls.Step != "password" {
-			t.Fatalf("login step = %+v", ls)
+		_, err := ctrl.fxa.LoginWithAuthPW(ctx, "user@example.com", authPW)
+		if err == nil {
+			t.Fatal("login succeeded, want a challenge")
 		}
-		return ls.Error
+		var chErr *fxa.ChallengeError
+		if !errors.As(err, &chErr) {
+			t.Fatalf("error = %v, want *fxa.ChallengeError", err)
+		}
+		return challengeFailureMessage(err)
 	}
 
 	const (

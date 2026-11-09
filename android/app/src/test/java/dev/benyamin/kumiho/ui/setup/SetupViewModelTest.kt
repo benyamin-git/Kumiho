@@ -158,6 +158,39 @@ class SetupViewModelTest {
     }
 
     @Test
+    fun `password challenge falls back to the in-app browser`() = runTest(mainRule.testDispatcher) {
+        engine.onPassword = {
+            LoginState(
+                "browser",
+                "user@example.com",
+                null,
+                null,
+                null,
+                method = "browser",
+                url = BROWSER_URL,
+                loginId = "fallback-1",
+            )
+        }
+        val viewModel = viewModel()
+        reachSignIn(viewModel)
+        viewModel.submitEmail("user@example.com")
+        runCurrent()
+
+        viewModel.submitPassword("hunter2")
+        runCurrent()
+
+        assertEquals(listOf("hunter2"), engine.passwordCalls)
+        assertEquals("fallback-1", viewModel.state.value.browser?.id)
+        assertEquals(BROWSER_URL, viewModel.state.value.browser?.url)
+        assertEquals(BROWSER_URL, viewModel.state.value.browserLaunchURL)
+        assertTrue(
+            "a challenged password login opens the in-app browser",
+            viewModel.state.value.browserWebViewOpen,
+        )
+        assertNull(viewModel.state.value.signIn.error)
+    }
+
+    @Test
     fun `closing the setup webview keeps the flow and reopening restores it`() =
         runTest(mainRule.testDispatcher) {
             engine.loginStartResult = { _, _ -> browserState() }

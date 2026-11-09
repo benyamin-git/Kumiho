@@ -159,10 +159,10 @@ terminal the password flow is used for script compatibility.
 	if method == "browser" {
 		return runBrowserSignIn(client, startType, statusType, cancelType, *email, accountID, *noOpen, adding, command, os.Stdin, stdout, stderr)
 	}
-	return runPasswordSignIn(ctx, client, startType, *email, accountID, adding, command, stdout, stderr)
+	return runPasswordSignIn(ctx, client, startType, statusType, cancelType, *email, accountID, *noOpen, adding, command, os.Stdin, stdout, stderr)
 }
 
-func runPasswordSignIn(ctx context.Context, client *ipc.Client, startType, email, accountID string, adding bool, command string, stdout, stderr io.Writer) int {
+func runPasswordSignIn(ctx context.Context, client *ipc.Client, startType, statusType, cancelType, email, accountID string, noOpen, adding bool, command string, in io.Reader, stdout, stderr io.Writer) int {
 	tty := newLoginTerminal()
 	if email == "" {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -219,6 +219,11 @@ func runPasswordSignIn(ctx context.Context, client *ipc.Client, startType, email
 				Method: "password", Email: addr, AccountID: accountID,
 			}, stderr, command)
 
+		case "browser":
+			// The engine escalated a challenged password login to its
+			// browser flow; wait for that same flow instead of restarting it.
+			return waitForBrowserSignIn(client, statusType, cancelType, ls.LoginID, ls.URL, command, noOpen, adding, in, stdout, stderr)
+
 		case "done":
 			if ls.Error != "" {
 				return 1
@@ -273,16 +278,23 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 		}
 		return 1
 	}
-	if ls.URL == "" {
-		fmt.Fprintf(stderr, "kumiho %s: daemon returned no browser URL\n", command)
-		return 1
-	}
 	if ls.Error != "" {
 		fmt.Fprintf(stderr, "%s: %s\n", command, ls.Error)
 	}
-	fmt.Fprintf(stdout, "Open this URL to sign in:\n%s\n", ls.URL)
+	return waitForBrowserSignIn(client, statusType, cancelType, ls.LoginID, ls.URL, command, noOpen, adding, in, stdout, stderr)
+}
+
+// waitForBrowserSignIn prints an engine browser URL and waits for the
+// redirect paste, then completes and polls the flow. Both a browser-first
+// sign-in and a password login escalated after an anti-bot challenge use it.
+func waitForBrowserSignIn(client *ipc.Client, statusType, cancelType, loginID, url, command string, noOpen, adding bool, in io.Reader, stdout, stderr io.Writer) int {
+	if url == "" {
+		fmt.Fprintf(stderr, "kumiho %s: daemon returned no browser URL\n", command)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Open this URL to sign in:\n%s\n", url)
 	if !noOpen {
-		_ = openBrowserURL(ls.URL)
+		_ = openBrowserURL(url)
 	}
 	fmt.Fprintln(stdout, browserRedirectInstruction)
 
@@ -291,13 +303,13 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 	reader := bufio.NewReader(in)
 	for {
 		if !time.Now().Before(deadline) {
-			cancelBrowserLogin(client, cancelType, ls.LoginID)
+			cancelBrowserLogin(client, cancelType, loginID)
 			fmt.Fprintf(stderr, "kumiho %s: timed out waiting for the browser sign-in\n", command)
 			return 1
 		}
 		line, err := promptBrowserRedirect(reader, stdout)
 		if err != nil {
-			cancelBrowserLogin(client, cancelType, ls.LoginID)
+			cancelBrowserLogin(client, cancelType, loginID)
 			if errors.Is(err, io.EOF) {
 				fmt.Fprintf(stderr, "kumiho %s: no redirect URL was pasted\n", command)
 			} else {
@@ -310,7 +322,7 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 			continue
 		}
 		if !time.Now().Before(deadline) {
-			cancelBrowserLogin(client, cancelType, ls.LoginID)
+			cancelBrowserLogin(client, cancelType, loginID)
 			fmt.Fprintf(stderr, "kumiho %s: timed out waiting for the browser sign-in\n", command)
 			return 1
 		}
@@ -321,18 +333,18 @@ func runBrowserSignIn(client *ipc.Client, startType, statusType, cancelType, ema
 		// restart, or a client-side timeout while the daemon completed).
 		completeCtx, cancelComplete := context.WithTimeout(context.Background(), boundedTimeout(deadline, browserCompleteTimeout))
 		_, err = client.Call(completeCtx, ipc.TypeLoginComplete, api.LoginCompletePayload{
-			LoginID: ls.LoginID, RedirectURL: line,
+			LoginID: loginID, RedirectURL: line,
 		})
 		cancelComplete()
 		if err != nil {
-			retry, code := reconcileBrowserCompleteError(client, statusType, ls.LoginID, command, adding, stdout, stderr)
+			retry, code := reconcileBrowserCompleteError(client, statusType, loginID, command, adding, stdout, stderr)
 			if retry {
 				fmt.Fprintf(stderr, "kumiho %s: %v\n", command, err)
 				continue
 			}
 			return code
 		}
-		return pollBrowserSignIn(client, statusType, cancelType, ls.LoginID, command, deadline, adding, stdout, stderr)
+		return pollBrowserSignIn(client, statusType, cancelType, loginID, command, deadline, adding, stdout, stderr)
 	}
 }
 

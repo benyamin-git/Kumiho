@@ -784,13 +784,14 @@ tunneling and route exclusions.
 
 Firefox Accounts sometimes presents an interactive captcha. The native
 password flow solves the Fastly proof-of-work/PAT/clientmetrics challenges but
-cannot solve a captcha. Cancel it and choose **Continue in browser**; the
-full-screen **Mozilla account** page can complete the captcha and the app
-intercepts the HTTPS success redirect when it finishes. If the in-app page
-cannot be created, Kumiho opens the URL in a Custom Tab and reveals the
-**Redirect URL** field; copy the complete URL from the Firefox Accounts success
-page and paste it there. If no browser is available at all, use the password
-fallback.
+cannot solve a captcha. When Mozilla challenges the password API, Kumiho
+continues the same sign-in in the full-screen **Mozilla account** page
+automatically; that page can complete the captcha and the app intercepts the
+HTTPS success redirect when it finishes. If the in-app page cannot be created,
+Kumiho opens the URL in a Custom Tab and reveals the **Redirect URL** field;
+copy the complete URL from the Firefox Accounts success page and paste it
+there. The browser-first **Continue in browser** button remains the primary
+path when you expect a captcha.
 
 ### Uninstalling and removing state
 

@@ -728,6 +728,22 @@ class SetupViewModel(
                     restartPolling(immediate = false)
                 }
             }
+            STEP_BROWSER -> {
+                // A challenged password login is not a dead end: the engine
+                // replaced it with the browser flow. Adopt that flow, open the
+                // WebView and poll exactly like a browser-first start.
+                stopPolling()
+                applyBrowser(login)
+                mutableState.update {
+                    it.copy(
+                        signIn = it.signIn.copy(busy = false, error = null, message = null),
+                    )
+                }
+                if (login.error == null) {
+                    openBrowser()
+                    restartBrowserPolling(immediate = false)
+                }
+            }
             STEP_DONE -> {
                 val failure = login.error
                 if (!failure.isNullOrBlank()) {

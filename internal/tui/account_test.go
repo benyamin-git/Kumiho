@@ -655,6 +655,40 @@ func TestLoginScreenOffersBrowserAndPassword(t *testing.T) {
 	}
 }
 
+// A challenged password login returns a browser step from the engine. The
+// login modal must switch to the browser waiting state instead of leaving the
+// password form with an error.
+func TestLoginPasswordChallengeEntersBrowserWaiting(t *testing.T) {
+	m := &Model{
+		screen:   screenLogin,
+		step:     "password",
+		email:    "user@example.com",
+		password: "hunter2",
+		busy:     true,
+	}
+	_, cmd := m.handleLoginState(loginStateMsg{state: api.LoginState{
+		Step:    "browser",
+		Method:  "browser",
+		URL:     "https://example.test/login",
+		LoginID: "login-9",
+	}})
+	if cmd == nil {
+		t.Fatal("the browser fallback should start polling")
+	}
+	if !m.ac.polling || m.ac.browserID != "login-9" {
+		t.Fatalf("browser waiting state = polling:%v id:%q", m.ac.polling, m.ac.browserID)
+	}
+	if m.ac.browserURL != "https://example.test/login" {
+		t.Fatalf("browser URL = %q", m.ac.browserURL)
+	}
+	if m.busy {
+		t.Fatal("busy should clear when the browser flow starts")
+	}
+	if !strings.Contains(m.View(), "https://example.test/login") {
+		t.Fatalf("login view does not show the browser URL:\n%s", m.View())
+	}
+}
+
 func TestLoginFieldsDropControlCharacters(t *testing.T) {
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		if req.typ == ipc.TypeLoginEmail {

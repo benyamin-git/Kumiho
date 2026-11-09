@@ -730,16 +730,20 @@ Gap flags (daemon-side abilities beyond the IPC surface):
   client stores tokens.
 - Password steps: email → password → optional 2FA (`email` link method or
   emailed code/TOTP/unblock) → done. `login_state.error` carries friendly
-  messages (wrong password, link-not-confirmed, anti-bot challenge wording,
-  timeouts). The CLI caps a password attempt loop at 12.
+  messages (wrong password, link-not-confirmed, timeouts). A Fastly challenge
+  on the password API is not a terminal error: the engine abandons the
+  password attempt and returns a `browser` step for the same email/account,
+  with the flow already active. The CLI caps a password attempt loop at 12.
 - Browser steps: `login_start` returns `{method, login_id, url}` with step
   `browser`. Clients open the URL, ask for the complete URL from the browser's
   Firefox Accounts success page, send it with `login_complete`, and poll
-  `login_status(login_id)` until `done`/`error`, or call `login_cancel`. The
-  daemon runs a direct Firefox Accounts OAuth flow with PKCE and `state`, no
-  listener and a ten-minute deadline. The redirect URL, code, verifier and
-  tokens are never logged. Captcha, password, TOTP and unblock codes are
-  handled by Mozilla's page, never automated by Kumiho.
+  `login_status(login_id)` until `done`/`error`, or call `login_cancel`. A
+  challenged password step returns this same state from `login_password`;
+  poll that `login_id` instead of starting a second flow. The daemon runs a
+  direct Firefox Accounts OAuth flow with PKCE and `state`, no listener and a
+  ten-minute deadline. The redirect URL, code, verifier and tokens are never
+  logged. Captcha, password, TOTP and unblock codes are handled by Mozilla's
+  page, never automated by Kumiho.
 - Signing in while an account is active adds/switches on completion; there is
   no sign-out-first requirement. Only another in-flight login is refused. The
   active account cannot change while the tunnel is up (`accounts_use` returns

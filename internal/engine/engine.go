@@ -999,6 +999,23 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 	authPW := fxa.AuthPW(pending.email, password)
 	res, err := c.fxa.LoginWithAuthPW(ctx, pending.email, authPW)
 	if err != nil {
+		// A challenge is the one failure the browser can always clear. The
+		// password form is a fast path, not the only door: continue in the
+		// background-owned browser flow instead of dead-ending on Fastly.
+		if isChallengeError(err) {
+			state, started := c.startBrowserFallback(pending)
+			if started {
+				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; continuing in the browser", pending.email)
+				return state
+			}
+			if state.Step == "done" || state.Step == "email" {
+				// The browser could not start; its refusal (account limit,
+				// active tunnel, bad email) is more useful than the generic
+				// challenge error.
+				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; browser fallback unavailable: %s", pending.email, state.Error)
+				return state
+			}
+		}
 		var apiErr *fxa.APIError
 		if errors.As(err, &apiErr) && apiErr.Errno == errnoAccountUnverified &&
 			apiErr.VerificationReason == "unblock-code" {
@@ -1064,6 +1081,50 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 		}
 	}
 	return c.completeLogin(ctx, pending.email, res.SessionToken, gen)
+}
+
+// startBrowserFallback abandons a password attempt that hit the anti-bot edge
+// and starts the equivalent browser flow for the same email and account. The
+// browser path runs Mozilla's own page, so a Fastly challenge change cannot
+// break it. started is false when the browser flow cannot start (for example
+// the tunnel came up between the request and the fallback); the password
+// pending state is restored so the caller can still report the challenge or
+// surface the browser's refusal.
+func (c *Controller) startBrowserFallback(pending *pendingLogin) (api.LoginState, bool) {
+	if pending == nil {
+		return api.LoginState{}, false
+	}
+	c.mu.Lock()
+	if c.pending != pending {
+		c.mu.Unlock()
+		return api.LoginState{}, false
+	}
+	email, targetID := pending.email, pending.targetID
+	pending.authPW = ""
+	c.pending = nil
+	c.mu.Unlock()
+
+	state := c.LoginStart(MethodBrowser, email, targetID)
+	if state.Step == "browser" && state.URL != "" {
+		// The state is healthy: Error stays empty so every client opens the
+		// WebView and starts polling instead of treating the notice as a
+		// failed flow. The caller logs why the form switched.
+		return state, true
+	}
+
+	c.mu.Lock()
+	if c.pending == nil && c.browser == nil {
+		c.pending = pending
+	}
+	c.mu.Unlock()
+	return state, false
+}
+
+// isChallengeError reports whether err is a Fastly anti-bot challenge (or a
+// solver failure joined to one), as opposed to a normal API rejection.
+func isChallengeError(err error) bool {
+	var chErr *fxa.ChallengeError
+	return errors.As(err, &chErr)
 }
 
 // Login2FA verifies an authenticator code, an unblock code, the emailed
