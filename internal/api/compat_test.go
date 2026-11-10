@@ -229,3 +229,38 @@ func TestAccountsViewRoundTrips(t *testing.T) {
 		t.Fatalf("accounts view round trip:\n got %+v\nwant %+v\njson %s", got, want, raw)
 	}
 }
+
+// The v0.12.0 language field is additive: a new view carries it, an old
+// client ignores it, and an old fixture without it still decodes.
+func TestSettingsViewLanguageIsAdditive(t *testing.T) {
+	raw, err := json.Marshal(SettingsView{SocksPort: 1080, Language: "fa"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(fields["language"]); got != `"fa"` {
+		t.Fatalf("language = %s, want \"fa\" (json %s)", got, raw)
+	}
+
+	type settingsViewV011 struct {
+		SocksPort int `json:"socks_port"`
+	}
+	var old settingsViewV011
+	if err := json.Unmarshal(raw, &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.SocksPort != 1080 {
+		t.Fatalf("old client decoded socks_port = %d, want 1080", old.SocksPort)
+	}
+
+	var got SettingsView
+	if err := json.Unmarshal([]byte(`{"socks_port":1080}`), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.SocksPort != 1080 || got.Language != "" {
+		t.Fatalf("old fixture decoded to %+v", got)
+	}
+}

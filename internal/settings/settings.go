@@ -90,6 +90,7 @@ type Config struct {
 	AllowLAN          bool     `toml:"allow_lan"`
 	MTU               int      `toml:"mtu"`
 	LogLevel          string   `toml:"log_level"`
+	Language          string   `toml:"language"` // system|en|fa
 	RedactTargets     bool     `toml:"redact_targets"`
 	QuotaPollMinutes  int      `toml:"quota_poll_minutes"`
 	TLSSplit          string   `toml:"tls_split"` // off|first-byte|sni
@@ -116,6 +117,7 @@ func DefaultConfig() Config {
 		AllowLAN:          true,
 		MTU:               8500,
 		LogLevel:          "info",
+		Language:          "system",
 		RedactTargets:     true,
 		QuotaPollMinutes:  15,
 		TLSSplit:          "off",
@@ -179,6 +181,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("mtu: out of range: %d", c.MTU)
 	}
 	if err := validateEnum("log_level", c.LogLevel, "debug", "info", "warn", "error"); err != nil {
+		return err
+	}
+	if err := validateEnum("language", c.Language, "system", "en", "fa"); err != nil {
 		return err
 	}
 	if c.QuotaPollMinutes < 1 || c.QuotaPollMinutes > 24*60 {
@@ -278,6 +283,9 @@ type State struct {
 	AllowLocked *bool         `json:"allow_locked,omitempty"`
 	Favorites   []LocationRef `json:"favorites,omitempty"`
 	Recents     []LocationRef `json:"recents,omitempty"`
+
+	// v0.12.0 language override.
+	Language *string `json:"language,omitempty"`
 }
 
 // Store owns the config/state pair and persists state atomically.
@@ -469,6 +477,14 @@ func (s *Store) effectiveConfigLocked() Config {
 	if st.AllowLocked != nil {
 		cfg.AllowLocked = *st.AllowLocked
 	}
+	if st.Language != nil {
+		switch *st.Language {
+		case "system", "en", "fa":
+			cfg.Language = *st.Language
+		default:
+			cfg.Language = "system"
+		}
+	}
 	return cfg
 }
 
@@ -508,6 +524,7 @@ func (s *Store) OverriddenKeys() []string {
 	add("rotation_threshold", st.RotationThreshold != nil)
 	add("relay_url", st.RelayURL != nil)
 	add("allow_locked", st.AllowLocked != nil)
+	add("language", st.Language != nil)
 	sort.Strings(keys)
 	return keys
 }
@@ -590,6 +607,12 @@ func (s *Store) SetOverride(key, value string) error {
 	case "log_level":
 		cand.LogLevel = value
 		st.LogLevel = &value
+	case "language":
+		if err := validateEnum("language", value, "system", "en", "fa"); err != nil {
+			return err
+		}
+		cand.Language = value
+		st.Language = &value
 	case "doh_provider":
 		cand.DoHProvider = value
 		st.DoHProvider = &value
@@ -675,6 +698,8 @@ func (s *Store) ClearOverride(key string) error {
 		st.ExitCheck = nil
 	case "log_level":
 		st.LogLevel = nil
+	case "language":
+		st.Language = nil
 	case "redact_targets":
 		st.RedactTargets = nil
 	case "doh_provider":

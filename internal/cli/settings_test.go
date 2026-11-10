@@ -35,6 +35,7 @@ func settingsTestView() api.SettingsView {
 		RelayURL:             "https://relay.example.test",
 		RelayTokenSet:        true,
 		AllowLocked:          true,
+		Language:             "fa",
 	}
 }
 
@@ -55,6 +56,7 @@ func TestSettingsGetTextMasksTheToken(t *testing.T) {
 		"allow_locked = true\n",
 		"relay_url = https://relay.example.test\n",
 		"relay_token_set = true\n",
+		"language = fa\n",
 		"kill_switch = on\n",
 		"mtu = 1500\n",
 	} {
@@ -105,6 +107,88 @@ func TestSettingsGetJSONEncodesTheView(t *testing.T) {
 	}
 	if _, ok := view["relay_token"]; ok {
 		t.Fatalf("JSON leaked a token field: %s", out.String())
+	}
+}
+
+func TestSettingsLanguageGetSetReset(t *testing.T) {
+	if !knownSettingKey("language") {
+		t.Fatal("language is not a known CLI setting")
+	}
+	if got := settingTextValue(api.SettingsView{Language: "fa"}, "language"); got != "fa" {
+		t.Fatalf("settingTextValue(language) = %q, want fa", got)
+	}
+
+	var payloads []api.SettingsSetPayload
+	client := startFakeCLI(t, func(conn *ipc.Conn, env *ipc.Envelope) error {
+		switch env.Type {
+		case ipc.TypeSettingsGet:
+			return replyFakeCLI(conn, env, ipc.TypeSettings, settingsTestView())
+		case ipc.TypeSettingsSet:
+			var p api.SettingsSetPayload
+			if err := env.DecodePayload(&p); err != nil {
+				return err
+			}
+			payloads = append(payloads, p)
+			return replyFakeCLI(conn, env, ipc.TypeResult, api.Result{OK: true})
+		}
+		return nil
+	})
+	var out, errOut bytes.Buffer
+	if code := settingsWithClient(context.Background(), client, "get", "language", "", false, &out, &errOut); code != 0 {
+		t.Fatalf("get code=%d stderr=%s", code, errOut.String())
+	}
+	if out.String() != "language = fa\n" {
+		t.Fatalf("get output = %q", out.String())
+	}
+	out.Reset()
+	if code := settingsWithClient(context.Background(), client, "set", "language", "fa", false, &out, &errOut); code != 0 {
+		t.Fatalf("set code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "language = fa") {
+		t.Fatalf("set output = %q", out.String())
+	}
+	out.Reset()
+	if code := settingsWithClient(context.Background(), client, "reset", "language", "", false, &out, &errOut); code != 0 {
+		t.Fatalf("reset code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "language = reset") {
+		t.Fatalf("reset output = %q", out.String())
+	}
+	if len(payloads) != 2 {
+		t.Fatalf("payloads = %+v", payloads)
+	}
+	if payloads[0] != (api.SettingsSetPayload{Key: "language", Value: "fa"}) {
+		t.Fatalf("set payload = %+v", payloads[0])
+	}
+	if payloads[1] != (api.SettingsSetPayload{Key: "language", Reset: true}) {
+		t.Fatalf("reset payload = %+v", payloads[1])
+	}
+}
+
+func TestSettingsLanguageInvalidValueReachesDaemon(t *testing.T) {
+	var got api.SettingsSetPayload
+	client := startFakeCLI(t, func(conn *ipc.Conn, env *ipc.Envelope) error {
+		if env.Type != ipc.TypeSettingsSet {
+			return nil
+		}
+		if err := env.DecodePayload(&got); err != nil {
+			return err
+		}
+		return replyFakeCLIError(conn, env, &api.RemoteError{
+			Code:    api.CodeBadRequest,
+			Message: `language: "de" is not one of system|en|fa`,
+		})
+	})
+	var out, errOut bytes.Buffer
+	code := settingsWithClient(context.Background(), client, "set", "language", "de", false, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("code = %d, want 1", code)
+	}
+	if got.Key != "language" || got.Value != "de" {
+		t.Fatalf("payload = %+v, want language de", got)
+	}
+	if !strings.Contains(errOut.String(), `language: "de" is not one of system|en|fa`) {
+		t.Fatalf("stderr = %q", errOut.String())
 	}
 }
 

@@ -1783,6 +1783,7 @@ func (c *Controller) Settings() api.SettingsView {
 		ExcludeCIDRs:         cfg.ExcludeCIDRs,
 		AllowLAN:             cfg.AllowLAN,
 		LogLevel:             cfg.LogLevel,
+		Language:             cfg.Language,
 		RedactTargets:        cfg.RedactTargets,
 		KillSwitch:           cfg.KillSwitch,
 		Autoconnect:          cfg.Autoconnect,

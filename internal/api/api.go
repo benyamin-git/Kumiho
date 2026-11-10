@@ -208,6 +208,7 @@ type SettingsView struct {
 	ExcludeCIDRs         []string `json:"exclude_cidrs,omitempty"`
 	AllowLAN             bool     `json:"allow_lan"`
 	LogLevel             string   `json:"log_level"`
+	Language             string   `json:"language"`
 	RedactTargets        bool     `json:"redact_targets"`
 	KillSwitch           string   `json:"kill_switch"`
 	Autoconnect          string   `json:"autoconnect"`

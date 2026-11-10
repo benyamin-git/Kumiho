@@ -814,3 +814,94 @@ func TestAccountRotationOverrideRoundTrip(t *testing.T) {
 		t.Fatalf("after clear: rotation %v threshold %d", cfg.AccountRotation, cfg.RotationThreshold)
 	}
 }
+
+func TestLanguageDefaultAndValidation(t *testing.T) {
+	if got := DefaultConfig().Language; got != "system" {
+		t.Fatalf("default language = %q, want system", got)
+	}
+	for _, lang := range []string{"system", "en", "fa"} {
+		cfg := DefaultConfig()
+		cfg.Language = lang
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("language %q rejected: %v", lang, err)
+		}
+	}
+	cfg := DefaultConfig()
+	cfg.Language = "fr"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("language fr should fail validation")
+	}
+
+	paths := testPaths(t)
+	if err := os.WriteFile(paths.Config, []byte("language = \"fr\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(paths); err == nil {
+		t.Fatal("invalid language in config.toml should fail to open")
+	}
+}
+
+func TestLanguageOverrideAndInvalidStoredState(t *testing.T) {
+	paths := testPaths(t)
+	if err := os.WriteFile(paths.Config, []byte("language = \"en\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.EffectiveConfig().Language; got != "en" {
+		t.Fatalf("effective language = %q, want en", got)
+	}
+
+	if err := st.SetOverride("language", "fa"); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.EffectiveConfig().Language; got != "fa" {
+		t.Fatalf("language after set = %q, want fa", got)
+	}
+	if !contains(st.OverriddenKeys(), "language") {
+		t.Fatalf("OverriddenKeys = %v, want language", st.OverriddenKeys())
+	}
+
+	reopened, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.EffectiveConfig().Language; got != "fa" {
+		t.Fatalf("language after reopen = %q, want fa", got)
+	}
+	if err := reopened.ClearOverride("language"); err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.EffectiveConfig().Language; got != "en" {
+		t.Fatalf("language after clear = %q, want the config en", got)
+	}
+	if contains(reopened.OverriddenKeys(), "language") {
+		t.Fatalf("OverriddenKeys after clear = %v, want no language", reopened.OverriddenKeys())
+	}
+	if err := reopened.SetOverride("language", "de"); err == nil {
+		t.Fatal("invalid language override accepted")
+	}
+	if got := reopened.EffectiveConfig().Language; got != "en" {
+		t.Fatalf("language after rejected set = %q, want en", got)
+	}
+
+	invalidPaths := testPaths(t)
+	if err := os.WriteFile(invalidPaths.Config, []byte("language = \"fa\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPaths.State, []byte(`{"language":"de"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	invalid, err := Open(invalidPaths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := invalid.EffectiveConfig().Language; got != "system" {
+		t.Fatalf("invalid stored language resolved to %q, want system", got)
+	}
+	if got := invalid.Config().Language; got != "fa" {
+		t.Fatalf("admin language = %q, want fa (the invalid override must not rewrite it)", got)
+	}
+}

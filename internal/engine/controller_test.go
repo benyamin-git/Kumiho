@@ -628,6 +628,47 @@ func TestV040SettingsWireNames(t *testing.T) {
 	}
 }
 
+func TestLanguageSetting(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
+
+	if got := ctrl.Settings().Language; got != "system" {
+		t.Fatalf("default language = %q, want system", got)
+	}
+	if err := ctrl.SetSetting("language", "fa"); err != nil {
+		t.Fatal(err)
+	}
+	view := ctrl.Settings()
+	if view.Language != "fa" {
+		t.Fatalf("language = %q, want fa", view.Language)
+	}
+	if !containsString(view.Overridden, "language") {
+		t.Fatalf("language not listed as overridden: %v", view.Overridden)
+	}
+
+	err := ctrl.ApplySetting(api.SettingsSetPayload{Key: "language", Value: "de"})
+	var remote *api.RemoteError
+	if !errors.As(err, &remote) {
+		t.Fatalf("invalid language error = %v, want a RemoteError", err)
+	}
+	if remote.Code != api.CodeBadRequest {
+		t.Fatalf("invalid language code = %v, want bad request", remote.Code)
+	}
+	if got := ctrl.Settings().Language; got != "fa" {
+		t.Fatalf("language after rejected set = %q, want fa", got)
+	}
+
+	if err := ctrl.ApplySetting(api.SettingsSetPayload{Key: "language", Reset: true}); err != nil {
+		t.Fatal(err)
+	}
+	view = ctrl.Settings()
+	if view.Language != "system" {
+		t.Fatalf("language after reset = %q, want system", view.Language)
+	}
+	if containsString(view.Overridden, "language") {
+		t.Fatalf("language still listed as overridden: %v", view.Overridden)
+	}
+}
+
 func containsString(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {

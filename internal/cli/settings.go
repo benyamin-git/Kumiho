@@ -19,6 +19,7 @@ var cliSettingKeys = []string{
 	"kill_switch",
 	"autoconnect",
 	"log_level",
+	"language",
 	"redact_targets",
 	"exit_check",
 	"doh_provider",
@@ -261,6 +262,8 @@ func settingTextValue(view api.SettingsView, key string) string {
 		return onOffText(view.AutoconnectEffective)
 	case "log_level":
 		return view.LogLevel
+	case "language":
+		return view.Language
 	case "redact_targets":
 		return strconv.FormatBool(view.RedactTargets)
 	case "exit_check":
