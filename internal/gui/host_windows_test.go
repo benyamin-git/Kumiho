@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/benyamin-git/kumiho/internal/gui/prefs"
+	"github.com/benyamin-git/kumiho/internal/gui/web"
 )
 
 // useTempPrefs points prefs.Save/Load at a scratch gui.toml.
@@ -107,7 +108,10 @@ func TestSaveGeometryPersistsMaximized(t *testing.T) {
 func newAutostartHost(t *testing.T, startOn bool) (*host, *Controller) {
 	t.Helper()
 	useTempPrefs(t)
-	h := &host{prefs: prefs.Prefs{Theme: "dark", Accent: "blue", Autostart: startOn}}
+	h := &host{
+		prefs:  prefs.Prefs{Theme: "dark", Accent: "blue", Autostart: startOn},
+		server: &web.Server{},
+	}
 	h.ctrl = NewController(newFakeDaemon(), Options{
 		Theme:     "dark",
 		Accent:    "blue",
