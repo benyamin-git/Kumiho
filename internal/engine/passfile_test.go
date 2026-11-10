@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -39,8 +40,13 @@ func TestPassFileRoundTripAndMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("pass.json mode = %o, want 600", got)
+	// Windows ignores Unix permission bits and reports the file as 0666.
+	// The round-trip below is the cross-platform assertion; keep the mode
+	// assertion on the platforms where it is meaningful.
+	if runtime.GOOS != "windows" {
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("pass.json mode = %o, want 600", got)
+		}
 	}
 	loaded, ok := ctrl.loadPassFile()
 	if !ok || loaded.Token != pass.Token || loaded.ExpiresAt != pass.ExpiresAt {
