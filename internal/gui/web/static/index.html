@@ -7,27 +7,28 @@
      every stylesheet, link and script. All scripts are same-origin files
      (CSP `default-src 'self'`; never add inline script or style attributes). -->
 <!--kumiho:theme-css-->
+<!--kumiho:language-->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kumiho</title>
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/app.css">
 <script src="js/transport.js"></script>
 </head>
-<body>
+<body class="app-booting">
 <div class="app">
 <header class="app-header">
 <h1 class="app-header__title" id="screen-title">Dashboard</h1>
 <p class="app-header__status" id="conn-status" data-tone="muted" role="status">Loading...</p>
 </header>
 <div class="app-body">
-<nav class="rail" aria-label="Primary">
+<nav class="rail" aria-label="Primary" data-i18n-aria-label="nav.primary">
 <ul class="rail__list">
-<li><a class="rail__item" href="#/dashboard" data-screen="dashboard">Dashboard</a></li>
-<li><a class="rail__item" href="#/locations" data-screen="locations">Locations</a></li>
-<li><a class="rail__item" href="#/settings" data-screen="settings">Settings</a></li>
-<li><a class="rail__item" href="#/account" data-screen="account">Account</a></li>
-<li><a class="rail__item" href="#/logs" data-screen="logs">Logs</a></li>
-<li><a class="rail__item" href="#/diagnostics" data-screen="diagnostics">Diagnostics</a></li>
+<li><a class="rail__item" href="#/dashboard" data-screen="dashboard" data-i18n="nav.dashboard">Dashboard</a></li>
+<li><a class="rail__item" href="#/locations" data-screen="locations" data-i18n="nav.locations">Locations</a></li>
+<li><a class="rail__item" href="#/settings" data-screen="settings" data-i18n="nav.settings">Settings</a></li>
+<li><a class="rail__item" href="#/account" data-screen="account" data-i18n="nav.account">Account</a></li>
+<li><a class="rail__item" href="#/logs" data-screen="logs" data-i18n="nav.logs">Logs</a></li>
+<li><a class="rail__item" href="#/diagnostics" data-screen="diagnostics" data-i18n="nav.diagnostics">Diagnostics</a></li>
 </ul>
 </nav>
 <main class="content" id="screen-host" tabindex="-1"></main>

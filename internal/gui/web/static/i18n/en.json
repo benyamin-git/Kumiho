@@ -1,0 +1,20 @@
+{
+  "nav.primary": "Primary",
+  "nav.dashboard": "Dashboard",
+  "nav.locations": "Locations",
+  "nav.settings": "Settings",
+  "nav.account": "Account",
+  "nav.logs": "Logs",
+  "nav.diagnostics": "Diagnostics",
+  "common.not_built_title": "Nothing here yet",
+  "common.not_built_detail": "The {title} screen is not built yet.",
+  "unit.bytes": "B",
+  "unit.kib": "KB",
+  "unit.mib": "MB",
+  "unit.gib": "GB",
+  "unit.tib": "TB",
+  "unit.seconds_short": "s",
+  "unit.minutes_short": "m",
+  "unit.hours_short": "h",
+  "unit.days_short": "d"
+}

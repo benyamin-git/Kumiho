@@ -290,6 +290,7 @@ func (h *host) run() error {
 		return fmt.Errorf("asset server: %w", err)
 	}
 	h.server.SetThemeCSS(css)
+	h.server.SetLanguage(cachedLanguage)
 
 	installed, err := webviewloader.GetInstalledVersion()
 	if err != nil {
@@ -935,6 +936,11 @@ func (h *host) applyPrefs(act Action) error {
 	h.mu.Lock()
 	h.prefs = updated
 	h.mu.Unlock()
+	effectiveLanguage := updated.Language
+	if effectiveLanguage == "" {
+		effectiveLanguage = prefs.SystemLanguage()
+	}
+	h.server.SetLanguage(effectiveLanguage)
 	if updated.Onboarded != current.Onboarded {
 		h.ctrl.SetOnboarded(updated.Onboarded)
 	}

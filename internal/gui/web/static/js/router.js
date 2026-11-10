@@ -56,6 +56,7 @@
  */
 
 import { store } from "./store.js";
+import { t } from "./i18n.js";
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const MAX_ID = 32;
@@ -159,10 +160,10 @@ function renderScaffold(host, title) {
   wrap.className = "empty-state";
   const heading = document.createElement("p");
   heading.className = "empty-state__title";
-  heading.textContent = "Nothing here yet";
+  heading.textContent = t("common.not_built_title");
   const detail = document.createElement("p");
   detail.className = "empty-state__detail";
-  detail.textContent = "The " + title + " screen is not built yet.";
+  detail.textContent = t("common.not_built_detail", { title: title });
   wrap.append(heading, detail);
   host.append(wrap);
 }
@@ -177,12 +178,21 @@ export function initRouter(opts) {
   const titleEl = opts.title;
   const send = opts.send;
   const links = Array.from(document.querySelectorAll(".rail__item[data-screen]"));
-  const titles = new Map(links.map((el) => [el.dataset.screen, el.textContent.trim()]));
+
+  // The rail is the single source for the screen titles; reading the live
+  // label keeps the header in step after data-i18n updates on a language
+  // change without a second title table.
+  function titleFor(id) {
+    const link = links.find((el) => el.dataset.screen === id);
+    const label = link ? link.textContent.trim() : "";
+    return label || capitalize(id);
+  }
 
   const appEl = document.querySelector(".app");
 
   let generation = 0;
   let current = null;
+  let currentCtx = null;
   let currentCSS = null; // the mounted screen's <link>, linked by the router
   let currentRoute = null; // the effective route actually shown
 
@@ -250,7 +260,7 @@ export function initRouter(opts) {
       if (link.dataset.screen === route.id) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     }
-    const title = titles.get(route.id) || capitalize(route.id);
+    const title = titleFor(route.id);
     titleEl.textContent = title;
 
     if (current && typeof current.unmount === "function") {
@@ -261,6 +271,7 @@ export function initRouter(opts) {
       }
     }
     current = null;
+    currentCtx = null;
     unlinkScreenCSS();
     host.replaceChildren();
 
@@ -284,7 +295,8 @@ export function initRouter(opts) {
     if (screen && typeof screen.mount === "function") {
       if (entry.css) linkScreenCSS(route.id, entry.css);
       try {
-        screen.mount(host, { store: store, send: send, hint: route.hint, navigate: navigate, title: title });
+        currentCtx = { store: store, send: send, hint: route.hint, navigate: navigate, title: title };
+        screen.mount(host, currentCtx);
         current = screen;
       } catch (err) {
         console.error("kumiho: screen " + route.id + " failed to mount", err);
@@ -298,6 +310,39 @@ export function initRouter(opts) {
     // Move focus into the content so keyboard and screen reader users land
     // on the new screen (the shell's rail stays put).
     if (moveFocus) host.focus({ preventScroll: true });
+  }
+
+  // Re-render the current route in place after a language change. The shell
+  // title is read from the freshly translated rail; a screen that exposes
+  // rerender keeps its local state, while the fallback remounts the screen
+  // (screens migrate to rerender as they gain translated copy).
+  function refresh() {
+    if (!currentRoute) return;
+    const title = titleFor(currentRoute.id);
+    titleEl.textContent = title;
+    if (currentCtx) currentCtx.title = title;
+    if (current && typeof current.rerender === "function") {
+      try {
+        current.rerender(currentCtx);
+      } catch (err) {
+        console.error("kumiho: " + currentRoute.id + " rerender failed", err);
+      }
+      return;
+    }
+    if (current && typeof current.mount === "function") {
+      try {
+        if (typeof current.unmount === "function") current.unmount();
+      } catch (err) {
+        console.error("kumiho: " + currentRoute.id + " unmount failed", err);
+      }
+      host.replaceChildren();
+      try {
+        current.mount(host, currentCtx);
+      } catch (err) {
+        console.error("kumiho: " + currentRoute.id + " remount failed", err);
+        renderScaffold(host, title);
+      }
+    }
   }
 
   window.addEventListener("hashchange", () => {
@@ -319,4 +364,5 @@ export function initRouter(opts) {
     history.replaceState(null, "", routeHash(initial));
   }
   routeTo(initial, false);
+  return { refresh: refresh };
 }

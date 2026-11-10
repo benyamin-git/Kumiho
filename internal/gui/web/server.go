@@ -36,6 +36,12 @@ import (
 // injected block lands before first paint. The real UI (T2.1) must keep it.
 const themeMarker = "<!--kumiho:theme-css-->"
 
+// languageMarker is the placeholder the server substitutes with the cached
+// effective language meta tag in every index.html render. It sits beside the
+// theme marker in <head>, before the scripts, so app.js can select the first
+// catalog without a round trip or an English flash.
+const languageMarker = "<!--kumiho:language-->"
+
 // indexFile is the document served for the (token-prefixed) root path.
 const indexFile = "index.html"
 
@@ -78,6 +84,7 @@ type Server struct {
 	ln       net.Listener
 	http     *http.Server
 	themeCSS string
+	language string       // en|fa; empty renders en
 	route    routeHandler // optional dynamic route hook (the dev harness)
 }
 
@@ -161,11 +168,24 @@ func (s *Server) SetThemeCSS(css string) {
 	s.mu.Unlock()
 }
 
+// SetLanguage sets the cached effective UI language injected into every
+// subsequent index.html render. Only en and fa are valid; anything else
+// renders en. It is safe to call concurrently with requests and takes effect
+// on the next render; a language-only change never reloads the page.
+func (s *Server) SetLanguage(lang string) {
+	if lang != "fa" {
+		lang = "en"
+	}
+	s.mu.Lock()
+	s.language = lang
+	s.mu.Unlock()
+}
+
 // setRouteHandler installs the dynamic route hook. It is unexported so the
-// exported surface stays New/Start/URL/SetThemeCSS/Close; its only caller is
-// the harness in this package (NewHarness). Installing a second hook is an
-// error — one dynamic route owner per server, so routes can never be
-// silently clobbered.
+// exported surface stays New/Start/URL/SetThemeCSS/SetLanguage/Close; its
+// only caller is the harness in this package (NewHarness). Installing a
+// second hook is an error — one dynamic route owner per server, so routes can
+// never be silently clobbered.
 func (s *Server) setRouteHandler(h routeHandler) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -242,6 +262,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == indexFile {
+		data = s.injectLanguage(data)
 		data, ok = s.injectTheme(w, data)
 		if !ok {
 			return
@@ -314,6 +335,21 @@ func (s *Server) injectTheme(w http.ResponseWriter, data []byte) ([]byte, bool) 
 		cspBase+"; style-src 'self' 'nonce-"+nonce+"'")
 	block := `<style nonce="` + nonce + `">` + css + `</style>`
 	return bytes.Replace(data, []byte(themeMarker), []byte(block), 1), true
+}
+
+// injectLanguage substitutes the language meta tag in an index.html document.
+// The value is restricted by SetLanguage to en|fa, so the tag needs no
+// escaping; a missing marker is a no-op, keeping minimal test documents and
+// older assets working.
+func (s *Server) injectLanguage(data []byte) []byte {
+	s.mu.Lock()
+	lang := s.language
+	s.mu.Unlock()
+	if lang == "" {
+		lang = "en"
+	}
+	tag := `<meta name="kumiho-language" content="` + lang + `">`
+	return bytes.Replace(data, []byte(languageMarker), []byte(tag), 1)
 }
 
 // styleClose is the closing sequence of the injected <style> element.

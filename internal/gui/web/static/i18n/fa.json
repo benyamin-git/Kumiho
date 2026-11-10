@@ -1,0 +1,20 @@
+{
+  "nav.primary": "ناوبری اصلی",
+  "nav.dashboard": "داشبورد",
+  "nav.locations": "مکان‌ها",
+  "nav.settings": "تنظیمات",
+  "nav.account": "حساب",
+  "nav.logs": "گزارش‌ها",
+  "nav.diagnostics": "عیب‌یابی",
+  "common.not_built_title": "هنوز چیزی اینجا نیست",
+  "common.not_built_detail": "صفحهٔ {title} هنوز ساخته نشده است.",
+  "unit.bytes": "بایت",
+  "unit.kib": "کیلوبایت",
+  "unit.mib": "مگابایت",
+  "unit.gib": "گیگابایت",
+  "unit.tib": "ترابایت",
+  "unit.seconds_short": "ث",
+  "unit.minutes_short": "د",
+  "unit.hours_short": "س",
+  "unit.days_short": "ر"
+}

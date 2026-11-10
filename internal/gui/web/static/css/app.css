@@ -12,6 +12,52 @@
  * rings and themed scrollbars. Screens add their own CSS files.
  */
 
+/* Vazirmatn is loaded only for Persian: English keeps the system UI font and
+ * never requests these files. The four static weights mirror the vendored
+ * third_party/vazirmatn sources copied under static/fonts/. */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../fonts/vazirmatn-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../fonts/vazirmatn-medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../fonts/vazirmatn-semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../fonts/vazirmatn-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+html[lang="fa"] {
+  --font-sans: "Vazirmatn", system-ui, "Segoe UI", sans-serif;
+}
+
+/* The catalogs load before the shell paints; visibility (not display) keeps
+ * the final layout stable while hiding the English first paint. app.js removes
+ * the class after initI18n resolves, including on a catalog failure. */
+.app-booting .app {
+  visibility: hidden;
+}
+
 /* ------------------------------------------------------------------------
  * Derived colour roles (composed only from injected theme variables).
  * ---------------------------------------------------------------------- */

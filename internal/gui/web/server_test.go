@@ -500,3 +500,43 @@ func TestIndexAsset(t *testing.T) {
 		}
 	}
 }
+
+// TestLanguageInjection pins the language meta tag: SetLanguage accepts only
+// en|fa, every index render replaces the marker exactly once, and the theme
+// block still injects alongside it.
+func TestLanguageInjection(t *testing.T) {
+	assets := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><head>" + themeMarker + languageMarker +
+			"</head><body>shell</body></html>")},
+	}
+	s := startServer(t, assets, Options{})
+
+	got := do(t, "GET", s.URL())
+	if !strings.Contains(got.body, `<meta name="kumiho-language" content="en">`) {
+		t.Fatalf("default language body = %q; want the en meta tag", got.body)
+	}
+	if strings.Contains(got.body, languageMarker) {
+		t.Error("language marker was not replaced")
+	}
+
+	s.SetLanguage("fa")
+	got = do(t, "GET", s.URL())
+	if !strings.Contains(got.body, `<meta name="kumiho-language" content="fa">`) {
+		t.Fatalf("fa body = %q; want the fa meta tag", got.body)
+	}
+	if strings.Count(got.body, "kumiho-language") != 1 {
+		t.Errorf("language tag appears %d times; want exactly once", strings.Count(got.body, "kumiho-language"))
+	}
+
+	s.SetLanguage("de")
+	got = do(t, "GET", s.URL())
+	if !strings.Contains(got.body, `<meta name="kumiho-language" content="en">`) {
+		t.Fatalf("invalid language body = %q; want the en fallback", got.body)
+	}
+
+	s.SetThemeCSS(":root{--injected:1}")
+	got = do(t, "GET", s.URL())
+	if !strings.Contains(got.body, ":root{--injected:1}") || !strings.Contains(got.body, `<meta name="kumiho-language" content="en">`) {
+		t.Fatalf("theme+language body = %q; want both injections", got.body)
+	}
+}
