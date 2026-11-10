@@ -37,6 +37,12 @@ flag-icons (https://github.com/lipis/flag-icons)
     rasterized into the Android app's WebP flag assets. Source, checksums and
     the full license are in third_party/flag-icons.
 
+Vazirmatn (https://github.com/rastikerdar/vazirmatn)
+    SIL Open Font License 1.1. Persian UI font, v33.003. Four static weights
+    (Regular, Medium, SemiBold, Bold) are bundled as WOFF2 for the Windows
+    GUI and TTF for the Android app. The full license text is in
+    third_party/vazirmatn/OFL.txt.
+
 jchv/go-webview2 (https://github.com/jchv/go-webview2)
     MIT License. WebView2 binding for the Windows GUI. Embeds Microsoft's
     WebView2Loader DLLs (webviewloader/sdk/, 3-Clause BSD License,
