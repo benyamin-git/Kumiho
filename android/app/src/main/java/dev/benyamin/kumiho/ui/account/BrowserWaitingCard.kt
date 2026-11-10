@@ -80,7 +80,8 @@ fun BrowserWaitingCard(
     modifier: Modifier = Modifier,
 ) {
     val warning = LocalKumihoColors.current.warning
-    val failed = browser.error != null || fallback
+    val browserMessage = browserMessageText(browser.message)
+    val failed = browser.error != null || browserMessage != null || fallback
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -100,7 +101,7 @@ fun BrowserWaitingCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
         ) {
-            if (browser.error == null && !fallback) {
+            if (browser.error == null && browserMessage == null && !fallback) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
                 Icon(
@@ -117,7 +118,8 @@ fun BrowserWaitingCard(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = browser.error ?: if (fallback) fallbackHint else hint,
+                    text = browser.error ?: browserMessage
+                        ?: if (fallback) fallbackHint else hint,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (failed) warning else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -235,10 +237,21 @@ fun BrowserWaitingCard(
     }
 }
 
+/** The client-generated browser failure copy, resolved by the UI. */
+@Composable
+private fun browserMessageText(message: BrowserMessage?): String? = when (message) {
+    null -> null
+    BrowserMessage.START_FAILED -> stringResource(R.string.browser_waiting_error_start)
+    BrowserMessage.NO_SIGN_IN_ID -> stringResource(R.string.browser_waiting_error_no_id)
+    BrowserMessage.FAILED -> stringResource(R.string.browser_waiting_error_failed)
+    BrowserMessage.UNEXPECTED_STEP -> stringResource(R.string.browser_waiting_error_unexpected_step)
+}
+
 /** The local validation copy for the paste field, resolved by the UI. */
 @Composable
 internal fun pasteMessageText(message: BrowserPasteMessage): String = stringResource(
     when (message) {
         BrowserPasteMessage.REQUIRED -> R.string.browser_waiting_paste_required
+        BrowserPasteMessage.FAILED -> R.string.browser_waiting_paste_failed
     },
 )

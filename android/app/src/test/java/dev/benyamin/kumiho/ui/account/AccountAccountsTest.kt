@@ -470,9 +470,10 @@ class AccountAccountsTest {
             assertFalse(viewModel.state.value.browserWebViewOpen)
             assertTrue(viewModel.state.value.browserPasteOpen)
             assertEquals(FULL_REDIRECT, viewModel.state.value.browserPasteValue)
+            assertNull(viewModel.state.value.browserPasteError)
             assertEquals(
-                "the OAuth state does not match",
-                viewModel.state.value.browserPasteError,
+                BrowserPasteMessage.FAILED,
+                viewModel.state.value.browserPasteMessage,
             )
 
             // The WebView will not emit the same redirect again; Continue retries

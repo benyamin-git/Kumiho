@@ -18,8 +18,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
@@ -98,10 +100,11 @@ fun KumihoLoadingState(
 fun KumihoErrorState(
     message: String,
     modifier: Modifier = Modifier,
-    title: String = "Something went wrong",
+    title: String = "",
     onRetry: (() -> Unit)? = null,
 ) {
     val loss = LocalKumihoColors.current.loss
+    val heading = title.ifBlank { stringResource(R.string.error_generic_title) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -123,7 +126,7 @@ fun KumihoErrorState(
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    text = title,
+                    text = heading,
                     style = MaterialTheme.typography.titleSmall,
                     color = loss,
                 )
@@ -140,7 +143,7 @@ fun KumihoErrorState(
                     color = MaterialTheme.colorScheme.primary,
                 ) {
                     Text(
-                        text = "Retry",
+                        text = stringResource(R.string.common_retry),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),

@@ -26,11 +26,22 @@ data class BrowserSignIn(
     val id: String,
     val url: String?,
     val error: String? = null,
+    /** A client-generated failure, resolved to a resource by the UI. */
+    val message: BrowserMessage? = null,
 )
+
+/** Client-generated browser failures; engine errors stay in [BrowserSignIn.error]. */
+enum class BrowserMessage {
+    START_FAILED,
+    NO_SIGN_IN_ID,
+    FAILED,
+    UNEXPECTED_STEP,
+}
 
 /** The local validation copy for the redirect-URL fallback field. */
 enum class BrowserPasteMessage {
     REQUIRED,
+    FAILED,
 }
 
 /**

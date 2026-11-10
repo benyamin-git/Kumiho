@@ -247,8 +247,8 @@ class AccountViewModel(
 
     private suspend fun loadAccounts(): LoadResult<Accounts> = try {
         LoadResult.Ok(withTimeout(ACCOUNT_LIST_TIMEOUT_MS) { gateway.accountsList() })
-    } catch (timeout: TimeoutCancellationException) {
-        LoadResult.Failed(IllegalStateException("the account list timed out", timeout))
+    } catch (_: TimeoutCancellationException) {
+        LoadResult.Timeout
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Exception) {
@@ -409,8 +409,12 @@ class AccountViewModel(
                             addingAccount = false,
                             signIn = it.signIn.copy(
                                 busy = false,
-                                error = login.error ?: "browser sign-in did not start",
-                                message = null,
+                                error = login.error,
+                                message = if (login.error == null) {
+                                    SetupMessage.BROWSER_START_FAILED
+                                } else {
+                                    null
+                                },
                             ),
                         )
                     }
@@ -543,7 +547,7 @@ class AccountViewModel(
                         mutableState.update {
                             it.copy(
                                 message = AccountMessage.ACTION_FAILED,
-                                error = login.error ?: "browser sign-in did not start",
+                                error = login.error,
                             )
                         }
                     }
@@ -738,8 +742,8 @@ class AccountViewModel(
                         browserWebViewOpen = false,
                         browserPasteOpen = true,
                         browserPasteValue = url,
-                        browserPasteError = messageOf(error),
-                        browserPasteMessage = null,
+                        browserPasteError = null,
+                        browserPasteMessage = BrowserPasteMessage.FAILED,
                         browserSubmitting = false,
                     )
                 }
@@ -830,7 +834,7 @@ class AccountViewModel(
 
     private fun shouldPollBrowser(): Boolean {
         val browser = mutableState.value.browser
-        return resumed && browser != null && browser.error == null
+        return resumed && browser != null && browser.error == null && browser.message == null
     }
 
     private fun restartBrowserPolling(immediate: Boolean) {
@@ -861,9 +865,12 @@ class AccountViewModel(
         } catch (error: Exception) {
             mutableState.update {
                 it.copy(
-                    browser = it.browser?.copy(error = messageOf(error)),
+                    browser = it.browser?.copy(
+                        error = null,
+                        message = BrowserMessage.FAILED,
+                    ),
                     message = AccountMessage.ACTION_FAILED,
-                    error = messageOf(error),
+                    error = null,
                 )
             }
         }
@@ -876,7 +883,12 @@ class AccountViewModel(
                 val id = login.loginId ?: current?.id
                 if (id.isNullOrBlank()) {
                     mutableState.update {
-                        it.copy(browser = it.browser?.copy(error = "the engine did not return a sign-in id"))
+                        it.copy(
+                            browser = it.browser?.copy(
+                                error = null,
+                                message = BrowserMessage.NO_SIGN_IN_ID,
+                            ),
+                        )
                     }
                     return
                 }
@@ -913,7 +925,8 @@ class AccountViewModel(
             STEP_ERROR -> mutableState.update {
                 it.copy(
                     browser = it.browser?.copy(
-                        error = login.error ?: "browser sign-in failed",
+                        error = login.error,
+                        message = if (login.error == null) BrowserMessage.FAILED else null,
                     ),
                     browserWebViewOpen = false,
                     browserSubmitting = false,
@@ -924,7 +937,8 @@ class AccountViewModel(
             else -> mutableState.update {
                 it.copy(
                     browser = it.browser?.copy(
-                        error = login.error ?: "unexpected sign-in step ${login.step}",
+                        error = login.error,
+                        message = if (login.error == null) BrowserMessage.UNEXPECTED_STEP else null,
                     ),
                     browserWebViewOpen = false,
                     browserSubmitting = false,

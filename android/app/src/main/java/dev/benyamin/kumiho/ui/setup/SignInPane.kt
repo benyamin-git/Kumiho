@@ -397,5 +397,6 @@ internal fun setupMessageText(message: SetupMessage): String = stringResource(
         SetupMessage.CODE_REQUIRED -> R.string.sign_in_code_required
         SetupMessage.UNEXPECTED_STEP -> R.string.sign_in_unexpected_step
         SetupMessage.NO_BROWSER -> R.string.sign_in_no_browser
+        SetupMessage.BROWSER_START_FAILED -> R.string.sign_in_browser_start_failed
     },
 )

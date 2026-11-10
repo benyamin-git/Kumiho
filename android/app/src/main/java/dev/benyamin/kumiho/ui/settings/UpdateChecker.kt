@@ -18,13 +18,30 @@ interface UpdateFetcher {
     fun get(url: String, userAgent: String): UpdateHttpResponse
 }
 
+/** The structured reason a manual update check failed. */
+sealed interface UpdateFailure {
+    data object InstalledVersionInvalid : UpdateFailure
+
+    data class Network(val detail: String?) : UpdateFailure
+
+    data class Http(val code: Int) : UpdateFailure
+
+    data object Malformed : UpdateFailure
+
+    data object NoRelease : UpdateFailure
+
+    data object MissingTag : UpdateFailure
+
+    data object InvalidTag : UpdateFailure
+}
+
 /** The result of one manual check. Only [Available] carries a release to open. */
 sealed interface UpdateResult {
     data object UpToDate : UpdateResult
 
     data class Available(val version: String, val url: String) : UpdateResult
 
-    data class Failed(val message: String) : UpdateResult
+    data class Failed(val failure: UpdateFailure) : UpdateResult
 }
 
 /**
@@ -49,34 +66,34 @@ class GitHubUpdateChecker(
 
     override suspend fun check(currentVersion: String): UpdateResult = withContext(Dispatchers.IO) {
         val current = parseSemver(currentVersion)
-            ?: return@withContext UpdateResult.Failed("The installed version is not a version number.")
+            ?: return@withContext UpdateResult.Failed(UpdateFailure.InstalledVersionInvalid)
         val response = try {
             fetcher.get(RELEASES_URL, USER_AGENT)
         } catch (error: Exception) {
             return@withContext UpdateResult.Failed(
-                error.message?.takeIf { it.isNotBlank() } ?: "The update check could not reach GitHub.",
+                UpdateFailure.Network(error.message?.takeIf { it.isNotBlank() }),
             )
         }
         if (response.code != HttpURLConnection.HTTP_OK) {
-            return@withContext UpdateResult.Failed("GitHub answered HTTP ${response.code}.")
+            return@withContext UpdateResult.Failed(UpdateFailure.Http(response.code))
         }
         val releases = try {
             JSONArray(response.body)
         } catch (error: JSONException) {
-            return@withContext UpdateResult.Failed("GitHub sent a release that could not be read.")
+            return@withContext UpdateResult.Failed(UpdateFailure.Malformed)
         }
         val release = (0 until releases.length())
             .mapNotNull { index -> releases.optJSONObject(index) }
             .firstOrNull { !it.optBoolean("draft", false) }
-            ?: return@withContext UpdateResult.Failed("GitHub has no published release.")
+            ?: return@withContext UpdateResult.Failed(UpdateFailure.NoRelease)
         val tag = release.optString("tag_name").trim()
         if (tag.isEmpty()) {
-            return@withContext UpdateResult.Failed("GitHub's latest release has no version tag.")
+            return@withContext UpdateResult.Failed(UpdateFailure.MissingTag)
         }
         val normalized = tag.removePrefix("v").removePrefix("V")
         if (isPrereleaseTag(normalized)) return@withContext UpdateResult.UpToDate
         val latest = parseSemver(normalized)
-            ?: return@withContext UpdateResult.Failed("GitHub's latest release tag is not a version number.")
+            ?: return@withContext UpdateResult.Failed(UpdateFailure.InvalidTag)
         if (latest <= current) return@withContext UpdateResult.UpToDate
         val url = release.optString("html_url").trim().ifEmpty { "$RELEASES_PAGE/tag/$tag" }
         UpdateResult.Available(version = normalized, url = url)

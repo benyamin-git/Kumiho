@@ -307,7 +307,7 @@ class SettingsViewModel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                UpdateResult.Failed(messageOf(error))
+                UpdateResult.Failed(UpdateFailure.Network(messageOf(error)))
             }
             mutableState.update { current ->
                 current.copy(
@@ -315,7 +315,7 @@ class SettingsViewModel(
                         UpdateResult.UpToDate -> UpdateState.UpToDate
                         is UpdateResult.Available ->
                             UpdateState.Available(result.version, result.url)
-                        is UpdateResult.Failed -> UpdateState.Failed(result.message)
+                        is UpdateResult.Failed -> UpdateState.Failed(result.failure)
                     },
                 )
             }

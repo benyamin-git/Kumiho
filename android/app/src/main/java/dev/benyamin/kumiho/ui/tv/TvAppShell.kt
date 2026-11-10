@@ -15,11 +15,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.shell.Destination
 import dev.benyamin.kumiho.ui.shell.MoreRoute
 import dev.benyamin.kumiho.ui.shell.ShellNavigation
+import dev.benyamin.kumiho.ui.shell.screenTitle
 import dev.benyamin.kumiho.ui.tv.theme.TvDimens
 
 /**
@@ -84,7 +87,13 @@ fun TvAppShell(
                 focusRequesters = railFocus,
             )
             Column(modifier = Modifier.fillMaxSize().padding(start = TvDimens.Space2)) {
-                TvTopBar(title = if (moreOpen) Destination.More.label else state.title)
+                TvTopBar(
+                    title = if (moreOpen) {
+                        stringResource(Destination.More.labelRes)
+                    } else {
+                        state.screenTitle()
+                    },
+                )
                 Box(modifier = Modifier.fillMaxSize()) {
                     when {
                         moreOpen -> TvMorePage(

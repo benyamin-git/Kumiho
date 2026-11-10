@@ -61,6 +61,7 @@ import dev.benyamin.kumiho.ui.settings.batteryStatusTone
 import dev.benyamin.kumiho.ui.settings.settingDisplayValue
 import dev.benyamin.kumiho.ui.settings.settingOptionLabel
 import dev.benyamin.kumiho.ui.settings.settingValidationText
+import dev.benyamin.kumiho.ui.settings.updateFailureText
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
@@ -527,10 +528,15 @@ private fun UpdateBlock(
         }
         is UpdateState.Failed -> {
             Text(
-                text = stringResource(R.string.settings_update_failed) + " " + update.message,
+                text = stringResource(R.string.settings_update_failed),
                 style = MaterialTheme.typography.bodyMedium,
                 color = LocalKumihoColors.current.loss,
                 modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
+            Text(
+                text = updateFailureText(update.failure),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TvButton(
                 label = stringResource(R.string.settings_update_retry),

@@ -16,9 +16,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.shell.Destination
 import dev.benyamin.kumiho.ui.tv.components.TvButton
 import dev.benyamin.kumiho.ui.tv.components.TvFocusableSurface
@@ -52,7 +54,7 @@ fun TvRail(
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
     ) {
         Text(
-            text = "Kumiho",
+            text = stringResource(R.string.app_name),
             style = MaterialTheme.typography.titleLarge,
             color = colors.onSurface,
             modifier = Modifier.padding(start = TvDimens.Space2, bottom = TvDimens.Space2),
@@ -79,7 +81,7 @@ fun TvRail(
                     horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
                 ) {
                     Text(
-                        text = destination.label,
+                        text = stringResource(destination.labelRes),
                         style = MaterialTheme.typography.titleSmall,
                         color = content,
                     )
@@ -118,21 +120,24 @@ fun TvMorePage(
             .testTag(TvShellTags.MORE),
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
     ) {
-        TvPageHeader(title = "More", subtitle = "Logs and diagnostics")
+        TvPageHeader(
+            title = stringResource(R.string.nav_more),
+            subtitle = stringResource(R.string.tv_more_subtitle),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space2)) {
             TvButton(
-                label = "Logs",
+                label = stringResource(R.string.nav_logs),
                 onClick = onLogs,
                 modifier = Modifier.testTag(TvShellTags.MORE_LOGS),
             )
             TvButton(
-                label = "Diagnostics",
+                label = stringResource(R.string.nav_diagnostics),
                 onClick = onDiagnostics,
                 modifier = Modifier.testTag(TvShellTags.MORE_DIAGNOSTICS),
             )
         }
         Text(
-            text = "Press Back to return to the previous screen.",
+            text = stringResource(R.string.tv_more_back_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Start,

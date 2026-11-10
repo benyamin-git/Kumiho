@@ -16,6 +16,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
@@ -41,7 +43,7 @@ fun KumihoTopBar(
                 IconButton(onClick = onBack, modifier = Modifier.size(Dimens.TouchTarget)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.common_back),
                         tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }

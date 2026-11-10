@@ -1180,7 +1180,7 @@ private fun UpdateBlock(state: SettingsState, actions: SettingsActions) {
                     modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
                 )
                 Text(
-                    text = update.message,
+                    text = updateFailureText(update.failure),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

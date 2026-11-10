@@ -75,7 +75,7 @@ sealed interface UpdateState {
 
     data class Available(val version: String, val url: String) : UpdateState
 
-    data class Failed(val message: String) : UpdateState
+    data class Failed(val failure: UpdateFailure) : UpdateState
 }
 
 /**

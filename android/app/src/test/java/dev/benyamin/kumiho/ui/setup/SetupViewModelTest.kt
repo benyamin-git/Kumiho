@@ -282,7 +282,8 @@ class SetupViewModelTest {
 
             assertTrue(viewModel.state.value.browserPasteOpen)
             assertEquals(FULL_REDIRECT, viewModel.state.value.browserPasteValue)
-            assertEquals("bad redirect", viewModel.state.value.browserPasteError)
+            assertNull(viewModel.state.value.browserPasteError)
+            assertEquals(BrowserPasteMessage.FAILED, viewModel.state.value.browserPasteMessage)
             assertTrue(viewModel.state.value.browser != null)
             assertFalse(viewModel.state.value.browserWebViewOpen)
         }

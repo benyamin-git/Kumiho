@@ -317,10 +317,12 @@ class SettingsScreenTest {
 
     @Test
     fun aFailedUpdateOffersARetry() {
-        show(state(update = UpdateState.Failed("no route to host")))
+        show(state(update = UpdateState.Failed(UpdateFailure.Network("no route to host"))))
 
         scrollTo(SettingsTags.UPDATE_STATUS)
-        rule.onNodeWithText("no route to host").assertExists()
+        rule.onNodeWithText(
+            rule.activity.getString(R.string.settings_update_failure_network),
+        ).assertExists()
         rule.onNodeWithTag(SettingsTags.UPDATE_RETRY).performClick()
 
         assertEquals(listOf("check-updates"), calls)

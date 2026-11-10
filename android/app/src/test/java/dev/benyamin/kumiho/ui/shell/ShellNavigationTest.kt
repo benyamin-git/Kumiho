@@ -93,7 +93,6 @@ class ShellNavigationTest {
         assertNull(nav.current.moreRoute)
         assertEquals("home", nav.current.route)
         assertEquals(Destination.Home, nav.current.selectedTab)
-        assertEquals("Home", nav.current.title)
     }
 
     @Test
@@ -131,7 +130,6 @@ class ShellNavigationTest {
         nav.openMoreRoute(MoreRoute.Logs)
         assertEquals(MoreRoute.Logs, nav.current.moreRoute)
         assertEquals("logs", nav.current.route)
-        assertEquals("Logs", nav.current.title)
         // More is the item that reads as selected while a More route is up.
         assertEquals(Destination.More, nav.current.selectedTab)
         // The underlying tab is remembered, not lost.

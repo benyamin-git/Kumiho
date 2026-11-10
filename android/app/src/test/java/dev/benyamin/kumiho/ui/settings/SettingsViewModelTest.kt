@@ -387,12 +387,15 @@ class SettingsViewModelTest {
         runTest(mainRule.testDispatcher) {
             val viewModel = viewModel()
             runCurrent()
-            checker.result = UpdateResult.Failed("no route to host")
+            checker.result = UpdateResult.Failed(UpdateFailure.Network("no route to host"))
 
             viewModel.checkForUpdates()
             runCurrent()
 
-            assertEquals(UpdateState.Failed("no route to host"), viewModel.state.value.update)
+            assertEquals(
+                UpdateState.Failed(UpdateFailure.Network("no route to host")),
+                viewModel.state.value.update,
+            )
 
             checker.result = UpdateResult.UpToDate
             viewModel.checkForUpdates()

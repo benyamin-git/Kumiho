@@ -228,19 +228,34 @@ private fun SummaryCard(report: DoctorReport, checks: List<DoctorCheck>) {
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
     ) {
         Text(
-            text = DiagnosticsReducer.summary(report, checks),
+            text = stringResource(R.string.diagnostics_summary_title),
             style = MaterialTheme.typography.titleMedium,
             color = colors.onSurface,
         )
         Text(
-            text = "Kumiho " + report.version + " · " + report.host + " · " + report.os,
+            text = stringResource(
+                R.string.diagnostics_report_meta,
+                report.version,
+                report.os,
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
         )
         Text(
-            text = report.time,
+            text = stringResource(R.string.diagnostics_report_host, report.host, report.time),
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
+        )
+        val counts = DiagnosticsReducer.statusCounts(checks)
+        Text(
+            text = stringResource(
+                R.string.diagnostics_summary,
+                counts[DoctorStatus.FAIL] ?: 0,
+                counts[DoctorStatus.WARN] ?: 0,
+                counts[DoctorStatus.SKIP] ?: 0,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
         )
     }
 }
@@ -270,41 +285,66 @@ private fun FactsCard(
         )
         if (facts != null) {
             Text(
-                text = "Device " + facts.device + " · SDK " + facts.sdk +
-                    " · Engine " + facts.engineState.ifBlank { "—" },
+                text = stringResource(
+                    R.string.diagnostics_facts_device,
+                    facts.device,
+                    facts.sdk,
+                    facts.engineState.ifBlank { "—" },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
             Text(
-                text = "VPN permission " + yesNo(facts.vpnPermission) +
-                    " · Always-on " + yesNo(facts.alwaysOn) +
-                    " · Lockdown " + yesNo(facts.lockdown),
+                text = stringResource(
+                    R.string.diagnostics_facts_permission,
+                    yesNo(facts.vpnPermission),
+                    yesNo(facts.alwaysOn),
+                    yesNo(facts.lockdown),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
             Text(
-                text = "Notifications " + yesNo(facts.notifications) +
-                    " · Battery optimized " + yesNo(facts.batteryOptimized) +
-                    " · Network " + yesNo(facts.network),
+                text = stringResource(
+                    R.string.diagnostics_facts_notifications,
+                    yesNo(facts.notifications),
+                    yesNo(facts.batteryOptimized),
+                    yesNo(facts.network),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
             Text(
-                text = "DNS " + facts.dnsServers.joinToString(", ").ifBlank { "—" } +
-                    " · Private DNS " + facts.privateDnsMode,
+                text = stringResource(
+                    R.string.diagnostics_facts_dns,
+                    facts.dnsServers.joinToString(", ").ifBlank { "—" },
+                    privateDns(facts.privateDnsMode),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
             Text(
-                text = "SOCKS listening " + yesNo(facts.socksPortListening) +
-                    " · HTTP proxy listening " + yesNo(facts.httpProxyPortListening),
+                text = stringResource(
+                    R.string.diagnostics_facts_ports,
+                    yesNo(facts.socksPortListening),
+                    yesNo(facts.httpProxyPortListening),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
         }
         Text(
-            text = "Service " + if (serviceBound) "bound" else "not bound" +
-                " · Split " + splitLabel(splitMode, splitAppCount),
+            text = stringResource(
+                R.string.diagnostics_facts_service,
+                stringResource(
+                    if (serviceBound) {
+                        R.string.diagnostics_service_bound
+                    } else {
+                        R.string.diagnostics_service_not_bound
+                    },
+                ),
+                splitLabel(splitMode, splitAppCount),
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
             modifier = Modifier.testTag(DiagnosticsTags.SPLIT_CARD),
@@ -419,10 +459,23 @@ private fun ResetDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     )
 }
 
-private fun yesNo(value: Boolean): String = if (value) "yes" else "no"
+@Composable
+private fun yesNo(value: Boolean): String = stringResource(
+    if (value) R.string.diagnostics_yes else R.string.diagnostics_no,
+)
 
+@Composable
+private fun privateDns(mode: String?): String = when (mode) {
+    AndroidFacts.PRIVATE_DNS_HOSTNAME -> stringResource(R.string.diagnostics_private_dns_hostname)
+    AndroidFacts.PRIVATE_DNS_OPPORTUNISTIC ->
+        stringResource(R.string.diagnostics_private_dns_opportunistic)
+    AndroidFacts.PRIVATE_DNS_OFF -> stringResource(R.string.diagnostics_private_dns_off)
+    else -> stringResource(R.string.diagnostics_not_reported)
+}
+
+@Composable
 private fun splitLabel(mode: SplitMode, count: Int): String = when (mode) {
-    SplitMode.OFF -> "off"
-    SplitMode.EXCLUDE -> "excluding $count"
-    SplitMode.INCLUDE -> "including $count"
+    SplitMode.OFF -> stringResource(R.string.diagnostics_split_off)
+    SplitMode.EXCLUDE -> stringResource(R.string.diagnostics_split_excluding, count)
+    SplitMode.INCLUDE -> stringResource(R.string.diagnostics_split_including, count)
 }

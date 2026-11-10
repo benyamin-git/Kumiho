@@ -9,11 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.benyamin.kumiho.AppContainer
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.account.AccountRoute
 import dev.benyamin.kumiho.ui.tv.theme.TvDimens
 
@@ -34,7 +36,7 @@ fun TvAccountRoute(container: AppContainer, modifier: Modifier = Modifier) {
                 verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
             ) {
                 Text(
-                    text = "Loading your account…",
+                    text = stringResource(R.string.tv_account_loading),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,

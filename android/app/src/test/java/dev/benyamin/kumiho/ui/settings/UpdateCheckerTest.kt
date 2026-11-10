@@ -120,7 +120,7 @@ class UpdateCheckerTest {
     fun `a transport failure is reported and never invented`() = runBlocking {
         fetcher.error = IllegalStateException("no route to host")
         assertEquals(
-            UpdateResult.Failed("no route to host"),
+            UpdateResult.Failed(UpdateFailure.Network("no route to host")),
             checker().check("0.5.0"),
         )
     }
@@ -130,7 +130,7 @@ class UpdateCheckerTest {
         fetcher.response = UpdateHttpResponse(503, "")
         val result = checker().check("0.5.0")
         assertTrue(result is UpdateResult.Failed)
-        assertTrue((result as UpdateResult.Failed).message.contains("503"))
+        assertEquals(UpdateFailure.Http(503), (result as UpdateResult.Failed).failure)
     }
 
     @Test

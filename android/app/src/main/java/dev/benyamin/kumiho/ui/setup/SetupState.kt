@@ -42,6 +42,7 @@ enum class SetupMessage {
     CODE_REQUIRED,
     UNEXPECTED_STEP,
     NO_BROWSER,
+    BROWSER_START_FAILED,
 }
 
 /**

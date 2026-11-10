@@ -582,7 +582,7 @@ private fun FastestRow(
                 )
                 Text(
                     text = if (fastest != null) {
-                        fastest.row.title + LocationTree.SEPARATOR + fastest.row.address
+                        locationTitle(fastest.row) + LocationTree.SEPARATOR + fastest.row.address
                     } else {
                         stringResource(R.string.locations_fastest_hint)
                     },
@@ -665,9 +665,10 @@ private fun ServerRow(
     onFavorite: () -> Unit,
 ) {
     val server = row.server
+    val title = locationTitle(row)
     val favoriteDescription = stringResource(
         if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
-        row.title,
+        title,
     )
     Surface(
         shape = MaterialTheme.shapes.medium,
@@ -720,7 +721,7 @@ private fun ServerRow(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = row.title,
+                        text = title,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,

@@ -12,8 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoPowerButton
 import dev.benyamin.kumiho.ui.theme.Dimens
 
@@ -68,13 +70,14 @@ fun PlaceholderScreen(
  */
 @Composable
 fun HomePlaceholder(modifier: Modifier = Modifier) {
+    val notConnected = stringResource(R.string.dashboard_state_off)
     PlaceholderScreen(
-        title = "Not connected",
-        message = "The engine client is not wired yet. The dashboard arrives with it.",
+        title = notConnected,
+        message = stringResource(R.string.placeholder_dashboard_waiting),
         modifier = modifier,
         hero = {
             KumihoPowerButton(
-                stateLabel = "Not connected",
+                stateLabel = notConnected,
                 connected = false,
                 enabled = false,
                 onToggle = {},

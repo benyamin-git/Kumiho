@@ -52,14 +52,14 @@ fun MoreSheet(
             KumihoSectionHeader(title = stringResource(R.string.more_title))
             overflow.forEach { destination ->
                 KumihoRow(
-                    title = destination.label,
+                    title = stringResource(destination.labelRes),
                     icon = destinationIcon(destination),
                     onClick = { onSelectTab(destination) },
                 )
             }
             MoreRoute.entries.forEach { route ->
                 KumihoRow(
-                    title = route.label,
+                    title = stringResource(route.labelRes),
                     icon = moreRouteIcon(route),
                     onClick = { onOpen(route) },
                 )

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.ui.account.BrowserMessage
 import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import dev.benyamin.kumiho.ui.account.BrowserSignIn
 import kotlinx.coroutines.CancellationException
@@ -284,7 +285,12 @@ class SetupViewModel(
                             it.copy(
                                 signIn = it.signIn.copy(
                                     busy = false,
-                                    error = login.error ?: "browser sign-in did not start",
+                                    error = login.error,
+                                    message = if (login.error == null) {
+                                        SetupMessage.BROWSER_START_FAILED
+                                    } else {
+                                        null
+                                    },
                                 ),
                             )
                         }
@@ -295,7 +301,13 @@ class SetupViewModel(
             } catch (error: Exception) {
                 clearBrowserState()
                 mutableState.update {
-                    it.copy(signIn = it.signIn.copy(busy = false, error = messageOf(error)))
+                    it.copy(
+                        signIn = it.signIn.copy(
+                            busy = false,
+                            error = null,
+                            message = SetupMessage.BROWSER_START_FAILED,
+                        ),
+                    )
                 }
             }
         }
@@ -441,8 +453,8 @@ class SetupViewModel(
                         browserWebViewOpen = false,
                         browserPasteOpen = true,
                         browserPasteValue = url,
-                        browserPasteError = messageOf(error),
-                        browserPasteMessage = null,
+                        browserPasteError = null,
+                        browserPasteMessage = BrowserPasteMessage.FAILED,
                         browserSubmitting = false,
                     )
                 }
@@ -500,7 +512,8 @@ class SetupViewModel(
         return resumed &&
             current.step == SetupStep.SIGN_IN &&
             browser != null &&
-            browser.error == null
+            browser.error == null &&
+            browser.message == null
     }
 
     private fun restartBrowserPolling(immediate: Boolean) {
@@ -530,7 +543,12 @@ class SetupViewModel(
             throw cancelled
         } catch (error: Exception) {
             mutableState.update {
-                it.copy(browser = it.browser?.copy(error = messageOf(error)))
+                it.copy(
+                    browser = it.browser?.copy(
+                        error = null,
+                        message = BrowserMessage.FAILED,
+                    ),
+                )
             }
         }
     }
@@ -542,7 +560,12 @@ class SetupViewModel(
                 val id = login.loginId ?: current?.id
                 if (id.isNullOrBlank()) {
                     mutableState.update {
-                        it.copy(browser = it.browser?.copy(error = "the engine did not return a sign-in id"))
+                        it.copy(
+                            browser = it.browser?.copy(
+                                error = null,
+                                message = BrowserMessage.NO_SIGN_IN_ID,
+                            ),
+                        )
                     }
                     return
                 }
@@ -581,7 +604,8 @@ class SetupViewModel(
             STEP_ERROR -> mutableState.update {
                 it.copy(
                     browser = it.browser?.copy(
-                        error = login.error ?: "browser sign-in failed",
+                        error = login.error,
+                        message = if (login.error == null) BrowserMessage.FAILED else null,
                     ),
                     browserWebViewOpen = false,
                     browserSubmitting = false,
@@ -590,7 +614,8 @@ class SetupViewModel(
             else -> mutableState.update {
                 it.copy(
                     browser = it.browser?.copy(
-                        error = login.error ?: "unexpected sign-in step ${login.step}",
+                        error = login.error,
+                        message = if (login.error == null) BrowserMessage.UNEXPECTED_STEP else null,
                     ),
                     browserWebViewOpen = false,
                     browserSubmitting = false,

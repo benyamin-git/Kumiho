@@ -185,7 +185,7 @@ private fun PaletteErrorSurface(message: String, onRetry: () -> Unit) {
                     modifier = Modifier.size(40.dp),
                 )
                 Text(
-                    text = "Theme unavailable",
+                    text = stringResource(R.string.theme_unavailable),
                     style = MaterialTheme.typography.titleLarge,
                     color = foreground,
                 )
@@ -202,7 +202,7 @@ private fun PaletteErrorSurface(message: String, onRetry: () -> Unit) {
                     border = BorderStroke(1.dp, foreground.copy(alpha = 0.5f)),
                 ) {
                     Text(
-                        text = "Retry",
+                        text = stringResource(R.string.common_retry),
                         style = MaterialTheme.typography.labelLarge,
                         color = foreground,
                         modifier = Modifier.padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),

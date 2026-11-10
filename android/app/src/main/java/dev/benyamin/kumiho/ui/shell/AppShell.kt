@@ -32,9 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.destinationIcon
 import dev.benyamin.kumiho.ui.components.moreRouteIcon
 import dev.benyamin.kumiho.ui.screens.HomePlaceholder
@@ -124,7 +126,7 @@ fun AppShell(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 KumihoTopBar(
-                    title = state.title,
+                    title = state.screenTitle(),
                     onBack = if (state.moreRoute != null) {
                         { back.value() }
                     } else {
@@ -209,7 +211,9 @@ fun AppShell(
 private fun widestLabelWidth(): Dp {
     val measurer = rememberTextMeasurer()
     val style = MaterialTheme.typography.labelMedium
-    val widest = Destination.tabs.maxOf { measurer.measure(it.label, style).size.width }
+    val widest = Destination.tabs.maxOf {
+        measurer.measure(stringResource(it.labelRes), style).size.width
+    }
     return with(LocalDensity.current) { widest.toDp() }
 }
 
@@ -228,7 +232,7 @@ private fun BottomBar(
                 selected = destination == marked,
                 onClick = { onSelect(destination) },
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
-                label = { Text(destination.label) },
+                label = { Text(stringResource(destination.labelRes)) },
                 alwaysShowLabel = true,
             )
         }
@@ -247,7 +251,7 @@ private fun NavRail(
                 selected = destination == selected,
                 onClick = { onSelect(destination) },
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
-                label = { Text(destination.label) },
+                label = { Text(stringResource(destination.labelRes)) },
                 alwaysShowLabel = true,
             )
         }
@@ -285,8 +289,8 @@ private fun ScreenHost(
 @Composable
 private fun AccountPlaceholder() {
     PlaceholderScreen(
-        title = Destination.Account.label,
-        message = "Not connected. Account details arrive with the engine client.",
+        title = stringResource(Destination.Account.labelRes),
+        message = stringResource(R.string.placeholder_account_waiting),
         icon = destinationIcon(Destination.Account),
     )
 }
@@ -295,8 +299,8 @@ private fun AccountPlaceholder() {
 @Composable
 private fun MoreRoutePlaceholder(route: MoreRoute) {
     PlaceholderScreen(
-        title = route.label,
-        message = "Not connected. This screen arrives with the engine client.",
+        title = stringResource(route.labelRes),
+        message = stringResource(R.string.placeholder_route_waiting),
         icon = moreRouteIcon(route),
     )
 }
@@ -305,8 +309,8 @@ private fun MoreRoutePlaceholder(route: MoreRoute) {
 @Composable
 private fun LocationsPlaceholder() {
     PlaceholderScreen(
-        title = Destination.Locations.label,
-        message = "Not connected. Location data arrives with the engine client.",
+        title = stringResource(Destination.Locations.labelRes),
+        message = stringResource(R.string.placeholder_locations_waiting),
         icon = destinationIcon(Destination.Locations),
     )
 }
@@ -315,8 +319,8 @@ private fun LocationsPlaceholder() {
 @Composable
 private fun SettingsPlaceholder() {
     PlaceholderScreen(
-        title = Destination.Settings.label,
-        message = "Engine settings arrive with the engine client.",
+        title = stringResource(Destination.Settings.labelRes),
+        message = stringResource(R.string.placeholder_settings_waiting),
         icon = destinationIcon(Destination.Settings),
     )
 }

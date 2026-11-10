@@ -58,6 +58,7 @@ import dev.benyamin.kumiho.ui.locations.LocationsRoute
 import dev.benyamin.kumiho.ui.locations.LocationsState
 import dev.benyamin.kumiho.ui.locations.LocationsTags
 import dev.benyamin.kumiho.ui.locations.latencyText
+import dev.benyamin.kumiho.ui.locations.locationTitle
 import dev.benyamin.kumiho.ui.locations.noticeText
 import dev.benyamin.kumiho.ui.locations.selectionText
 import dev.benyamin.kumiho.ui.locations.serverRowTag
@@ -446,7 +447,7 @@ private fun FastestRow(
                 )
                 Text(
                     text = if (fastest != null) {
-                        fastest.row.title + LocationTree.SEPARATOR + fastest.row.address
+                        locationTitle(fastest.row) + LocationTree.SEPARATOR + fastest.row.address
                     } else {
                         stringResource(R.string.locations_fastest_hint)
                     },
@@ -492,9 +493,10 @@ private fun ServerRow(
 ) {
     val colors = MaterialTheme.colorScheme
     val shape = MaterialTheme.shapes.medium
+    val title = locationTitle(row)
     val favoriteDescription = stringResource(
         if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
-        row.title,
+        title,
     )
     Row(
         modifier = Modifier
@@ -536,7 +538,7 @@ private fun ServerRow(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = row.title,
+                        text = title,
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurface,
                         maxLines = 1,

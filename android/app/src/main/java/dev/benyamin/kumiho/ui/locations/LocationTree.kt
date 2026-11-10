@@ -405,6 +405,9 @@ data class LocationRow(
 ) {
     val countryCode: String get() = country.code.trim().lowercase()
 
+    /** True for the engine's REC shortcut. */
+    val recommended: Boolean get() = LocationTree.isRecommended(country)
+
     /** Full country name, or "Recommended"; never a country code unless unknown. */
     val countryName: String get() = LocationTree.displayCountryName(country)
 

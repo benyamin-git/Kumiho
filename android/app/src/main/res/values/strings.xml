@@ -129,6 +129,7 @@
     <string name="sign_in_password_required">Enter your Firefox Account password.</string>
     <string name="sign_in_code_required">Enter the code from the email.</string>
     <string name="sign_in_unexpected_step">The engine answered with an unexpected sign-in step. Start again from the email address.</string>
+    <string name="sign_in_browser_start_failed">Browser sign-in did not start. Start again from the email address.</string>
 
     <!-- Step 3: Android permissions. -->
     <string name="permissions_title">Android permissions</string>
@@ -781,4 +782,66 @@
     <string name="guide_relay_note">Only blocked Mozilla requests use the relay; VPN traffic never does.</string>
     <string name="guide_browser_note">Browser sign-in still needs another VPN or another device; the relay does not proxy the browser page.</string>
     <string name="guide_close_to_sign_in">Close this guide to sign in, then prepare.</string>
+
+    <!-- Shared shell and error copy (T12). -->
+    <string name="common_retry">Retry</string>
+    <string name="common_back">Back</string>
+    <string name="theme_unavailable">Theme unavailable</string>
+    <string name="error_generic_title">Something went wrong</string>
+    <string name="error_summary_bad_request">That request was not understood.</string>
+    <string name="error_summary_not_implemented">This version of Kumiho does not support that action.</string>
+    <string name="error_summary_not_authenticated">Sign in and try again.</string>
+    <string name="error_summary_forbidden">This account is not allowed to do that.</string>
+    <string name="error_summary_unsupported_setting">That setting is not supported.</string>
+    <string name="error_summary_internal">Kumiho hit an internal error.</string>
+    <string name="error_summary_protocol">Kumiho and the engine could not agree on the protocol.</string>
+    <string name="error_summary_engine">The local engine failed.</string>
+    <string name="error_summary_closed">The connection to the engine closed.</string>
+    <string name="error_summary_generic">Something went wrong.</string>
+
+    <!-- Shell destinations and placeholders. -->
+    <string name="nav_home">Home</string>
+    <string name="nav_locations">Locations</string>
+    <string name="nav_account">Account</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_more">More</string>
+    <string name="nav_logs">Logs</string>
+    <string name="nav_diagnostics">Diagnostics</string>
+    <string name="placeholder_dashboard_waiting">The engine client is not wired yet. The dashboard arrives with it.</string>
+    <string name="placeholder_account_waiting">Not connected. Account details arrive with the engine client.</string>
+    <string name="placeholder_route_waiting">Not connected. This screen arrives with the engine client.</string>
+    <string name="placeholder_locations_waiting">Not connected. Location data arrives with the engine client.</string>
+    <string name="placeholder_settings_waiting">Engine settings arrive with the engine client.</string>
+
+    <!-- Android TV shell and waiting copy. -->
+    <string name="tv_more_subtitle">Logs and diagnostics</string>
+    <string name="tv_more_back_hint">Press Back to return to the previous screen.</string>
+    <string name="tv_dashboard_loading">Loading the VPN service…</string>
+    <string name="tv_dashboard_unavailable">The VPN service is unavailable</string>
+    <string name="tv_account_loading">Loading your account…</string>
+    <string name="diagnostics_facts_device">Device %1$s · SDK %2$s · Engine %3$s</string>
+    <string name="diagnostics_facts_permission">VPN permission %1$s · Always-on %2$s · Lockdown %3$s</string>
+    <string name="diagnostics_facts_notifications">Notifications %1$s · Battery optimized %2$s · Network %3$s</string>
+    <string name="diagnostics_facts_dns">DNS %1$s · Private DNS %2$s</string>
+    <string name="diagnostics_facts_ports">SOCKS listening %1$s · HTTP proxy listening %2$s</string>
+    <string name="diagnostics_facts_service">Service %1$s · Split %2$s</string>
+    <string name="diagnostics_service_bound">bound</string>
+    <string name="diagnostics_service_not_bound">not bound</string>
+    <string name="diagnostics_split_off">off</string>
+
+    <!-- Browser sign-in fallback copy. -->
+    <string name="browser_waiting_error_start">Browser sign-in did not start.</string>
+    <string name="browser_waiting_error_no_id">The engine did not return a sign-in id.</string>
+    <string name="browser_waiting_error_failed">Browser sign-in failed.</string>
+    <string name="browser_waiting_error_unexpected_step">The engine returned an unexpected sign-in step.</string>
+    <string name="browser_waiting_paste_failed">The redirect URL could not be submitted.</string>
+
+    <!-- Manual update check failures. -->
+    <string name="settings_update_failure_installed">The installed version is not a version number.</string>
+    <string name="settings_update_failure_network">The update check could not reach GitHub.</string>
+    <string name="settings_update_failure_http">GitHub answered HTTP %1$d.</string>
+    <string name="settings_update_failure_malformed">GitHub sent a release that could not be read.</string>
+    <string name="settings_update_failure_no_release">GitHub has no published release.</string>
+    <string name="settings_update_failure_missing_tag">GitHub\'s latest release has no version tag.</string>
+    <string name="settings_update_failure_invalid_tag">GitHub\'s latest release tag is not a version number.</string>
 </resources>

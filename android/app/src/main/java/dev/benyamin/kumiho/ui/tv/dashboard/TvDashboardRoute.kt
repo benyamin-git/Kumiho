@@ -13,11 +13,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.benyamin.kumiho.AppContainer
+import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.dashboard.DashboardPhase
 import dev.benyamin.kumiho.ui.dashboard.DashboardRoute
 import dev.benyamin.kumiho.ui.dashboard.DashboardState
@@ -75,7 +77,9 @@ private fun TvDashboardWaiting(error: String?, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
         ) {
             Text(
-                text = if (error == null) "Loading the VPN service…" else "The VPN service is unavailable",
+                text = stringResource(
+                    if (error == null) R.string.tv_dashboard_loading else R.string.tv_dashboard_unavailable,
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,

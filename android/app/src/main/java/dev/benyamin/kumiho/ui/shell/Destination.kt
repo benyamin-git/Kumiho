@@ -1,5 +1,7 @@
 package dev.benyamin.kumiho.ui.shell
 
+import androidx.annotation.StringRes
+import dev.benyamin.kumiho.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -8,14 +10,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * The five shell destinations. Everything but More maps to a route; More opens
  * a sheet and has no route of its own, so its route is the empty sentinel.
  */
-enum class Destination(val route: String, val label: String) {
-    Home("home", "Home"),
-    Locations("locations", "Locations"),
-    Account("account", "Account"),
-    Settings("settings", "Settings"),
+enum class Destination(val route: String, @StringRes val labelRes: Int) {
+    Home("home", R.string.nav_home),
+    Locations("locations", R.string.nav_locations),
+    Account("account", R.string.nav_account),
+    Settings("settings", R.string.nav_settings),
 
     /** A sheet trigger, never a tab and never a route: the sentinel is empty. */
-    More("", "More"),
+    More("", R.string.nav_more),
     ;
 
     companion object {
@@ -25,9 +27,9 @@ enum class Destination(val route: String, val label: String) {
 }
 
 /** The two routes behind the More sheet. They are routes, not nav items. */
-enum class MoreRoute(val route: String, val label: String) {
-    Logs("logs", "Logs"),
-    Diagnostics("diagnostics", "Diagnostics"),
+enum class MoreRoute(val route: String, @StringRes val labelRes: Int) {
+    Logs("logs", R.string.nav_logs),
+    Diagnostics("diagnostics", R.string.nav_diagnostics),
 }
 
 /** How the shell lays out navigation for the available width. */
@@ -71,9 +73,6 @@ data class ShellNavState(
 
     /** The active route: `home` … `diagnostics`. */
     val route: String get() = moreRoute?.route ?: tab.route
-
-    /** The title the top bar shows. */
-    val title: String get() = moreRoute?.label ?: tab.label
 }
 
 /**
