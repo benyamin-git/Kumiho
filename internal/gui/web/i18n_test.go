@@ -15,8 +15,11 @@ var (
 	i18nKeyStringRE = regexp.MustCompile(`"([a-z][a-z0-9]*(?:\.[a-z0-9_]+)+)"`)
 	dataI18nRE      = regexp.MustCompile(`data-i18n(?:-aria-label|-placeholder|-title)?="([^"]+)"`)
 	placeholderRE   = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
-	dynamicPrefix   = []string{"state.", "settings.", "notice."}
-	catalogLocales  = []string{"en", "fa"}
+	dynamicPrefix   = []string{
+		"state.", "settings.", "notice.",
+		"logs.level.", "diagnostics.status.", "region.host.",
+	}
+	catalogLocales = []string{"en", "fa"}
 )
 
 func readCatalog(t *testing.T, lang string) map[string]string {

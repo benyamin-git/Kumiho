@@ -1,3 +1,5 @@
+import { t, tp, formatNumber, noticeText } from "../i18n.js";
+
 /* The Diagnostics screen (inventory §Diagnostics, D16/D17): the action row
  * (`Re-run checks`, `Copy details`, `Open log folder`, `Cleanup…`), the
  * service card (the SCM state and Start/Stop via UAC), the results list of
@@ -50,9 +52,6 @@ const SERVICE_CLICK_MS = 1500;
 const WHEEL_ITEMS = 3;
 const WHEEL_NOTCH_MIN = 40;
 
-// The service card's explanation, shown while a service is installed.
-const SERVICE_DETAIL = "Runs the tunnel in the background, with or without the Kumiho window open.";
-
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
 // time, so one slot is enough).
 let cleanup = null;
@@ -76,22 +75,39 @@ function summaryLine(checks) {
     else if (check.status === "skip") skipped += 1;
   }
   const ok = checks.length - failed - warned - skipped;
-  const checksWord = checks.length === 1 ? "1 check" : checks.length + " checks";
-  const warningsWord = warned === 1 ? "1 warning" : warned + " warnings";
+  const checksWord = tp("diagnostics.checks", checks.length, {
+    checks: formatNumber(checks.length),
+  });
+  const warningsWord = tp("diagnostics.warnings", warned, {
+    warnings: formatNumber(warned),
+  });
   if (failed > 0) {
     return {
-      text: checksWord + ": " + failed + " failed, " + warningsWord +
-        " — fix the failed checks before connecting",
+      text: t("diagnostics.summary.failed", {
+        checks: checksWord,
+        failed: formatNumber(failed),
+        warnings: warningsWord,
+      }),
       tone: "bad",
     };
   }
   if (warned > 0) {
     return {
-      text: checksWord + ": " + ok + " OK, " + warningsWord + ", " + skipped + " skipped",
+      text: t("diagnostics.summary.warn", {
+        checks: checksWord,
+        ok: formatNumber(ok),
+        warnings: warningsWord,
+        skipped: formatNumber(skipped),
+      }),
       tone: "warn",
     };
   }
-  return { text: "All " + checksWord + " passed", tone: "good" };
+  return { text: t("diagnostics.summary.all", { checks: checksWord }), tone: "good" };
+}
+
+/** The localized chip word for one doctor status. */
+function statusWord(status) {
+  return t(("diagnostics.status.") + status);
 }
 
 /** One check block: title + status chip, then up to three small lines. */
@@ -100,16 +116,29 @@ function checkBlock(check) {
   item.dataset.check = check.name || "";
 
   const head = el("div", "diag__check-head");
-  head.append(el("p", "diag__check-title", check.title || check.name || ""));
-  const chip = el("span", "chip diag__check-chip", check.status_word || "");
+  const title = el("p", "diag__check-title", check.title || check.name || "");
+  title.dir = "ltr";
+  head.append(title);
+  const word = check.status ? statusWord(check.status) : (check.status_word || "");
+  const chip = el("span", "chip diag__check-chip", word);
   if (check.tone) chip.dataset.tone = check.tone;
   head.append(chip);
   item.append(head);
 
-  if (check.explanation) item.append(el("p", "diag__check-line", check.explanation));
-  if (check.detail) item.append(el("p", "diag__check-line", check.detail));
+  if (check.explanation) {
+    const explanation = el("p", "diag__check-line", check.explanation);
+    explanation.dir = "ltr";
+    item.append(explanation);
+  }
+  if (check.detail) {
+    const detail = el("p", "diag__check-line", check.detail);
+    detail.dir = "ltr";
+    item.append(detail);
+  }
   if (check.remediation && (check.status === "warn" || check.status === "fail")) {
-    const fix = el("p", "diag__check-line diag__check-fix", "Fix: " + check.remediation);
+    const fix = el("p", "diag__check-line diag__check-fix",
+      t("diagnostics.fix") + " " + check.remediation);
+    fix.dir = "ltr";
     if (check.tone) fix.dataset.tone = check.tone;
     item.append(fix);
   }
@@ -122,33 +151,39 @@ function serviceView(service) {
   const state = String(s.state || "").toLowerCase();
   const installed = !!s.installed;
   const busy = !!s.busy;
-  const view = { chip: "Unknown", tone: "", detail: SERVICE_DETAIL, start: false, stop: false };
+  const view = {
+    chip: t("diagnostics.service.unknown"),
+    tone: "",
+    detail: t("diagnostics.service.detail"),
+    start: false,
+    stop: false,
+  };
   switch (state) {
     case "running":
-      view.chip = "Running";
+      view.chip = t("diagnostics.service.running");
       view.tone = "good";
       view.stop = true;
       break;
     case "stopped":
-      view.chip = "Stopped";
+      view.chip = t("diagnostics.service.stopped");
       view.tone = "warn";
       view.start = true;
       break;
     case "start pending":
-      view.chip = "Starting";
+      view.chip = t("diagnostics.service.starting");
       break;
     case "stop pending":
-      view.chip = "Stopping";
+      view.chip = t("diagnostics.service.stopping");
       break;
     case "paused":
-      view.chip = "Paused";
+      view.chip = t("diagnostics.service.paused");
       view.tone = "warn";
       view.stop = true;
       break;
     case "not installed":
-      view.chip = "Not installed";
+      view.chip = t("diagnostics.service.not_installed");
       view.tone = "warn";
-      view.detail = "Install it with the Kumiho setup.";
+      view.detail = t("diagnostics.service.not_installed_detail");
       break;
     case "":
       break;
@@ -165,7 +200,12 @@ function serviceView(service) {
 
 /** The notice identity used by the cleanup busy guard. */
 function noticeMark(notice) {
-  return notice && notice.message ? notice.message + "\u0000" + (notice.tone || "") : "";
+  if (!notice) return "";
+  return JSON.stringify({
+    code: notice.code || "",
+    params: notice.params || {},
+    tone: notice.tone || "",
+  });
 }
 
 /** Build the screen's DOM and return its element references. */
@@ -173,16 +213,16 @@ function build(host) {
   const root = el("div", "diag");
 
   // Action row (inventory order, then the D16 Cleanup… action).
-  const rerun = el("button", "button button--tonal diag__rerun", "Re-run checks");
+  const rerun = el("button", "button button--tonal diag__rerun", t("diagnostics.rerun"));
   rerun.type = "button";
   rerun.id = "diag-rerun";
-  const copy = el("button", "button button--tonal diag__copy", "Copy details");
+  const copy = el("button", "button button--tonal diag__copy", t("diagnostics.copy"));
   copy.type = "button";
   copy.id = "diag-copy";
-  const openFolder = el("button", "button button--tonal diag__open", "Open log folder");
+  const openFolder = el("button", "button button--tonal diag__open", t("logs.open_folder"));
   openFolder.type = "button";
   openFolder.id = "diag-open-folder";
-  const cleanupBtn = el("button", "button button--tonal diag__cleanup", "Cleanup…");
+  const cleanupBtn = el("button", "button button--tonal diag__cleanup", t("diagnostics.cleanup"));
   cleanupBtn.type = "button";
   cleanupBtn.id = "diag-cleanup";
   const actions = el("div", "diag__actions");
@@ -191,19 +231,19 @@ function build(host) {
   // The service card (D17): state chip, explanation, Start/Stop.
   const serviceCard = el("section", "card diag__service");
   serviceCard.id = "diag-service";
-  serviceCard.setAttribute("aria-label", "Kumiho service");
+  serviceCard.setAttribute("aria-label", t("diagnostics.service.title"));
   const serviceHead = el("div", "diag__service-head");
-  serviceHead.append(el("p", "diag__service-title", "Kumiho service"));
-  const serviceChip = el("span", "chip diag__service-chip", "Unknown");
+  serviceHead.append(el("p", "diag__service-title", t("diagnostics.service.title")));
+  const serviceChip = el("span", "chip diag__service-chip", t("diagnostics.service.unknown"));
   serviceChip.id = "diag-service-chip";
   serviceHead.append(serviceChip);
-  const serviceDetail = el("p", "diag__service-detail", SERVICE_DETAIL);
+  const serviceDetail = el("p", "diag__service-detail", t("diagnostics.service.detail"));
   serviceDetail.id = "diag-service-detail";
   const serviceActions = el("div", "diag__service-actions");
-  const serviceStart = el("button", "button button--tonal diag__service-start", "Start");
+  const serviceStart = el("button", "button button--tonal diag__service-start", t("diagnostics.service.start"));
   serviceStart.type = "button";
   serviceStart.id = "diag-service-start";
-  const serviceStop = el("button", "button button--tonal diag__service-stop", "Stop");
+  const serviceStop = el("button", "button button--tonal diag__service-stop", t("diagnostics.service.stop"));
   serviceStop.type = "button";
   serviceStop.id = "diag-service-stop";
   serviceActions.append(serviceStart, serviceStop);
@@ -215,42 +255,44 @@ function build(host) {
   const list = el("ul", "card diag__list");
   list.id = "diag-list";
   list.tabIndex = 0;
-  list.setAttribute("aria-label", "Diagnostic results");
+  list.setAttribute("aria-label", t("diagnostics.list_aria"));
 
   // The quiet placeholder in place of the card while there is nothing to
   // show: `Checking…` while a run is in flight, `No checks yet.` before the
   // first one.
-  const empty = el("p", "diag__empty", "No checks yet.");
+  const empty = el("p", "diag__empty", t("diagnostics.no_checks"));
   empty.id = "diag-empty";
 
   const status = el("p", "diag__status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
+  const details = el("p", "diag__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
   // The cleanup confirmation: the shared house dialog pattern, driven
   // natively; the confirm changes system network state, so it carries the
   // loss colour (the account sign-out pattern).
   const dialog = el("dialog", "dialog diag__dialog");
-  const title = el("h2", "dialog__title", "Cleanup");
+  const title = el("h2", "dialog__title", t("diagnostics.cleanup.title"));
   title.id = "diag-cleanup-title";
-  const question = el("p", "dialog__body", "Remove stale network state left by a crashed Kumiho run?");
+  const question = el("p", "dialog__body", t("diagnostics.cleanup.question"));
   question.id = "diag-cleanup-question";
-  const detail = el("p", "dialog__body",
-    "Kumiho removes leftover routes, firewall rules and DNS settings. Windows will ask for administrator approval.");
+  const detail = el("p", "dialog__body", t("diagnostics.cleanup.detail"));
   detail.id = "diag-cleanup-detail";
   dialog.setAttribute("aria-labelledby", title.id);
   dialog.setAttribute("aria-describedby", question.id + " " + detail.id);
-  const cancel = el("button", "button button--tonal diag__cleanup-cancel", "Cancel");
+  const cancel = el("button", "button button--tonal diag__cleanup-cancel", t("common.cancel"));
   cancel.type = "button";
   cancel.id = "diag-cleanup-cancel";
-  const confirm = el("button", "button button--danger diag__cleanup-confirm", "Cleanup");
+  const confirm = el("button", "button button--danger diag__cleanup-confirm", t("diagnostics.cleanup"));
   confirm.type = "button";
   confirm.id = "diag-cleanup-confirm";
   const dialogActions = el("div", "dialog__actions");
   dialogActions.append(cancel, confirm);
   dialog.append(title, question, detail, dialogActions);
 
-  root.append(actions, serviceCard, list, empty, status, dialog);
+  root.append(actions, serviceCard, list, empty, status, details, dialog);
   host.append(root);
 
   return {
@@ -266,6 +308,7 @@ function build(host) {
     list: list,
     empty: empty,
     status: status,
+    details: details,
     dialog: dialog,
     cancel: cancel,
     confirm: confirm,
@@ -282,8 +325,10 @@ export default {
       renderKey: null,
       statusText: null,
       statusTone: null,
+      statusDetail: null,
       copyNotice: "",
       copyError: "",
+      copyErrorDetail: "",
       copyTimer: 0,
       cleanupBusy: false,
       cleanupMark: "",
@@ -337,11 +382,11 @@ export default {
 
     function rebuildList(running, checks) {
       if (running) {
-        showPlaceholder("Checking…");
+        showPlaceholder(t("diagnostics.checking"));
         return;
       }
       if (checks.length === 0) {
-        showPlaceholder("No checks yet.");
+        showPlaceholder(t("diagnostics.no_checks"));
         return;
       }
       const fragment = document.createDocumentFragment();
@@ -377,6 +422,7 @@ export default {
     function clearCopyState() {
       view.copyNotice = "";
       view.copyError = "";
+      view.copyErrorDetail = "";
       clearTimeout(view.copyTimer);
       view.copyTimer = 0;
     }
@@ -387,7 +433,8 @@ export default {
       copyText(doctor.details || "").then(
         function () {
           view.copyError = "";
-          view.copyNotice = "Details copied to the clipboard";
+          view.copyErrorDetail = "";
+          view.copyNotice = t("diagnostics.copy.done");
           clearTimeout(view.copyTimer);
           view.copyTimer = setTimeout(function () {
             view.copyTimer = 0;
@@ -400,7 +447,8 @@ export default {
           view.copyNotice = "";
           clearTimeout(view.copyTimer);
           view.copyTimer = 0;
-          view.copyError = "Could not copy the details: " + err.message;
+          view.copyError = t("diagnostics.copy.failed");
+          view.copyErrorDetail = err.message;
           render();
         }
       );
@@ -529,30 +577,43 @@ export default {
      */
     function statusLine(snapshot) {
       const doctor = snapshot.doctor || null;
-      if (doctor && doctor.running) return { text: "Running health checks...", tone: "" };
-      if (view.copyError) return { text: view.copyError, tone: "bad" };
-      const notice = snapshot.diagnostics_notice;
-      if (notice && notice.tone === "bad") return { text: notice.message, tone: "bad" };
-      if (notice && notice.message) {
-        const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
-        return { text: notice.message, tone: tone };
+      if (doctor && doctor.running) {
+        return { text: t("diagnostics.running"), tone: "", detail: "" };
       }
-      if (view.copyNotice) return { text: view.copyNotice, tone: "good" };
+      if (view.copyError) {
+        return { text: view.copyError, tone: "bad", detail: view.copyErrorDetail };
+      }
+      const notice = snapshot.diagnostics_notice;
+      if (notice && notice.tone === "bad") {
+        const presentation = noticeText(notice);
+        return { text: presentation.text, tone: "bad", detail: presentation.detail };
+      }
+      if (notice) {
+        const presentation = noticeText(notice);
+        if (presentation.text) {
+          const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
+          return { text: presentation.text, tone: tone, detail: presentation.detail };
+        }
+      }
+      if (view.copyNotice) return { text: view.copyNotice, tone: "good", detail: "" };
       const checks = (doctor && doctor.checks) || [];
-      if (checks.length > 0) return summaryLine(checks);
-      return { text: "", tone: "" };
+      if (checks.length > 0) return Object.assign(summaryLine(checks), { detail: "" });
+      return { text: "", tone: "", detail: "" };
     }
 
     function renderStatus(snapshot) {
       const line = statusLine(snapshot);
-      if (line.text === view.statusText && line.tone === view.statusTone) return;
+      if (line.text === view.statusText && line.tone === view.statusTone && line.detail === view.statusDetail) return;
       view.statusText = line.text;
       view.statusTone = line.tone;
+      view.statusDetail = line.detail;
       ui.status.textContent = line.text;
       ui.status.title = line.text;
       if (line.tone) ui.status.dataset.tone = line.tone;
       else delete ui.status.dataset.tone;
       ui.status.hidden = line.text === "";
+      ui.details.textContent = line.detail;
+      ui.details.hidden = line.detail === "";
     }
 
     function renderButtons(snapshot) {

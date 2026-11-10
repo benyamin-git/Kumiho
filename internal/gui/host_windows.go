@@ -525,6 +525,7 @@ func (h *host) handleClose() {
 func (h *host) installTray() {
 	h.tray = NewTray(TrayProviders{
 		Tooltip:          h.trayStateWord,
+		Language:         h.trayLanguage,
 		Connected:        h.trayConnected,
 		Busy:             h.trayBusy.Load,
 		Locations:        h.trayLocations,
@@ -544,11 +545,16 @@ func (h *host) installTray() {
 }
 
 // trayStateWord is the tray tooltip's state word: the exact header wording
-// (the inventory's rule), derived by trayWord (state_hooks_windows.go) — the
-// single mapping the state hook shares, so the tooltip and the refresh can
-// never drift apart.
+// (the inventory's rule), derived by trayStateWord (state_hooks_windows.go) —
+// the single mapping the state hook shares, so the tooltip and the refresh
+// can never drift apart.
 func (h *host) trayStateWord() string {
-	return trayWord(h.ctrl.Snapshot())
+	return trayStateWord(h.ctrl.Snapshot())
+}
+
+// trayLanguage is the tray's live UI language, read at every popup.
+func (h *host) trayLanguage() string {
+	return h.ctrl.Snapshot().Language
 }
 
 // trayConnected reports whether the tray's action entry disconnects instead
@@ -557,7 +563,7 @@ func (h *host) trayStateWord() string {
 // stale connected status under an unreachable daemon therefore reads
 // "Connect", exactly like the header status.
 func (h *host) trayConnected() bool {
-	return trayDisconnect(trayWord(h.ctrl.Snapshot()))
+	return trayDisconnect(h.ctrl.Snapshot())
 }
 
 // trayLocations is the menu's location list: the controller's server list
@@ -699,7 +705,10 @@ func (h *host) runServiceStartStop(start bool) {
 	})
 
 	msg, tone := serviceOutcomeNotice(verb, code, err)
-	noticeCode := "diagnostics.service.done"
+	noticeCode := "diagnostics.service.started"
+	if verb == "stop" {
+		noticeCode = "diagnostics.service.stopped"
+	}
 	if tone == toneBad {
 		noticeCode = "diagnostics.service.failed"
 	}

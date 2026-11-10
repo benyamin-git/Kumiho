@@ -2,56 +2,89 @@
 
 package gui
 
+import "strings"
+
 // This file is the tray's live-state hook (T4.1): the shell's 250 ms snapshot
 // loop hands every fresh snapshot to trayStateHook.observe, which refreshes
 // the icon's tooltip when its state word changes. The menu needs no hook —
 // the tray reads its providers at every popup, so labels, the location
 // submenu and the busy guard are live by construction.
 //
-// trayWord is the single Go source of the tooltip word (the header's mapping,
-// inventory §Shell and §Tray: unreachable first, then the live state label,
-// then the first-load failure, then the loading placeholder). The
-// Connect/Disconnect rule derives from the same word, so the tooltip and the
+// trayStateWord is the single Go source of the tooltip word (the header's
+// mapping, inventory §Shell and §Tray: unreachable first, then the live state
+// label, then the first-load failure, then the loading placeholder). The
+// Connect/Disconnect rule derives from the same state, so the tooltip and the
 // menu action can never disagree; the UI's store.connectionStatus mirrors the
 // same order and wording for the header.
 
-// trayDisconnectWords are the state words whose menu action is `Disconnect`
-// (inventory §Tray: the Dashboard button's rule): Connected, Proxy only,
-// Connecting, Reconnecting and Waiting for network.
-var trayDisconnectWords = map[string]struct{}{
-	"Connected":           {},
-	"Proxy only":          {},
-	"Connecting":          {},
-	"Reconnecting":        {},
-	"Waiting for network": {},
+// trayStateCode maps a snapshot's status to a daemon state code. New
+// snapshots carry State directly; the English label fallback keeps older
+// test fixtures and any projection that omits State working.
+func trayStateCode(snap State) string {
+	if snap.Status == nil {
+		return ""
+	}
+	if code := strings.TrimSpace(snap.Status.State); code != "" {
+		return code
+	}
+	switch snap.Status.Label {
+	case "", "Off":
+		return "IDLE"
+	case "Connected":
+		return "CONNECTED"
+	case "Proxy only":
+		return "PROXY_ONLY"
+	case "Connecting":
+		return "CONNECTING"
+	case "Reconnecting":
+		return "RECONNECTING"
+	case "Waiting for network":
+		return "WAITING_NETWORK"
+	case "Not signed in":
+		return "UNAUTHENTICATED"
+	case "Error":
+		return "FATAL"
+	}
+	return ""
 }
 
-// trayWord derives the tray's state word from a snapshot, exactly the header
-// model the shell has always pushed: unreachable first because every screen
-// depends on reachability, then the live state label, then the first-load
-// failure, then the loading placeholder. An empty label cannot occur in
-// practice (stateLabel maps every daemon state, the zero one to "Off"); the
-// tray's tipText still defaults an empty provider word to "Loading...".
-func trayWord(snap State) string {
+// trayStateWord derives the tray's state word from a snapshot: unreachable
+// first because every screen depends on reachability, then the localized live
+// state, then the first-load failure, then the loading placeholder. The same
+// mapping feeds the tooltip and the Connect/Disconnect rule.
+func trayStateWord(snap State) string {
+	language := trayLanguage(snap.Language)
 	switch {
 	case !snap.Reachable:
-		return "Daemon unreachable"
+		return trayText(language, "unreachable")
 	case snap.Status != nil:
-		return snap.Status.Label
+		code := trayStateCode(snap)
+		if key := "state." + code; code != "" && trayHas(key) {
+			return trayText(language, key)
+		}
+		if snap.Status.Label != "" {
+			return snap.Status.Label
+		}
+		return trayText(language, "loading")
 	case snap.StatusError != "":
-		return "Status unavailable"
+		return trayText(language, "unavailable")
 	default:
-		return "Loading..."
+		return trayText(language, "loading")
 	}
 }
 
-// trayDisconnect reports whether a state word is one the action entry
-// disconnects from. An unreachable word never is: the tooltip and the label
-// both lose the stale connected word when the control pipe goes away, the
-// same way the header status does.
-func trayDisconnect(word string) bool {
-	_, ok := trayDisconnectWords[word]
-	return ok
+// trayDisconnect reports whether the snapshot is one the action entry
+// disconnects from. An unreachable snapshot never is: the tooltip and the
+// label both lose the stale connected word when the control pipe goes away.
+func trayDisconnect(snap State) bool {
+	if !snap.Reachable {
+		return false
+	}
+	switch trayStateCode(snap) {
+	case "CONNECTED", "PROXY_ONLY", "CONNECTING", "RECONNECTING", "WAITING_NETWORK":
+		return true
+	}
+	return false
 }
 
 // trayStateHook watches the tooltip's state word: observe compares each
@@ -77,7 +110,7 @@ func newTrayStateHook(t *Tray) *trayStateHook {
 // and every later one only when the word actually changed, which is what
 // keeps the tooltip and the header in lockstep without a per-tick NIM_MODIFY.
 func (h *trayStateHook) observe(snap State) {
-	word := trayWord(snap)
+	word := trayStateWord(snap)
 	if h.seen && word == h.word {
 		return
 	}

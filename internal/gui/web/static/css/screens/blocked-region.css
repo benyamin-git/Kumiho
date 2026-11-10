@@ -123,3 +123,31 @@
     padding-block: var(--space-2);
   }
 }
+
+/* Screen-local daemon errors and raw relay details stay technical and LTR. */
+.region__status {
+  font-size: var(--text-sm);
+}
+
+.region__status[data-tone="bad"] {
+  color: var(--loss);
+}
+
+.region__details {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border-inline-start: 2px solid var(--hairline);
+}
+
+.region__details[hidden] {
+  display: none;
+}
+
+.region__relay-details {
+  flex-basis: 100%;
+}

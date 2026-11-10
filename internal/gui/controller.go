@@ -1438,21 +1438,23 @@ func (c *Controller) dispatchOpenLogsFolder(act Action) error {
 	default:
 		return fmt.Errorf("open_logs_folder: unknown notice surface %q", p.Notice)
 	}
-	surface := "logs"
+	failedCode := "logs.folder.failed"
+	doneCode := "logs.folder.done"
 	if slot == slotDiagnostics {
-		surface = "diagnostics"
+		failedCode = "diagnostics.folder.failed"
+		doneCode = "diagnostics.folder.done"
 	}
 	if c.opts.OpenLogsFolder == nil {
 		err := errors.New("opening the log folder is not available")
-		c.setNoticeCode(slot, surface+".folder.failed", map[string]any{"error": err.Error()}, "could not open the log folder: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slot, failedCode, map[string]any{"error": err.Error()}, "could not open the log folder: "+err.Error(), toneBad, 0)
 		return err
 	}
 	dir, err := c.opts.OpenLogsFolder()
 	if err != nil {
-		c.setNoticeCode(slot, surface+".folder.failed", map[string]any{"error": err.Error()}, "could not open the log folder: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slot, failedCode, map[string]any{"error": err.Error()}, "could not open the log folder: "+err.Error(), toneBad, 0)
 		return err
 	}
-	c.setNoticeCode(slot, surface+".folder.done", map[string]any{"path": dir}, "Opened "+dir, toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slot, doneCode, map[string]any{"path": dir}, "Opened "+dir, toneGood, c.opts.NoticeTTL)
 	return nil
 }
 

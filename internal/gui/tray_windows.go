@@ -24,6 +24,10 @@ type TrayProviders struct {
 	// renders it as "Kumiho — <word>" (the inventory's exact format).
 	Tooltip func() string
 
+	// Language returns the effective UI language (en|fa) for the menu and
+	// notifications; the shell reads it live at every popup.
+	Language func() string
+
 	// Connected reports whether the action entry reads "Disconnect" and runs
 	// OnDisconnect instead of "Connect"/OnConnect. The inventory's rule is
 	// the Dashboard button's: true for Connected, Proxy only, Connecting,
@@ -74,13 +78,6 @@ const (
 // trayTipPrefix is the tooltip's fixed head: the inventory's exact format
 // (em dash, spaces around it).
 const trayTipPrefix = "Kumiho — "
-
-// The first-close hint's copy. T4.2 owns when it shows (the close_hint_shown
-// preference); T1.8 ships only the mechanism.
-const (
-	firstCloseHintTitle = "Kumiho"
-	firstCloseHintText  = "Kumiho is still running. Right-click the tray icon to connect or quit."
-)
 
 // Tray is the shell's notification-area icon: one static fox icon whose
 // hidden window lives on the shell's own message pump (the probe's proven
@@ -141,13 +138,23 @@ func (t *Tray) ShowFirstCloseHint() {
 // "Kumiho — <state word>" format. The shell's 128-unit tip cap is enforced
 // at the Win32 edge (utf16Into), so any provider word truncates safely.
 func (t *Tray) tipText() string {
-	word := "Loading..."
+	language := t.language()
+	word := trayText(language, "loading")
 	if t.p.Tooltip != nil {
 		if w := t.p.Tooltip(); w != "" {
 			word = w
 		}
 	}
 	return trayTipPrefix + word
+}
+
+// language reads the effective UI language at the moment a menu, tooltip or
+// notification is built; the controller can switch it while the tray is up.
+func (t *Tray) language() string {
+	if t.p.Language == nil {
+		return "en"
+	}
+	return trayLanguage(t.p.Language())
 }
 
 // handleNotification routes one callback event from the shell (runs on the
@@ -175,7 +182,8 @@ func (t *Tray) applyTooltip() {
 // applyFirstCloseHint shows the balloon (runs on the shell's thread, from a
 // ShowFirstCloseHint post).
 func (t *Tray) applyFirstCloseHint() {
-	if err := t.icon.showBalloon(firstCloseHintTitle, firstCloseHintText); err != nil {
+	language := t.language()
+	if err := t.icon.showBalloon(trayText(language, "hint_title"), trayText(language, "hint_text")); err != nil {
 		t.log.logf("tray: close hint: %v", err)
 	}
 }
@@ -203,12 +211,13 @@ func (t *Tray) showMenu() {
 	}
 	defer m.destroy()
 
+	language := t.language()
 	connected := t.p.Connected != nil && t.p.Connected()
 	busy := t.p.Busy != nil && t.p.Busy()
 	if connected {
-		m.addItem("Disconnect", trayCmdAction, busy)
+		m.addItem(trayText(language, "disconnect"), trayCmdAction, busy)
 	} else {
-		m.addItem("Connect", trayCmdAction, busy)
+		m.addItem(trayText(language, "connect"), trayCmdAction, busy)
 	}
 
 	// The Location submenu: the locations in display order (REC first). An
@@ -225,14 +234,14 @@ func (t *Tray) showMenu() {
 		for i, c := range locs {
 			sub.addItem(locationLabel(c), trayCmdLocation+uint32(i), false)
 		}
-		m.addPopup("Location", sub, false)
+		m.addPopup(trayText(language, "location"), sub, false)
 	} else {
-		m.addItem("Location: (none)", 0, true)
+		m.addItem(trayText(language, "no_location"), 0, true)
 	}
 
-	m.addItem("Show Kumiho", trayCmdShow, false)
-	m.addItem("Diagnostics", trayCmdDiagnostics, false)
-	m.addItem("Quit", trayCmdQuit, false)
+	m.addItem(trayText(language, "show"), trayCmdShow, false)
+	m.addItem(trayText(language, "diagnostics"), trayCmdDiagnostics, false)
+	m.addItem(trayText(language, "quit"), trayCmdQuit, false)
 
 	cmd := m.track(hwnd)
 	switch {

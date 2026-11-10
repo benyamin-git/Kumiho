@@ -148,3 +148,29 @@
 .logs__status[data-tone="bad"] {
   color: var(--loss);
 }
+
+/* Log lines are technical English and always read left-to-right. */
+.logs__list,
+.logs__line {
+  direction: ltr;
+  text-align: start;
+}
+
+.logs__line {
+  unicode-bidi: isolate;
+}
+
+.logs__details {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border-inline-start: 2px solid var(--hairline);
+}
+
+.logs__details[hidden] {
+  display: none;
+}

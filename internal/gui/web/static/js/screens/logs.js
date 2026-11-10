@@ -1,3 +1,5 @@
+import { t, tp, formatNumber, noticeText } from "../i18n.js";
+
 /* The Logs screen (inventory §Logs): the level button (debug → info → warn →
  * error), the Follow toggle, Refresh, the Search row with Clear / Export /
  * Open log folder right-aligned, the log console (card, 24-unit lines, newest
@@ -143,7 +145,7 @@ function build(host) {
   const follow = el("button", "button button--tonal logs__follow");
   follow.type = "button";
   follow.id = "logs-follow";
-  const refresh = el("button", "button button--tonal logs__refresh", "Refresh");
+  const refresh = el("button", "button button--tonal logs__refresh", t("common.refresh"));
   refresh.type = "button";
   refresh.id = "logs-refresh";
   const actions = el("div", "logs__actions");
@@ -151,26 +153,26 @@ function build(host) {
 
   // Search row: the labelled field (always visible), then the right-aligned
   // Clear / Export / Open log folder actions.
-  const searchLabel = el("label", "field__label", "Search");
+  const searchLabel = el("label", "field__label", t("logs.search_label"));
   searchLabel.htmlFor = "logs-search";
   const search = document.createElement("input");
   search.type = "text";
   search.id = "logs-search";
   search.className = "input logs__search-input";
-  search.placeholder = "Tag or message";
+  search.placeholder = t("logs.search_placeholder");
   search.autocomplete = "off";
   search.spellcheck = false;
-  search.setAttribute("aria-label", "Search the logs");
+  search.setAttribute("aria-label", t("logs.search_aria"));
   const field = el("div", "field logs__field");
   field.append(searchLabel, search);
   const spacer = el("div", "logs__spacer");
-  const clear = el("button", "button button--tonal logs__clear", "Clear");
+  const clear = el("button", "button button--tonal logs__clear", t("logs.clear"));
   clear.type = "button";
   clear.id = "logs-clear";
-  const exportBtn = el("button", "button button--tonal logs__export", "Export");
+  const exportBtn = el("button", "button button--tonal logs__export", t("logs.export"));
   exportBtn.type = "button";
   exportBtn.id = "logs-export";
-  const openFolder = el("button", "button button--tonal logs__open", "Open log folder");
+  const openFolder = el("button", "button button--tonal logs__open", t("logs.open_folder"));
   openFolder.type = "button";
   openFolder.id = "logs-open-folder";
   const searchRow = el("div", "logs__search-row");
@@ -185,19 +187,22 @@ function build(host) {
   list.tabIndex = 0;
   list.setAttribute("role", "log");
   list.setAttribute("aria-live", "off");
-  list.setAttribute("aria-label", "Log entries");
+  list.setAttribute("aria-label", t("logs.entries_aria"));
 
   // The quiet placeholder in place of the card while the stream has no
   // entries at all.
-  const empty = el("p", "logs__empty", "No log entries yet.");
+  const empty = el("p", "logs__empty", t("logs.empty"));
   empty.id = "logs-empty";
   empty.hidden = true;
 
   const status = el("p", "logs__status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
+  const details = el("p", "logs__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
-  root.append(actions, searchRow, list, empty, status);
+  root.append(actions, searchRow, list, empty, status, details);
   host.append(root);
 
   return {
@@ -212,6 +217,7 @@ function build(host) {
     list: list,
     empty: empty,
     status: status,
+    details: details,
   };
 }
 
@@ -227,6 +233,7 @@ export default {
       rows: [],
       statusText: null,
       statusTone: null,
+      statusDetail: null,
     };
 
     // Set by unmount: a seed reply that lands after the screen left must not
@@ -252,13 +259,15 @@ export default {
     }
 
     function renderFollow() {
-      const text = "Follow: " + (session.follow ? "on" : "off");
+      const text = t("logs.follow_label", {
+        value: t(session.follow ? "common.on" : "common.off"),
+      });
       if (ui.follow.textContent !== text) ui.follow.textContent = text;
       ui.follow.setAttribute("aria-pressed", session.follow ? "true" : "false");
     }
 
     function renderLevel() {
-      const text = "Level: " + session.level;
+      const text = t("logs.level_label", { level: levelLabel(session.level) });
       if (ui.level.textContent !== text) ui.level.textContent = text;
     }
 
@@ -269,10 +278,11 @@ export default {
         // A filter that hides everything inside a non-empty stream: the
         // inventory's first line of the card (the empty-stream placeholder
         // replaces the whole card instead).
-        fragment.append(el("div", "logs__nomatch", "No entries match the filter"));
+        fragment.append(el("div", "logs__nomatch", t("logs.nomatch")));
       }
       for (const entry of view.rows) {
         const line = el("div", "logs__line", lineText(entry));
+        line.dir = "ltr";
         line.dataset.level = entry.level || "info";
         fragment.append(line);
       }
@@ -288,36 +298,53 @@ export default {
      * error is never masked. */
     function statusLine(snapshot) {
       const notice = snapshot.logs_notice;
-      if (notice && notice.tone === "bad") return { text: notice.message, tone: "bad" };
-      if (!snapshot.logs_loaded) return { text: "Loading logs...", tone: "" };
-      if (notice && notice.message) {
-        const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
-        return { text: notice.message, tone: tone };
+      if (notice && notice.tone === "bad") {
+        const presentation = noticeText(notice);
+        return { text: presentation.text, tone: "bad", detail: presentation.detail };
       }
-      return { text: countText(), tone: "" };
+      if (!snapshot.logs_loaded) return { text: t("logs.loading"), tone: "", detail: "" };
+      if (notice) {
+        const presentation = noticeText(notice);
+        if (presentation.text) {
+          const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
+          return { text: presentation.text, tone: tone, detail: presentation.detail };
+        }
+      }
+      return { text: countText(), tone: "", detail: "" };
     }
 
     /** The walk model's count wording, exactly. */
+    function levelLabel(level) {
+      return t(("logs.level.") + level);
+    }
+
     function countText() {
       const shown = view.rows.length;
       const total = view.entries.length;
-      if (total === 0) return "No log entries";
-      if (shown === 0) return "No entries match the filter";
-      if (shown !== total) return shown + " of " + total + " entries";
-      if (total === 1) return "1 entry";
-      return total + " entries";
+      if (total === 0) return t("logs.count.none");
+      if (shown === 0) return t("logs.count.nomatch");
+      if (shown !== total) {
+        return t("logs.count.filtered", {
+          shown: formatNumber(shown),
+          total: formatNumber(total),
+        });
+      }
+      return tp("logs.count.entries", total, { entries: formatNumber(total) });
     }
 
     function renderStatus(snapshot) {
       const line = statusLine(snapshot);
-      if (line.text === view.statusText && line.tone === view.statusTone) return;
+      if (line.text === view.statusText && line.tone === view.statusTone && line.detail === view.statusDetail) return;
       view.statusText = line.text;
       view.statusTone = line.tone;
+      view.statusDetail = line.detail;
       ui.status.textContent = line.text;
       ui.status.title = line.text;
       if (line.tone) ui.status.dataset.tone = line.tone;
       else delete ui.status.dataset.tone;
       ui.status.hidden = line.text === "";
+      ui.details.textContent = line.detail;
+      ui.details.hidden = line.detail === "";
     }
 
     function render() {
