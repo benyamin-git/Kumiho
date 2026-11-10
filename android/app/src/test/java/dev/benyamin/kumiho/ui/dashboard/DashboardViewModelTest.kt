@@ -425,6 +425,31 @@ class DashboardViewModelTest {
         }
 
     @Test
+    fun `a region service error opens the guide and clears the notice`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+            gateway.serviceState.value = snapshot(
+                state = STATE_ERROR,
+                error = "Blocked region: vpn.mozilla.org answered HTTP 451.",
+            )
+            runCurrent()
+            val events = collectEvents(viewModel)
+            runCurrent()
+
+            assertEquals(
+                DashboardNoticeAction.OPEN_REGION_GUIDE,
+                viewModel.state.value.notice?.action,
+            )
+
+            viewModel.retryNotice()
+            runCurrent()
+
+            assertEquals(listOf(DashboardEvent.OpenRegionGuide), events)
+            assertNull(viewModel.state.value.notice)
+        }
+
+    @Test
     fun `Android VPN settings are a one-shot event with an honest failure`() =
         runTest(mainRule.testDispatcher) {
             val viewModel = viewModel()

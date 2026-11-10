@@ -167,11 +167,22 @@ data class DashboardNotice(
         get() = (text as? NoticeText.Local)?.message == DashboardMessage.STATUS_REFRESH_FAILED
 
     companion object {
-        fun serviceError(detail: String): DashboardNotice = DashboardNotice(
-            text = NoticeText.Raw(detail),
-            tone = DashboardNoticeTone.ERROR,
-            action = DashboardNoticeAction.RETRY_CONNECT,
-        )
+        fun serviceError(detail: String): DashboardNotice {
+            // A connect failure can be the blocked region itself; offer the
+            // guide rather than a retry that cannot succeed.
+            if (isRegionMessage(detail)) {
+                return DashboardNotice(
+                    text = NoticeText.Raw(detail),
+                    tone = DashboardNoticeTone.WARNING,
+                    action = DashboardNoticeAction.OPEN_REGION_GUIDE,
+                )
+            }
+            return DashboardNotice(
+                text = NoticeText.Raw(detail),
+                tone = DashboardNoticeTone.ERROR,
+                action = DashboardNoticeAction.RETRY_CONNECT,
+            )
+        }
 
         /**
          * Maps one advisory engine notice. A fatal transition can be retried;
@@ -235,11 +246,20 @@ data class DashboardNotice(
             tone = DashboardNoticeTone.ERROR,
         )
 
-        fun connectFailed(detail: String): DashboardNotice = DashboardNotice(
-            text = NoticeText.Local(DashboardMessage.CONNECT_FAILED, detail),
-            tone = DashboardNoticeTone.ERROR,
-            action = DashboardNoticeAction.RETRY_CONNECT,
-        )
+        fun connectFailed(detail: String): DashboardNotice {
+            if (isRegionMessage(detail)) {
+                return DashboardNotice(
+                    text = NoticeText.Local(DashboardMessage.CONNECT_FAILED, detail),
+                    tone = DashboardNoticeTone.WARNING,
+                    action = DashboardNoticeAction.OPEN_REGION_GUIDE,
+                )
+            }
+            return DashboardNotice(
+                text = NoticeText.Local(DashboardMessage.CONNECT_FAILED, detail),
+                tone = DashboardNoticeTone.ERROR,
+                action = DashboardNoticeAction.RETRY_CONNECT,
+            )
+        }
 
         fun disconnectFailed(detail: String): DashboardNotice = DashboardNotice(
             text = NoticeText.Local(DashboardMessage.DISCONNECT_FAILED, detail),

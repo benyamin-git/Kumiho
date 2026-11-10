@@ -427,6 +427,25 @@ class DashboardStateTest {
     }
 
     @Test
+    fun aRegionServiceErrorOpensTheGuideInsteadOfRetrying() {
+        val notice = DashboardState.fromService(
+            snapshot(
+                state = STATE_ERROR,
+                error = "Blocked region: vpn.mozilla.org answered HTTP 451. Open the Blocked region guide.",
+            ),
+        ).notice
+        assertEquals(DashboardNoticeTone.WARNING, notice?.tone)
+        assertEquals(DashboardNoticeAction.OPEN_REGION_GUIDE, notice?.action)
+    }
+
+    @Test
+    fun aRegionConnectFailureOpensTheGuide() {
+        val notice = DashboardNotice.connectFailed("The prepared pass expired.")
+        assertEquals(DashboardNoticeTone.WARNING, notice.tone)
+        assertEquals(DashboardNoticeAction.OPEN_REGION_GUIDE, notice.action)
+    }
+
+    @Test
     fun aFatalEngineNoticeCanBeRetriedAndKeepsTheEngineWords() {
         val notice = DashboardNotice.engineNotice(Notice("fatal", STATE_ERROR, "edge handshake failed"))
         assertEquals(NoticeText.Raw("edge handshake failed"), notice.text)
