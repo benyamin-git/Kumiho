@@ -139,6 +139,8 @@ fun SettingsRoute(
         )
     }
     val state by settingsViewModel.state.collectAsStateWithLifecycle()
+    val languagePreference by container.languageRepository.preference.collectAsStateWithLifecycle()
+    val effectiveLanguage by container.languageRepository.effective.collectAsStateWithLifecycle()
     val splitState by container.splitTunnelRepository.state.collectAsStateWithLifecycle()
     val bypassState by container.allowBypassRepository.state
         .collectAsStateWithLifecycle()
@@ -205,6 +207,8 @@ fun SettingsRoute(
         bypassLoaded = !bypassState.loading,
         bypassNeedsReconnect = bypassReconnect,
         bypassError = bypassState.error,
+        languagePreference = languagePreference,
+        effectiveLanguage = effectiveLanguage,
     )
     val actions = SettingsActions(
         onToggleAdvanced = settingsViewModel::toggleAdvanced,
@@ -219,6 +223,13 @@ fun SettingsRoute(
         onAccentSelected = container.themeRepository::setAccent,
         onCheckForUpdates = settingsViewModel::checkForUpdates,
         onTestRelay = settingsViewModel::testRelay,
+        onLanguageSelected = { value ->
+            // The UI switches immediately; the engine write is confirmed by a
+            // fresh snapshot and can be retried from the row on failure.
+            container.languageRepository.setPreference(value)
+            settingsViewModel.setLanguage(value)
+        },
+        onRetryLanguage = { settingsViewModel.setLanguage(languagePreference) },
         onOpenRelease = { url ->
             if (url.startsWith("https://")) {
                 open(Intent(Intent.ACTION_VIEW, url.toUri()))
@@ -367,6 +378,14 @@ private fun SettingsList(
         }
         item(key = "app_card") {
             SettingsCard {
+                LanguageSetting(
+                    preference = appState.languagePreference,
+                    effective = appState.effectiveLanguage,
+                    applying = state.applyingKey == "language",
+                    rawError = state.errorFor("language")?.text,
+                    onSelected = actions.onLanguageSelected,
+                    onRetry = actions.onRetryLanguage,
+                )
                 ThemeSetting(
                     theme = appState.theme,
                     onThemeSelected = actions.onThemeSelected,

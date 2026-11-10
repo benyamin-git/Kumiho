@@ -11,6 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import dev.benyamin.kumiho.MainActivity
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.AppLanguage
+import dev.benyamin.kumiho.data.LanguageRepository
 import dev.benyamin.kumiho.engine.EngineStatus
 
 /**
@@ -22,7 +23,14 @@ import dev.benyamin.kumiho.engine.EngineStatus
  * use the default-importance alert channel so they are noticeable once, without
  * turning the persistent status into an alert.
  */
-class NotificationFactory(private val context: Context) {
+class NotificationFactory(
+    private val baseContext: Context,
+    private val languageRepository: LanguageRepository? = null,
+) {
+    /** Every string and channel read follows the effective app language. */
+    private val context: Context
+        get() = languageRepository?.localizedContext(baseContext) ?: baseContext
+
     /** Creates both channels; safe to call repeatedly. */
     fun ensureChannels() {
         ensureStatusChannel()
@@ -31,7 +39,6 @@ class NotificationFactory(private val context: Context) {
 
     private fun ensureStatusChannel() {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.notification_channel_status),
@@ -47,7 +54,6 @@ class NotificationFactory(private val context: Context) {
 
     private fun ensureAlertChannel() {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(ALERT_CHANNEL_ID) != null) return
         val channel = NotificationChannel(
             ALERT_CHANNEL_ID,
             context.getString(R.string.notification_channel_alerts),
@@ -199,11 +205,12 @@ class NotificationFactory(private val context: Context) {
     )
 
     private fun contextLanguage(): AppLanguage =
-        if (context.resources.configuration.locales[0].language == "fa") {
-            AppLanguage.PERSIAN
-        } else {
-            AppLanguage.ENGLISH
-        }
+        languageRepository?.effective?.value
+            ?: if (baseContext.resources.configuration.locales[0].language == "fa") {
+                AppLanguage.PERSIAN
+            } else {
+                AppLanguage.ENGLISH
+            }
 
     companion object {
         /** The foreground notification id; T16 keeps this id stable. */

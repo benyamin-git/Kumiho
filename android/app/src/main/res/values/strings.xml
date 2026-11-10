@@ -318,6 +318,8 @@
     <string name="language_system">System</string>
     <string name="language_english">English</string>
     <string name="language_persian">فارسی</string>
+    <string name="language_system_note">System language: %1$s</string>
+    <string name="language_failed">Couldn\'t save the language.</string>
     <string name="settings_group_connection">Connection</string>
     <string name="settings_group_region">Region</string>
     <string name="settings_group_android_vpn">Android VPN</string>
@@ -687,7 +689,7 @@
     <string name="account_add_password_title">Add with password</string>
     <string name="account_method_browser">Browser</string>
     <string name="account_method_password">Password</string>
-    <string name="account_row_quota_left">%1$d%% left</string>
+    <string name="account_row_quota_left">%1$s%% left</string>
     <string name="account_row_quota_unknown">Quota unknown</string>
     <string name="account_reauth_required">Sign-in expired</string>
     <string name="account_actions">Account actions</string>

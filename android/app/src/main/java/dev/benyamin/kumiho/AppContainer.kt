@@ -1,6 +1,8 @@
 package dev.benyamin.kumiho
 
+import android.content.ComponentName
 import android.content.Context
+import android.service.quicksettings.TileService
 import android.content.res.Configuration
 import dev.benyamin.kumiho.data.AllowBypassRepository
 import dev.benyamin.kumiho.data.AppPrefs
@@ -9,9 +11,11 @@ import dev.benyamin.kumiho.data.LanguageRepository
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
+import dev.benyamin.kumiho.tv.TvChannelPublisher
 import dev.benyamin.kumiho.ui.guide.GuideController
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.BypassSettingsProvider
+import dev.benyamin.kumiho.vpn.QuickConnectTileService
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import dev.benyamin.kumiho.widget.WidgetRefresh
@@ -115,6 +119,18 @@ class AppContainer(context: Context) {
         scope.launch {
             themeRepository.state.collect { state ->
                 if (state is PaletteState.Ready) WidgetRefresh.request(appContext)
+            }
+        }
+        // One fan-out per effective-language change: repaint the widgets,
+        // republish the TV channel and ask the tile to re-read its labels.
+        scope.launch {
+            languageRepository.effective.collect {
+                WidgetRefresh.request(appContext)
+                TvChannelPublisher.publish(appContext)
+                TileService.requestListeningState(
+                    appContext,
+                    ComponentName(appContext, QuickConnectTileService::class.java),
+                )
             }
         }
     }

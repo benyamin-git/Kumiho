@@ -56,11 +56,15 @@ class QuickConnectTileService : TileService() {
     private fun render() {
         val tile = qsTile ?: return
         val presentation = presentation()
-        tile.label = getString(R.string.tile_label)
+        val localized = (application as? KumihoApplication)?.container
+            ?.languageRepository
+            ?.localizedContext(this)
+            ?: this
+        tile.label = localized.getString(R.string.tile_label)
         // Subtitle is API 29+; on 26-28 the active/inactive state and label are
         // all the platform renders, so nothing is lost by skipping it.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = subtitle(presentation.subtitle)
+            tile.subtitle = subtitle(presentation.subtitle, localized)
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_tile)
         tile.state = when {
@@ -166,18 +170,19 @@ class QuickConnectTileService : TileService() {
         if (isLocked) unlockAndRun(block) else block.run()
     }
 
-    private fun subtitle(subtitle: TileSubtitle): String = when (subtitle) {
-        TileSubtitle.NotConnected -> getString(R.string.tile_subtitle_off)
-        TileSubtitle.Connecting -> getString(R.string.tile_subtitle_connecting)
-        is TileSubtitle.Connected -> subtitle.location?.let {
-            getString(R.string.tile_subtitle_connected_location, it)
-        } ?: getString(R.string.tile_subtitle_connected)
-        TileSubtitle.ProxyOnly -> getString(R.string.tile_subtitle_proxy_only)
-        TileSubtitle.Reconnecting -> getString(R.string.tile_subtitle_reconnecting)
-        TileSubtitle.Waiting -> getString(R.string.tile_subtitle_waiting)
-        TileSubtitle.SignInRequired -> getString(R.string.tile_subtitle_sign_in)
-        TileSubtitle.PermissionNeeded -> getString(R.string.tile_subtitle_permission)
-        TileSubtitle.Unavailable -> getString(R.string.tile_subtitle_unavailable)
-        TileSubtitle.Error -> getString(R.string.tile_subtitle_error)
-    }
+    private fun subtitle(subtitle: TileSubtitle, context: android.content.Context): String =
+        when (subtitle) {
+            TileSubtitle.NotConnected -> context.getString(R.string.tile_subtitle_off)
+            TileSubtitle.Connecting -> context.getString(R.string.tile_subtitle_connecting)
+            is TileSubtitle.Connected -> subtitle.location?.let {
+                context.getString(R.string.tile_subtitle_connected_location, it)
+            } ?: context.getString(R.string.tile_subtitle_connected)
+            TileSubtitle.ProxyOnly -> context.getString(R.string.tile_subtitle_proxy_only)
+            TileSubtitle.Reconnecting -> context.getString(R.string.tile_subtitle_reconnecting)
+            TileSubtitle.Waiting -> context.getString(R.string.tile_subtitle_waiting)
+            TileSubtitle.SignInRequired -> context.getString(R.string.tile_subtitle_sign_in)
+            TileSubtitle.PermissionNeeded -> context.getString(R.string.tile_subtitle_permission)
+            TileSubtitle.Unavailable -> context.getString(R.string.tile_subtitle_unavailable)
+            TileSubtitle.Error -> context.getString(R.string.tile_subtitle_error)
+        }
 }

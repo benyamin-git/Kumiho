@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.setup
 
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
@@ -76,6 +77,55 @@ class SetupViewModelTest {
         runCurrent()
         assertEquals(SetupStep.SIGN_IN, viewModel.state.value.step)
     }
+
+    @Test
+    fun `the language control keeps the consent tick and writes the engine`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            viewModel.setConsentAccepted(true)
+
+            viewModel.setLanguage("fa")
+            runCurrent()
+
+            assertEquals("fa", viewModel.state.value.languagePreference)
+            assertEquals(AppLanguage.PERSIAN, viewModel.state.value.effectiveLanguage)
+            assertTrue("the consent tick must survive a language switch", viewModel.state.value.consentAccepted)
+            assertEquals(SetupStep.CONSENT, viewModel.state.value.step)
+            assertEquals(listOf("fa"), engine.languageCalls)
+            assertFalse(viewModel.state.value.languageBusy)
+            assertNull(viewModel.state.value.languageError)
+        }
+
+    @Test
+    fun `a failed language write keeps the local choice and offers a retry`() =
+        runTest(mainRule.testDispatcher) {
+            engine.languageFailure = IllegalStateException("settings_set failed")
+            val viewModel = viewModel()
+
+            viewModel.setLanguage("fa")
+            runCurrent()
+
+            assertEquals("fa", viewModel.state.value.languagePreference)
+            assertEquals("settings_set failed", viewModel.state.value.languageError)
+            assertFalse(viewModel.state.value.languageBusy)
+            assertEquals(listOf("fa"), engine.languageCalls)
+        }
+
+    @Test
+    fun `an initial cached preference is shown before the engine answers`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = SetupViewModel(
+                engine = engine,
+                permissions = permissions,
+                persistSetupComplete = {},
+                connectNow = {},
+                initialLanguagePreference = "fa",
+                initialEffectiveLanguage = AppLanguage.PERSIAN,
+            )
+
+            assertEquals("fa", viewModel.state.value.languagePreference)
+            assertEquals(AppLanguage.PERSIAN, viewModel.state.value.effectiveLanguage)
+        }
 
     @Test
     fun `blocked region preflight advances and opens the guide`() = runTest(mainRule.testDispatcher) {
@@ -862,6 +912,7 @@ private class FakeEngine : SetupEngine {
     val loginStatusCalls = mutableListOf<String>()
     val loginCompleteCalls = mutableListOf<Pair<String, String?>>()
     val loginCancelCalls = mutableListOf<String>()
+    val languageCalls = mutableListOf<String>()
 
     var status: EngineStatus = status()
     var statusFailure: Exception? = null
@@ -870,6 +921,7 @@ private class FakeEngine : SetupEngine {
     var emailFailure: Exception? = null
     var passwordFailure: Exception? = null
     var codeFailure: Exception? = null
+    var languageFailure: Exception? = null
 
     var onEmail: (String) -> LoginState = { LoginState("password", it, null, null, null) }
     var onPassword: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
@@ -908,6 +960,11 @@ private class FakeEngine : SetupEngine {
     override suspend fun regionCheck(): RegionCheck {
         regionFailure?.let { throw it }
         return region
+    }
+
+    override suspend fun setLanguage(value: String) {
+        languageCalls += value
+        languageFailure?.let { throw it }
     }
 
     override suspend fun accountsList(): Accounts {

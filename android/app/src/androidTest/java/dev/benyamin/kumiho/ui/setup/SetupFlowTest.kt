@@ -312,6 +312,7 @@ internal class FakeSetupEngine : SetupEngine {
     val emailCalls = mutableListOf<String>()
     val passwordCalls = mutableListOf<String>()
     val codeCalls = mutableListOf<String>()
+    val languageCalls = mutableListOf<String>()
 
     var onEmail: (String) -> LoginState = { LoginState("password", it, null, null, null) }
     var onPassword: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
@@ -352,6 +353,10 @@ internal class FakeSetupEngine : SetupEngine {
 
     override suspend fun regionCheck(): RegionCheck =
         RegionCheck(emptyList(), emptyList(), browserBlocked = false, relayConfigured = false)
+
+    override suspend fun setLanguage(value: String) {
+        languageCalls += value
+    }
 
     private fun pending(): LoginState = LoginState(
         step = "2fa",

@@ -46,6 +46,7 @@ import dev.benyamin.kumiho.ui.settings.RelayTestState
 import dev.benyamin.kumiho.ui.settings.SettingKind
 import dev.benyamin.kumiho.ui.settings.SettingSpec
 import dev.benyamin.kumiho.ui.settings.SettingInput
+import dev.benyamin.kumiho.ui.settings.LANGUAGE_OPTIONS
 import dev.benyamin.kumiho.ui.settings.SettingsActions
 import dev.benyamin.kumiho.ui.settings.SettingsAppState
 import dev.benyamin.kumiho.ui.settings.SettingsCatalog
@@ -55,6 +56,7 @@ import dev.benyamin.kumiho.ui.settings.SettingsMessage
 import dev.benyamin.kumiho.ui.settings.SettingsRoute
 import dev.benyamin.kumiho.ui.settings.SettingsState
 import dev.benyamin.kumiho.ui.settings.SettingsTags
+import dev.benyamin.kumiho.ui.settings.languageLabel
 import dev.benyamin.kumiho.ui.settings.UpdateState
 import dev.benyamin.kumiho.ui.settings.batteryLabelRes
 import dev.benyamin.kumiho.ui.settings.batteryStatusTone
@@ -155,6 +157,52 @@ fun TvSettingsScreen(
             GroupHeader(stringResource(R.string.settings_group_app), SettingsTags.GROUP_APP)
 
             TvSectionCard {
+                SectionTitle(stringResource(R.string.language_title), stringResource(R.string.language_hint))
+                Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+                    LANGUAGE_OPTIONS.forEach { option ->
+                        TvButton(
+                            label = languageLabel(option),
+                            onClick = { actions.onLanguageSelected(option) },
+                            enabled = state.applyingKey != "language",
+                            modifier = Modifier.testTag(SettingsTags.languageOption(option)),
+                            primary = appState.languagePreference == option,
+                        )
+                    }
+                }
+                if (appState.languagePreference == "system") {
+                    Text(
+                        text = stringResource(
+                            R.string.language_system_note,
+                            languageLabel(appState.effectiveLanguage.tag),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.testTag(SettingsTags.LANGUAGE_SYSTEM_NOTE),
+                    )
+                }
+                state.errorFor("language")?.text?.let { rawError ->
+                    Text(
+                        text = stringResource(R.string.language_failed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.error,
+                        modifier = Modifier.testTag(SettingsTags.LANGUAGE_ERROR),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+                        Text(
+                            text = rawError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TvButton(
+                            label = stringResource(R.string.settings_retry),
+                            onClick = actions.onRetryLanguage,
+                            enabled = state.applyingKey != "language",
+                            modifier = Modifier.testTag(SettingsTags.LANGUAGE_RETRY),
+                        )
+                    }
+                }
+
                 SectionTitle(stringResource(R.string.settings_theme_title), stringResource(R.string.settings_theme_hint))
                 Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
                     ThemeId.entries.forEach { theme ->

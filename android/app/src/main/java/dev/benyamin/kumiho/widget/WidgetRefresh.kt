@@ -13,6 +13,7 @@ import dev.benyamin.kumiho.MainActivity
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.permissions.PermissionController
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.VpnStatusCache
@@ -39,14 +40,15 @@ object WidgetRefresh {
         val app = context.applicationContext
         val container = (app as? KumihoApplication)?.container ?: return
         val colors = (container.themeRepository.state.value as? PaletteState.Ready)?.colors ?: return
+        val localized = container.languageRepository.localizedContext(context)
         val view = WidgetState.reduce(
             VpnStatusCache.current(),
             consentGranted = PermissionController.vpnPrepareIntent(app) == null,
         )
         for (id in ids) {
             val remote = when (size) {
-                WidgetSize.TOGGLE_1X1 -> toggle(context, view, colors)
-                WidgetSize.STATUS_2X1 -> status(context, view, colors)
+                WidgetSize.TOGGLE_1X1 -> toggle(localized, view, colors)
+                WidgetSize.STATUS_2X1 -> status(localized, view, colors)
             }
             manager.updateAppWidget(id, remote)
         }
@@ -154,7 +156,14 @@ object WidgetRefresh {
         val parts = mutableListOf<String>()
         view.location?.let(parts::add)
         when (val quota = view.quota) {
-            is WidgetQuota.Percent -> parts.add(context.getString(R.string.account_row_quota_left, quota.value))
+            is WidgetQuota.Percent -> {
+                val percent = if (context.resources.configuration.locales[0].language == "fa") {
+                    PersianFormat.formatNumber(quota.value.toLong())
+                } else {
+                    quota.value.toString()
+                }
+                parts.add(context.getString(R.string.account_row_quota_left, percent))
+            }
             WidgetQuota.Unknown -> parts.add(context.getString(R.string.account_row_quota_unknown))
             WidgetQuota.Hidden -> Unit
         }

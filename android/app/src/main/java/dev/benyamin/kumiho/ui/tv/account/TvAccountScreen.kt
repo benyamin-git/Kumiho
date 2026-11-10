@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.ui.account.AccountActions
 import dev.benyamin.kumiho.ui.account.AccountFormat
@@ -42,6 +43,7 @@ import dev.benyamin.kumiho.ui.account.BrowserWaitingCard
 import dev.benyamin.kumiho.ui.account.MozillaAccountBrowserDialog
 import dev.benyamin.kumiho.ui.account.accountNoticeText
 import dev.benyamin.kumiho.ui.dashboard.DashboardFormat
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.ui.setup.SignInPane
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
@@ -857,7 +859,12 @@ private fun methodLabel(method: String): String = stringResource(
 private fun quotaLabel(account: AccountSummary): String {
     val percent = AccountFormat.quotaPercent(account.quota)
         ?: return stringResource(R.string.account_row_quota_unknown)
-    return stringResource(R.string.account_row_quota_left, percent)
+    val digits = if (LocalAppLanguage.current == AppLanguage.PERSIAN) {
+        PersianFormat.formatNumber(percent.toLong())
+    } else {
+        percent.toString()
+    }
+    return stringResource(R.string.account_row_quota_left, digits)
 }
 
 private val retryable = setOf(

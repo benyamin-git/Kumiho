@@ -83,6 +83,8 @@ fun SetupRoute(
     val engine by container.vpnServiceCoordinator.engine.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val appContext = context.applicationContext
+    val languagePreference by container.languageRepository.preference.collectAsStateWithLifecycle()
+    val effectiveLanguage by container.languageRepository.effective.collectAsStateWithLifecycle()
     val client = engine
 
     if (client == null) {
@@ -102,9 +104,19 @@ fun SetupRoute(
             connectNow = { container.vpnServiceCoordinator.connect(ConnectRequest()) },
             openExternalBrowser = { url -> openBrowserSignIn(appContext, url) },
             onRegionBlocked = container.guide::open,
+            initialLanguagePreference = container.languageRepository.preference.value,
+            initialEffectiveLanguage = container.languageRepository.effective.value,
         )
     }
-    SetupFlow(viewModel = setupViewModel, modifier = modifier)
+    SetupFlow(
+        viewModel = setupViewModel,
+        onLanguageSelected = { value ->
+            container.languageRepository.setPreference(value)
+            setupViewModel.setLanguage(value)
+        },
+        onRetryLanguage = { setupViewModel.setLanguage(languagePreference) },
+        modifier = modifier,
+    )
 }
 
 /** Themed loading before the engine is ready; a themed error if it never is. */
@@ -164,6 +176,8 @@ private fun SetupWaitingSurface(error: String?, modifier: Modifier = Modifier) {
 @Composable
 fun SetupFlow(
     viewModel: SetupViewModel,
+    onLanguageSelected: (String) -> Unit = {},
+    onRetryLanguage: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -266,7 +280,14 @@ fun SetupFlow(
                         .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space4),
                 ) {
                     when (state.step) {
-                        SetupStep.CONSENT -> ConsentStep()
+                        SetupStep.CONSENT -> ConsentStep(
+                            languagePreference = state.languagePreference,
+                            effectiveLanguage = state.effectiveLanguage,
+                            languageBusy = state.languageBusy,
+                            languageError = state.languageError,
+                            onLanguageSelected = onLanguageSelected,
+                            onRetryLanguage = onRetryLanguage,
+                        )
                         SetupStep.SIGN_IN -> SignInStep(
                             state = state.signIn,
                             notice = state.notice,

@@ -47,6 +47,8 @@ import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import dev.benyamin.kumiho.ui.account.pasteMessageText
+import dev.benyamin.kumiho.ui.settings.LANGUAGE_OPTIONS
+import dev.benyamin.kumiho.ui.settings.languageLabel
 import dev.benyamin.kumiho.ui.setup.SetupActions
 import dev.benyamin.kumiho.ui.setup.SetupHost
 import dev.benyamin.kumiho.ui.setup.SetupMessage
@@ -315,6 +317,56 @@ private fun StepLine(current: SetupStep) {
 @Composable
 private fun ConsentStep(state: SetupState, actions: SetupActions, focus: FocusRequester) {
     val colors = MaterialTheme.colorScheme
+    Text(
+        text = stringResource(R.string.language_title),
+        style = MaterialTheme.typography.titleMedium,
+        color = colors.onSurface,
+    )
+    Text(
+        text = stringResource(R.string.language_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+        LANGUAGE_OPTIONS.forEach { option ->
+            TvButton(
+                label = languageLabel(option),
+                onClick = { actions.onLanguageSelected(option) },
+                enabled = !state.languageBusy,
+                primary = state.languagePreference == option,
+            )
+        }
+    }
+    if (state.languagePreference == "system") {
+        Text(
+            text = stringResource(
+                R.string.language_system_note,
+                languageLabel(state.effectiveLanguage.tag),
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant,
+        )
+    }
+    state.languageError?.let { rawError ->
+        Text(
+            text = stringResource(R.string.language_failed),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.error,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {
+            Text(
+                text = rawError,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TvButton(
+                label = stringResource(R.string.settings_retry),
+                onClick = actions.onRetryLanguage,
+                enabled = !state.languageBusy,
+            )
+        }
+    }
     Text(
         text = stringResource(R.string.consent_title),
         style = MaterialTheme.typography.headlineMedium,

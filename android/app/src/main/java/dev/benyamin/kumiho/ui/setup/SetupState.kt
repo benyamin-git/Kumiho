@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.setup
 
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import dev.benyamin.kumiho.ui.account.BrowserSignIn
 
@@ -96,6 +97,14 @@ data class SetupState(
      * the wizard advances to sign-in.
      */
     val regionChecking: Boolean = false,
+    /** The saved app-language preference: `system`, `en` or `fa`. */
+    val languagePreference: String = "system",
+    /** The language this setup screen is currently rendering. */
+    val effectiveLanguage: AppLanguage = AppLanguage.ENGLISH,
+    /** A language write to the engine is in flight. */
+    val languageBusy: Boolean = false,
+    /** The raw engine detail when the language write failed. */
+    val languageError: String? = null,
     val signIn: SignInPaneState = SignInPaneState(),
     val permissions: PermissionState = PermissionState(),
     /** Android's Always-on VPN state, mirrored from the service. */

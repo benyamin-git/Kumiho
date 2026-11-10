@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ServiceCompat
+import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.KumihoApplication
 import dev.benyamin.kumiho.crash.CrashLog
 import dev.benyamin.kumiho.engine.EngineClient
@@ -60,6 +61,7 @@ class KumihoVpnService : VpnService() {
     private lateinit var engine: EngineClient
     private lateinit var bridge: KumihoDeviceBridge
     private lateinit var notifications: NotificationFactory
+    private lateinit var container: AppContainer
 
     private val binder = LocalBinder()
 
@@ -98,9 +100,9 @@ class KumihoVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        notifications = NotificationFactory(this)
+        container = (application as KumihoApplication).container
+        notifications = NotificationFactory(this, container.languageRepository)
         engine = EngineClient(GomobileEngineTransport())
-        val container = (application as KumihoApplication).container
         bridge = KumihoDeviceBridge(
             this,
             container.splitSettingsProvider,
@@ -112,6 +114,22 @@ class KumihoVpnService : VpnService() {
         scope.launch {
             engine.status.collect { status ->
                 mutableState.update { it.copy(status = status) }
+            }
+        }
+        // A language change updates the channel names and the live notification
+        // without waiting for the next status tick.
+        scope.launch {
+            container.languageRepository.effective.collect { language ->
+                notifications.ensureChannels()
+                if (foreground) {
+                    val snapshot = mutableState.value
+                    notifications.update(
+                        NotificationFactory.FOREGROUND_ID,
+                        VpnStateReducer.reduceForService(snapshot),
+                        snapshot.status,
+                        language,
+                    )
+                }
             }
         }
         // Keep the foreground notification truthful while it is showing: once

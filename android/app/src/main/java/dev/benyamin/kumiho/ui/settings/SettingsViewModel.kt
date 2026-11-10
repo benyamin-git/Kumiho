@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.benyamin.kumiho.data.LanguageRepository
 import dev.benyamin.kumiho.engine.RelayTest
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
@@ -161,6 +162,15 @@ class SettingsViewModel(
             }
             is SettingInput.Valid -> mutate(SettingChange(key = key, value = input.value))
         }
+    }
+
+    /**
+     * Writes the app language. It is app-level, not a catalog row: the row has
+     * its own three-way control, and an unknown value falls back to `system`.
+     */
+    fun setLanguage(value: String) {
+        if (mutableState.value.applying) return
+        mutate(SettingChange(key = "language", value = LanguageRepository.normalize(value)))
     }
 
     /** Drops the engine override; read-only rows are refused. */

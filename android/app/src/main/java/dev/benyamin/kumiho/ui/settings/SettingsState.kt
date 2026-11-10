@@ -1,6 +1,7 @@
 package dev.benyamin.kumiho.ui.settings
 
 import androidx.compose.ui.graphics.Color
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
@@ -158,6 +159,10 @@ data class SettingsAppState(
     val bypassNeedsReconnect: Boolean = false,
     /** A fixed load/save error under the row, if any. */
     val bypassError: BypassError? = null,
+    /** The saved language preference: `system`, `en` or `fa`. */
+    val languagePreference: String = "system",
+    /** The language currently rendered, used by the System note. */
+    val effectiveLanguage: AppLanguage = AppLanguage.ENGLISH,
 )
 
 /**
@@ -185,6 +190,10 @@ data class SettingsActions(
     val onToggleBypass: (Boolean) -> Unit,
     val onOpenSplitTunneling: (() -> Unit)? = null,
     val onTestRelay: () -> Unit = {},
+    /** Writes the app language immediately and to the engine. */
+    val onLanguageSelected: (String) -> Unit = {},
+    /** Retries a failed language write with the current preference. */
+    val onRetryLanguage: () -> Unit = {},
     /** Opens the app-scoped Blocked region guide (v0.11.0). */
     val onOpenGuide: () -> Unit = {},
 )
@@ -213,6 +222,13 @@ object SettingsTags {
     const val RELAY_TOKEN_SET = "settings_relay_token_set"
     const val RELAY_TOKEN_CLEAR = "settings_relay_token_clear"
     const val REGION_GUIDE = "settings_region_guide"
+
+    const val LANGUAGE_CONTROL = "settings_language_control"
+    const val LANGUAGE_SYSTEM_NOTE = "settings_language_system_note"
+    const val LANGUAGE_ERROR = "settings_language_error"
+    const val LANGUAGE_RETRY = "settings_language_retry"
+
+    fun languageOption(id: String): String = "settings_language_$id"
 
     const val THEME_CONTROL = "settings_theme_control"
     const val VERSION_APP = "settings_version_app"

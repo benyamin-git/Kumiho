@@ -2,6 +2,7 @@ package dev.benyamin.kumiho.ui.setup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -16,7 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
+import dev.benyamin.kumiho.ui.settings.LanguageSetting
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
@@ -26,6 +30,12 @@ import dev.benyamin.kumiho.ui.theme.Dimens
  */
 @Composable
 fun ConsentStep(
+    languagePreference: String = "system",
+    effectiveLanguage: AppLanguage = AppLanguage.ENGLISH,
+    languageBusy: Boolean = false,
+    languageError: String? = null,
+    onLanguageSelected: (String) -> Unit = {},
+    onRetryLanguage: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -34,6 +44,15 @@ fun ConsentStep(
             .testTag(SetupTags.CONSENT_STEP),
         verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
     ) {
+        LanguageSetting(
+            preference = languagePreference,
+            effective = effectiveLanguage,
+            applying = languageBusy,
+            rawError = languageError,
+            onSelected = onLanguageSelected,
+            onRetry = onRetryLanguage,
+            contentPadding = PaddingValues(0.dp),
+        )
         Text(
             text = stringResource(R.string.consent_title),
             style = MaterialTheme.typography.headlineMedium,

@@ -10,6 +10,7 @@ import androidx.tvprovider.media.tv.PreviewChannel
 import androidx.tvprovider.media.tv.PreviewChannelHelper
 import androidx.tvprovider.media.tv.PreviewProgram
 import androidx.tvprovider.media.tv.TvContractCompat
+import dev.benyamin.kumiho.KumihoApplication
 import dev.benyamin.kumiho.R
 import java.util.concurrent.TimeUnit
 
@@ -31,7 +32,11 @@ object TvChannelPublisher {
 
     fun publish(context: Context) {
         if (!TvEnvironment.isTelevision(context)) return
-        runCatching { publishChannel(context) }
+        val localized = (context.applicationContext as? KumihoApplication)?.container
+            ?.languageRepository
+            ?.localizedContext(context)
+            ?: context
+        runCatching { publishChannel(localized) }
             .onFailure { Log.w(TAG, "Could not publish the TV channel", it) }
     }
 

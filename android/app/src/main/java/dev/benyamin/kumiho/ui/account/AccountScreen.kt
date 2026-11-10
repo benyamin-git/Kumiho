@@ -56,11 +56,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.Account
 import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.setup.SignInPane
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
@@ -586,7 +588,12 @@ private fun AccountListRow(
                 }
                 Text(
                     text = AccountFormat.quotaPercent(account.quota)?.let { percent ->
-                        stringResource(R.string.account_row_quota_left, percent)
+                        val digits = if (LocalAppLanguage.current == AppLanguage.PERSIAN) {
+                            PersianFormat.formatNumber(percent.toLong())
+                        } else {
+                            percent.toString()
+                        }
+                        stringResource(R.string.account_row_quota_left, digits)
                     } ?: stringResource(R.string.account_row_quota_unknown),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

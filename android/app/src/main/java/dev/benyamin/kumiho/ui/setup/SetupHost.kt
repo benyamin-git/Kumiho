@@ -48,6 +48,8 @@ data class SetupActions(
     val onRequestNotifications: () -> Unit,
     val onOpenNotificationSettings: () -> Unit,
     val onOpenVpnSettings: () -> Unit,
+    val onLanguageSelected: (String) -> Unit = {},
+    val onRetryLanguage: () -> Unit = {},
 )
 
 /**
@@ -71,6 +73,7 @@ fun SetupHost(
     val appContext = context.applicationContext
     val lifecycleOwner = LocalLifecycleOwner.current
     val client = engine
+    val languagePreference by container.languageRepository.preference.collectAsStateWithLifecycle()
 
     if (client == null) {
         waiting(serviceState.error)
@@ -89,6 +92,8 @@ fun SetupHost(
             connectNow = { container.vpnServiceCoordinator.connect(ConnectRequest()) },
             openExternalBrowser = { url -> openBrowserSignIn(appContext, url) },
             onRegionBlocked = container.guide::open,
+            initialLanguagePreference = container.languageRepository.preference.value,
+            initialEffectiveLanguage = container.languageRepository.effective.value,
         )
     }
     val state by setupViewModel.state.collectAsStateWithLifecycle()
@@ -174,6 +179,11 @@ fun SetupHost(
         onRequestNotifications = requestNotifications,
         onOpenNotificationSettings = openNotificationSettings,
         onOpenVpnSettings = openVpnSettings,
+        onLanguageSelected = { value ->
+            container.languageRepository.setPreference(value)
+            setupViewModel.setLanguage(value)
+        },
+        onRetryLanguage = { setupViewModel.setLanguage(languagePreference) },
     )
 
     content(state, actions)

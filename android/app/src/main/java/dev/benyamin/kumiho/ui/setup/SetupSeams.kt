@@ -42,6 +42,9 @@ interface SetupEngine {
 
     /** The no-credentials blocked-region preflight (v0.11.0). */
     suspend fun regionCheck(): RegionCheck
+
+    /** Writes the app language (`system|en|fa`) to the engine. */
+    suspend fun setLanguage(value: String)
 }
 
 /** The production [SetupEngine]: a thin adapter over [EngineClient]. */
@@ -67,6 +70,8 @@ class EngineSetupEngine(private val client: EngineClient) : SetupEngine {
     override suspend fun refreshStatus(): EngineStatus = client.refreshStatus()
 
     override suspend fun regionCheck(): RegionCheck = client.regionCheck()
+
+    override suspend fun setLanguage(value: String) = client.setSetting("language", value)
 }
 
 /**

@@ -279,6 +279,8 @@
     <string name="language_system">سیستم</string>
     <string name="language_english">انگلیسی</string>
     <string name="language_persian">فارسی</string>
+    <string name="language_system_note">زبان دستگاه: %1$s</string>
+    <string name="language_failed">زبان ذخیره نشد.</string>
     <string name="settings_group_connection">اتصال</string>
     <string name="settings_group_region">منطقه</string>
     <string name="settings_group_android_vpn">VPN اندروید</string>
@@ -625,7 +627,7 @@
     <string name="account_add_password_title">افزودن با رمز عبور</string>
     <string name="account_method_browser">مرورگر</string>
     <string name="account_method_password">رمز عبور</string>
-    <string name="account_row_quota_left">%1$d%% باقی‌مانده</string>
+    <string name="account_row_quota_left">%1$s%% باقی‌مانده</string>
     <string name="account_row_quota_unknown">سهمیه نامشخص</string>
     <string name="account_reauth_required">ورود منقضی شده است</string>
     <string name="account_actions">اقدام‌های حساب</string>

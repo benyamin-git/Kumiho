@@ -2,6 +2,8 @@ package dev.benyamin.kumiho.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.benyamin.kumiho.data.AppLanguage
+import dev.benyamin.kumiho.data.LanguageRepository
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.ui.account.BrowserMessage
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.Locale
 
 /**
  * The four-step setup state machine: consent, Firefox Accounts sign-in, the two
@@ -45,6 +48,9 @@ class SetupViewModel(
     private val onRegionBlocked: () -> Unit = {},
     private val pollIntervalMillis: Long = DEFAULT_POLL_INTERVAL_MS,
     private val browserPollIntervalMillis: Long = DEFAULT_BROWSER_POLL_INTERVAL_MS,
+    private val systemLanguage: () -> String = { Locale.getDefault().language },
+    initialLanguagePreference: String = "system",
+    initialEffectiveLanguage: AppLanguage = AppLanguage.ENGLISH,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(
@@ -52,6 +58,8 @@ class SetupViewModel(
             permissions = currentPermissions(),
             alwaysOn = permissions.alwaysOn(),
             lockdown = permissions.lockdown(),
+            languagePreference = LanguageRepository.normalize(initialLanguagePreference),
+            effectiveLanguage = initialEffectiveLanguage,
         ),
     )
 
@@ -77,6 +85,40 @@ class SetupViewModel(
     /** Records the required consent tick; Continue stays disabled until true. */
     fun setConsentAccepted(accepted: Boolean) {
         mutableState.update { it.copy(consentAccepted = accepted) }
+    }
+
+    /**
+     * Switches the wizard language immediately, then writes the engine setting.
+     * The local preference is updated by the route before this call, so a
+     * write failure only adds a retry row; it never reverts the UI.
+     */
+    fun setLanguage(value: String) {
+        val preference = LanguageRepository.normalize(value)
+        mutableState.update {
+            it.copy(
+                languagePreference = preference,
+                effectiveLanguage = LanguageRepository.resolve(preference, systemLanguage()),
+                languageBusy = true,
+                languageError = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                engine.setLanguage(preference)
+                mutableState.update { it.copy(languageBusy = false) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update {
+                    it.copy(
+                        languageBusy = false,
+                        languageError = error.message?.takeIf(String::isNotBlank)
+                            ?: error::class.simpleName
+                            ?: "language write failed",
+                    )
+                }
+            }
+        }
     }
 
     // ---- navigation -----------------------------------------------------

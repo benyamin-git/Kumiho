@@ -137,6 +137,50 @@ class SettingsViewModelTest {
         }
 
     @Test
+    fun `language is app-level and writes the normalized engine value`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+
+            gateway.snapshot = gateway.snapshot.copy(language = "fa")
+            viewModel.setLanguage("fa")
+            runCurrent()
+
+            assertEquals(listOf(Triple("language", "fa", false)), gateway.changes)
+            assertEquals("fa", viewModel.state.value.snapshot?.language)
+            assertEquals(2, gateway.settingsCalls)
+            assertNull(viewModel.state.value.applyingKey)
+        }
+
+    @Test
+    fun `an unknown language falls back to system`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+
+            gateway.snapshot = gateway.snapshot.copy(language = "system")
+            viewModel.setLanguage("fr")
+            runCurrent()
+
+            assertEquals(listOf(Triple("language", "system", false)), gateway.changes)
+        }
+
+    @Test
+    fun `a language write failure keeps the pref and exposes a retry row`() =
+        runTest(mainRule.testDispatcher) {
+            val viewModel = viewModel()
+            runCurrent()
+
+            gateway.setError = IllegalStateException("settings_set failed")
+            viewModel.setLanguage("fa")
+            runCurrent()
+
+            assertEquals("language", viewModel.state.value.errorFor("language")?.key)
+            assertEquals("settings_set failed", viewModel.state.value.errorFor("language")?.text)
+            assertEquals("system", viewModel.state.value.snapshot?.language)
+        }
+
+    @Test
     fun `read-only Android rows never reach settings_set`() =
         runTest(mainRule.testDispatcher) {
             val viewModel = viewModel()
