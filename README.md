@@ -4,6 +4,8 @@
 [![Downloads](https://img.shields.io/github/downloads/benyamin-git/Kumiho/total?style=flat-square)](https://github.com/benyamin-git/Kumiho/releases)
 [![License](https://img.shields.io/github/license/benyamin-git/Kumiho?style=flat-square)](LICENSE)
 
+[فارسی](README.fa.md)
+
 Kumiho is an unofficial desktop and mobile client for the free
 Firefox-account VPN. Use your own Firefox account on **Linux**, **Windows 11**,
 **Android phones** or **Android TV** — with a native app on every platform.
