@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.LoginState
+import dev.benyamin.kumiho.engine.RegionCheck
 import dev.benyamin.kumiho.ui.account.BrowserSignIn
 import dev.benyamin.kumiho.ui.account.MozillaAccountWebViewTags
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
@@ -348,6 +349,9 @@ internal class FakeSetupEngine : SetupEngine {
 
     override suspend fun accountsList(): Accounts =
         Accounts(emptyList(), null, false, 10, null, null, null)
+
+    override suspend fun regionCheck(): RegionCheck =
+        RegionCheck(emptyList(), emptyList(), browserBlocked = false, relayConfigured = false)
 
     private fun pending(): LoginState = LoginState(
         step = "2fa",
