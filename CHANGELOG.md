@@ -8,6 +8,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- **Android blocked-region recovery is easier to reach.** A connect failure
+  caused by HTTP 451 or an expired prepared pass now offers **Open guide**
+  instead of a retry that cannot succeed. The guide respects the status bar
+  and display cutout, and the relay token row keeps **Set**/**Replace** and
+  **Clear** on the same line as the label.
+
 ## [0.11.0] - 2026-11-09
 
 Blocked-region first run: sign in, prepare once, connect, and let Kumiho renew
