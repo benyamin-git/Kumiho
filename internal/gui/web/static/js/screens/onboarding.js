@@ -47,6 +47,8 @@
  * The router links css/screens/onboarding.css from the registry entry.
  */
 
+import { t, tp, formatNumber, setLanguage, currentLanguage, hasTranslation } from "../i18n.js";
+
 // The five steps, in order.
 const STEP_WELCOME = 0;
 const STEP_LOGIN = 1;
@@ -56,14 +58,28 @@ const STEP_FINISH = 4;
 const STEP_COUNT = 5;
 
 // The step titles (the page heading) and the primary button's label per step.
-const STEP_TITLES = [
-  "Welcome to Kumiho",
-  "Sign in",
-  "Health check",
-  "Almost done",
-  "You're all set",
+const STEP_TITLE_KEYS = [
+  "onboarding.step.welcome",
+  "onboarding.step.login",
+  "onboarding.step.health",
+  "onboarding.step.autoconnect",
+  "onboarding.step.finish",
 ];
-const PRIMARY_LABELS = ["Continue", "Continue", "Continue", "Finish", "Open Kumiho"];
+const PRIMARY_LABEL_KEYS = [
+  "onboarding.primary.continue",
+  "onboarding.primary.continue",
+  "onboarding.primary.continue",
+  "onboarding.primary.finish",
+  "onboarding.primary.open",
+];
+
+function stepTitle(step) {
+  return t(STEP_TITLE_KEYS[step]);
+}
+
+function primaryLabel(step) {
+  return t(PRIMARY_LABEL_KEYS[step]);
+}
 
 // Capture hints -> starting step (scripts/visual/README.md).
 const HINT_STEPS = {
@@ -85,53 +101,79 @@ const SETTLE_MS = 3000;
 const POLL_MS = 1000;
 
 // The consent copy: the D16 gate, transcribed from the inventory.
-const CONSENT_INTRO =
-  "Kumiho is an unofficial desktop client for the VPN proxy included with a " +
-  "Firefox account. Please read this before you continue.";
+const CONSENT_INTRO_KEY = "onboarding.consent.intro";
 const CONSENT_GROUPS = [
   {
-    heading: "What Kumiho does",
-    items: [
-      "It signs in with your Firefox account and stores the resulting sign-in tokens on this PC. It never stores your password.",
-      "It carries your traffic through Mozilla's servers using an HTTP/2 tunnel.",
-      "The tunnel carries TCP and DNS only. Non-DNS UDP traffic (some games, video calls, and QUIC/HTTP3) is blocked on purpose, so apps either fall back to TCP or stop working.",
+    headingKey: "onboarding.consent.group.does",
+    itemKeys: [
+      "onboarding.consent.item.signs_in",
+      "onboarding.consent.item.tunnel",
+      "onboarding.consent.item.udp",
     ],
   },
   {
-    heading: "What to keep in mind",
-    items: [
-      "Kumiho is not affiliated with or endorsed by Mozilla. Using an unofficial client is a gray area under Mozilla's terms of service.",
-      "While the tunnel is up, the kill switch can block traffic that tries to leave outside it.",
-      "Kumiho is provided as is; review the code before trusting it with your account.",
+    headingKey: "onboarding.consent.group.keep",
+    itemKeys: [
+      "onboarding.consent.item.unofficial",
+      "onboarding.consent.item.kill_switch",
+      "onboarding.consent.item.as_is",
     ],
   },
 ];
-const CONSENT_TICK = 'Tick "I understand" below to unlock Continue.';
+const CONSENT_TICK_KEY = "onboarding.consent.tick";
 
 // The login pages' bodies (inventory §Sign in, extended by v0.6.0).
-const LOGIN_CHOICE_BODY =
-  "Sign in with the Firefox account that has the VPN. Continue in your browser (recommended), or use your account password.";
-const LOGIN_EMAIL_BODY =
-  "Sign in with the Firefox account that has the VPN. Kumiho stores the sign-in tokens on this PC, never your password.";
-const LOGIN_PASSWORD_BODY = "Enter your Firefox account password.";
-const LOGIN_CODE_BODY = "Enter the verification code from the email Mozilla sent you.";
-const LOGIN_LINK_BODY =
-  "Check your email and open the Mozilla sign-in link, then choose Continue with the code empty to finish signing in.";
-const LOGIN_SIGNED_BODY =
-  "Kumiho already has a signed-in Firefox account. Choose Continue to finish setting up, or sign out to use a different account.";
-const LOGIN_WAITING_BODY =
-  "Finish signing in in your browser. The browser lands on a Firefox Accounts success page; paste the complete URL from its address bar.";
+const LOGIN_CHOICE_BODY_KEY = "onboarding.login.choice_body";
+const LOGIN_EMAIL_BODY_KEY = "onboarding.login.email_body";
+const LOGIN_PASSWORD_BODY_KEY = "onboarding.login.password_body";
+const LOGIN_CODE_BODY_KEY = "onboarding.login.code_body";
+const LOGIN_LINK_BODY_KEY = "onboarding.login.link_body";
+const LOGIN_SIGNED_BODY_KEY = "onboarding.login.signed_body";
+const LOGIN_WAITING_BODY_KEY = "onboarding.login.waiting_body";
 
 // The remaining steps' bodies and the shared sign-out dialog copy.
-const HEALTH_BODY =
-  "Kumiho checked this PC. Fix anything marked Failed before connecting; warnings are usually fine.";
-const AUTOCONNECT_BODY =
-  "Kumiho can connect automatically whenever it starts. You can change this later in Settings.";
-const FINISH_BODY = "Kumiho is ready. Press Connect on the Dashboard to start the tunnel.";
-const SIGNOUT_QUESTION = "Sign out of Kumiho?";
-const SIGNOUT_DETAIL = "The stored sign-in tokens are cleared and the tunnel disconnects.";
-const SIGNOUT_REVOKE =
-  "Kumiho will also try to revoke its Mozilla sign-in; local sign-out completes offline.";
+const HEALTH_BODY_KEY = "onboarding.health.body";
+const AUTOCONNECT_BODY_KEY = "onboarding.autoconnect.body";
+const FINISH_BODY_KEY = "onboarding.finish.body";
+const SIGNOUT_QUESTION_KEY = "onboarding.login.sign_out_question";
+const SIGNOUT_DETAIL_KEY = "onboarding.login.sign_out_detail";
+const SIGNOUT_REVOKE_KEY = "onboarding.login.sign_out_revoke";
+
+// Known daemon error codes get a translated summary/action; unknown codes
+// use the generic summary and keep the raw English detail visible below.
+const ERROR_KEYS = {
+  bad_request: "error.bad_request",
+  not_authenticated: "error.not_authenticated",
+  region_blocked: "error.region_blocked",
+  bootstrap_required: "error.bootstrap_required",
+  forbidden: "error.forbidden",
+  internal: "error.internal",
+  not_implemented: "error.not_implemented",
+  unsupported_setting: "error.unsupported_setting",
+};
+
+const HEALTH_STATUS_KEYS = {
+  ok: "onboarding.health.status.ok",
+  warn: "onboarding.health.status.warn",
+  fail: "onboarding.health.status.fail",
+  skip: "onboarding.health.status.skip",
+};
+
+const LANGUAGE_OPTION_KEYS = {
+  system: "onboarding.language.system",
+  en: "onboarding.language.english",
+  fa: "onboarding.language.persian",
+};
+
+const LANGUAGE_NAME_KEYS = {
+  en: "onboarding.language.english",
+  fa: "onboarding.language.persian",
+};
+
+// The wizard's current language choice survives the router's remount (the
+// picker lives only on Welcome, so the step and consent tick already do).
+let pendingLanguageChoice = "";
+let pendingLanguageError = "";
 
 // Module-level session state: a router remount keeps the step and the
 // consent tick (never persisted; a fresh launch reloads the module).
@@ -166,23 +208,34 @@ function summaryLine(checks) {
     else if (check.status === "skip") skipped += 1;
   }
   const ok = checks.length - failed - warned - skipped;
-  const checksWord = checks.length === 1 ? "1 check" : checks.length + " checks";
-  const warningsWord = warned === 1 ? "1 warning" : warned + " warnings";
+  const checksWord = tp("onboarding.health.check_count", checks.length, {
+    checks: formatNumber(checks.length),
+  });
+  const warningsWord = tp("onboarding.health.warning_count", warned, {
+    warnings: formatNumber(warned),
+  });
   if (failed > 0) {
     return {
-      text:
-        checksWord + ": " + failed + " failed, " + warningsWord +
-        " — fix the failed checks before connecting",
+      text: t("onboarding.health.summary.failed", {
+        checks: checksWord,
+        failed: formatNumber(failed),
+        warnings: warningsWord,
+      }),
       tone: "bad",
     };
   }
   if (warned > 0) {
     return {
-      text: checksWord + ": " + ok + " OK, " + warningsWord + ", " + skipped + " skipped",
+      text: t("onboarding.health.summary.warned", {
+        checks: checksWord,
+        ok: formatNumber(ok),
+        warnings: warningsWord,
+        skipped: formatNumber(skipped),
+      }),
       tone: "warn",
     };
   }
-  return { text: "All " + checksWord + " passed", tone: "good" };
+  return { text: t("onboarding.health.summary.passed", { checks: checksWord }), tone: "good" };
 }
 
 /** The 2FA body: TOTP, the unblock code, or the emailed link/code flow. */
@@ -190,12 +243,33 @@ function twoFactorBody(login) {
   const flow = String((login && login.method) || "").toLowerCase();
   const method = String((login && login.verification_method) || "").toLowerCase();
   const reason = String((login && login.verification_reason) || "").toLowerCase();
-  if (flow === "totp") return "Enter the code from your authenticator app.";
+  if (flow === "totp") return t("onboarding.login.totp_body");
   if (flow === "unblock" || reason === "unblock-code") {
-    return "Enter the unblock code Mozilla emailed you.";
+    return t("onboarding.login.unblock_body");
   }
-  if (method === "email" || method.indexOf("link") >= 0) return LOGIN_LINK_BODY;
-  return LOGIN_CODE_BODY;
+  if (method === "email" || method.indexOf("link") >= 0) return t("onboarding.login.link_body");
+  return t("onboarding.login.code_body");
+}
+
+/** The translated summary/action for a known login error code, or the
+ * generic summary for an unknown one; the raw English detail stays separate. */
+function errorSummary(login) {
+  const code = login && login.error_code;
+  const key = code && ERROR_KEYS[code];
+  return t(key || "error.generic");
+}
+
+/** The translated notice text plus its raw English engine detail, if any. */
+function noticePresentation(notice) {
+  if (notice && notice.code) {
+    const key = "notice." + notice.code;
+    if (hasTranslation(key)) {
+      const params = notice.params || {};
+      const detail = typeof params.error === "string" ? params.error : "";
+      return { text: t(key, params), detail: detail };
+    }
+  }
+  return { text: (notice && notice.message) || "", detail: "" };
 }
 
 /** A labeled input group (label always visible, never placeholder-only). */
@@ -219,12 +293,35 @@ function build(host) {
   const root = el("div", "onb");
   const panel = el("div", "card onb__panel");
 
+  // The language choice is the first thing on the consent step: switching
+  // language never reloads, and the module-level step/tick survive the
+  // router's remount. System shows the OS resolution as a small note.
+  const language = el("div", "onb__language");
+  language.setAttribute("role", "group");
+  language.setAttribute("aria-label", t("onboarding.language.label"));
+  const languageLabel = el("span", "onb__language-label", t("onboarding.language.label"));
+  const languageOptions = el("div", "onb__language-options");
+  const languageButtons = {};
+  for (const value of ["system", "en", "fa"]) {
+    const button = el("button", "button button--tonal onb__language-option", t(LANGUAGE_OPTION_KEYS[value]));
+    button.type = "button";
+    button.dataset.value = value;
+    button.setAttribute("aria-pressed", "false");
+    languageOptions.append(button);
+    languageButtons[value] = button;
+  }
+  const languageNote = el("p", "onb__language-note");
+  languageNote.hidden = true;
+  language.append(languageLabel, languageOptions, languageNote);
+  panel.append(language);
+
   // Heading + the visual step progress (the heading carries the step's
   // identity; the progressbar is the accompanying position, exposed to AT).
   const head = el("div", "onb__head");
-  const title = el("h2", "onb__title", STEP_TITLES[STEP_WELCOME]);
+  const title = el("h2", "onb__title", stepTitle(STEP_WELCOME));
   const progress = el("div", "onb__progress");
   progress.setAttribute("role", "progressbar");
+  progress.setAttribute("aria-label", t("onboarding.progress_aria"));
   progress.setAttribute("aria-valuemin", "1");
   progress.setAttribute("aria-valuemax", String(STEP_COUNT));
   const segments = [];
@@ -243,15 +340,15 @@ function build(host) {
   const consent = el("div", "onb__consent");
   consent.tabIndex = 0;
   consent.setAttribute("role", "region");
-  consent.setAttribute("aria-label", "Consent");
-  consent.append(el("p", "onb__consent-text", CONSENT_INTRO));
+  consent.setAttribute("aria-label", t("onboarding.consent.region"));
+  consent.append(el("p", "onb__consent-text", t(CONSENT_INTRO_KEY)));
   for (const group of CONSENT_GROUPS) {
-    const heading = el("h3", "onb__consent-heading", group.heading);
+    const heading = el("h3", "onb__consent-heading", t(group.headingKey));
     const list = el("ul", "onb__consent-list");
-    for (const item of group.items) list.append(el("li", null, item));
+    for (const itemKey of group.itemKeys) list.append(el("li", null, t(itemKey)));
     consent.append(heading, list);
   }
-  consent.append(el("p", "onb__consent-text", CONSENT_TICK));
+  consent.append(el("p", "onb__consent-text", t(CONSENT_TICK_KEY)));
   const consentToggle = el("button", "onb__consent-toggle");
   consentToggle.type = "button";
   consentToggle.id = "onb-consent";
@@ -259,54 +356,54 @@ function build(host) {
   consentToggle.setAttribute("aria-checked", "false");
   const consentBox = el("span", "onb__consent-box");
   consentBox.setAttribute("aria-hidden", "true");
-  consentToggle.append(consentBox, el("span", "onb__consent-label", "I understand"));
+  consentToggle.append(consentBox, el("span", "onb__consent-label", t("onboarding.consent.understand")));
   welcome.append(consent, consentToggle);
 
   // Step 2: sign in (body + signed-in card + the three credential fields).
   const login = el("section", "onb__step");
   login.dataset.step = "login";
   login.hidden = true;
-  const loginBody = el("p", "onb__body", LOGIN_CHOICE_BODY);
+  const loginBody = el("p", "onb__body", t(LOGIN_CHOICE_BODY_KEY));
   // The first page offers both methods. The primary button is the default
   // (the last successful method, browser on first run); this secondary
   // choice is the other one.
   const methods = el("div", "onb__methods");
-  const altMethod = el("button", "button button--tonal onb__method", "Use password");
+  const altMethod = el("button", "button button--tonal onb__method", t("onboarding.login.use_password"));
   altMethod.type = "button";
   altMethod.id = "onb-method-alt";
   methods.append(altMethod);
   methods.hidden = true;
   const signed = el("div", "onb__signed");
   const signedIdentity = el("p", "onb__signed-identity");
-  const signout = el("button", "button button--tonal onb__signout", "Sign out");
+  const signout = el("button", "button button--tonal onb__signout", t("onboarding.login.sign_out"));
   signout.type = "button";
   signed.append(signedIdentity, signout);
   signed.hidden = true;
-  const email = fieldBox("onb-email", "Email", "email", "you@example.com");
-  const password = fieldBox("onb-password", "Password", "password", "");
-  const code = fieldBox("onb-code", "Verification code", "text", "");
+  const email = fieldBox("onb-email", t("onboarding.login.email_label"), "email", "you@example.com");
+  const password = fieldBox("onb-password", t("onboarding.login.password_label"), "password", "");
+  const code = fieldBox("onb-code", t("onboarding.login.code_label"), "text", "");
   password.wrap.hidden = true;
   code.wrap.hidden = true;
   // The browser waiting card: the engine URL, the pasted redirect URL,
   // Open again and Cancel.
   const browser = el("div", "onb__browser");
   browser.hidden = true;
-  const browserBody = el("p", "onb__body", LOGIN_WAITING_BODY);
+  const browserBody = el("p", "onb__body", t(LOGIN_WAITING_BODY_KEY));
   const browserURL = el("p", "onb__browser-url");
-  const browserRedirect = fieldBox("onb-browser-redirect", "Redirect URL", "text", "Paste the complete URL");
+  const browserRedirect = fieldBox("onb-browser-redirect", t("onboarding.login.redirect_label"), "text", t("onboarding.login.redirect_placeholder"));
   const browserError = el("p", "onb__browser-error");
   browserError.id = "onb-browser-error";
   browserError.setAttribute("aria-live", "polite");
   browserError.hidden = true;
   browserRedirect.input.setAttribute("aria-describedby", browserError.id);
   const browserActions = el("div", "onb__browser-actions");
-  const browserOpen = el("button", "button button--tonal onb__browser-open", "Open again");
+  const browserOpen = el("button", "button button--tonal onb__browser-open", t("onboarding.login.open_again"));
   browserOpen.type = "button";
   browserOpen.id = "onb-browser-open";
-  const browserCancel = el("button", "button button--text onb__browser-cancel", "Cancel");
+  const browserCancel = el("button", "button button--text onb__browser-cancel", t("onboarding.login.cancel"));
   browserCancel.type = "button";
   browserCancel.id = "onb-browser-cancel";
-  const browserContinue = el("button", "button button--filled onb__browser-continue", "Continue");
+  const browserContinue = el("button", "button button--filled onb__browser-continue", t("onboarding.login.continue"));
   browserContinue.type = "button";
   browserContinue.id = "onb-browser-continue";
   browserActions.append(browserOpen, browserCancel, browserContinue);
@@ -318,17 +415,17 @@ function build(host) {
   const health = el("section", "onb__step");
   health.dataset.step = "health";
   health.hidden = true;
-  const healthBody = el("p", "onb__body", HEALTH_BODY);
+  const healthBody = el("p", "onb__body", t(HEALTH_BODY_KEY));
   const healthActions = el("div", "onb__health-actions");
-  const rerun = el("button", "button button--tonal onb__rerun", "Re-run checks");
+  const rerun = el("button", "button button--tonal onb__rerun", t("onboarding.health.rerun"));
   rerun.type = "button";
   rerun.id = "onb-rerun";
   healthActions.append(rerun);
   const checks = el("ul", "onb__checks");
   checks.id = "onb-checks";
   checks.tabIndex = 0;
-  checks.setAttribute("aria-label", "Health check results");
-  const checksEmpty = el("p", "onb__checks-empty", "Checking…");
+  checks.setAttribute("aria-label", t("onboarding.health.results_aria"));
+  const checksEmpty = el("p", "onb__checks-empty", t("onboarding.health.checking"));
   checksEmpty.id = "onb-checks-empty";
   health.append(healthBody, healthActions, checks, checksEmpty);
 
@@ -337,13 +434,13 @@ function build(host) {
   const autoconnect = el("section", "onb__step");
   autoconnect.dataset.step = "autoconnect";
   autoconnect.hidden = true;
-  const autoBody = el("p", "onb__body", AUTOCONNECT_BODY);
+  const autoBody = el("p", "onb__body", t(AUTOCONNECT_BODY_KEY));
   const autoRow = el("div", "onb__row");
-  autoRow.append(el("span", "onb__row-label", "Autoconnect"));
-  const autoToggle = el("button", "button button--tonal onb__toggle", "off");
+  autoRow.append(el("span", "onb__row-label", t("onboarding.autoconnect.label")));
+  const autoToggle = el("button", "button button--tonal onb__toggle", t("onboarding.autoconnect.off"));
   autoToggle.type = "button";
   autoToggle.id = "onb-autoconnect";
-  autoToggle.setAttribute("aria-label", "Autoconnect");
+  autoToggle.setAttribute("aria-label", t("onboarding.autoconnect.label"));
   autoRow.append(autoToggle);
   autoconnect.append(autoBody, autoRow);
 
@@ -351,23 +448,27 @@ function build(host) {
   const finish = el("section", "onb__step");
   finish.dataset.step = "finish";
   finish.hidden = true;
-  const finishBody = el("p", "onb__body", FINISH_BODY);
+  const finishBody = el("p", "onb__body", t(FINISH_BODY_KEY));
   finish.append(finishBody);
 
   panel.append(welcome, login, health, autoconnect, finish);
 
-  // Status line (the wizard-global priority; owned by the screen).
+  // Status line (the wizard-global priority; owned by the screen) and the
+  // raw English engine detail block (always LTR; never translated).
   const status = el("p", "onb__status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
+  const details = el("p", "onb__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
   // Navigation: Back (tonal, hidden on the first and last pages) and the
   // per-step primary action.
   const nav = el("div", "onb__nav");
-  const back = el("button", "button button--tonal onb__back", "Back");
+  const back = el("button", "button button--tonal onb__back", t("onboarding.back"));
   back.type = "button";
   back.id = "onb-back";
-  const primary = el("button", "button button--filled onb__primary", PRIMARY_LABELS[STEP_WELCOME]);
+  const primary = el("button", "button button--filled onb__primary", primaryLabel(STEP_WELCOME));
   primary.type = "button";
   primary.id = "onb-primary";
   nav.append(back, primary);
@@ -375,29 +476,32 @@ function build(host) {
   // The shared sign-out confirmation (the house dialog pattern, native;
   // Cancel focused by default, Esc and Enter cancel).
   const dialog = el("dialog", "dialog onb__dialog");
-  const dialogTitle = el("h2", "dialog__title", "Sign out");
+  const dialogTitle = el("h2", "dialog__title", t("onboarding.login.sign_out_title"));
   dialogTitle.id = "onb-signout-title";
-  const dialogQuestion = el("p", "dialog__body", SIGNOUT_QUESTION);
+  const dialogQuestion = el("p", "dialog__body", t(SIGNOUT_QUESTION_KEY));
   dialogQuestion.id = "onb-signout-question";
-  const dialogDetail = el("p", "dialog__body", SIGNOUT_DETAIL);
+  const dialogDetail = el("p", "dialog__body", t(SIGNOUT_DETAIL_KEY));
   dialogDetail.id = "onb-signout-detail";
-  const dialogRevoke = el("p", "dialog__body", SIGNOUT_REVOKE);
+  const dialogRevoke = el("p", "dialog__body", t(SIGNOUT_REVOKE_KEY));
   dialogRevoke.id = "onb-signout-revoke";
   dialog.setAttribute("aria-labelledby", dialogTitle.id);
   dialog.setAttribute("aria-describedby", dialogQuestion.id + " " + dialogDetail.id + " " + dialogRevoke.id);
-  const cancel = el("button", "button button--tonal onb__dialog-cancel", "Cancel");
+  const cancel = el("button", "button button--tonal onb__dialog-cancel", t("onboarding.login.sign_out_cancel"));
   cancel.type = "button";
-  const confirm = el("button", "button button--danger onb__dialog-confirm", "Sign out");
+  const confirm = el("button", "button button--danger onb__dialog-confirm", t("onboarding.login.sign_out_confirm"));
   confirm.type = "button";
   const dialogActions = el("div", "dialog__actions");
   dialogActions.append(cancel, confirm);
   dialog.append(dialogTitle, dialogQuestion, dialogDetail, dialogRevoke, dialogActions);
 
-  root.append(panel, status, nav, dialog);
+  root.append(panel, status, details, nav, dialog);
   host.append(root);
 
   return {
     root: root,
+    language: language,
+    languageButtons: languageButtons,
+    languageNote: languageNote,
     title: title,
     progress: progress,
     segments: segments,
@@ -426,6 +530,7 @@ function build(host) {
     back: back,
     primary: primary,
     status: status,
+    details: details,
     dialog: dialog,
     cancel: cancel,
     confirm: confirm,
@@ -460,7 +565,11 @@ export default {
       completingMark: "",
       completingTimer: 0,
       redirectError: "",
+      redirectErrorSummary: "",
+      redirectErrorDetail: "",
       redirectID: "",
+      languageChoice: pendingLanguageChoice,
+      languageError: pendingLanguageError,
       busy: null, // "signin" while a login round trip runs
       busyMark: "",
       busyTimer: 0,
@@ -502,7 +611,10 @@ export default {
       const account = snapshot.account || null;
       const status = snapshot.status || null;
       const email = (account && account.email) || (status && status.email) || "";
-      return email ? "Signed in as " + email : "Signed in";
+      if (!email) return t("onboarding.login.signed_in");
+      // Keep the Latin email in its own left-to-right isolate inside the
+      // Persian sentence; the engine email itself is never rewritten.
+      return t("onboarding.login.signed_in_as", { email: "\u2066" + email + "\u2069" });
     }
 
     /** The login projection's identity for the busy guard. */
@@ -518,6 +630,7 @@ export default {
         login.url || "",
         login.id || "",
         login.error || "",
+        login.error_code || "",
       ].join("\u0000");
     }
 
@@ -559,8 +672,16 @@ export default {
       clearTimeout(view.busyTimer);
       view.busyTimer = 0;
       // Follow the reply (or, after a settle with no reply, the settled
-      // state): the password/2FA pages and the signed-in variant.
-      view.page = derivePage(ctx.store.get());
+      // state): the password/2FA pages and the signed-in variant. A
+      // dispatch refusal is a shared onboarding notice, not a login
+      // projection change; keep the submitted form so retry and the raw
+      // detail stay together.
+      const notice = ctx.store.get().notice;
+      const refused = view.submitPage && notice && notice.tone === "bad" &&
+        typeof notice.code === "string" && notice.code.indexOf("onboarding.sign_in.") === 0;
+      if (refused) pinPage(view.submitPage);
+      else view.page = derivePage(ctx.store.get());
+      view.submitPage = "";
     }
 
     function beginBusy() {
@@ -622,6 +743,12 @@ export default {
     /** Release every guard whose completion evidence moved (called first on
      * every envelope, before rendering). */
     function settleGuards(snapshot) {
+      const settings = snapshot.settings;
+      if (pendingLanguageChoice && settings && settings.language === pendingLanguageChoice) {
+        pendingLanguageChoice = "";
+        view.languageChoice = "";
+        view.languageError = "";
+      }
       if (view.busy && loginMark(snapshot) !== view.busyMark) {
         endBusy();
       }
@@ -679,6 +806,54 @@ export default {
     function goTo(step) {
       currentStep = step;
       render();
+    }
+
+    /** The picker's saved preference; System is the pre-settings default. */
+    function languagePreference(snapshot) {
+      return (snapshot.settings && snapshot.settings.language) || "system";
+    }
+
+    /** The effective language for a preference, with the cache as the
+     * pre-settings System fallback. */
+    function effectiveLanguage(choice, snapshot) {
+      if (choice === "en" || choice === "fa") return choice;
+      if (snapshot.system_language === "en" || snapshot.system_language === "fa") {
+        return snapshot.system_language;
+      }
+      return currentLanguage();
+    }
+
+    /** Switch immediately, persist the engine preference and cache the
+     * effective language for the next first paint. A refusal rolls the UI
+     * back and keeps the raw detail on the status line. */
+    function onLanguageChoice(choice) {
+      const snapshot = ctx.store.get() || {};
+      const previous = currentLanguage();
+      const effective = effectiveLanguage(choice, snapshot);
+      pendingLanguageChoice = choice;
+      pendingLanguageError = "";
+      view.languageChoice = choice;
+      view.languageError = "";
+      render();
+      setLanguage(effective).catch(function (err) {
+        console.error("kumiho: language switch failed", err);
+      });
+      ctx.send("settings_set", { key: "language", value: choice }).then(function (err) {
+        if (!err) {
+          return ctx.send("prefs_set", { language: effective }).then(function (cacheErr) {
+            if (cacheErr) console.warn("kumiho: could not cache the language: " + cacheErr);
+          });
+        }
+        pendingLanguageChoice = "";
+        pendingLanguageError = err;
+        view.languageChoice = "";
+        view.languageError = err;
+        setLanguage(previous).catch(function (switchErr) {
+          console.error("kumiho: language rollback failed", switchErr);
+        });
+        render();
+        console.warn("kumiho: language change refused: " + err);
+      });
     }
 
     /** The first focusable target of the current step (first field or the
@@ -827,7 +1002,9 @@ export default {
       if (!login || login.step !== "browser" || !login.id || view.completing) return;
       const url = ui.browserRedirect.input.value.trim();
       if (!url) {
-        view.redirectError = "Paste the complete redirect URL from the browser.";
+        view.redirectError = "required";
+        view.redirectErrorSummary = t("onboarding.login.redirect_required");
+        view.redirectErrorDetail = "";
         render();
         ui.browserRedirect.input.focus();
         return;
@@ -838,6 +1015,8 @@ export default {
         if (!err) return;
         endCompleting();
         view.redirectError = err;
+        view.redirectErrorSummary = t("onboarding.login.redirect_failed");
+        view.redirectErrorDetail = err;
         render();
         console.warn("kumiho: login_complete refused: " + err);
       });
@@ -859,11 +1038,15 @@ export default {
       }
       if (!payload) return;
       view.submitted = true;
+      view.submitPage = page;
       view.pagePinned = false;
       beginBusy();
       ctx.send(action, payload).then(function (err) {
         if (err) {
           endBusy();
+          // A refused submit keeps the field the user was on so the
+          // Persian summary and the raw detail sit beside the retry.
+          pinPage(page);
           render();
           console.warn("kumiho: " + action + " refused: " + err);
         }
@@ -889,7 +1072,8 @@ export default {
     function checkRow(check) {
       const item = el("li", "onb__check");
       item.append(document.createTextNode((check.title || check.name || "") + ": "));
-      const word = el("span", "onb__check-word", check.status_word || "");
+      const statusKey = HEALTH_STATUS_KEYS[check.status];
+      const word = el("span", "onb__check-word", statusKey ? t(statusKey) : (check.status_word || ""));
       if (check.tone) word.dataset.tone = check.tone;
       item.append(word);
       let rest = ": " + (check.detail || "");
@@ -906,7 +1090,7 @@ export default {
       if (running || list.length === 0) {
         ui.checks.hidden = true;
         ui.checksEmpty.hidden = false;
-        ui.checksEmpty.textContent = running ? "Checking…" : "No checks yet.";
+        ui.checksEmpty.textContent = running ? t("onboarding.health.checking") : t("onboarding.health.empty");
         return;
       }
       const fragment = document.createDocumentFragment();
@@ -1117,9 +1301,13 @@ export default {
       if (view.shownStep === currentStep) return;
       view.shownStep = currentStep;
       for (let i = 0; i < ui.sections.length; i++) ui.sections[i].hidden = i !== currentStep;
-      ui.title.textContent = STEP_TITLES[currentStep];
+      ui.language.hidden = currentStep !== STEP_WELCOME;
+      ui.title.textContent = stepTitle(currentStep);
       ui.progress.setAttribute("aria-valuenow", String(currentStep + 1));
-      ui.progress.setAttribute("aria-valuetext", "Step " + (currentStep + 1) + " of " + STEP_COUNT);
+      ui.progress.setAttribute("aria-valuetext", t("onboarding.step_position", {
+        current: formatNumber(currentStep + 1),
+        total: formatNumber(STEP_COUNT),
+      }));
       for (let i = 0; i < ui.segments.length; i++) {
         if (i <= currentStep) ui.segments[i].dataset.state = "done";
         else delete ui.segments[i].dataset.state;
@@ -1197,18 +1385,20 @@ export default {
         if (ui.signedIdentity.textContent !== identity) ui.signedIdentity.textContent = identity;
       }
 
-      let body = LOGIN_SIGNED_BODY;
-      if (showChoice) body = LOGIN_CHOICE_BODY;
-      else if (showEmail) body = LOGIN_EMAIL_BODY;
-      else if (showPassword) body = LOGIN_PASSWORD_BODY;
+      let body = t(LOGIN_SIGNED_BODY_KEY);
+      if (showChoice) body = t(LOGIN_CHOICE_BODY_KEY);
+      else if (showEmail) body = t(LOGIN_EMAIL_BODY_KEY);
+      else if (showPassword) body = t(LOGIN_PASSWORD_BODY_KEY);
       else if (showCode) body = twoFactorBody(login);
-      else if (showBrowser) body = LOGIN_WAITING_BODY;
+      else if (showBrowser) body = t(LOGIN_WAITING_BODY_KEY);
       if (ui.loginBody.textContent !== body) ui.loginBody.textContent = body;
 
       // The first page's primary is the last-used method; the secondary
       // offers the other one.
       if (showChoice) {
-        const alt = def === "password" ? "Continue in browser" : "Use password";
+        const alt = def === "password"
+          ? t("onboarding.login.continue_in_browser")
+          : t("onboarding.login.use_password");
         if (ui.altMethod.textContent !== alt) ui.altMethod.textContent = alt;
         const disabled = !!view.busy || !!view.logoutBusy;
         if (ui.altMethod.disabled !== disabled) ui.altMethod.disabled = disabled;
@@ -1216,7 +1406,7 @@ export default {
 
       if (showBrowser) {
         const url = login.url || "";
-        const text = url || "Waiting for the sign-in link…";
+        const text = url || t("onboarding.login.waiting_link");
         if (ui.browserURL.textContent !== text) {
           ui.browserURL.textContent = text;
           ui.browserURL.title = text;
@@ -1227,8 +1417,12 @@ export default {
           view.redirectID = login.id || "";
           ui.browserRedirect.input.value = "";
           view.redirectError = "";
+          view.redirectErrorSummary = "";
+          view.redirectErrorDetail = "";
         }
-        const error = view.redirectError || login.error || "";
+        let error = "";
+        if (view.redirectError) error = view.redirectErrorSummary || t("onboarding.login.redirect_failed");
+        else if (login && login.error) error = errorSummary(login);
         if (ui.browserError.textContent !== error) ui.browserError.textContent = error;
         ui.browserError.hidden = !error;
         if (error) ui.browserRedirect.input.setAttribute("aria-invalid", "true");
@@ -1244,11 +1438,15 @@ export default {
         else stopPolling();
         ui.browserOpen.disabled = !url;
         ui.browserCancel.disabled = !login.id || view.cancelling || view.completing;
-        const cancelLabel = view.cancelling ? "Cancelling…" : "Cancel";
+        const cancelLabel = view.cancelling
+          ? t("onboarding.login.cancelling")
+          : t("onboarding.login.cancel");
         if (ui.browserCancel.textContent !== cancelLabel) ui.browserCancel.textContent = cancelLabel;
         ui.browserRedirect.input.disabled = !!view.busy || !!view.logoutBusy || view.completing;
         ui.browserContinue.disabled = !!view.busy || !!view.logoutBusy || view.completing || !login.id;
-        const continueLabel = view.completing ? "Signing in…" : "Continue";
+        const continueLabel = view.completing
+          ? t("onboarding.login.signing_in")
+          : t("onboarding.login.continue");
         if (ui.browserContinue.textContent !== continueLabel) ui.browserContinue.textContent = continueLabel;
       } else {
         stopPolling();
@@ -1259,6 +1457,8 @@ export default {
         ui.browserError.hidden = true;
         view.redirectID = "";
         view.redirectError = "";
+        view.redirectErrorSummary = "";
+        view.redirectErrorDetail = "";
         view.openedURL = "";
       }
 
@@ -1298,7 +1498,9 @@ export default {
         value = view.autoPick;
         pressed = view.autoPick === "on";
       }
-      if (ui.autoToggle.textContent !== value) ui.autoToggle.textContent = value;
+      const label = value === "on" ? t("onboarding.autoconnect.on") : t("onboarding.autoconnect.off");
+      if (ui.autoToggle.textContent !== label) ui.autoToggle.textContent = label;
+      ui.autoToggle.setAttribute("aria-label", t("onboarding.autoconnect.label") + ": " + label);
       if (settings) ui.autoToggle.setAttribute("aria-pressed", pressed ? "true" : "false");
       else ui.autoToggle.removeAttribute("aria-pressed");
       const disabled = view.autoBusy || !settings;
@@ -1322,41 +1524,75 @@ export default {
      */
     function statusLine(snapshot) {
       const login = snapshot.login || null;
-      if (view.busy) return { text: "Signing in...", tone: "" };
-      if (view.logoutBusy) return { text: "Signing out...", tone: "" };
-      if (view.finishError) return { text: view.finishError, tone: "bad" };
+      if (view.busy) return { text: t("onboarding.login.signing_in_status"), tone: "", detail: "" };
+      if (view.logoutBusy) return { text: t("onboarding.login.signing_out_status"), tone: "", detail: "" };
+      if (view.finishError) {
+        return {
+          text: t("onboarding.finish.failed"),
+          tone: "bad",
+          detail: view.finishError,
+        };
+      }
+      if (view.languageError) {
+        return {
+          text: t("onboarding.language.save_failed"),
+          tone: "bad",
+          detail: view.languageError,
+        };
+      }
       const accountNotice = snapshot.account_notice;
       if (currentStep === STEP_LOGIN && accountNotice && accountNotice.tone === "bad") {
-        return { text: accountNotice.message, tone: "bad" };
+        const notice = noticePresentation(accountNotice);
+        return { text: notice.text, tone: "bad", detail: notice.detail };
       }
       const settingsNotice = snapshot.settings_notice;
-      if (currentStep === STEP_AUTOCONNECT && settingsNotice && settingsNotice.message) {
-        return { text: settingsNotice.message, tone: settingsNotice.tone || "" };
+      if (currentStep === STEP_AUTOCONNECT && settingsNotice && settingsNotice.tone) {
+        const notice = noticePresentation(settingsNotice);
+        if (notice.text) return { text: notice.text, tone: settingsNotice.tone || "", detail: notice.detail };
       }
       if (currentStep === STEP_HEALTH) {
         const doctor = snapshot.doctor || null;
-        if (doctor && doctor.running) return { text: "Running health checks...", tone: "" };
+        if (doctor && doctor.running) return { text: t("onboarding.health.running_status"), tone: "", detail: "" };
         const checks = (doctor && doctor.checks) || [];
         if (checks.length > 0) return summaryLine(checks);
       }
       if (currentStep === STEP_LOGIN && login && login.step === "browser") {
-        return { text: "Waiting for sign-in in your browser...", tone: "" };
+        return { text: t("onboarding.login.browser_waiting_status"), tone: "", detail: "" };
       }
-      if (login && login.error) return { text: login.error, tone: "bad" };
       const notice = snapshot.notice;
       const stale =
         notice && notice.tone === "bad" &&
-        String(notice.message || "").indexOf("sign-in failed: ") === 0 &&
+        notice.code === "onboarding.sign_in.failed" &&
         signedIn(snapshot);
-      if (notice && notice.message && !stale) return { text: notice.message, tone: notice.tone || "" };
-      return { text: "", tone: "" };
+      const presentation = notice && notice.tone && !stale
+        ? noticePresentation(notice)
+        : null;
+      if (login && login.error) {
+        if (login.error_code && ERROR_KEYS[login.error_code]) {
+          return { text: errorSummary(login), tone: "bad", detail: login.error };
+        }
+        // A dispatch refusal is carried by the structured notice; it is
+        // newer and more specific than a stale login projection error.
+        if (presentation && notice.tone === "bad" && presentation.text) {
+          return { text: presentation.text, tone: "bad", detail: presentation.detail };
+        }
+        return { text: errorSummary(login), tone: "bad", detail: login.error };
+      }
+      if (presentation && presentation.text) {
+        return { text: presentation.text, tone: notice.tone || "", detail: presentation.detail };
+      }
+      return { text: "", tone: "", detail: "" };
     }
 
     function renderStatus(snapshot) {
       const line = statusLine(snapshot);
-      if (line.text === view.statusText && line.tone === view.statusTone) return;
+      const login = snapshot.login || null;
+      const rawLogin = login && login.error ? login.error : "";
+      const detail = line.detail || view.redirectErrorDetail || rawLogin || "";
+      if (line.text === view.statusText && line.tone === view.statusTone && detail === view.statusDetail) return;
       view.statusText = line.text;
       view.statusTone = line.tone;
+      view.statusDetail = detail;
       ui.status.textContent = line.text;
       ui.status.title = line.text;
       ui.status.hidden = line.text === "";
@@ -1365,31 +1601,52 @@ export default {
       } else {
         delete ui.status.dataset.tone;
       }
+      ui.details.textContent = detail;
+      ui.details.hidden = detail === "";
     }
 
     function renderNav() {
-      let label = PRIMARY_LABELS[currentStep];
+      let label = primaryLabel(currentStep);
       let waiting = false;
       if (currentStep === STEP_LOGIN) {
         const page = view.page || derivePage(ctx.store.get());
         if (page === "choice") {
-          label = defaultMethod(ctx.store.get()) === "password" ? "Use password" : "Continue in browser";
+          label = defaultMethod(ctx.store.get()) === "password"
+            ? t("onboarding.login.use_password")
+            : t("onboarding.login.continue_in_browser");
         } else if (page === "browser") {
-          label = "Waiting for sign-in...";
+          label = t("onboarding.login.waiting_button");
           waiting = true;
         } else {
-          label = "Continue";
+          label = t("onboarding.login.continue");
         }
       }
       const busy = !!view.busy || view.logoutBusy || view.finishBusy || view.regionChecking;
       const consentOK = currentStep !== STEP_WELCOME || consentTicked;
       const disabled = busy || !consentOK || waiting;
-      if (currentStep === STEP_WELCOME && view.regionChecking) label = "Checking Mozilla's hosts…";
+      if (currentStep === STEP_WELCOME && view.regionChecking) label = t("onboarding.login.checking_hosts");
       if (ui.primary.textContent !== label) ui.primary.textContent = label;
       if (ui.primary.disabled !== disabled) ui.primary.disabled = disabled;
       if (ui.back.disabled !== (!!view.busy || view.logoutBusy)) {
         ui.back.disabled = !!view.busy || view.logoutBusy;
       }
+    }
+
+    function renderLanguage(snapshot) {
+      const preference = view.languageChoice || languagePreference(snapshot);
+      ui.language.hidden = currentStep !== STEP_WELCOME;
+      for (const value of Object.keys(ui.languageButtons)) {
+        const button = ui.languageButtons[value];
+        const pressed = value === preference ? "true" : "false";
+        if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
+      }
+      const systemCode = snapshot.system_language === "fa" || snapshot.system_language === "en"
+        ? snapshot.system_language
+        : currentLanguage();
+      const systemName = t(LANGUAGE_NAME_KEYS[systemCode]);
+      const note = t("onboarding.language.system_note", { language: systemName });
+      if (ui.languageNote.textContent !== note) ui.languageNote.textContent = note;
+      ui.languageNote.hidden = preference !== "system";
     }
 
     function render() {
@@ -1399,6 +1656,7 @@ export default {
       maybeRegionBranch(snapshot);
       renderStep();
       renderConsent();
+      renderLanguage(snapshot);
       renderLogin(snapshot);
       renderHealth(snapshot);
       renderAutoconnect(snapshot);
@@ -1425,6 +1683,11 @@ export default {
     // -------------------------------------------------------------- events
 
     ui.consentToggle.addEventListener("click", onConsentToggle);
+    for (const value of Object.keys(ui.languageButtons)) {
+      ui.languageButtons[value].addEventListener("click", function () {
+        onLanguageChoice(value);
+      });
+    }
     ui.primary.addEventListener("click", onPrimary);
     ui.altMethod.addEventListener("click", onSecondary);
     ui.browserOpen.addEventListener("click", function () {

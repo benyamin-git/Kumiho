@@ -140,6 +140,11 @@ export function currentLanguage() {
   return activeLanguage;
 }
 
+/** Whether a key exists in the active catalog or the English fallback. */
+export function hasTranslation(key) {
+  return lookup(key) !== undefined;
+}
+
 /** Translate a key: active catalog, then English, then the key itself. */
 export function t(key, params) {
   const value = lookup(key);

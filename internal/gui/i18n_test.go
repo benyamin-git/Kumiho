@@ -36,7 +36,7 @@ var (
 		"update":         true,
 		"version":        true,
 	}
-	noticeCodeLiteralRE = regexp.MustCompile(`"(dashboard|locations|settings|account|logs|diagnostics|onboarding)\.[a-z0-9_.]+"`)
+	noticeCodeLiteralRE = regexp.MustCompile(`"(?:dashboard|locations|settings|account|logs|diagnostics|onboarding)\.[a-z0-9_.]+"`)
 )
 
 // TestDynamicCatalogFamilies checks the catalog keys the literal scanner
@@ -111,8 +111,8 @@ func controllerNoticeCodes(t *testing.T) map[string]bool {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		for _, match := range noticeCodeLiteralRE.FindAllStringSubmatch(string(data), -1) {
-			codes[match[1]] = true
+		for _, match := range noticeCodeLiteralRE.FindAllString(string(data), -1) {
+			codes[strings.Trim(match, `"`)] = true
 		}
 	}
 	return codes

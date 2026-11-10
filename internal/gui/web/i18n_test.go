@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	i18nLiteralRE  = regexp.MustCompile(`\bt\(\s*"([^"]+)"`)
-	i18nPluralRE   = regexp.MustCompile(`\btp\(\s*"([^"]+)"`)
-	dataI18nRE     = regexp.MustCompile(`data-i18n(?:-aria-label|-placeholder|-title)?="([^"]+)"`)
-	placeholderRE  = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
-	dynamicPrefix  = []string{"state.", "settings.", "notice."}
-	catalogLocales = []string{"en", "fa"}
+	i18nLiteralRE   = regexp.MustCompile(`\bt\(\s*"([^"]+)"`)
+	i18nPluralRE    = regexp.MustCompile(`\btp\(\s*"([^"]+)"`)
+	i18nKeyStringRE = regexp.MustCompile(`"([a-z][a-z0-9]*(?:\.[a-z0-9_]+)+)"`)
+	dataI18nRE      = regexp.MustCompile(`data-i18n(?:-aria-label|-placeholder|-title)?="([^"]+)"`)
+	placeholderRE   = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
+	dynamicPrefix   = []string{"state.", "settings.", "notice."}
+	catalogLocales  = []string{"en", "fa"}
 )
 
 func readCatalog(t *testing.T, lang string) map[string]string {
@@ -106,6 +107,10 @@ func TestCatalogKeysAreReferencedOrDynamic(t *testing.T) {
 			return err
 		}
 		collectLiteralKeys(string(data), used)
+		// Keys stored in arrays/maps (the step and consent tables) are
+		// referenced too; only exact catalog keys count, so a stray string
+		// can never invent a key.
+		collectCatalogMentions(string(data), en, used)
 		return nil
 	})
 	if err != nil {
@@ -116,6 +121,7 @@ func TestCatalogKeysAreReferencedOrDynamic(t *testing.T) {
 		t.Fatalf("read index.html: %v", err)
 	}
 	collectLiteralKeys(string(index), used)
+	collectCatalogMentions(string(index), en, used)
 
 	for key := range used {
 		if _, ok := en[key]; !ok {
@@ -134,8 +140,23 @@ func TestCatalogKeysAreReferencedOrDynamic(t *testing.T) {
 }
 
 func collectLiteralKeys(source string, used map[string]struct{}) {
-	for _, re := range []*regexp.Regexp{i18nLiteralRE, i18nPluralRE, dataI18nRE} {
+	for _, re := range []*regexp.Regexp{i18nLiteralRE, dataI18nRE} {
 		for _, match := range re.FindAllStringSubmatch(source, -1) {
+			used[match[1]] = struct{}{}
+		}
+	}
+	// A tp() call owns the optional singular/plural variants; Persian
+	// carries both keys with the same form so the key sets stay identical.
+	// The base key itself is not a catalog entry.
+	for _, match := range i18nPluralRE.FindAllStringSubmatch(source, -1) {
+		used[match[1]+".one"] = struct{}{}
+		used[match[1]+".other"] = struct{}{}
+	}
+}
+
+func collectCatalogMentions(source string, catalog map[string]string, used map[string]struct{}) {
+	for _, match := range i18nKeyStringRE.FindAllStringSubmatch(source, -1) {
+		if _, ok := catalog[match[1]]; ok {
 			used[match[1]] = struct{}{}
 		}
 	}
