@@ -377,3 +377,35 @@
 .acct__rename-dialog .field {
   margin-block-start: var(--space-2);
 }
+
+/* Raw engine detail lines: LTR technical text, never translated. */
+.acct__details {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border-inline-start: 2px solid var(--hairline);
+}
+
+.acct__details[hidden] {
+  display: none;
+}
+
+/* Raw engine detail lines: LTR technical text, never translated. */
+.acct__details {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border-inline-start: 2px solid var(--hairline);
+}
+
+.acct__details[hidden] {
+  display: none;
+}

@@ -146,6 +146,16 @@ export function hasTranslation(key) {
 }
 
 /**
+ * The Persian (or English) summary for a protocol error code. Known
+ * `error.<code>` entries win; everything else gets the generic summary. The
+ * raw engine error belongs in the LTR details block, never here.
+ */
+export function errorSummary(code) {
+  const key = code ? "error." + code : "";
+  return key && hasTranslation(key) ? t(key) : t("error.generic");
+}
+
+/**
  * Present one structured controller notice: the localized summary from
  * `notice.<code>` (with its raw params) and the raw engine error for the LTR
  * details block. Unknown codes keep the controller's English message.

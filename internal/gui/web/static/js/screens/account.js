@@ -47,6 +47,7 @@
  */
 
 import { accountMethodWord, accountName, accountQuotaPercent } from "../store.js";
+import { t, formatBytes, formatDateTime, formatNumber, noticeText, errorSummary } from "../i18n.js";
 
 // The sign-out guard's settle (the dashboard/locations/settings T2.2
 // pattern): a logout whose completion evidence repeats byte-for-byte stops
@@ -62,20 +63,17 @@ const MAX_ACCOUNTS = 5;
 
 // The card's rows in the inventory's canonical order.
 const ROWS = [
-  ["email", "Email"],
-  ["uid", "UID"],
-  ["subscription", "Subscription"],
-  ["quota", "Quota"],
-  ["bandwidth", "Bandwidth"],
-  ["token_expiry", "Token expiry"],
+  ["email", "account.row.email"],
+  ["uid", "account.row.uid"],
+  ["subscription", "account.row.subscription"],
+  ["quota", "account.row.quota"],
+  ["bandwidth", "account.row.bandwidth"],
+  ["token_expiry", "account.row.token_expiry"],
 ];
 
-// The sign-out confirmation's revoke disclosure (v0.6.0): sign-out best-effort
-// revokes the Mozilla sign-in, and the local sign-out always completes.
-const SIGNOUT_REVOKE =
-  "Kumiho will also try to revoke its Mozilla sign-in; local sign-out completes offline.";
-const SIGNOUT_REVOKE_ALL =
-  "Kumiho will also try to revoke its Mozilla sign-ins; local sign-out completes offline.";
+// The known legacy-list notice is the one account-list string the engine
+// still emits in English; map that exact one-time message.
+const LEGACY_NOTICE = "Old browser sign-in removed. Add your Firefox account again.";
 
 // The browser URL opened once across remounts. Re-opening the same flow after
 // a screen switch would open a second tab, so remember it; a new flow carries
@@ -93,21 +91,12 @@ function el(tag, className, text) {
   return node;
 }
 
-/** Binary units, the controller's humanBytes wording ("38.0 GiB", "512 B"). */
-function humanBytes(n) {
-  if (n < 1024) return n + " B";
-  let div = 1024;
-  let exp = 0;
-  for (let v = Math.floor(n / 1024); v >= 1024; v = Math.floor(v / 1024)) {
-    div *= 1024;
-    exp += 1;
-  }
-  return (n / div).toFixed(1) + " " + "KMGTPE"[exp] + "iB";
-}
-
-/** RFC3339 UTC, the controller's time.RFC3339 ("2026-11-01T12:00:00Z"). */
-function rfc3339(unixSeconds) {
-  return new Date(unixSeconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+/** The localized summary and raw detail for one login failure. */
+function loginFailure(login) {
+  return {
+    summary: errorSummary(login && login.error_code),
+    detail: (login && login.error) || "",
+  };
 }
 
 /** A loaded snapshot is signed in when its local session facts are present. */
@@ -117,9 +106,9 @@ function signedIn(account) {
 
 /** The Subscription row value and tone (inventory §Account). */
 function subscriptionView(account) {
-  if (account.error) return { text: "Unknown", tone: "warn" };
-  if (account.subscribed === true) return { text: "Yes", tone: "good" };
-  if (account.subscribed === false) return { text: "No", tone: "" };
+  if (account.error) return { text: t("account.unknown"), tone: "warn" };
+  if (account.subscribed === true) return { text: t("account.yes"), tone: "good" };
+  if (account.subscribed === false) return { text: t("account.no"), tone: "" };
   // The wire always carries the bool; an absent one is no answer to show,
   // not a "No".
   return { text: "", tone: "" };
@@ -130,10 +119,14 @@ function quotaText(account) {
   const remaining = account.quota_remaining;
   const limit = account.max_bytes;
   if (typeof remaining === "number" && typeof limit === "number") {
-    return humanBytes(remaining) + " remaining of " + humanBytes(limit);
+    return t("account.quota.remaining_of", { remaining: formatBytes(remaining), limit: formatBytes(limit) });
   }
-  if (typeof remaining === "number") return humanBytes(remaining) + " remaining";
-  if (typeof limit === "number") return humanBytes(limit) + " per period";
+  if (typeof remaining === "number") {
+    return t("account.quota.remaining", { remaining: formatBytes(remaining) });
+  }
+  if (typeof limit === "number") {
+    return t("account.quota.per_period", { limit: formatBytes(limit) });
+  }
   return "";
 }
 
@@ -144,7 +137,12 @@ function accountSignature(account) {
 
 /** The notice identity used by the sign-out guard. */
 function noticeMark(notice) {
-  return notice && notice.message ? notice.message + "\u0000" + (notice.tone || "") : "";
+  if (!notice) return "";
+  return JSON.stringify({
+    code: notice.code || "",
+    params: notice.params || {},
+    tone: notice.tone || "",
+  });
 }
 
 /** The login projection's identity for the add-flow guards. */
@@ -159,6 +157,7 @@ function loginMark(login) {
     login.url || "",
     login.id || "",
     login.error || "",
+    login.error_code || "",
   ].join("\u0000");
 }
 
@@ -167,14 +166,14 @@ function twoFactorBody(login) {
   const method = String((login && login.method) || "").toLowerCase();
   const verification = String((login && login.verification_method) || "").toLowerCase();
   const reason = String((login && login.verification_reason) || "").toLowerCase();
-  if (method === "totp") return "Enter the code from your authenticator app.";
+  if (method === "totp") return t("account.twofa.totp");
   if (method === "unblock" || reason === "unblock-code") {
-    return "Enter the unblock code Mozilla emailed you.";
+    return t("account.twofa.unblock");
   }
   if (verification === "email-2fa" || method === "email" || verification.indexOf("link") >= 0) {
-    return "Check your email and open the Mozilla sign-in link, then press Continue with the code empty to finish signing in.";
+    return t("account.twofa.link");
   }
-  return "Enter the verification code Mozilla sent you.";
+  return t("account.twofa.generic");
 }
 
 /** A labeled input group (label always visible, never placeholder-only). */
@@ -197,11 +196,11 @@ function build(host) {
   const root = el("div", "acct");
 
   // Header actions: Refresh, Add account and the session-wide Sign out.
-  const refresh = el("button", "button button--tonal acct__refresh", "Refresh");
+  const refresh = el("button", "button button--tonal acct__refresh", t("common.refresh"));
   refresh.type = "button";
-  const add = el("button", "button button--filled acct__add", "Add account");
+  const add = el("button", "button button--filled acct__add", t("account.add"));
   add.type = "button";
-  const signout = el("button", "button button--tonal acct__signout", "Sign out");
+  const signout = el("button", "button button--tonal acct__signout", t("account.signout"));
   signout.type = "button";
   signout.hidden = true;
   const actions = el("div", "acct__actions");
@@ -210,13 +209,13 @@ function build(host) {
   // The account rows, above the entitlement card.
   const accounts = el("section", "acct__accounts");
   const accountsHead = el("div", "acct__section-head");
-  const accountsTitle = el("h2", "acct__section-title", "Accounts");
+  const accountsTitle = el("h2", "acct__section-title", t("account.accounts"));
   accountsTitle.id = "acct-accounts-title";
-  const accountsHint = el("p", "acct__section-hint", "Switch accounts here; Kumiho keeps up to five.");
+  const accountsHint = el("p", "acct__section-hint", t("account.accounts_hint"));
   accountsHead.append(accountsTitle, accountsHint);
   const list = el("ul", "card acct__list");
   list.setAttribute("aria-labelledby", accountsTitle.id);
-  const empty = el("p", "acct__empty", "No accounts yet.");
+  const empty = el("p", "acct__empty", t("account.empty"));
   empty.hidden = true;
   accounts.append(accountsHead, list, empty);
 
@@ -224,13 +223,18 @@ function build(host) {
   // the redirect URL pasted from the browser, Open again and Cancel.
   const waiting = el("section", "card acct__waiting");
   waiting.hidden = true;
-  const waitingTitle = el("h2", "acct__waiting-title", "Waiting for browser sign-in");
+  const redirectDetails = el("p", "acct__details");
+  redirectDetails.dir = "ltr";
+  redirectDetails.hidden = true;
+  const formDetails = el("p", "acct__details");
+  formDetails.dir = "ltr";
+  formDetails.hidden = true;
+  const waitingTitle = el("h2", "acct__waiting-title", t("account.waiting.title"));
   waitingTitle.id = "acct-waiting-title";
-  const waitingBody = el("p", "acct__waiting-body",
-    "Finish signing in in your browser. The browser lands on a Firefox Accounts success page; paste the complete URL from its address bar. Kumiho stores the sign-in tokens, never your password.");
+  const waitingBody = el("p", "acct__waiting-body", t("account.waiting.body"));
   const waitingURL = el("p", "acct__waiting-url");
-  const redirect = fieldBox("acct-browser-redirect", "Redirect URL", "text", "off");
-  redirect.input.placeholder = "Paste the complete URL";
+  const redirect = fieldBox("acct-browser-redirect", t("account.waiting.redirect_label"), "text", "off");
+  redirect.input.placeholder = t("account.waiting.redirect_placeholder");
   redirect.wrap.classList.add("acct__redirect");
   const redirectError = el("p", "acct__waiting-error");
   redirectError.id = "acct-browser-error";
@@ -238,50 +242,50 @@ function build(host) {
   redirectError.hidden = true;
   redirect.input.setAttribute("aria-describedby", redirectError.id);
   const waitingActions = el("div", "acct__waiting-actions");
-  const openAgain = el("button", "button button--tonal acct__open", "Open again");
+  const openAgain = el("button", "button button--tonal acct__open", t("account.waiting.open_again"));
   openAgain.type = "button";
-  const cancelBrowser = el("button", "button button--text acct__cancel-browser", "Cancel");
+  const cancelBrowser = el("button", "button button--text acct__cancel-browser", t("common.cancel"));
   cancelBrowser.type = "button";
-  const browserContinue = el("button", "button button--filled acct__browser-continue", "Continue");
+  const browserContinue = el("button", "button button--filled acct__browser-continue", t("common.continue"));
   browserContinue.type = "button";
   waitingActions.append(openAgain, cancelBrowser, browserContinue);
-  waiting.append(waitingTitle, waitingBody, waitingURL, redirect.wrap, redirectError, waitingActions);
+  waiting.append(waitingTitle, waitingBody, waitingURL, redirect.wrap, redirectError, redirectDetails, waitingActions);
   waiting.setAttribute("aria-labelledby", waitingTitle.id);
 
   // The password form (the onboarding credential flow, inline).
   const addform = el("section", "card acct__addform");
   addform.hidden = true;
-  const addformTitle = el("h2", "acct__addform-title", "Sign in with password");
+  const addformTitle = el("h2", "acct__addform-title", t("account.password.title"));
   addformTitle.id = "acct-addform-title";
   const addformBody = el("p", "acct__addform-body");
-  const email = fieldBox("acct-add-email", "Email", "email", "username");
+  const email = fieldBox("acct-add-email", t("account.field.email"), "email", "username");
   email.input.placeholder = "you@example.com";
-  const password = fieldBox("acct-add-password", "Password", "password", "current-password");
-  const code = fieldBox("acct-add-code", "Verification code", "text", "one-time-code");
+  const password = fieldBox("acct-add-password", t("account.field.password"), "password", "current-password");
+  const code = fieldBox("acct-add-code", t("account.field.code"), "text", "one-time-code");
   password.wrap.hidden = true;
   code.wrap.hidden = true;
   const formStatus = el("p", "acct__form-status");
   formStatus.setAttribute("aria-live", "polite");
   formStatus.hidden = true;
   const formActions = el("div", "acct__form-actions");
-  const formCancel = el("button", "button button--text acct__form-cancel", "Cancel");
+  const formCancel = el("button", "button button--text acct__form-cancel", t("common.cancel"));
   formCancel.type = "button";
-  const formSubmit = el("button", "button button--filled acct__form-submit", "Continue");
+  const formSubmit = el("button", "button button--filled acct__form-submit", t("common.continue"));
   formSubmit.type = "button";
   formActions.append(formCancel, formSubmit);
-  addform.append(addformTitle, addformBody, email.wrap, password.wrap, code.wrap, formStatus, formActions);
+  addform.append(addformTitle, addformBody, email.wrap, password.wrap, code.wrap, formStatus, formDetails, formActions);
   addform.setAttribute("aria-labelledby", addformTitle.id);
 
   // The entitlement card (unchanged inventory rows).
-  const planTitle = el("h2", "acct__section-title", "Plan");
+  const planTitle = el("h2", "acct__section-title", t("account.plan"));
   planTitle.id = "acct-plan-title";
   const card = document.createElement("dl");
   card.className = "card acct__card";
   card.setAttribute("aria-labelledby", planTitle.id);
   card.hidden = true;
   const rows = new Map();
-  for (const [key, label] of ROWS) {
-    const dt = el("dt", null, label);
+  for (const [key, labelKey] of ROWS) {
+    const dt = el("dt", null, t(labelKey));
     const dd = document.createElement("dd");
     const value = el("span", "acct__value");
     dd.append(value);
@@ -295,16 +299,15 @@ function build(host) {
   // Rotation: a switch and the 1–50% threshold, saved immediately.
   const rotation = el("section", "card acct__rotation");
   const rotationHead = el("div", "acct__rotation-head");
-  const rotationTitle = el("h2", "acct__rotation-title", "Account rotation");
+  const rotationTitle = el("h2", "acct__rotation-title", t("account.rotation.title"));
   rotationTitle.id = "acct-rotation-title";
   const rotationToggle = el("button", "button button--tonal acct__toggle", "off");
   rotationToggle.type = "button";
   rotationToggle.id = "acct-rotation-toggle";
-  rotationToggle.setAttribute("aria-label", "Account rotation");
+  rotationToggle.setAttribute("aria-label", t("account.rotation.title"));
   rotationHead.append(rotationTitle, rotationToggle);
-  const rotationBody = el("p", "acct__rotation-body",
-    "Before connecting, switch to another account when the active one has less quota left than the threshold.");
-  const threshold = fieldBox("acct-rotation-threshold", "Switch below (%)", "number", "off");
+  const rotationBody = el("p", "acct__rotation-body", t("account.rotation.body"));
+  const threshold = fieldBox("acct-rotation-threshold", t("account.rotation.threshold"), "number", "off");
   threshold.input.min = "1";
   threshold.input.max = "50";
   threshold.input.step = "1";
@@ -314,19 +317,19 @@ function build(host) {
 
   // The sign-out confirmation (the existing dialog).
   const dialog = el("dialog", "dialog acct__dialog");
-  const title = el("h2", "dialog__title", "Sign out");
+  const title = el("h2", "dialog__title", t("account.signout"));
   title.id = "acct-confirm-title";
-  const question = el("p", "dialog__body", "Sign out of Kumiho?");
+  const question = el("p", "dialog__body", t("account.signout.question"));
   question.id = "acct-confirm-question";
-  const detail = el("p", "dialog__body", "The stored sign-in tokens are cleared and the tunnel disconnects.");
+  const detail = el("p", "dialog__body", t("account.signout.detail"));
   detail.id = "acct-confirm-detail";
-  const revoke = el("p", "dialog__body", SIGNOUT_REVOKE);
+  const revoke = el("p", "dialog__body", t("account.signout.revoke"));
   revoke.id = "acct-confirm-revoke";
   dialog.setAttribute("aria-labelledby", title.id);
   dialog.setAttribute("aria-describedby", question.id + " " + detail.id + " " + revoke.id);
-  const cancel = el("button", "button button--tonal acct__cancel", "Cancel");
+  const cancel = el("button", "button button--tonal acct__cancel", t("common.cancel"));
   cancel.type = "button";
-  const confirm = el("button", "button button--danger acct__confirm", "Sign out");
+  const confirm = el("button", "button button--danger acct__confirm", t("account.signout"));
   confirm.type = "button";
   const dialogActions = el("div", "dialog__actions");
   dialogActions.append(cancel, confirm);
@@ -334,18 +337,17 @@ function build(host) {
 
   // Add account: the browser choice is the default and first.
   const addDialog = el("dialog", "dialog acct__add-dialog");
-  const addTitle = el("h2", "dialog__title", "Add account");
+  const addTitle = el("h2", "dialog__title", t("account.add"));
   addTitle.id = "acct-add-title";
-  const addBody = el("p", "dialog__body",
-    "Sign in to another Firefox account with the VPN. Browser sign-in is the default; password sign-in is also available.");
+  const addBody = el("p", "dialog__body", t("account.add.body"));
   addBody.id = "acct-add-body";
   addDialog.setAttribute("aria-labelledby", addTitle.id);
   addDialog.setAttribute("aria-describedby", addBody.id);
-  const addCancel = el("button", "button button--tonal acct__add-cancel", "Cancel");
+  const addCancel = el("button", "button button--tonal acct__add-cancel", t("common.cancel"));
   addCancel.type = "button";
-  const addPassword = el("button", "button button--tonal acct__add-password", "Use password");
+  const addPassword = el("button", "button button--tonal acct__add-password", t("account.add.use_password"));
   addPassword.type = "button";
-  const addBrowser = el("button", "button button--filled acct__add-browser", "Continue in browser");
+  const addBrowser = el("button", "button button--filled acct__add-browser", t("account.add.browser"));
   addBrowser.type = "button";
   const addActions = el("div", "dialog__actions");
   addActions.append(addCancel, addPassword, addBrowser);
@@ -353,17 +355,17 @@ function build(host) {
 
   // Rename the selected account.
   const renameDialog = el("dialog", "dialog acct__rename-dialog");
-  const renameTitle = el("h2", "dialog__title", "Rename account");
+  const renameTitle = el("h2", "dialog__title", t("account.rename.title"));
   renameTitle.id = "acct-rename-title";
-  const renameBody = el("p", "dialog__body", "Choose a short label for this account.");
+  const renameBody = el("p", "dialog__body", t("account.rename.body"));
   renameBody.id = "acct-rename-body";
   renameDialog.setAttribute("aria-labelledby", renameTitle.id);
   renameDialog.setAttribute("aria-describedby", renameBody.id);
-  const renameField = fieldBox("acct-rename-label", "Label", "text", "off");
+  const renameField = fieldBox("acct-rename-label", t("account.rename.label"), "text", "off");
   renameField.input.maxLength = 64;
-  const renameCancel = el("button", "button button--tonal acct__rename-cancel", "Cancel");
+  const renameCancel = el("button", "button button--tonal acct__rename-cancel", t("common.cancel"));
   renameCancel.type = "button";
-  const renameSave = el("button", "button button--filled acct__rename-save", "Save");
+  const renameSave = el("button", "button button--filled acct__rename-save", t("common.save"));
   renameSave.type = "button";
   const renameActions = el("div", "dialog__actions");
   renameActions.append(renameCancel, renameSave);
@@ -371,18 +373,17 @@ function build(host) {
 
   // Remove the selected account.
   const removeDialog = el("dialog", "dialog acct__remove-dialog");
-  const removeTitle = el("h2", "dialog__title", "Remove account");
+  const removeTitle = el("h2", "dialog__title", t("account.remove.title"));
   removeTitle.id = "acct-remove-title";
-  const removeQuestion = el("p", "dialog__body", "Remove this account?");
+  const removeQuestion = el("p", "dialog__body", t("account.remove.question"));
   removeQuestion.id = "acct-remove-question";
-  const removeDetail = el("p", "dialog__body",
-    "The stored sign-in tokens for this account are removed. Other accounts stay signed in.");
+  const removeDetail = el("p", "dialog__body", t("account.remove.detail"));
   removeDetail.id = "acct-remove-detail";
   removeDialog.setAttribute("aria-labelledby", removeTitle.id);
   removeDialog.setAttribute("aria-describedby", removeQuestion.id + " " + removeDetail.id);
-  const removeCancel = el("button", "button button--tonal acct__remove-cancel", "Cancel");
+  const removeCancel = el("button", "button button--tonal acct__remove-cancel", t("common.cancel"));
   removeCancel.type = "button";
-  const removeConfirm = el("button", "button button--danger acct__remove-confirm", "Remove");
+  const removeConfirm = el("button", "button button--danger acct__remove-confirm", t("account.remove.action"));
   removeConfirm.type = "button";
   const removeActions = el("div", "dialog__actions");
   removeActions.append(removeCancel, removeConfirm);
@@ -391,6 +392,9 @@ function build(host) {
   const status = el("p", "acct__status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
+  const details = el("p", "acct__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
   root.append(
     actions,
@@ -405,6 +409,7 @@ function build(host) {
     renameDialog,
     removeDialog,
     status,
+    details,
   );
   host.append(root);
 
@@ -421,6 +426,7 @@ function build(host) {
     waitingURL: waitingURL,
     redirect: redirect,
     redirectError: redirectError,
+    redirectDetails: redirectDetails,
     openAgain: openAgain,
     cancelBrowser: cancelBrowser,
     browserContinue: browserContinue,
@@ -431,6 +437,7 @@ function build(host) {
     password: password,
     code: code,
     formStatus: formStatus,
+    formDetails: formDetails,
     formCancel: formCancel,
     formSubmit: formSubmit,
     rotation: rotation,
@@ -453,6 +460,7 @@ function build(host) {
     removeCancel: removeCancel,
     removeConfirm: removeConfirm,
     status: status,
+    details: details,
   };
 }
 
@@ -470,13 +478,16 @@ export default {
       pendingDialog: ctx.hint === "signout-confirm",
       statusText: null,
       statusTone: null,
+      statusDetail: null,
       // Add-account flow: browser waiting or the inline password pages.
       adding: false,
       addMethod: "",
       addStep: "start",
       addEmail: "",
       addError: "",
+      addErrorDetail: "",
       formError: "",
+      formErrorSummary: "",
       starting: false,
       startingMark: "",
       startTimer: 0,
@@ -487,6 +498,7 @@ export default {
       completingMark: "",
       completingTimer: 0,
       redirectError: "",
+      redirectErrorSummary: "",
       redirectID: "",
       loginMark: null,
       formFocusKey: "",
@@ -619,7 +631,8 @@ export default {
       if (!login || login.step !== "browser" || !login.id || view.completing) return;
       const url = ui.redirect.input.value.trim();
       if (!url) {
-        view.redirectError = "Paste the complete redirect URL from the browser.";
+        view.redirectError = "";
+        view.redirectErrorSummary = t("account.error.redirect_required");
         render();
         ui.redirect.input.focus();
         return;
@@ -630,6 +643,7 @@ export default {
         if (!err) return;
         endCompleting();
         view.redirectError = err;
+        view.redirectErrorSummary = t("error.generic");
         render();
         console.warn("kumiho: login_complete refused: " + err);
       });
@@ -685,8 +699,8 @@ export default {
 
     function quotaLabel(account) {
       const pct = accountQuotaPercent(account);
-      if (pct === null) return "Quota unknown";
-      return pct + "% left";
+      if (pct === null) return t("account.quota_unknown");
+      return t("account.quota_left", { percent: formatNumber(pct) });
     }
 
     function rowNode(account, snapshot) {
@@ -704,12 +718,12 @@ export default {
       if (email === name) emailNode.hidden = true;
       const marks = el("div", "acct__marks");
       if (account.active) {
-        const active = el("span", "chip acct__mark", "Active");
+        const active = el("span", "chip acct__mark", t("account.active"));
         active.dataset.tone = "good";
         marks.append(active);
       }
       if (account.reauth_required) {
-        const reauth = el("span", "chip acct__mark", "Sign in needed");
+        const reauth = el("span", "chip acct__mark", t("account.reauth_needed"));
         reauth.dataset.tone = "warn";
         marks.append(reauth);
       }
@@ -721,23 +735,25 @@ export default {
       meta.append(method, quota);
 
       const menu = el("details", "acct__menu");
-      const summary = el("summary", "acct__menu-summary", "More");
-      summary.setAttribute("aria-label", "Actions for " + (name || email || "account"));
+      const summary = el("summary", "acct__menu-summary", t("account.more"));
+      summary.setAttribute("aria-label", t("account.actions_for", {
+        name: name || email || t("account.this_account"),
+      }));
       const menuList = el("div", "acct__menu-list");
-      const use = el("button", "button button--text acct__menu-action", "Use");
+      const use = el("button", "button button--text acct__menu-action", t("account.use"));
       use.type = "button";
       use.dataset.accountAction = "use";
       use.dataset.id = account.id || "";
       use.disabled = !!account.active;
-      const rename = el("button", "button button--text acct__menu-action", "Rename");
+      const rename = el("button", "button button--text acct__menu-action", t("account.rename.action"));
       rename.type = "button";
       rename.dataset.accountAction = "rename";
       rename.dataset.id = account.id || "";
-      const reauth = el("button", "button button--text acct__menu-action", "Re-authenticate");
+      const reauth = el("button", "button button--text acct__menu-action", t("account.reauth"));
       reauth.type = "button";
       reauth.dataset.accountAction = "reauth";
       reauth.dataset.id = account.id || "";
-      const remove = el("button", "button button--text acct__menu-action", "Remove");
+      const remove = el("button", "button button--text acct__menu-action", t("account.remove.action"));
       remove.type = "button";
       remove.dataset.accountAction = "remove";
       remove.dataset.id = account.id || "";
@@ -761,8 +777,8 @@ export default {
         ui.list.replaceChildren();
         ui.list.hidden = true;
         ui.empty.hidden = false;
-        if (!accounts) ui.empty.textContent = "Loading accounts...";
-        else ui.empty.textContent = "No accounts yet.";
+        if (!accounts) ui.empty.textContent = t("account.loading_accounts");
+        else ui.empty.textContent = t("account.empty");
         return;
       }
       ui.list.hidden = false;
@@ -782,13 +798,13 @@ export default {
       const atLimit = count >= MAX_ACCOUNTS;
       const addDisabled = atLimit || !snapshot.accounts || view.busy || view.adding || view.starting;
       if (ui.add.disabled !== addDisabled) ui.add.disabled = addDisabled;
-      const addTitle = atLimit ? "Kumiho keeps up to five accounts" : "Add another account";
+      const addTitle = atLimit ? t("account.add.limit") : t("account.add.another");
       if (ui.add.title !== addTitle) ui.add.title = addTitle;
 
       const showSignout = signedIn(snapshot.account) || count > 0;
       if (ui.signout.hidden !== !showSignout) ui.signout.hidden = !showSignout;
       if (ui.signout.disabled !== view.busy) ui.signout.disabled = view.busy;
-      const label = count > 1 ? "Sign out all" : "Sign out";
+      const label = t(count > 1 ? "account.signout_all" : "account.signout");
       if (ui.signout.textContent !== label) ui.signout.textContent = label;
       if (ui.signout.title !== label) ui.signout.title = label;
     }
@@ -796,7 +812,7 @@ export default {
     function renderRotation(snapshot) {
       const accounts = snapshot.accounts || null;
       const enabled = !!(accounts && accounts.rotation);
-      const text = enabled ? "on" : "off";
+      const text = t(enabled ? "common.on" : "common.off");
       if (ui.rotationToggle.textContent !== text) ui.rotationToggle.textContent = text;
       if (accounts) ui.rotationToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
       else ui.rotationToggle.removeAttribute("aria-pressed");
@@ -806,10 +822,12 @@ export default {
       if (accounts && document.activeElement !== ui.threshold.input) {
         const value = String(accounts.rotation_threshold || 10);
         if (ui.threshold.input.value !== value) ui.threshold.input.value = value;
-        ui.threshold.input.setAttribute("aria-valuetext", value + " percent left");
+        ui.threshold.input.setAttribute("aria-valuetext",
+          t("account.rotation.value", { percent: formatNumber(value) }));
       }
-      ui.threshold.input.setAttribute("aria-label", "Switch accounts below " +
-        ((accounts && accounts.rotation_threshold) || 10) + " percent quota left");
+      ui.threshold.input.setAttribute("aria-label", t("account.rotation.aria", {
+        percent: formatNumber((accounts && accounts.rotation_threshold) || 10),
+      }));
     }
 
     // ------------------------------------------------------ browser waiting
@@ -825,15 +843,18 @@ export default {
         ui.redirect.input.value = "";
         ui.redirectError.textContent = "";
         ui.redirectError.hidden = true;
+        ui.redirectDetails.textContent = "";
+        ui.redirectDetails.hidden = true;
         view.redirectID = "";
         view.redirectError = "";
+        view.redirectErrorSummary = "";
         // A completed flow's URL may be one-shot; keep a new flow's URL free
         // to open even when the daemon happens to reuse it.
         view.openedURL = "";
         return;
       }
       const url = login.url || "";
-      const text = url || "Waiting for the sign-in link…";
+      const text = url || t("account.waiting.link");
       if (ui.waitingURL.textContent !== text) {
         ui.waitingURL.textContent = text;
         ui.waitingURL.title = text;
@@ -844,18 +865,30 @@ export default {
         view.redirectID = login.id || "";
         ui.redirect.input.value = "";
         view.redirectError = "";
+        view.redirectErrorSummary = "";
       }
-      const error = view.redirectError || login.error || "";
-      if (ui.redirectError.textContent !== error) ui.redirectError.textContent = error;
-      ui.redirectError.hidden = !error;
-      if (error) ui.redirect.input.setAttribute("aria-invalid", "true");
+      const errorSummaryText = view.redirectErrorSummary ||
+        (login.error ? errorSummary(login.error_code) : "");
+      const errorDetail = view.redirectError || login.error || "";
+      if (ui.redirectError.textContent !== errorSummaryText) {
+        ui.redirectError.textContent = errorSummaryText;
+        ui.redirectError.title = errorSummaryText;
+      }
+      ui.redirectError.hidden = !errorSummaryText;
+      ui.redirectDetails.textContent = errorDetail;
+      ui.redirectDetails.hidden = !errorDetail;
+      if (errorSummaryText) ui.redirect.input.setAttribute("aria-invalid", "true");
       else ui.redirect.input.removeAttribute("aria-invalid");
       ui.openAgain.disabled = !url;
       ui.cancelBrowser.disabled = !login.id || view.cancelling || view.completing;
-      ui.cancelBrowser.textContent = view.cancelling ? "Cancelling…" : "Cancel";
+      ui.cancelBrowser.textContent = view.cancelling
+        ? t("account.waiting.cancelling")
+        : t("common.cancel");
       ui.redirect.input.disabled = view.completing;
       ui.browserContinue.disabled = view.completing || !login.id;
-      ui.browserContinue.textContent = view.completing ? "Signing in…" : "Continue";
+      ui.browserContinue.textContent = view.completing
+        ? t("account.waiting.signing_in")
+        : t("common.continue");
       if (url && view.openedURL !== url && openedBrowserURL !== url) {
         openedBrowserURL = url;
         openURL(url);
@@ -868,10 +901,12 @@ export default {
 
     function addformBody(login) {
       if (view.addStep === "password") {
-        return "Enter the password for " + (view.addEmail || login.email || "this account") + ".";
+        return t("account.form.password", {
+          email: view.addEmail || (login && login.email) || t("account.this_account"),
+        });
       }
       if (view.addStep === "2fa") return twoFactorBody(login);
-      return "Sign in with the Firefox account password. Kumiho stores the sign-in tokens, never your password.";
+      return t("account.form.start");
     }
 
     function renderAddForm(snapshot) {
@@ -891,13 +926,25 @@ export default {
 
       const body = addformBody(login);
       if (ui.addformBody.textContent !== body) ui.addformBody.textContent = body;
-      const submitLabel = showCode ? "Verify" : showPassword ? "Sign in" : "Continue";
+      const submitLabel = showCode
+        ? t("account.form.verify")
+        : showPassword
+          ? t("account.form.sign_in")
+          : t("common.continue");
       if (ui.formSubmit.textContent !== submitLabel) ui.formSubmit.textContent = submitLabel;
 
-      const error = view.formError || (view.addStep !== "start" && login && login.error ? login.error : "");
-      if (ui.formStatus.textContent !== error) ui.formStatus.textContent = error;
-      ui.formStatus.hidden = !error;
-      const invalid = !!error;
+      const loginError = view.addStep !== "start" && login && login.error ? login.error : "";
+      const errorSummaryText = view.formErrorSummary ||
+        (loginError ? errorSummary(login.error_code) : "");
+      const errorDetail = view.formError || loginError;
+      if (ui.formStatus.textContent !== errorSummaryText) {
+        ui.formStatus.textContent = errorSummaryText;
+        ui.formStatus.title = errorSummaryText;
+      }
+      ui.formStatus.hidden = !errorSummaryText;
+      ui.formDetails.textContent = errorDetail;
+      ui.formDetails.hidden = !errorDetail;
+      const invalid = !!errorSummaryText;
       const active = showEmail ? ui.email.input : showPassword ? ui.password.input : ui.code.input;
       for (const input of [ui.email.input, ui.password.input, ui.code.input]) {
         if (input === active && invalid) input.setAttribute("aria-invalid", "true");
@@ -932,37 +979,54 @@ export default {
       const account = snapshot.account || null;
       const accounts = snapshot.accounts || null;
       const login = snapshot.login || null;
-      if (view.busy) return { text: "Signing out...", tone: "" };
-      if (notice && notice.tone === "bad") return { text: notice.message, tone: "bad" };
-      if (view.addError) return { text: view.addError, tone: "bad" };
-      if (accounts && accounts.error) return { text: accounts.error, tone: "bad" };
+      if (view.busy) return { text: t("account.status.signing_out"), tone: "", detail: "" };
+      if (notice && notice.tone === "bad") {
+        const presentation = noticeText(notice);
+        return { text: presentation.text, tone: "bad", detail: presentation.detail };
+      }
+      if (view.addError) return { text: view.addError, tone: "bad", detail: view.addErrorDetail };
+      if (accounts && accounts.error) {
+        return { text: t("account.list.load_failed"), tone: "bad", detail: accounts.error };
+      }
       if (login && login.step === "browser") {
-        return { text: "Waiting for sign-in in your browser...", tone: "" };
+        return { text: t("account.status.waiting"), tone: "", detail: "" };
       }
-      if (notice && notice.message) {
-        const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
-        return { text: notice.message, tone: tone };
+      if (notice) {
+        const presentation = noticeText(notice);
+        if (presentation.text) {
+          const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
+          return { text: presentation.text, tone: tone, detail: presentation.detail };
+        }
       }
-      if (accounts && accounts.notice) return { text: accounts.notice, tone: "" };
-      if (!accounts) return { text: "Loading accounts...", tone: "" };
-      if (!account) return { text: "Loading account...", tone: "" };
-      if (!signedIn(account)) return { text: "Not signed in", tone: "" };
+      if (accounts && accounts.notice) {
+        return {
+          text: accounts.notice === LEGACY_NOTICE ? t("account.legacy_notice") : accounts.notice,
+          tone: "",
+          detail: "",
+        };
+      }
+      if (!accounts) return { text: t("account.status.loading_accounts"), tone: "", detail: "" };
+      if (!account) return { text: t("account.status.loading_account"), tone: "", detail: "" };
+      if (!signedIn(account)) return { text: t("account.status.not_signed_in"), tone: "", detail: "" };
       if (account.error) {
-        return { text: "Subscription details unavailable: " + account.error, tone: "warn" };
+        return { text: t("account.subscription_unavailable"), tone: "warn", detail: account.error };
       }
-      return { text: "", tone: "" };
+      return { text: "", tone: "", detail: "" };
     }
 
     function renderStatus(snapshot) {
       const line = statusLine(snapshot);
-      if (line.text === view.statusText && line.tone === view.statusTone) return;
+      if (line.text === view.statusText && line.tone === view.statusTone && line.detail === view.statusDetail) return;
       view.statusText = line.text;
       view.statusTone = line.tone;
+      view.statusDetail = line.detail;
       ui.status.textContent = line.text;
       ui.status.title = line.text;
       if (line.tone) ui.status.dataset.tone = line.tone;
       else delete ui.status.dataset.tone;
       ui.status.hidden = line.text === "";
+      ui.details.textContent = line.detail;
+      ui.details.hidden = line.detail === "";
     }
 
     // ---------------------------------------------------------- entitlement
@@ -978,10 +1042,10 @@ export default {
         subscription: subscriptionView(account),
         quota: quotaText(account),
         bandwidth: {
-          text: account.limited_bandwidth ? "Limited" : "Unlimited",
+          text: t(account.limited_bandwidth ? "account.limited" : "account.unlimited"),
           tone: account.limited_bandwidth ? "warn" : "",
         },
-        token_expiry: account.token_expires > 0 ? rfc3339(account.token_expires) : "",
+        token_expiry: account.token_expires > 0 ? formatDateTime(account.token_expires) : "",
       };
       for (const [key, entry] of ui.rows) {
         const item = values[key];
@@ -1011,18 +1075,16 @@ export default {
       if (ui.dialog.open && !show && !view.busy) closeDialog(ui.dialog, true, ui.signout);
 
       const count = accountCount(snapshot);
-      const every = count > 1 ? "Sign out of every account?" : "Sign out of Kumiho?";
+      const every = t(count > 1 ? "account.signout.question_all" : "account.signout.question");
       if (ui.dialog.querySelector(".dialog__body").textContent !== every) {
         ui.dialog.querySelector(".dialog__body").textContent = every;
       }
-      const detail = count > 1
-        ? "All stored sign-in tokens are cleared and the tunnel disconnects."
-        : "The stored sign-in tokens are cleared and the tunnel disconnects.";
+      const detail = t(count > 1 ? "account.signout.detail_all" : "account.signout.detail");
       const detailNode = ui.dialog.querySelectorAll(".dialog__body")[1];
       if (detailNode.textContent !== detail) detailNode.textContent = detail;
-      const revoke = count > 1 ? SIGNOUT_REVOKE_ALL : SIGNOUT_REVOKE;
+      const revoke = t(count > 1 ? "account.signout.revoke_all" : "account.signout.revoke");
       if (ui.revoke.textContent !== revoke) ui.revoke.textContent = revoke;
-      const confirmLabel = count > 1 ? "Sign out all" : "Sign out";
+      const confirmLabel = t(count > 1 ? "account.signout_all" : "account.signout");
       if (ui.confirm.textContent !== confirmLabel) ui.confirm.textContent = confirmLabel;
     }
 
@@ -1034,7 +1096,9 @@ export default {
       view.addStep = "start";
       view.addEmail = "";
       view.addError = "";
+      view.addErrorDetail = "";
       view.formError = "";
+      view.formErrorSummary = "";
       view.formFocusKey = "";
       ui.email.input.value = "";
       ui.password.input.value = "";
@@ -1056,22 +1120,28 @@ export default {
           // is a failure, not a silent success: keep the user's password form
           // open with the engine error, and for a browser wait close it with
           // the error on the status line so Add account is usable again.
-          view.addError = login.error;
+          const failure = loginFailure(login);
+          view.addError = failure.summary;
+          view.addErrorDetail = failure.detail;
           if (view.addMethod === "password") {
-            view.formError = login.error;
+            view.formError = failure.detail;
+            view.formErrorSummary = failure.summary;
             endStarting();
             return;
           }
           resetAddForm();
-          view.addError = login.error;
+          view.addError = failure.summary;
+          view.addErrorDetail = failure.detail;
           return;
         }
         resetAddForm();
         return;
       }
       if (step === "error") {
+        const failure = loginFailure(login);
         resetAddForm();
-        view.addError = (login && login.error) || "Sign-in failed";
+        view.addError = failure.summary;
+        view.addErrorDetail = failure.detail;
         return;
       }
       if (step === "cancelled") {
@@ -1086,7 +1156,9 @@ export default {
         view.addStep = "browser";
         view.addEmail = (login && login.email) || view.addEmail;
         view.addError = "";
+        view.addErrorDetail = "";
         view.formError = "";
+        view.formErrorSummary = "";
         endStarting();
         return;
       }
@@ -1103,6 +1175,7 @@ export default {
       } else if (step === "email") {
         view.addStep = "start";
         view.formError = (login && login.error) || "";
+        view.formErrorSummary = login && login.error ? errorSummary(login.error_code) : "";
       }
     }
 
@@ -1113,7 +1186,9 @@ export default {
       view.addStep = "browser";
       view.addEmail = email || "";
       view.addError = "";
+      view.addErrorDetail = "";
       view.formError = "";
+      view.formErrorSummary = "";
       view.openedURL = "";
       const payload = { method: "browser" };
       if (accountID) payload.account_id = accountID;
@@ -1122,7 +1197,8 @@ export default {
         if (!err) return;
         endStarting();
         view.adding = false;
-        view.addError = err;
+        view.addError = t("error.generic");
+        view.addErrorDetail = err;
         render();
         console.warn("kumiho: accounts_add_start refused: " + err);
       });
@@ -1135,7 +1211,9 @@ export default {
       view.addStep = "start";
       view.addEmail = "";
       view.addError = "";
+      view.addErrorDetail = "";
       view.formError = "";
+      view.formErrorSummary = "";
       view.openedURL = "";
       render();
       ui.email.input.focus();
@@ -1146,19 +1224,23 @@ export default {
       if (view.addStep === "start") {
         const address = ui.email.input.value.trim();
         if (!address) {
-          view.formError = "Enter your email.";
+          view.formError = "";
+          view.formErrorSummary = t("account.error.email_required");
           render();
           ui.email.input.focus();
           return;
         }
         view.addEmail = address;
         view.addError = "";
+        view.addErrorDetail = "";
         view.formError = "";
+        view.formErrorSummary = "";
         beginStarting();
         ctx.send("accounts_add_start", { method: "password", email: address }).then(function (err) {
           if (!err) return;
           endStarting();
           view.formError = err;
+          view.formErrorSummary = t("error.generic");
           render();
           console.warn("kumiho: accounts_add_start refused: " + err);
         });
@@ -1175,12 +1257,15 @@ export default {
       }
       if (!action) return;
       view.addError = "";
+      view.addErrorDetail = "";
       view.formError = "";
+      view.formErrorSummary = "";
       beginStarting();
       ctx.send(action, payload).then(function (err) {
         if (!err) return;
         endStarting();
         view.formError = err;
+        view.formErrorSummary = t("error.generic");
         render();
         console.warn("kumiho: " + action + " refused: " + err);
       });
@@ -1258,7 +1343,9 @@ export default {
           break;
         case "remove":
           view.removeID = id;
-          ui.removeQuestion.textContent = "Remove " + (accountName(account) || account.email || "this account") + "?";
+          ui.removeQuestion.textContent = t("account.remove.named", {
+            name: accountName(account) || account.email || t("account.this_account"),
+          });
           openDialog(ui.removeDialog, ui.removeCancel);
           break;
       }

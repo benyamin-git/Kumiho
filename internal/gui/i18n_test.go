@@ -24,7 +24,10 @@ var (
 		"FATAL":           true,
 	}
 	catalogUIFamilies = map[string]bool{
+		"action":         true,
 		"accent":         true,
+		"autostart":      true,
+		"status":         true,
 		"blocked_region": true,
 		"cleanup":        true,
 		"group":          true,
@@ -89,6 +92,9 @@ func checkSettingCatalogKey(t *testing.T, key string) {
 	}
 	switch {
 	case tail == "label", tail == "hint", tail == "unit":
+	case tail == "cue", tail == "aria", tail == "placeholder":
+	case tail == "save", tail == "clear", tail == "save_aria", tail == "clear_aria":
+	case tail == "set", tail == "not_set":
 	case strings.HasPrefix(tail, "option."):
 	default:
 		t.Errorf("catalog setting key %q has unknown field %q", key, tail)

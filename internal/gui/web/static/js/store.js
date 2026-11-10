@@ -84,9 +84,9 @@ export function accountName(account) {
 export function accountMethodWord(method) {
   switch (String(method || "").toLowerCase()) {
     case "browser":
-      return "Browser";
+      return t("account.method.browser");
     case "password":
-      return "Password";
+      return t("account.method.password");
     default:
       return method ? String(method) : "";
   }

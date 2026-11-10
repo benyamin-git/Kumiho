@@ -2328,6 +2328,10 @@ func decodePayload[T any](act Action) (T, error) {
 
 // settingLabels maps the daemon setting keys to the inventory's row labels.
 var settingLabels = map[string]string{
+	"language":           "Language",
+	"allow_locked":       "Allow locked locations",
+	"relay_url":          "Relay URL",
+	"relay_token":        "Relay token",
 	"kill_switch":        "Kill switch",
 	"autoconnect":        "Autoconnect",
 	"log_level":          "Log level",

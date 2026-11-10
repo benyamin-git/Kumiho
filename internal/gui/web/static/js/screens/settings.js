@@ -56,6 +56,8 @@
 // The mutation guard's settle (the dashboard/locations T2.2 pattern): a
 // change whose completion evidence repeats byte-for-byte stops blocking
 // after this long.
+import { t, currentLanguage, setLanguage, formatNumber, noticeText } from "../i18n.js";
+
 const SETTLE_MS = 3000;
 
 // Wheel/scroll metrics: the house 40px control rows, three rows per notch,
@@ -66,17 +68,22 @@ const WHEEL_NOTCH_MIN = 40;
 
 // The `Kumiho app` rows (inventory §Settings table plus the D9 update row).
 const THEME_OPTIONS = [
-  ["light", "Light"],
-  ["dark", "Dark"],
-  ["oled", "OLED"],
+  ["light", "settings.theme.light"],
+  ["dark", "settings.theme.dark"],
+  ["oled", "settings.theme.oled"],
 ];
 const ACCENT_OPTIONS = [
-  ["blue", "Blue"],
-  ["teal", "Teal"],
-  ["green", "Green"],
-  ["orange", "Orange"],
-  ["rose", "Rose"],
-  ["violet", "Violet"],
+  ["blue", "settings.accent.blue"],
+  ["teal", "settings.accent.teal"],
+  ["green", "settings.accent.green"],
+  ["orange", "settings.accent.orange"],
+  ["rose", "settings.accent.rose"],
+  ["violet", "settings.accent.violet"],
+];
+const LANGUAGE_OPTIONS = [
+  ["system", "onboarding.language.system"],
+  ["en", "onboarding.language.english"],
+  ["fa", "onboarding.language.persian"],
 ];
 const AUTOSTART_KEY = "kumiho.gui.autostart";
 
@@ -327,7 +334,64 @@ function settingsSignature(settings) {
 
 /** The notice identity used by the mutation guards. */
 function noticeMark(notice) {
-  return notice && notice.message ? notice.message + "\u0000" + (notice.tone || "") : "";
+  if (!notice) return "";
+  return JSON.stringify({
+    code: notice.code || "",
+    params: notice.params || {},
+    tone: notice.tone || "",
+  });
+}
+
+/** One catalog key for a daemon setting. */
+function settingKey(key, suffix) {
+  return "settings." + key + "." + suffix;
+}
+
+/** The localized label for one daemon setting key. */
+function settingLabel(key) {
+  if (!key) return "";
+  if (key === "language") return t("onboarding.language.label");
+  if (key === "allow_locked") return t("settings.allow_locked.label");
+  if (key === "relay_url") return t("settings.relay_url.label");
+  if (key === "relay_token") return t("settings.relay_token.label");
+  if (SERVICE_ROWS.some(function (spec) { return spec.key === key; })) {
+    return t(settingKey(key, "label"));
+  }
+  return key;
+}
+
+/** The display word for one setting value (toggle or cycle). */
+function optionText(spec, value) {
+  if (value === "on") return t("common.on");
+  if (value === "off") return t("common.off");
+  if (spec && spec.kind === "cycle") return t(settingKey(spec.key, "option." + value));
+  return value;
+}
+
+/** One settings notice with its localized summary and raw error detail. */
+function settingsNoticeText(notice) {
+  const presentation = noticeText(notice);
+  if (!notice) return presentation;
+  const code = notice.code || "";
+  const params = notice.params || {};
+  if (code === "settings.saved") {
+    return {
+      text: t("notice.settings.saved", { setting: settingLabel(params.key) }),
+      detail: presentation.detail,
+      tone: presentation.tone,
+    };
+  }
+  if (code === "settings.reset") {
+    return {
+      text: t("notice.settings.reset", { setting: settingLabel(params.key) }),
+      detail: presentation.detail,
+      tone: presentation.tone,
+    };
+  }
+  if (code === "settings.relay.unreachable" && !presentation.detail && params.status) {
+    return { text: presentation.text, detail: "HTTP " + params.status, tone: presentation.tone };
+  }
+  return presentation;
 }
 
 /** One relay probe result as the settings copy the spec pins. */
@@ -335,15 +399,15 @@ function relayText(result) {
   if (!result) return "";
   if (result.ok) {
     return result.latency_ms == null
-      ? "Relay OK"
-      : "Relay OK — " + Math.round(Number(result.latency_ms)) + " ms";
+      ? t("settings.relay.ok")
+      : t("settings.relay.ok_latency", { latency: formatNumber(Math.round(Number(result.latency_ms))) });
   }
   if (result.status === 401 || result.status === 403) {
-    return "Relay rejected the token";
+    return t("settings.relay.rejected");
   }
-  if (result.error) return "Relay unreachable: " + result.error;
-  if (result.status) return "Relay unreachable: HTTP " + result.status;
-  return "Relay unreachable";
+  if (result.error) return t("settings.relay.unreachable_error", { error: result.error });
+  if (result.status) return t("settings.relay.unreachable_status", { status: result.status });
+  return t("settings.relay.unreachable");
 }
 
 /** Build one app-section row: label, control area, no override treatment. */
@@ -379,7 +443,7 @@ function choiceGroup(labelText, options, onChoose) {
 function build(host, handlers) {
   const root = el("div", "set");
 
-  const refresh = el("button", "button button--tonal set__refresh", "Refresh");
+  const refresh = el("button", "button button--tonal set__refresh", t("common.refresh"));
   refresh.type = "button";
   const actions = el("div", "set__actions");
   actions.append(refresh);
@@ -388,59 +452,74 @@ function build(host, handlers) {
   pane.hidden = true;
 
   const appSection = el("div", "set__section");
-  appSection.append(heading("Kumiho app"));
+  appSection.append(heading(t("settings.group.app")));
+
+  // Language row: the same three-option control as onboarding, first in the
+  // Kumiho app group.
+  const language = choiceGroup(t("onboarding.language.label"),
+    LANGUAGE_OPTIONS.map(function (option) { return [option[0], t(option[1])]; }), handlers.onLanguage);
+  const languageNote = el("p", "set__note");
+  languageNote.hidden = true;
+  const languageControl = el("div", "set__language");
+  languageControl.append(language.group, languageNote);
+  const languageRow = appRow(t("onboarding.language.label"), t("settings.language.hint"), languageControl);
+  appSection.append(languageRow.row);
 
   // Theme row.
-  const theme = choiceGroup("Theme", THEME_OPTIONS, handlers.onTheme);
-  const themeRow = appRow("Theme", "Kumiho's color theme; changes immediately", theme.group);
+  const theme = choiceGroup(t("settings.theme.label"),
+    THEME_OPTIONS.map(function (option) { return [option[0], t(option[1])]; }), handlers.onTheme);
+  const themeRow = appRow(t("settings.theme.label"), t("settings.theme.hint"), theme.group);
   appSection.append(themeRow.row);
 
   // Accent row.
-  const accent = choiceGroup("Accent", ACCENT_OPTIONS, handlers.onAccent);
-  const accentRow = appRow("Accent", "Kumiho's accent color; changes immediately", accent.group);
+  const accent = choiceGroup(t("settings.accent.label"),
+    ACCENT_OPTIONS.map(function (option) { return [option[0], t(option[1])]; }), handlers.onAccent);
+  const accentRow = appRow(t("settings.accent.label"), t("settings.accent.hint"), accent.group);
   appSection.append(accentRow.row);
 
   // Start at login row.
-  const autostart = el("button", "button button--tonal set__toggle", "on");
+  const autostart = el("button", "button button--tonal set__toggle", t("common.on"));
   autostart.type = "button";
   autostart.addEventListener("click", handlers.onAutostart);
   const autostartRow = appRow(
-    "Start at login",
-    "Start Kumiho in the tray when you sign in to Windows",
+    t("settings.autostart.label"),
+    t("settings.autostart.hint"),
     autostart
   );
   appSection.append(autostartRow.row);
 
   // Version and the manual update check (D9).
   const version = el("span", "set__version");
-  const updateCheck = el("button", "button button--tonal set__update-check", "Check for updates");
+  const updateCheck = el("button", "button button--tonal set__update-check", t("settings.update.check"));
   updateCheck.type = "button";
   updateCheck.addEventListener("click", handlers.onUpdateCheck);
   const updateResult = el("span", "set__update-result");
   updateResult.hidden = true;
-  const updateLink = el("button", "button button--text set__update-link", "Open release page");
+  const updateLink = el("button", "button button--text set__update-link", t("settings.update.open"));
   updateLink.type = "button";
   updateLink.hidden = true;
   updateLink.addEventListener("click", handlers.onUpdateLink);
   const updateArea = el("div", "set__control set__control--wrap");
   updateArea.append(version, updateCheck, updateResult, updateLink);
   const versionRow = appRow(
-    "Version",
-    "The running Kumiho version; check the GitHub releases page for updates",
+    t("settings.version.label"),
+    t("settings.version.hint"),
     updateArea
   );
   appSection.append(versionRow.row);
 
   // The Background service rows in the inventory's canonical order.
   const serviceSection = el("div", "set__section");
-  serviceSection.append(heading("Background service"));
+  serviceSection.append(heading(t("settings.group.service")));
   const serviceRows = [];
   for (const spec of SERVICE_ROWS) {
+    const labelText = t(settingKey(spec.key, "label"));
+    const hintText = t(settingKey(spec.key, "hint"));
     const row = el("div", "set__row");
-    row.title = spec.hint;
-    const label = el("span", "set__label", spec.label);
+    row.title = hintText;
+    const label = el("span", "set__label", labelText);
     const area = el("div", "set__control");
-    const entry = { spec: spec, row: row, value: "" };
+    const entry = { spec: spec, row: row, value: "", label: labelText };
     if (spec.kind === "toggle" || spec.kind === "cycle") {
       const button = el("button", "button button--tonal set__toggle");
       button.type = "button";
@@ -454,27 +533,27 @@ function build(host, handlers) {
       input.autocomplete = "off";
       input.spellcheck = false;
       input.id = "set-" + spec.key;
-      input.placeholder = spec.cue || "";
-      input.setAttribute("aria-label", spec.label);
+      input.placeholder = spec.cue ? t(settingKey(spec.key, "cue")) : "";
+      input.setAttribute("aria-label", labelText);
       input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
           handlers.onApply(entry);
         }
       });
-      const apply = el("button", "button button--tonal set__apply", "Apply");
+      const apply = el("button", "button button--tonal set__apply", t("settings.action.apply"));
       apply.type = "button";
-      apply.setAttribute("aria-label", "Apply " + spec.label);
+      apply.setAttribute("aria-label", t("settings.action.apply_aria", { label: labelText }));
       apply.addEventListener("click", () => handlers.onApply(entry));
       entry.input = input;
       entry.apply = apply;
       area.append(input, apply);
     }
-    const mark = el("span", "set__override", "overridden");
+    const mark = el("span", "set__override", t("settings.action.overridden"));
     mark.hidden = true;
-    const reset = el("button", "button button--tonal set__reset", "Reset");
+    const reset = el("button", "button button--tonal set__reset", t("settings.action.reset"));
     reset.type = "button";
-    reset.setAttribute("aria-label", "Reset " + spec.label);
+    reset.setAttribute("aria-label", t("settings.action.reset_aria", { label: labelText }));
     reset.hidden = true;
     reset.addEventListener("click", () => handlers.onReset(entry));
     entry.mark = mark;
@@ -488,25 +567,25 @@ function build(host, handlers) {
   // canonical rows: allow_locked, the control-plane relay URL, the
   // write-only token, and the one-shot relay probe.
   const regionRow = el("div", "set__row");
-  regionRow.title = "Show servers the Firefox version filter marks locked; next locations refresh";
-  const regionLabel = el("span", "set__label", "Allow locked locations");
+  regionRow.title = t("settings.allow_locked.hint");
+  const regionLabel = el("span", "set__label", t("settings.allow_locked.label"));
   const regionArea = el("div", "set__control");
   const allowLocked = el("button", "button button--tonal set__toggle");
   allowLocked.type = "button";
   allowLocked.addEventListener("click", () => handlers.onAllowLocked());
-  const allowLockedMark = el("span", "set__override", "overridden");
+  const allowLockedMark = el("span", "set__override", t("settings.action.overridden"));
   allowLockedMark.hidden = true;
-  const allowLockedReset = el("button", "button button--tonal set__reset", "Reset");
+  const allowLockedReset = el("button", "button button--tonal set__reset", t("settings.action.reset"));
   allowLockedReset.type = "button";
-  allowLockedReset.setAttribute("aria-label", "Reset allow locked locations");
+  allowLockedReset.setAttribute("aria-label", t("settings.action.reset_aria", { label: t("settings.allow_locked.label") }));
   allowLockedReset.hidden = true;
   allowLockedReset.addEventListener("click", () => handlers.onResetKey("allow_locked"));
   regionArea.append(allowLocked);
   regionRow.append(regionLabel, regionArea, allowLockedMark, allowLockedReset);
 
   const relayRow = el("div", "set__row");
-  relayRow.title = "HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page";
-  const relayLabel = el("span", "set__label", "Relay URL");
+  relayRow.title = t("settings.relay_url.hint");
+  const relayLabel = el("span", "set__label", t("settings.relay_url.label"));
   const relayArea = el("div", "set__control");
   const relayInput = document.createElement("input");
   relayInput.className = "input set__edit";
@@ -515,30 +594,30 @@ function build(host, handlers) {
   relayInput.spellcheck = false;
   relayInput.id = "set-relay_url";
   relayInput.placeholder = "https://relay.example.test";
-  relayInput.setAttribute("aria-label", "Relay URL");
+  relayInput.setAttribute("aria-label", t("settings.relay_url.label"));
   relayInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       handlers.onSaveRelayURL();
     }
   });
-  const relayApply = el("button", "button button--tonal set__apply", "Apply");
+  const relayApply = el("button", "button button--tonal set__apply", t("settings.action.apply"));
   relayApply.type = "button";
-  relayApply.setAttribute("aria-label", "Apply relay URL");
+  relayApply.setAttribute("aria-label", t("settings.action.apply_aria", { label: t("settings.relay_url.label") }));
   relayApply.addEventListener("click", () => handlers.onSaveRelayURL());
   relayArea.append(relayInput, relayApply);
-  const relayMark = el("span", "set__override", "overridden");
+  const relayMark = el("span", "set__override", t("settings.action.overridden"));
   relayMark.hidden = true;
-  const relayReset = el("button", "button button--tonal set__reset", "Reset");
+  const relayReset = el("button", "button button--tonal set__reset", t("settings.action.reset"));
   relayReset.type = "button";
-  relayReset.setAttribute("aria-label", "Reset relay URL");
+  relayReset.setAttribute("aria-label", t("settings.action.reset_aria", { label: t("settings.relay_url.label") }));
   relayReset.hidden = true;
   relayReset.addEventListener("click", () => handlers.onResetKey("relay_url"));
   relayRow.append(relayLabel, relayArea, relayMark, relayReset);
 
   const tokenRow = el("div", "set__row");
-  tokenRow.title = "Write-only relay secret; never shown again after saving";
-  const tokenLabel = el("span", "set__label", "Relay token");
+  tokenRow.title = t("settings.relay_token.hint");
+  const tokenLabel = el("span", "set__label", t("settings.relay_token.label"));
   const tokenArea = el("div", "set__control");
   const tokenInput = document.createElement("input");
   tokenInput.className = "input set__edit";
@@ -546,33 +625,33 @@ function build(host, handlers) {
   tokenInput.autocomplete = "new-password";
   tokenInput.spellcheck = false;
   tokenInput.id = "set-relay_token";
-  tokenInput.placeholder = "Paste token";
-  tokenInput.setAttribute("aria-label", "Relay token");
+  tokenInput.placeholder = t("settings.relay_token.placeholder");
+  tokenInput.setAttribute("aria-label", t("settings.relay_token.label"));
   tokenInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       handlers.onSaveRelayToken();
     }
   });
-  const tokenSave = el("button", "button button--tonal set__apply", "Save");
+  const tokenSave = el("button", "button button--tonal set__apply", t("settings.relay_token.save"));
   tokenSave.type = "button";
-  tokenSave.setAttribute("aria-label", "Save relay token");
+  tokenSave.setAttribute("aria-label", t("settings.relay_token.save_aria"));
   tokenSave.addEventListener("click", () => handlers.onSaveRelayToken());
-  const tokenClear = el("button", "button button--tonal set__reset", "Clear");
+  const tokenClear = el("button", "button button--tonal set__reset", t("settings.relay_token.clear"));
   tokenClear.type = "button";
-  tokenClear.setAttribute("aria-label", "Clear relay token");
+  tokenClear.setAttribute("aria-label", t("settings.relay_token.clear_aria"));
   tokenClear.addEventListener("click", () => handlers.onClearRelayToken());
   tokenArea.append(tokenInput, tokenSave, tokenClear);
-  const tokenSet = el("span", "set__token-state", "Not set");
+  const tokenSet = el("span", "set__token-state", t("settings.relay_token.not_set"));
   tokenRow.append(tokenLabel, tokenArea, tokenSet);
 
   const testRow = el("div", "set__row");
-  testRow.title = "Send one request through the relay; used only after HTTP 451";
-  const testLabel = el("span", "set__label", "Test relay");
+  testRow.title = t("settings.relay.test.hint");
+  const testLabel = el("span", "set__label", t("settings.relay.test.label"));
   const testArea = el("div", "set__control");
-  const testButton = el("button", "button button--tonal set__apply", "Test relay");
+  const testButton = el("button", "button button--tonal set__apply", t("settings.relay.test.label"));
   testButton.type = "button";
-  testButton.setAttribute("aria-label", "Test relay");
+  testButton.setAttribute("aria-label", t("settings.relay.test.label"));
   testButton.addEventListener("click", () => handlers.onRelayTest());
   const testResult = el("span", "set__relay-result");
   testResult.hidden = true;
@@ -580,18 +659,18 @@ function build(host, handlers) {
   testRow.append(testLabel, testArea);
 
   const guideRow = el("div", "set__row");
-  guideRow.title = "Open the first-run guide: another VPN or the relay, then prepare and connect";
-  const guideLabel = el("span", "set__label", "Blocked region");
+  guideRow.title = t("settings.blocked_region.guide.hint");
+  const guideLabel = el("span", "set__label", t("settings.blocked_region.guide.label"));
   const guideArea = el("div", "set__control");
-  const guideButton = el("button", "button button--tonal set__apply", "Open guide");
+  const guideButton = el("button", "button button--tonal set__apply", t("settings.blocked_region.guide.open"));
   guideButton.type = "button";
-  guideButton.setAttribute("aria-label", "Open the Blocked region guide");
+  guideButton.setAttribute("aria-label", t("settings.blocked_region.guide.open_aria"));
   guideButton.addEventListener("click", () => handlers.onOpenGuide());
   guideArea.append(guideButton);
   guideRow.append(guideLabel, guideArea);
 
   const regionSection = el("div", "set__section");
-  regionSection.append(heading("Region"));
+  regionSection.append(heading(t("settings.group.region")));
   regionSection.append(guideRow, regionRow, relayRow, tokenRow, testRow);
 
   pane.append(appSection, serviceSection, regionSection);
@@ -599,8 +678,11 @@ function build(host, handlers) {
   const status = el("p", "set__status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
+  const details = el("p", "set__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
-  root.append(actions, pane, status);
+  root.append(actions, pane, status, details);
   host.append(root);
 
   return {
@@ -609,6 +691,8 @@ function build(host, handlers) {
     pane: pane,
     themeButtons: theme.buttons,
     accentButtons: accent.buttons,
+    languageButtons: language.buttons,
+    languageNote: languageNote,
     autostart: autostart,
     version: version,
     updateCheck: updateCheck,
@@ -631,6 +715,7 @@ function build(host, handlers) {
       testResult: testResult,
     },
     status: status,
+    details: details,
   };
 }
 
@@ -652,6 +737,8 @@ export default {
       picked: { theme: "", accent: "", autostart: "" },
       statusText: null,
       statusTone: null,
+      statusDetail: null,
+      languageError: "",
     };
 
     function setBusyTimer(which) {
@@ -777,17 +864,29 @@ export default {
 
       const autostart =
         view.picked.autostart || projectedAutostart(snapshot) || storedAutostart() || "on";
-      ui.autostart.textContent = autostart;
-      ui.autostart.setAttribute("aria-label", "Start at login: " + autostart);
+      ui.autostart.textContent = t(autostart === "on" ? "common.on" : "common.off");
+      ui.autostart.setAttribute("aria-label", t("settings.autostart.aria", { value: ui.autostart.textContent }));
+
+      const preference = (snapshot.settings && snapshot.settings.language) || "system";
+      for (const [value, button] of ui.languageButtons) {
+        const selected = value === preference;
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+      }
+      const systemCode = snapshot.system_language === "fa" || snapshot.system_language === "en"
+        ? snapshot.system_language
+        : "en";
+      const systemName = t(systemCode === "fa" ? "onboarding.language.persian" : "onboarding.language.english");
+      ui.languageNote.textContent = t("onboarding.language.system_note", { language: systemName });
+      ui.languageNote.hidden = preference !== "system";
 
       const up = snapshot.update || {};
       ui.version.textContent = up.current || "";
       if (up.checked_at && up.latest && !sameRelease(up.current, up.latest)) {
-        ui.updateResult.textContent = "Kumiho " + up.latest + " is available";
+        ui.updateResult.textContent = t("settings.update.available", { version: up.latest });
         ui.updateResult.hidden = false;
         ui.updateLink.hidden = !up.url;
       } else if (up.checked_at) {
-        ui.updateResult.textContent = "Kumiho is up to date";
+        ui.updateResult.textContent = t("settings.update.current");
         ui.updateResult.hidden = false;
         ui.updateLink.hidden = true;
       } else {
@@ -804,8 +903,9 @@ export default {
         const value = settingValue(settings, entry.spec.key);
         entry.value = value;
         if (entry.button) {
-          entry.button.textContent = value;
-          entry.button.setAttribute("aria-label", entry.spec.label + ": " + value);
+          const display = optionText(entry.spec, value);
+          entry.button.textContent = display;
+          entry.button.setAttribute("aria-label", entry.label + ": " + display);
         }
         if (entry.input && entry.input.value !== value) entry.input.value = value;
         const marked = !!overridden[entry.spec.key];
@@ -819,8 +919,9 @@ export default {
       if (!settings) return;
       const overridden = new Set(settings.overridden || []);
       const allow = !!settings.allow_locked;
-      ui.region.allowLocked.textContent = allow ? "on" : "off";
-      ui.region.allowLocked.setAttribute("aria-label", "Allow locked locations: " + (allow ? "on" : "off"));
+      const allowWord = t(allow ? "common.on" : "common.off");
+      ui.region.allowLocked.textContent = allowWord;
+      ui.region.allowLocked.setAttribute("aria-label", t("settings.allow_locked.aria", { value: allowWord }));
       ui.region.allowLockedMark.hidden = !overridden.has("allow_locked");
       ui.region.allowLockedReset.hidden = !overridden.has("allow_locked");
 
@@ -834,7 +935,9 @@ export default {
 
       // The token input is write-only: never populated from state, and the
       // snapshot only carries the boolean.
-      ui.region.tokenSet.textContent = settings.relay_token_set ? "Set" : "Not set";
+      ui.region.tokenSet.textContent = settings.relay_token_set
+        ? t("settings.relay_token.set")
+        : t("settings.relay_token.not_set");
       const result = relayText(snapshot.relay_test);
       ui.region.testResult.textContent = result;
       ui.region.testResult.hidden = !result;
@@ -871,31 +974,41 @@ export default {
 
     function renderStatus(snapshot) {
       const notice = snapshot.settings_notice;
-      const error = notice && notice.tone === "bad" ? notice.message : "";
+      const presentation = settingsNoticeText(notice);
       let text = "";
       let tone = "";
-      if (view.busy) {
-        text = "Applying...";
-      } else if (view.updateBusy) {
-        text = "Checking for updates...";
-      } else if (!snapshot.settings && !error) {
-        text = "Loading settings...";
-      } else if (error) {
-        text = error;
+      let detail = "";
+      if (view.languageError) {
+        text = t("onboarding.language.save_failed");
         tone = "bad";
-      } else if (notice && notice.message) {
-        text = notice.message;
+        detail = view.languageError;
+      } else if (view.busy) {
+        text = t("settings.status.applying");
+      } else if (view.updateBusy) {
+        text = t("settings.status.checking");
+      } else if (!snapshot.settings && !(notice && notice.tone === "bad")) {
+        text = t("settings.status.loading");
+      } else if (notice && notice.tone === "bad") {
+        text = presentation.text;
+        tone = "bad";
+        detail = presentation.detail;
+      } else if (presentation.text) {
+        text = presentation.text;
         if (notice.tone === "good") tone = "good";
         else if (notice.tone === "warn") tone = "warn";
+        detail = presentation.detail;
       }
-      if (text === view.statusText && tone === view.statusTone) return;
+      if (text === view.statusText && tone === view.statusTone && detail === view.statusDetail) return;
       view.statusText = text;
       view.statusTone = tone;
+      view.statusDetail = detail;
       ui.status.textContent = text;
       ui.status.title = text;
       if (tone) ui.status.dataset.tone = tone;
       else delete ui.status.dataset.tone;
       ui.status.hidden = text === "";
+      ui.details.textContent = detail;
+      ui.details.hidden = detail === "";
     }
 
     /**
@@ -914,7 +1027,38 @@ export default {
       });
     }
 
+    function effectiveLanguage(choice, snapshot) {
+      if (choice === "en" || choice === "fa") return choice;
+      if (snapshot.system_language === "en" || snapshot.system_language === "fa") {
+        return snapshot.system_language;
+      }
+      return currentLanguage();
+    }
+
     const handlers = {
+      onLanguage(value) {
+        const snapshot = ctx.store.get() || {};
+        const previous = currentLanguage();
+        const effective = effectiveLanguage(value, snapshot);
+        view.languageError = "";
+        setLanguage(effective).catch(function (err) {
+          console.error("kumiho: language switch failed", err);
+        });
+        ctx.send("settings_set", { key: "language", value: value }).then(function (err) {
+          if (!err) {
+            return ctx.send("prefs_set", { language: effective }).then(function (cacheErr) {
+              if (cacheErr) console.warn("kumiho: could not cache the language: " + cacheErr);
+            });
+          }
+          view.languageError = err;
+          setLanguage(previous).catch(function (switchErr) {
+            console.error("kumiho: language rollback failed", switchErr);
+          });
+          render();
+          console.warn("kumiho: language change refused: " + err);
+        });
+      },
+
       onTheme(value) {
         view.picked.theme = value;
         render();
