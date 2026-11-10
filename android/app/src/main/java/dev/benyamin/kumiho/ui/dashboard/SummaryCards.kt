@@ -26,6 +26,7 @@ import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoQuotaBar
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import java.time.ZoneId
 
 /**
@@ -165,12 +166,13 @@ private fun ExitCard(state: DashboardState, modifier: Modifier = Modifier) {
 @Composable
 private fun QuotaCard(state: DashboardState, modifier: Modifier = Modifier) {
     val quota = state.status?.quota
-    val label = DashboardFormat.quotaLabel(quota)
+    val label = DashboardFormat.quotaLabel(quota, LocalAppLanguage.current)
     val fraction = DashboardFormat.quotaFraction(quota)
     val reset = DashboardFormat.dateLabel(
         epochSeconds = quota?.reset ?: 0L,
         zone = ZoneId.systemDefault(),
         locale = LocalConfiguration.current.locales[0],
+        language = LocalAppLanguage.current,
     )
     KumihoCard(modifier = modifier.testTag(DashboardTags.CARD_QUOTA)) {
         CardTitle(stringResource(R.string.dashboard_quota_title))
@@ -201,11 +203,12 @@ private fun QuotaCard(state: DashboardState, modifier: Modifier = Modifier) {
 @Composable
 private fun SessionCard(state: DashboardState, modifier: Modifier = Modifier) {
     val status = state.status
-    val totals = DashboardFormat.totalsLabel(status?.totals)
-    val rates = DashboardFormat.ratesLabel(status?.rates)
+    val totals = DashboardFormat.totalsLabel(status?.totals, LocalAppLanguage.current)
+    val rates = DashboardFormat.ratesLabel(status?.rates, LocalAppLanguage.current)
     val uptime = DashboardFormat.uptimeLabel(
         since = status?.since ?: 0L,
         nowSeconds = System.currentTimeMillis() / 1000,
+        language = LocalAppLanguage.current,
     )
     KumihoCard(modifier = modifier.testTag(DashboardTags.CARD_SESSION)) {
         CardTitle(stringResource(R.string.dashboard_session_title))

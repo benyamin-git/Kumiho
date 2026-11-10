@@ -45,6 +45,7 @@ import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.tv.components.TvButton
 import dev.benyamin.kumiho.ui.tv.components.TvDialog
 import dev.benyamin.kumiho.ui.tv.components.TvFocusableSurface
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.tv.theme.TvDimens
 
 /**
@@ -164,6 +165,7 @@ private fun PowerHero(
         DashboardFormat.uptimeLabel(
             since = status?.since ?: 0L,
             nowSeconds = System.currentTimeMillis() / 1000,
+            language = LocalAppLanguage.current,
         )
     } else {
         null

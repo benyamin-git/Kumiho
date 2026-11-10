@@ -1,7 +1,9 @@
 package dev.benyamin.kumiho.vpn
 
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.EngineStatus
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import java.util.Locale
 
 /** One status-notification action; there is deliberately no Connect (D30). */
@@ -70,15 +72,16 @@ object NotificationText {
         state: VpnUiState,
         status: EngineStatus?,
         nowSeconds: Long,
+        language: AppLanguage = AppLanguage.ENGLISH,
     ): NotificationContent {
         val sessionUp = state == VpnUiState.CONNECTED || state == VpnUiState.PROXY_ONLY
         return NotificationContent(
             state = state,
             stateRes = stateRes(state),
             location = location(status),
-            uptime = if (sessionUp) uptime(status?.since ?: 0L, nowSeconds) else null,
-            up = if (sessionUp) status?.totals?.let { humanBytes(it.up) } else null,
-            down = if (sessionUp) status?.totals?.let { humanBytes(it.down) } else null,
+            uptime = if (sessionUp) uptime(status?.since ?: 0L, nowSeconds, language) else null,
+            up = if (sessionUp) status?.totals?.let { humanBytes(it.up, language) } else null,
+            down = if (sessionUp) status?.totals?.let { humanBytes(it.down, language) } else null,
         )
     }
 
@@ -100,21 +103,21 @@ object NotificationText {
      * dashboard: `42s`, `3m 20s`, `2h 5m`. Null without a start time; a future
      * timestamp reads as zero instead of a negative duration.
      */
-    fun uptime(since: Long, nowSeconds: Long): String? {
+    fun uptime(
+        since: Long,
+        nowSeconds: Long,
+        language: AppLanguage = AppLanguage.ENGLISH,
+    ): String? {
         if (since <= 0L) return null
-        val elapsed = (nowSeconds - since).coerceAtLeast(0L)
-        return when {
-            elapsed < 60 -> "${elapsed}s"
-            elapsed < 3600 -> "${elapsed / 60}m ${elapsed % 60}s"
-            else -> "${elapsed / 3600}h ${(elapsed % 3600) / 60}m"
-        }
+        return PersianFormat.formatDuration((nowSeconds - since).coerceAtLeast(0L), language)
     }
 
     /**
      * A byte count in binary units, exactly as the dashboard writes it:
      * `0 B`, `512 B`, `1.0 KiB`, `12.3 MiB`.
      */
-    fun humanBytes(bytes: Long): String {
+    fun humanBytes(bytes: Long, language: AppLanguage = AppLanguage.ENGLISH): String {
+        if (language == AppLanguage.PERSIAN) return PersianFormat.formatBytes(bytes)
         if (bytes < UNIT) return "$bytes B"
         var divisor = UNIT
         var exponent = 0

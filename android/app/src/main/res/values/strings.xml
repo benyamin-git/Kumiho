@@ -313,6 +313,11 @@
     <string name="settings_launch_failed_dismiss">Dismiss</string>
 
     <string name="settings_group_app">Kumiho app</string>
+    <string name="language_title">Language</string>
+    <string name="language_hint">App language; changes immediately</string>
+    <string name="language_system">System</string>
+    <string name="language_english">English</string>
+    <string name="language_persian">فارسی</string>
     <string name="settings_group_connection">Connection</string>
     <string name="settings_group_region">Region</string>
     <string name="settings_group_android_vpn">Android VPN</string>

@@ -1,6 +1,7 @@
 package dev.benyamin.kumiho.vpn
 
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.EngineStatus
 import org.junit.Assert.assertEquals
@@ -157,6 +158,26 @@ class NotificationTextTest {
         )
         assertNull(NotificationText.location(status(location = "rec", server = null)))
         assertNull(NotificationText.location(null))
+    }
+
+    @Test
+    fun `persian notification numbers use persian digits`() {
+        val since = 1_700_000_000L
+        val content = NotificationText.content(
+            state = VpnUiState.CONNECTED,
+            status = status(
+                location = "DE",
+                since = since,
+                up = 12_897_485L,
+                down = 47_817_523L,
+            ),
+            nowSeconds = since + 3_720L,
+            language = AppLanguage.PERSIAN,
+        )
+
+        assertEquals("۱ ساعت و ۲ دقیقه", content.uptime)
+        assertEquals("۱۲٫۳ مگابایت", content.up)
+        assertEquals("۴۵٫۶ مگابایت", content.down)
     }
 
     @Test

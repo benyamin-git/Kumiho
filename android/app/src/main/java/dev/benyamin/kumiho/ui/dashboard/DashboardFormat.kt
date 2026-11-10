@@ -2,7 +2,9 @@ package dev.benyamin.kumiho.ui.dashboard
 
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.Quota
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -27,7 +29,8 @@ object DashboardFormat {
      * A byte count in binary units, exactly as the desktop's `humanBytes`:
      * `0 B`, `512 B`, `1.0 KiB`, `1.5 MiB`, `12.3 GiB`.
      */
-    fun humanBytes(bytes: Long): String {
+    fun humanBytes(bytes: Long, language: AppLanguage = AppLanguage.ENGLISH): String {
+        if (language == AppLanguage.PERSIAN) return PersianFormat.formatBytes(bytes)
         if (bytes < UNIT) return "$bytes B"
         var divisor = UNIT
         var exponent = 0
@@ -47,15 +50,24 @@ object DashboardFormat {
      * known, a half sentence for one side, and null when there is nothing.
      * Zero remaining is a real, exhausted quota and stays visible.
      */
-    fun quotaLabel(quota: Quota?): String? {
+    fun quotaLabel(quota: Quota?, language: AppLanguage = AppLanguage.ENGLISH): String? {
         if (quota == null) return null
         val remaining = quota.remaining
         val limit = quota.limit
         return when {
             remaining != null && limit != null ->
-                "${humanBytes(remaining)} remaining of ${humanBytes(limit)}"
-            remaining != null -> "${humanBytes(remaining)} remaining"
-            limit != null -> humanBytes(limit)
+                if (language == AppLanguage.PERSIAN) {
+                    "${humanBytes(remaining, language)} باقی‌مانده از ${humanBytes(limit, language)}"
+                } else {
+                    "${humanBytes(remaining, language)} remaining of ${humanBytes(limit, language)}"
+                }
+            remaining != null ->
+                if (language == AppLanguage.PERSIAN) {
+                    "${humanBytes(remaining, language)} باقی‌مانده"
+                } else {
+                    "${humanBytes(remaining, language)} remaining"
+                }
+            limit != null -> humanBytes(limit, language)
             else -> null
         }
     }
@@ -72,15 +84,23 @@ object DashboardFormat {
      * `up 1.2 MiB/s / down 3.4 MiB/s`; null when there are no rates yet. Both
      * directions at zero describe no traffic, which the desktop also hides.
      */
-    fun ratesLabel(rates: ByteRates?): String? {
+    fun ratesLabel(rates: ByteRates?, language: AppLanguage = AppLanguage.ENGLISH): String? {
         if (rates == null || (rates.up == 0.0 && rates.down == 0.0)) return null
-        return "up ${humanBytes(rates.up.toLong())}/s / down ${humanBytes(rates.down.toLong())}/s"
+        return if (language == AppLanguage.PERSIAN) {
+            "بالا ${humanBytes(rates.up.toLong(), language)}/ث · پایین ${humanBytes(rates.down.toLong(), language)}/ث"
+        } else {
+            "up ${humanBytes(rates.up.toLong(), language)}/s / down ${humanBytes(rates.down.toLong(), language)}/s"
+        }
     }
 
     /** `up 12.3 MiB / down 45.6 MiB`; null when the engine has no totals. */
-    fun totalsLabel(totals: ByteCounters?): String? {
+    fun totalsLabel(totals: ByteCounters?, language: AppLanguage = AppLanguage.ENGLISH): String? {
         if (totals == null) return null
-        return "up ${humanBytes(totals.up)} / down ${humanBytes(totals.down)}"
+        return if (language == AppLanguage.PERSIAN) {
+            "بالا ${humanBytes(totals.up, language)} · پایین ${humanBytes(totals.down, language)}"
+        } else {
+            "up ${humanBytes(totals.up, language)} / down ${humanBytes(totals.down, language)}"
+        }
     }
 
     /**
@@ -88,14 +108,13 @@ object DashboardFormat {
      * `3m 20s`, `2h 5m`. Null when the engine has no start time; a start time
      * in the future reads as zero rather than a negative duration.
      */
-    fun uptimeLabel(since: Long, nowSeconds: Long): String? {
+    fun uptimeLabel(
+        since: Long,
+        nowSeconds: Long,
+        language: AppLanguage = AppLanguage.ENGLISH,
+    ): String? {
         if (since <= 0L) return null
-        val elapsed = (nowSeconds - since).coerceAtLeast(0L)
-        return when {
-            elapsed < 60 -> "${elapsed}s"
-            elapsed < 3600 -> "${elapsed / 60}m ${elapsed % 60}s"
-            else -> "${elapsed / 3600}h ${(elapsed % 3600) / 60}m"
-        }
+        return PersianFormat.formatDuration((nowSeconds - since).coerceAtLeast(0L), language)
     }
 
     /**
@@ -107,7 +126,9 @@ object DashboardFormat {
         epochSeconds: Long,
         zone: ZoneId = ZoneId.systemDefault(),
         locale: Locale = Locale.getDefault(),
+        language: AppLanguage = AppLanguage.ENGLISH,
     ): String? {
+        if (language == AppLanguage.PERSIAN) return PersianFormat.formatDate(epochSeconds, zone)
         if (epochSeconds <= 0L) return null
         val formatter = DateTimeFormatter.ofPattern("d MMM yyyy", locale).withZone(zone)
         return formatter.format(Instant.ofEpochSecond(epochSeconds))

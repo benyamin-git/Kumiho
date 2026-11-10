@@ -3,6 +3,7 @@ package dev.benyamin.kumiho.ui.account
 import dev.benyamin.kumiho.engine.Account
 import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.engine.Accounts
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.ui.dashboard.DashboardFormat
 import dev.benyamin.kumiho.ui.setup.SignInPaneState
@@ -124,9 +125,10 @@ object AccountFormat {
         ?.takeIf { it.isNotEmpty() && !isNotSignedIn(account) }
 
     /** The quota sentence, or null when the engine reported no quota fields. */
-    fun quota(account: Account?): String? = account?.let {
+    fun quota(account: Account?, language: AppLanguage = AppLanguage.ENGLISH): String? = account?.let {
         DashboardFormat.quotaLabel(
             Quota(limit = it.maxBytes, remaining = it.quotaRemaining, reset = null),
+            language,
         )
     }
 
@@ -135,7 +137,8 @@ object AccountFormat {
         account: Account?,
         zone: ZoneId = ZoneId.systemDefault(),
         locale: Locale = Locale.getDefault(),
-    ): String? = DashboardFormat.dateLabel(account?.tokenExpires ?: 0L, zone, locale)
+        language: AppLanguage = AppLanguage.ENGLISH,
+    ): String? = DashboardFormat.dateLabel(account?.tokenExpires ?: 0L, zone, locale, language)
 
     /** The engine's bandwidth flag: true means limited. */
     fun bandwidthLimited(account: Account?): Boolean = account?.limitedBandwidth == true

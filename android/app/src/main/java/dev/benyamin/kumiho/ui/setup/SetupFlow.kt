@@ -62,7 +62,9 @@ import dev.benyamin.kumiho.permissions.PermissionController
 import dev.benyamin.kumiho.ui.account.MozillaAccountBrowserDialog
 import dev.benyamin.kumiho.ui.account.openBrowserSignIn
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.theme.PillShape
 import dev.benyamin.kumiho.vpn.ConnectRequest
 
@@ -451,7 +453,11 @@ private fun StepBadge(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
-                    text = step.number.toString(),
+                    text = if (LocalAppLanguage.current == dev.benyamin.kumiho.data.AppLanguage.PERSIAN) {
+                        PersianFormat.formatNumber(step.number.toLong())
+                    } else {
+                        step.number.toString()
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = if (current) {
                         MaterialTheme.colorScheme.onPrimary

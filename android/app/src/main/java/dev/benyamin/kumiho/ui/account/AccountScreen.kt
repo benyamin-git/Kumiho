@@ -62,6 +62,7 @@ import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.setup.SignInPane
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
 /** Test tags for the Account screen. */
@@ -768,7 +769,7 @@ private fun AccountCard(account: Account) {
         )
         AccountRow(
             label = stringResource(R.string.account_quota),
-            value = AccountFormat.quota(account)
+            value = AccountFormat.quota(account, LocalAppLanguage.current)
                 ?: stringResource(R.string.account_quota_none),
             tag = AccountTags.QUOTA,
         )
@@ -783,7 +784,7 @@ private fun AccountCard(account: Account) {
         )
         AccountRow(
             label = stringResource(R.string.account_token),
-            value = AccountFormat.tokenExpiry(account)
+            value = AccountFormat.tokenExpiry(account, language = LocalAppLanguage.current)
                 ?: stringResource(R.string.account_token_unknown),
             tag = AccountTags.TOKEN,
         )

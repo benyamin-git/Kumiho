@@ -11,6 +11,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import dev.benyamin.kumiho.data.AppLanguage
 
 /**
  * The active [KumihoColors]. Provided by [KumihoTheme]; components read status
@@ -19,6 +20,9 @@ import androidx.core.view.WindowCompat
 val LocalKumihoColors = staticCompositionLocalOf<KumihoColors> {
     error("KumihoTheme is not applied")
 }
+
+/** The effective UI language, used by shared panes that set their own type. */
+val LocalAppLanguage = staticCompositionLocalOf { AppLanguage.ENGLISH }
 
 /** The house colours for the current theme, for reads inside components. */
 object KumihoTheme {
@@ -35,13 +39,17 @@ object KumihoTheme {
 @Composable
 fun KumihoTheme(
     colors: KumihoColors,
+    language: AppLanguage = AppLanguage.ENGLISH,
     content: @Composable () -> Unit,
 ) {
     ApplySystemBarAppearance(dark = colors.theme != ThemeId.LIGHT)
-    CompositionLocalProvider(LocalKumihoColors provides colors) {
+    CompositionLocalProvider(
+        LocalKumihoColors provides colors,
+        LocalAppLanguage provides language,
+    ) {
         MaterialTheme(
             colorScheme = colors.toColorScheme(),
-            typography = KumihoTypography,
+            typography = kumihoTypography(language),
             shapes = KumihoShapes,
             content = content,
         )

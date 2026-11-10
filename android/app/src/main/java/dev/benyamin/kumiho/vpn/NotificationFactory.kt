@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import dev.benyamin.kumiho.MainActivity
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.EngineStatus
 
 /**
@@ -63,9 +64,10 @@ class NotificationFactory(private val context: Context) {
         state: VpnUiState,
         status: EngineStatus? = null,
         nowSeconds: Long = System.currentTimeMillis() / 1000L,
+        language: AppLanguage = contextLanguage(),
     ): Notification {
         ensureChannels()
-        val content = NotificationText.content(state, status, nowSeconds)
+        val content = NotificationText.content(state, status, nowSeconds, language)
         val stateWord = context.getString(content.stateRes)
         val headline = content.location?.let {
             context.getString(R.string.notification_with_location, stateWord, it)
@@ -105,9 +107,14 @@ class NotificationFactory(private val context: Context) {
     }
 
     /** Updates the foreground notification; harmless when notifications are off. */
-    fun update(id: Int, state: VpnUiState, status: EngineStatus?) {
+    fun update(
+        id: Int,
+        state: VpnUiState,
+        status: EngineStatus?,
+        language: AppLanguage = contextLanguage(),
+    ) {
         try {
-            NotificationManagerCompat.from(context).notify(id, build(state, status))
+            NotificationManagerCompat.from(context).notify(id, build(state, status, language = language))
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS was revoked; the service still runs.
         }
@@ -190,6 +197,13 @@ class NotificationFactory(private val context: Context) {
             .setAction(KumihoVpnService.ACTION_DISCONNECT),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
+
+    private fun contextLanguage(): AppLanguage =
+        if (context.resources.configuration.locales[0].language == "fa") {
+            AppLanguage.PERSIAN
+        } else {
+            AppLanguage.ENGLISH
+        }
 
     companion object {
         /** The foreground notification id; T16 keeps this id stable. */

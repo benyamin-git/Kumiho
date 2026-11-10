@@ -56,7 +56,8 @@ import dev.benyamin.kumiho.ui.setup.SetupTags
 import dev.benyamin.kumiho.ui.setup.SignInPhase
 import dev.benyamin.kumiho.ui.setup.setupMessageText
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
-import dev.benyamin.kumiho.ui.theme.KumihoTypography
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
+import dev.benyamin.kumiho.ui.theme.kumihoTypography
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.tv.components.TvButton
 import dev.benyamin.kumiho.ui.tv.components.TvFocusableSurface
@@ -935,7 +936,7 @@ private fun TvField(
     val focusManager = LocalFocusManager.current
     androidx.compose.material3.MaterialTheme(
         colorScheme = house.toColorScheme(),
-        typography = KumihoTypography,
+        typography = kumihoTypography(LocalAppLanguage.current),
         shapes = KumihoShapes,
     ) {
         OutlinedTextField(

@@ -58,6 +58,7 @@ import dev.benyamin.kumiho.ui.locations.LocationsRoute
 import dev.benyamin.kumiho.ui.locations.LocationsState
 import dev.benyamin.kumiho.ui.locations.LocationsTags
 import dev.benyamin.kumiho.ui.locations.latencyText
+import dev.benyamin.kumiho.ui.locations.rttText
 import dev.benyamin.kumiho.ui.locations.locationTitle
 import dev.benyamin.kumiho.ui.locations.noticeText
 import dev.benyamin.kumiho.ui.locations.selectionText
@@ -465,7 +466,7 @@ private fun FastestRow(
                 )
             } else if (fastest != null) {
                 Text(
-                    text = stringResource(R.string.locations_latency, fastest.milliseconds),
+                    text = rttText(fastest.milliseconds),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                 )

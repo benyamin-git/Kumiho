@@ -52,6 +52,7 @@ import dev.benyamin.kumiho.ui.tv.components.TvPageHeader
 import dev.benyamin.kumiho.ui.tv.components.TvValue
 import dev.benyamin.kumiho.ui.tv.theme.TvDimens
 import dev.benyamin.kumiho.ui.tv.theme.TvM3Typography
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import java.time.ZoneId
 
 /**
@@ -403,8 +404,9 @@ private fun AccountsBlock(
 private fun CurrentAccountCard(state: AccountUiState) {
     val account = state.account ?: return
     val locale = LocalConfiguration.current.locales[0]
-    val quota = AccountFormat.quota(account) ?: stringResource(R.string.account_quota_none)
-    val expiry = AccountFormat.tokenExpiry(account, ZoneId.systemDefault(), locale)
+    val language = LocalAppLanguage.current
+    val quota = AccountFormat.quota(account, language) ?: stringResource(R.string.account_quota_none)
+    val expiry = AccountFormat.tokenExpiry(account, ZoneId.systemDefault(), locale, language)
         ?: stringResource(R.string.account_not_reported)
     val colors = MaterialTheme.colorScheme
     Column(

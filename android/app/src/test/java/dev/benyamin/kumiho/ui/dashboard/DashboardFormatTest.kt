@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui.dashboard
 
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.engine.Quota
@@ -194,6 +195,42 @@ class DashboardFormatTest {
     fun theDashIsOneCharacterAndNotANumber() {
         assertEquals("—", DashboardFormat.DASH)
         assertEquals(1, DashboardFormat.DASH.length)
+    }
+
+    @Test
+    fun persianUsesPersianDigitsUnitsAndJalaliDates() {
+        assertEquals("۱٫۵ کیلوبایت", DashboardFormat.humanBytes(1536, AppLanguage.PERSIAN))
+        assertEquals(
+            "۱٫۵ کیلوبایت باقی‌مانده از ۲٫۰ کیلوبایت",
+            DashboardFormat.quotaLabel(
+                Quota(limit = 2048L, remaining = 1536L, reset = null),
+                AppLanguage.PERSIAN,
+            ),
+        )
+        assertEquals(
+            "بالا ۱٫۲ مگابایت/ث · پایین ۳٫۴ مگابایت/ث",
+            DashboardFormat.ratesLabel(
+                ByteRates(up = 1.2 * MIB, down = 3.4 * MIB),
+                AppLanguage.PERSIAN,
+            ),
+        )
+        assertEquals(
+            "بالا ۱۲٫۳ مگابایت · پایین ۴۵٫۶ مگابایت",
+            DashboardFormat.totalsLabel(
+                ByteCounters(up = 12_897_485L, down = 47_817_523L),
+                AppLanguage.PERSIAN,
+            ),
+        )
+        assertEquals("۳ دقیقه و ۲۰ ثانیه", DashboardFormat.uptimeLabel(100L, 300L, AppLanguage.PERSIAN))
+        assertEquals(
+            "۱۴۰۵/۰۸/۱۹",
+            DashboardFormat.dateLabel(
+                java.time.Instant.parse("2026-11-10T12:00:00Z").epochSecond,
+                ZoneId.of("UTC"),
+                Locale.UK,
+                AppLanguage.PERSIAN,
+            ),
+        )
     }
 
     private companion object {

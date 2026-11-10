@@ -68,6 +68,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.Server
@@ -75,6 +77,7 @@ import dev.benyamin.kumiho.ui.components.KumihoEmptyState
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
 /**
@@ -599,7 +602,7 @@ private fun FastestRow(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 fastest != null -> Text(
-                    text = stringResource(R.string.locations_latency, fastest.milliseconds),
+                    text = rttText(fastest.milliseconds),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -804,8 +807,17 @@ private fun ServerRow(
 internal fun latencyText(latency: LatencyState): String = when (latency) {
     LatencyState.Untested -> stringResource(R.string.locations_latency_none)
     LatencyState.Timeout -> stringResource(R.string.locations_latency_timeout)
-    is LatencyState.Measured -> stringResource(R.string.locations_latency, latency.milliseconds)
+    is LatencyState.Measured -> rttText(latency.milliseconds)
 }
+
+/** A measured RTT keeps Persian digits and units, or the English resource. */
+@Composable
+internal fun rttText(milliseconds: Long): String =
+    if (LocalAppLanguage.current == AppLanguage.PERSIAN) {
+        PersianFormat.formatRtt(milliseconds)
+    } else {
+        stringResource(R.string.locations_latency, milliseconds)
+    }
 
 // ---- notices and content states ----------------------------------------
 

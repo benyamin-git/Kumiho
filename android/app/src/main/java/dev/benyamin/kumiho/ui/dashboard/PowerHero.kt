@@ -19,6 +19,7 @@ import dev.benyamin.kumiho.ui.components.KumihoPowerButton
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.StatusTone
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 
 /**
  * The power hero: one large power control, the state word, and only the facts
@@ -53,6 +54,7 @@ fun PowerHero(
         DashboardFormat.uptimeLabel(
             since = status?.since ?: 0L,
             nowSeconds = System.currentTimeMillis() / 1000,
+            language = LocalAppLanguage.current,
         )
     } else {
         null

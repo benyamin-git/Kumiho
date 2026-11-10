@@ -42,13 +42,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.EngineClient
 import dev.benyamin.kumiho.engine.EngineStatus
 import dev.benyamin.kumiho.engine.RegionCheck
 import dev.benyamin.kumiho.engine.RegionHost
 import dev.benyamin.kumiho.engine.RelayTest
 import dev.benyamin.kumiho.engine.Settings
+import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -226,7 +229,7 @@ fun BlockedRegionGuide(
                             )
                             Text(
                                 text = if (hasPass) {
-                                    stringResource(R.string.guide_pass_ready, shortClock(remaining))
+                                    stringResource(R.string.guide_pass_ready, shortClock(remaining, LocalAppLanguage.current))
                                 } else {
                                     stringResource(R.string.guide_pass_expired)
                                 },
@@ -522,7 +525,13 @@ private fun relayResultText(result: RelayTest?, busy: Boolean): String = when {
 }
 
 /** "m:ss" for the pass countdown; never negative. */
-private fun shortClock(seconds: Long): String {
+private fun shortClock(seconds: Long, language: AppLanguage): String {
     val safe = seconds.coerceAtLeast(0)
-    return "${safe / 60}:${(safe % 60).toString().padStart(2, '0')}"
+    return if (language == AppLanguage.PERSIAN) {
+        val minutes = PersianFormat.formatNumber(safe / 60)
+        val secondsPart = PersianFormat.formatNumber(safe % 60).padStart(2, '۰')
+        "$minutes:$secondsPart"
+    } else {
+        "${safe / 60}:${(safe % 60).toString().padStart(2, '0')}"
+    }
 }

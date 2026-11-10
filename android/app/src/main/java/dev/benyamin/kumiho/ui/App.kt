@@ -48,7 +48,7 @@ import dev.benyamin.kumiho.ui.shell.ShellNavigation
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
-import dev.benyamin.kumiho.ui.theme.KumihoTypography
+import dev.benyamin.kumiho.ui.theme.kumihoTypography
 import dev.benyamin.kumiho.ui.tv.TvRoot
 import dev.benyamin.kumiho.ui.tv.theme.TvKumihoTheme
 
@@ -89,12 +89,16 @@ fun KumihoApp(
     ) {
         when (val state = paletteState) {
             PaletteState.Loading -> KumihoLoadingSurface()
-            is PaletteState.Error -> PaletteErrorSurface(state.message, container.themeRepository::retry)
+            is PaletteState.Error -> PaletteErrorSurface(
+                message = state.message,
+                language = language,
+                onRetry = container.themeRepository::retry,
+            )
             is PaletteState.Ready -> {
                 val guideOpen by container.guide.visible.collectAsStateWithLifecycle()
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (isTv) {
-                        TvKumihoTheme(colors = state.colors) {
+                        TvKumihoTheme(colors = state.colors, language = language) {
                             TvRoot(
                                 container = container,
                                 tvConnectRequested = tvConnectRequested,
@@ -102,7 +106,7 @@ fun KumihoApp(
                             )
                         }
                     } else {
-                        KumihoTheme(colors = state.colors) {
+                        KumihoTheme(colors = state.colors, language = language) {
                             when (setupComplete) {
                                 null -> SetupGateLoading()
                                 false -> SetupRoute(container)
@@ -121,7 +125,7 @@ fun KumihoApp(
                     // The guide covers the wizard and both shells; it is reached
                     // from setup, Settings → Region and the dashboard notice.
                     if (guideOpen) {
-                        KumihoTheme(colors = state.colors) {
+                        KumihoTheme(colors = state.colors, language = language) {
                             BlockedRegionGuide(
                                 container = container,
                                 onClose = container.guide::close,
@@ -165,10 +169,14 @@ private fun KumihoLoadingSurface() {
  * default purple is ever visible.
  */
 @Composable
-private fun PaletteErrorSurface(message: String, onRetry: () -> Unit) {
+private fun PaletteErrorSurface(
+    message: String,
+    language: AppLanguage,
+    onRetry: () -> Unit,
+) {
     val background = colorResource(R.color.kumiho_background)
     val foreground = colorResource(R.color.kumiho_on_surface)
-    MaterialTheme(typography = KumihoTypography, shapes = KumihoShapes) {
+    MaterialTheme(typography = kumihoTypography(language), shapes = KumihoShapes) {
         Surface(modifier = Modifier.fillMaxSize(), color = background) {
             Column(
                 modifier = Modifier

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.theme.Dimens
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import java.time.ZoneId
 
 /**
@@ -42,8 +43,9 @@ fun StatusDetails(
     val status = state.status
     val zone = rememberZone()
     val locale = LocalConfiguration.current.locales[0]
-    val tokenExpiry = DashboardFormat.dateLabel(status?.tokenExpires ?: 0L, zone, locale)
-    val passExpiry = DashboardFormat.dateLabel(status?.passExpires ?: 0L, zone, locale)
+    val language = LocalAppLanguage.current
+    val tokenExpiry = DashboardFormat.dateLabel(status?.tokenExpires ?: 0L, zone, locale, language)
+    val passExpiry = DashboardFormat.dateLabel(status?.passExpires ?: 0L, zone, locale, language)
     val dns = status?.dns?.takeIf { it.isNotBlank() }
 
     KumihoCard(modifier = modifier.testTag(DashboardTags.DETAILS)) {

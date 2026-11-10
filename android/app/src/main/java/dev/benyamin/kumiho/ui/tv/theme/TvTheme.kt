@@ -3,12 +3,15 @@ package dev.benyamin.kumiho.ui.tv.theme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ColorScheme
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Shapes
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.KumihoShapes
+import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
 /**
@@ -18,16 +21,27 @@ import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
  * too because the shared sign-in and editor text fields are Material 3.
  */
 @Composable
-fun TvKumihoTheme(colors: KumihoColors, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalKumihoColors provides colors) {
+fun TvKumihoTheme(
+    colors: KumihoColors,
+    language: AppLanguage = AppLanguage.ENGLISH,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalKumihoColors provides colors,
+        LocalAppLanguage provides language,
+    ) {
         androidx.compose.material3.MaterialTheme(
             colorScheme = colors.toColorScheme(),
-            typography = TvM3Typography,
+            typography = if (language == AppLanguage.PERSIAN) {
+                PersianTvM3Typography
+            } else {
+                EnglishTvM3Typography
+            },
             shapes = KumihoShapes,
         ) {
             MaterialTheme(
                 colorScheme = colors.toTvColorScheme(),
-                typography = TvTypography,
+                typography = tvTypography(language),
                 shapes = TvShapes,
                 content = content,
             )
@@ -48,7 +62,16 @@ val TvShapes = Shapes(
  * The same TV scale expressed for Compose Material 3, used only where a shared
  * phone pane (sign-in, browser waiting) is embedded in a TV page.
  */
-val TvM3Typography = androidx.compose.material3.Typography(
+val TvM3Typography: androidx.compose.material3.Typography
+    @Composable
+    @ReadOnlyComposable
+    get() = if (LocalAppLanguage.current == AppLanguage.PERSIAN) {
+        PersianTvM3Typography
+    } else {
+        EnglishTvM3Typography
+    }
+
+private val EnglishTvM3Typography = androidx.compose.material3.Typography(
     displayLarge = TvTypography.displayLarge,
     displayMedium = TvTypography.displayMedium,
     displaySmall = TvTypography.displaySmall,
@@ -64,6 +87,24 @@ val TvM3Typography = androidx.compose.material3.Typography(
     labelLarge = TvTypography.labelLarge,
     labelMedium = TvTypography.labelMedium,
     labelSmall = TvTypography.labelSmall,
+)
+
+private val PersianTvM3Typography = androidx.compose.material3.Typography(
+    displayLarge = PersianTvTypography.displayLarge,
+    displayMedium = PersianTvTypography.displayMedium,
+    displaySmall = PersianTvTypography.displaySmall,
+    headlineLarge = PersianTvTypography.headlineLarge,
+    headlineMedium = PersianTvTypography.headlineMedium,
+    headlineSmall = PersianTvTypography.headlineSmall,
+    titleLarge = PersianTvTypography.titleLarge,
+    titleMedium = PersianTvTypography.titleMedium,
+    titleSmall = PersianTvTypography.titleSmall,
+    bodyLarge = PersianTvTypography.bodyLarge,
+    bodyMedium = PersianTvTypography.bodyMedium,
+    bodySmall = PersianTvTypography.bodySmall,
+    labelLarge = PersianTvTypography.labelLarge,
+    labelMedium = PersianTvTypography.labelMedium,
+    labelSmall = PersianTvTypography.labelSmall,
 )
 
 /**
