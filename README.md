@@ -67,20 +67,16 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.11.0
+## What's new in v0.11.1
 
-- **A blocked region no longer dead-ends the first run** — sign in through
-  another VPN (or the relay), run `kumiho prepare` once, turn the other VPN
-  off, and connect. Kumiho renews its own control-plane requests through the
-  tunnel. The same **Blocked region** guide is in the CLI/TUI, Windows GUI,
-  Android phone and Android TV.
-- **Prepare is one command** — `kumiho prepare` fetches the server list, your
-  profile and a Guardian pass, persists only the pass (0600), and reports the
-  handoff without ever printing the token. `kumiho guide` prints the same
-  instructions.
+- **Blocked-region recovery is easier to reach on Android** — a connect failure
+  caused by HTTP 451 or an expired prepared pass now offers **Open guide**
+  instead of a retry that cannot succeed.
+- **The guide and relay controls fit the screen** — the guide respects the
+  status bar and display cutout, and the relay token actions stay inline with
+  the label.
 
-v0.10.3 made a challenged password sign-in continue in the browser; see the
-[changelog](CHANGELOG.md) for details.
+See the [changelog](CHANGELOG.md) for details.
 
 ## Install
 
