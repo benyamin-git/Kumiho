@@ -97,7 +97,8 @@ function buildRows(locations) {
     for (const city of (country && country.cities) || []) {
       const cityName = String((city && city.name) || "").trim();
       const cityCode = String((city && city.code) || "").trim();
-      const visibleCity = cityName &&
+      const visibleCity = !recommended &&
+        cityName &&
         cityName.toLowerCase() !== countryName.toLowerCase() &&
         cityName.toLowerCase() !== rawCountryName.toLowerCase()
         ? cityName

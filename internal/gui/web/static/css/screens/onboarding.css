@@ -111,11 +111,23 @@
   flex-direction: column;
   gap: var(--space-2);
   margin: 0;
-  padding-inline-start: var(--space-6);
+  padding-inline-start: 0;
+  list-style: none;
 }
 
 .onb__consent-list li {
+  position: relative;
   max-inline-size: var(--content-measure);
+  padding-inline-start: var(--space-6);
+}
+
+/* Draw the bullet ourselves: a flex list would otherwise put the marker on
+ * the physical left even in RTL. The logical inset keeps it inline-start. */
+.onb__consent-list li::before {
+  content: "•";
+  position: absolute;
+  inset-inline-start: 0;
+  color: var(--text-muted);
 }
 
 /* The house-drawn checkbox: the box, the label, and a check mark shape that
