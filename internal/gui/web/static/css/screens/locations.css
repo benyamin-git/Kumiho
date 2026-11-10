@@ -51,6 +51,13 @@
   text-transform: uppercase;
 }
 
+/* Letter-spacing breaks Arabic-script joining; the heading keeps its weight
+ * and size but not the Latin small-caps treatment. */
+html[lang="fa"] .loc__heading-title {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .loc__clear {
   min-block-size: 40px;
   padding-inline: var(--space-2);
@@ -169,6 +176,7 @@
 .loc__detail {
   color: var(--text-muted);
   font-size: var(--text-xs);
+  unicode-bidi: isolate;
 }
 
 .loc__trailing {
@@ -183,6 +191,7 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
   text-align: end;
+  unicode-bidi: isolate;
 }
 
 .loc__check {

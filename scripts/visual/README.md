@@ -41,8 +41,11 @@ refuses a `KUMIHO_CAPTURES_DIR` inside the repository.
 ## Run
 
     scripts/dev-gui-web.sh start
-    node scripts/visual/capture.mjs                # the full 68-capture run
+    node scripts/visual/capture.mjs                # the full 78-capture run
+    node scripts/visual/capture.mjs --all
     node scripts/visual/capture.mjs --only dashboard
+    node scripts/visual/capture.mjs --lang fa --all # Persian RTL run
+    node scripts/visual/capture.mjs --lang fa --only dashboard
     node scripts/visual/capture.mjs --list         # manifest + planned files
     scripts/dev-gui-web.sh stop
 
@@ -58,6 +61,12 @@ sweep and states for `dashboard`, this screen's states for the others, and no
 dev panel (`--only dev` is the dev panel alone). It is the iteration loop for
 a single screen task.
 
+`--lang <en|fa>` pins the UI language with `?lang=…` on every page load, so
+the result never depends on the harness's cached first-paint language or its
+engine state. It also selects the matching browser locale (`en-US` or
+`fa-IR`). `--all` is the default full run and is rejected together with
+`--only`; it exists so the documented full-run command is explicit.
+
 ## Output layout
 
     /tmp/opencode/captures/
@@ -65,6 +74,11 @@ a single screen task.
       <screen>/<theme>-<accent>.png            e.g. dashboard/dark-teal.png
       <screen>/<theme>[-<accent>]-<state>.png  e.g. dashboard/dark-connected.png
       dev/panel.png                            the harness control panel, once
+      fa/<screen>/…                            the same layout for --lang fa
+
+The Persian run writes under `fa/` so it never deletes or mixes with the
+English captures. The dev panel (the harness's own `/dev` UI) is not part of
+the product and stays English in both runs.
 
 - The screen × theme matrix uses the default accent (blue), so
   `dashboard/dark.png` and the `dark-blue` capture of the accent sweep are
@@ -92,6 +106,7 @@ Screens (hash routes of the SPA, T2.1's router owns them):
 | account | `#/account` | T3.1 |
 | logs | `#/logs` | T3.2 |
 | diagnostics | `#/diagnostics` | T3.3 |
+| blocked-region | `#/blocked-region` | v0.11.0 |
 | onboarding | `#/onboarding` | T3.4 |
 
 Themes: `light`, `dark`, `oled`. Accents: `blue`, `teal`, `green`, `orange`,
@@ -150,7 +165,8 @@ run needs no changes.
   (logged as a warning). Every capture is checked for existence and a
   non-trivial size.
 - **Determinism:** 1280×800 viewport at scale 1, `prefers-reduced-motion:
-  reduce`, `en-US`/UTC. Theme and accent changes go live through `POST
+  reduce`, UTC, and the browser locale matching `--lang` (`en-US` or
+  `fa-IR`). Theme and accent changes go live through `POST
   /action` `prefs_set` followed by a reload (the harness re-injects the theme
   CSS on the next index render). Each state is preceded by a reset
   (`scenario disconnected`, latency 0, fail cleared); states that leave a

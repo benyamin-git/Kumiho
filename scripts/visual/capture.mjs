@@ -6,7 +6,7 @@
 //
 // Usage and the manifest contract are documented in scripts/visual/README.md:
 //
-//   node scripts/visual/capture.mjs [--only <screen>] [--list]
+//   node scripts/visual/capture.mjs [--only <screen>] [--lang <en|fa>] [--all] [--list]
 //
 // The harness must be running (scripts/dev-gui-web.sh start) and playwright
 // must be resolvable (see resolvePlaywright; no repo package.json exists).
@@ -160,7 +160,7 @@ const STATES = [
     screen: "diagnostics",
     waitFor: ".diag__check",
     click: ["#diag-cleanup", "#diag-cleanup-confirm"],
-    waitAfter: '.diag__status:has-text("Cleanup finished")',
+    waitAfter: '[data-code="diagnostics.cleanup.done"]',
   },
   {
     // A re-run in flight: the list clears to the `Checking…` placeholder and
@@ -178,7 +178,7 @@ const STATES = [
     screen: "diagnostics",
     waitFor: ".diag__check",
     click: ["#diag-copy"],
-    waitAfter: '.diag__status:has-text("Details copied")',
+    waitAfter: '[data-code="diagnostics.copy.done"]',
   },
   {
     // A completed service stop: the card reads Stopped and the notice shows.
@@ -186,7 +186,7 @@ const STATES = [
     screen: "diagnostics",
     waitFor: ".diag__check",
     click: ["#diag-service-stop"],
-    waitAfter: '.diag__status:has-text("Service stopped")',
+    waitAfter: '[data-code="diagnostics.service.done"][data-verb="stop"]',
   },
   {
     // A completed service start: everything is back to the initial state.
@@ -194,7 +194,7 @@ const STATES = [
     screen: "diagnostics",
     waitFor: ".diag__check",
     click: ["#diag-service-start"],
-    waitAfter: '.diag__status:has-text("Service started")',
+    waitAfter: '[data-code="diagnostics.service.done"][data-verb="start"]',
   },
   {
     name: "live-entry",
@@ -548,11 +548,18 @@ function printManifest() {
 // ---- argument handling ----------------------------------------------------
 
 function parseArgs(argv) {
-  const opts = { only: null, list: false, help: false };
+  const opts = { only: null, lang: "en", all: false, list: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--list") opts.list = true;
+    else if (arg === "--all") opts.all = true;
     else if (arg === "--help" || arg === "-h") opts.help = true;
+    else if (arg === "--lang") {
+      const value = argv[++i];
+      if (!value) throw new Error("--lang needs en or fa");
+      opts.lang = value;
+    }
+    else if (arg.startsWith("--lang=")) opts.lang = arg.slice("--lang=".length);
     else if (arg === "--only") {
       const value = argv[++i];
       if (!value) throw new Error("--only needs a screen name");
@@ -560,6 +567,13 @@ function parseArgs(argv) {
     }
     else if (arg.startsWith("--only=")) opts.only = arg.slice("--only=".length);
     else throw new Error(`unknown argument ${arg}`);
+  }
+  opts.lang = String(opts.lang || "").toLowerCase();
+  if (opts.lang !== "en" && opts.lang !== "fa") {
+    throw new Error(`--lang ${opts.lang}: expected en or fa`);
+  }
+  if (opts.all && opts.only) {
+    throw new Error("--all captures every screen; do not combine it with --only");
   }
   if (opts.only) {
     const valid = new Set([...SCREENS.map((s) => s.name), "dev"]);
@@ -571,9 +585,11 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  console.log(`usage: node scripts/visual/capture.mjs [--only <screen>] [--list]
+  console.log(`usage: node scripts/visual/capture.mjs [--only <screen>] [--lang <en|fa>] [--all] [--list]
 
   --only <screen>  capture one destination (${SCREENS.map((s) => s.name).join(", ")}, dev)
+  --lang <en|fa>   UI language to pin for the run (default en); fa writes under fa/
+  --all            capture every screen (the default; cannot combine with --only)
   --list           print the manifest and the planned captures, then exit
   --help           this text
 
@@ -751,15 +767,22 @@ function assertOutsideRepo(dir) {
   }
 }
 
-function prepareDirs(plan) {
+function prepareDirs(plan, root) {
   const dirs = new Set(plan.map((item) => path.dirname(item.file)));
   for (const dir of dirs) {
-    const full = path.join(CAPTURES_DIR, dir);
+    const full = path.join(root, dir);
     mkdirSync(full, { recursive: true });
     for (const entry of readdirSync(full)) {
       if (entry.endsWith(".png")) rmSync(path.join(full, entry));
     }
   }
+}
+
+/** Pin the UI language regardless of the harness's cached first-paint value. */
+function languageURL(target, lang) {
+  const url = new URL(target);
+  url.searchParams.set("lang", lang);
+  return url.toString();
 }
 
 async function main() {
@@ -769,22 +792,24 @@ async function main() {
     return;
   }
   const plan = buildPlan(opts.only);
+  const root = opts.lang === "fa" ? path.join(CAPTURES_DIR, "fa") : CAPTURES_DIR;
   if (opts.list) {
     printManifest();
-    console.log(`\n${plan.length} planned captures under ${CAPTURES_DIR}:`);
+    console.log(`\n${plan.length} planned captures under ${root}:`);
     for (const item of plan) console.log(`  ${item.file}`);
     return;
   }
 
-  assertOutsideRepo(CAPTURES_DIR);
+  assertOutsideRepo(root);
   const { mod: pw, dir: pwDir, version: pwVersion } = resolvePlaywright();
   console.log(`harness:  ${HARNESS_URL}`);
-  console.log(`output:   ${CAPTURES_DIR}`);
+  console.log(`language: ${opts.lang}`);
+  console.log(`output:   ${root}`);
   console.log(
     `playwright: ${pwVersion || "unknown version"} (${pwDir})`,
   );
   await preflight();
-  prepareDirs(plan);
+  prepareDirs(plan, root);
 
   let browser;
   try {
@@ -808,7 +833,7 @@ async function main() {
       viewport: VIEWPORT,
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
       reducedMotion: "reduce",
-      locale: "en-US",
+      locale: opts.lang === "fa" ? "fa-IR" : "en-US",
       timezoneId: "UTC",
       // The diagnostics Copy details capture writes to the clipboard; grant
       // the permissions up front so the headless run is deterministic.
@@ -869,7 +894,7 @@ async function main() {
 
     const capture = async (item) => {
       await settle();
-      const full = path.join(CAPTURES_DIR, item.file);
+      const full = path.join(root, item.file);
       await page.screenshot({ path: full, type: "png" });
       const bytes = statSync(full).size;
       results.push({ file: item.file, bytes });
@@ -964,7 +989,7 @@ async function main() {
     await postAction("prefs_set", { theme: DEFAULT_THEME, accent: DEFAULT_ACCENT, onboarded: true });
     current = { theme: DEFAULT_THEME, accent: DEFAULT_ACCENT };
     await resetDevState();
-    await navigate(HARNESS_URL, "initial navigation");
+    await navigate(languageURL(HARNESS_URL, opts.lang), "initial navigation");
 
     console.log(`\n${plan.length} captures:`);
     for (const item of plan) {

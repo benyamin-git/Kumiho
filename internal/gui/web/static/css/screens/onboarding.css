@@ -380,6 +380,9 @@
   background: var(--background);
   font-size: var(--text-xs);
   user-select: all;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
 }
 
 /* The pasted redirect URL is long and one-shot: give it the card's width. */

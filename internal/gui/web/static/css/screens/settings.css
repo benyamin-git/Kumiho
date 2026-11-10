@@ -123,6 +123,8 @@
 }
 
 .set__version {
+  direction: ltr;
+  unicode-bidi: isolate;
   font-weight: 600;
 }
 
@@ -134,9 +136,13 @@
   color: var(--text-muted);
 }
 
-/* Daemon rows: text/number inputs (the walk-era 240-unit edit) + Apply. */
+/* Daemon rows: text/number inputs (the walk-era 240-unit edit) + Apply.
+ * Every one edits a Latin technical value (IP, CIDR, URL, token, number), so
+ * it stays LTR even while the row label and hint are Persian. */
 .set__edit {
   inline-size: 240px;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .set__apply,

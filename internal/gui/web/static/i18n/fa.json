@@ -6,6 +6,8 @@
   "nav.account": "حساب",
   "nav.logs": "گزارش‌ها",
   "nav.diagnostics": "عیب‌یابی",
+  "nav.onboarding": "راه‌اندازی",
+  "nav.blocked_region": "منطقهٔ مسدود",
   "common.not_built_title": "هنوز چیزی اینجا نیست",
   "common.not_built_detail": "صفحهٔ {title} هنوز ساخته نشده است.",
   "unit.bytes": "بایت",

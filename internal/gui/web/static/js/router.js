@@ -71,6 +71,12 @@ const LAST_ROUTE_KEY = "kumiho:last-route";
 // hides the shell chrome.
 const WIZARD_SCREEN = "onboarding";
 
+/** Catalog keys for screens that are not rail destinations. */
+const OFF_RAIL_TITLES = {
+  onboarding: "nav.onboarding",
+  "blocked-region": "nav.blocked_region",
+};
+
 /** id -> { load: () => Promise<module>, css: string }; filled by registerScreen. */
 const loaders = new Map();
 
@@ -185,7 +191,11 @@ export function initRouter(opts) {
   function titleFor(id) {
     const link = links.find((el) => el.dataset.screen === id);
     const label = link ? link.textContent.trim() : "";
-    return label || capitalize(id);
+    if (label) return label;
+    // Screens outside the rail (the first-run wizard and the blocked-region
+    // guide) still need a translated shell title instead of a capitalized id.
+    const key = OFF_RAIL_TITLES[id];
+    return key ? t(key) : capitalize(id);
   }
 
   const appEl = document.querySelector(".app");

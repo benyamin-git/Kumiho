@@ -234,6 +234,7 @@ function build(host) {
   const waitingBody = el("p", "acct__waiting-body", t("account.waiting.body"));
   const waitingURL = el("p", "acct__waiting-url");
   const redirect = fieldBox("acct-browser-redirect", t("account.waiting.redirect_label"), "text", "off");
+  redirect.input.dir = "auto";
   redirect.input.placeholder = t("account.waiting.redirect_placeholder");
   redirect.wrap.classList.add("acct__redirect");
   const redirectError = el("p", "acct__waiting-error");
@@ -259,9 +260,12 @@ function build(host) {
   addformTitle.id = "acct-addform-title";
   const addformBody = el("p", "acct__addform-body");
   const email = fieldBox("acct-add-email", t("account.field.email"), "email", "username");
+  email.input.dir = "ltr";
   email.input.placeholder = "you@example.com";
   const password = fieldBox("acct-add-password", t("account.field.password"), "password", "current-password");
+  password.input.dir = "ltr";
   const code = fieldBox("acct-add-code", t("account.field.code"), "text", "one-time-code");
+  code.input.dir = "ltr";
   password.wrap.hidden = true;
   code.wrap.hidden = true;
   const formStatus = el("p", "acct__form-status");
@@ -312,6 +316,7 @@ function build(host) {
   threshold.input.max = "50";
   threshold.input.step = "1";
   threshold.input.inputMode = "numeric";
+  threshold.input.dir = "ltr";
   rotation.append(rotationHead, rotationBody, threshold.wrap);
   rotation.setAttribute("aria-labelledby", rotationTitle.id);
 
@@ -712,9 +717,11 @@ export default {
       if (account.reauth_required) item.dataset.reauth = "true";
 
       const identity = el("div", "acct__identity");
-      const nameNode = el("span", "acct__name", name);
+      const nameNode = el("span", "acct__name");
       nameNode.title = email || name;
-      const emailNode = el("span", "acct__email", email !== name ? email : "");
+      nameNode.append(el("bdi", null, name));
+      const emailNode = el("span", "acct__email");
+      if (email !== name) emailNode.append(el("bdi", null, email));
       if (email === name) emailNode.hidden = true;
       const marks = el("div", "acct__marks");
       if (account.active) {

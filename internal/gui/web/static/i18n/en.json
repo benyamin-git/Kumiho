@@ -6,6 +6,8 @@
   "nav.account": "Account",
   "nav.logs": "Logs",
   "nav.diagnostics": "Diagnostics",
+  "nav.onboarding": "Setup",
+  "nav.blocked_region": "Blocked region",
   "common.not_built_title": "Nothing here yet",
   "common.not_built_detail": "The {title} screen is not built yet.",
   "unit.bytes": "B",

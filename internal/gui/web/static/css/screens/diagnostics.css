@@ -136,6 +136,20 @@
   overflow-wrap: anywhere;
 }
 
+/* The check title and its English facts stay left-to-right strings, but in
+ * the Persian layout they align to the card's inline start (the right edge)
+ * so they read with the localized chip instead of floating mid-card. */
+html[lang="fa"] .diag__check-title,
+html[lang="fa"] .diag__check-line {
+  text-align: end;
+}
+
+/* The Fix: line is a Persian label followed by an isolated English fact;
+ * it follows the row's writing direction rather than the fact direction. */
+html[lang="fa"] .diag__check-fix {
+  text-align: start;
+}
+
 /* Tone is enhancement only; the Fix: line carries the remediation text. */
 .diag__check-fix[data-tone="bad"] {
   color: var(--loss);

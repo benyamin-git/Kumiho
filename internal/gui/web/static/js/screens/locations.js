@@ -545,15 +545,17 @@ export default {
         rowEl.setAttribute("aria-selected", "false");
         if (row.disabled) rowEl.setAttribute("aria-disabled", "true");
 
-        const flag = el("span", "loc__flag");
+        const flag = el("span", "loc__flag icon--keep");
         flag.setAttribute("aria-hidden", "true");
         if (row.countryCode) flag.append(flagIcon(row.countryCode));
         rowEl.append(flag);
 
         const main = el("span", "loc__main");
+        const detail = el("span", "loc__detail");
+        detail.append(el("bdi", null, row.detail));
         main.append(
           el("span", "loc__title", row.title),
-          el("span", "loc__detail", row.detail),
+          detail,
         );
         rowEl.append(main);
 
@@ -564,21 +566,23 @@ export default {
           trailing.append(badge);
         }
         const latency = el("span", "loc__latency");
-        const star = el("button", "button loc__star");
+        const latencyText = el("bdi");
+        latency.append(latencyText);
+        const star = el("button", "button loc__star icon--keep");
         star.type = "button";
         star.hidden = !!row.fastest;
         star.addEventListener("click", function (event) {
           event.stopPropagation();
           onFavorite(row);
         });
-        const check = el("span", "loc__check", "✓");
+        const check = el("span", "loc__check icon--keep", "✓");
         check.setAttribute("aria-hidden", "true");
         check.hidden = true;
         trailing.append(latency, star, check);
         rowEl.append(trailing);
 
         frag.append(rowEl);
-        els.push({ el: rowEl, latency: latency, star: star, check: check });
+        els.push({ el: rowEl, latency: latencyText, star: star, check: check });
       });
       ui.list.replaceChildren(frag);
       view.rowEls = els;

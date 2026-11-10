@@ -380,8 +380,11 @@ function build(host) {
   signed.append(signedIdentity, signout);
   signed.hidden = true;
   const email = fieldBox("onb-email", t("onboarding.login.email_label"), "email", "you@example.com");
+  email.input.dir = "ltr";
   const password = fieldBox("onb-password", t("onboarding.login.password_label"), "password", "");
+  password.input.dir = "ltr";
   const code = fieldBox("onb-code", t("onboarding.login.code_label"), "text", "");
+  code.input.dir = "ltr";
   password.wrap.hidden = true;
   code.wrap.hidden = true;
   // The browser waiting card: the engine URL, the pasted redirect URL,
@@ -391,6 +394,7 @@ function build(host) {
   const browserBody = el("p", "onb__body", t(LOGIN_WAITING_BODY_KEY));
   const browserURL = el("p", "onb__browser-url");
   const browserRedirect = fieldBox("onb-browser-redirect", t("onboarding.login.redirect_label"), "text", t("onboarding.login.redirect_placeholder"));
+  browserRedirect.input.dir = "auto";
   const browserError = el("p", "onb__browser-error");
   browserError.id = "onb-browser-error";
   browserError.setAttribute("aria-live", "polite");
@@ -1071,16 +1075,17 @@ export default {
      * (remediation only for Warning/Failed). */
     function checkRow(check) {
       const item = el("li", "onb__check");
-      item.append(document.createTextNode((check.title || check.name || "") + ": "));
+      // The doctor's name and facts stay English; isolate each Latin run so
+      // the Persian status word between them cannot reorder the line.
+      item.append(el("bdi", null, check.title || check.name || ""), ": ");
       const statusKey = HEALTH_STATUS_KEYS[check.status];
       const word = el("span", "onb__check-word", statusKey ? t(statusKey) : (check.status_word || ""));
       if (check.tone) word.dataset.tone = check.tone;
-      item.append(word);
-      let rest = ": " + (check.detail || "");
+      item.append(word, ": ");
+      item.append(el("bdi", null, check.detail || ""));
       if (check.remediation && (check.status === "warn" || check.status === "fail")) {
-        rest += " — " + check.remediation;
+        item.append(" — ", el("bdi", null, check.remediation));
       }
-      item.append(document.createTextNode(rest));
       return item;
     }
 

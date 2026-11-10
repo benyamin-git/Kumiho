@@ -69,6 +69,12 @@
   color: var(--loss);
 }
 
+/* Plan names, dates and the quota sentence may mix Latin identifiers with
+ * Persian copy; isolate the value without changing its row alignment. */
+.acct__value {
+  unicode-bidi: isolate;
+}
+
 /* ---------------------------------------------------------------- sign out */
 
 .acct__signout {
@@ -176,6 +182,7 @@
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+  unicode-bidi: isolate;
 }
 
 .acct__email {
@@ -184,6 +191,7 @@
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+  unicode-bidi: isolate;
 }
 
 .acct__marks {
@@ -290,6 +298,9 @@
   background: var(--background);
   font-size: var(--text-xs);
   user-select: all;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
 }
 
 /* The pasted redirect URL is long and one-shot: give it the card's width. */

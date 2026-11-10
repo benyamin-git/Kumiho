@@ -74,6 +74,11 @@ function el(tag, className, text) {
   return node;
 }
 
+/** A Latin technical value kept intact inside the surrounding RTL row. */
+function bdi(text) {
+  return el("bdi", null, text);
+}
+
 /** Build the screen's DOM and return its element references. */
 function build(host) {
   const root = el("div", "dash");
@@ -100,7 +105,7 @@ function build(host) {
   const location = document.createElement("select");
   location.className = "input";
   location.id = "dash-opt-location";
-  const locationFlag = el("span", "dash__flag");
+  const locationFlag = el("span", "dash__flag icon--keep");
   locationFlag.setAttribute("aria-hidden", "true");
   locationFlag.hidden = true;
   const locationControl = el("div", "dash__location");
@@ -387,7 +392,9 @@ export default {
     }
 
     function setRow(entry, text, tone) {
-      entry.value.textContent = text;
+      entry.value.replaceChildren();
+      if (typeof text === "string") entry.value.textContent = text;
+      else if (text) entry.value.append(text);
       if (tone) entry.value.dataset.tone = tone;
       else delete entry.value.dataset.tone;
       const show = text !== "";
@@ -448,8 +455,8 @@ export default {
 
     function renderRows(status) {
       setRow(ui.rows.get("uptime"), uptimeText(status));
-      setRow(ui.rows.get("location"), status ? locationText(status) : "");
-      setRow(ui.rows.get("exit_ip"), status ? exitText(status) : "");
+      setRow(ui.rows.get("location"), status ? bdi(locationText(status)) : "");
+      setRow(ui.rows.get("exit_ip"), status ? bdi(exitText(status)) : "");
       setRow(ui.rows.get("rates"), ratesText(status));
       setRow(ui.rows.get("totals"), totalsText(status));
       // Kill switch and Autoconnect are hidden until the first status; a

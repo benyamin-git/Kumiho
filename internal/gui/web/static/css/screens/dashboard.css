@@ -191,6 +191,12 @@
   color: var(--warning);
 }
 
+/* Keep mixed values (server host:port, IP, country) from reordering inside
+ * the RTL row. The value itself stays aligned at the row's inline start. */
+.dash__value {
+  unicode-bidi: isolate;
+}
+
 .dash__bar {
   block-size: 8px;
   border-radius: var(--radius-full);
@@ -198,8 +204,11 @@
   overflow: hidden;
 }
 
+/* The fill starts at the track's inline-start edge: left in LTR, right in
+ * RTL. The auto end margin anchors the sized block without a physical offset. */
 .dash__bar-fill {
   block-size: 100%;
+  margin-inline-end: auto;
   border-radius: var(--radius-full);
   background: var(--primary);
 }

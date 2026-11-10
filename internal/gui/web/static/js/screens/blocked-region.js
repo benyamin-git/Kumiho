@@ -96,6 +96,7 @@ function build(host) {
   relayInput.type = "url";
   relayInput.autocomplete = "off";
   relayInput.spellcheck = false;
+  relayInput.dir = "ltr";
   relayInput.placeholder = t("region.relay_url_placeholder");
   const relayApply = el("button", "button button--tonal", t("region.relay.apply"));
   relayApply.type = "button";
@@ -112,6 +113,7 @@ function build(host) {
   tokenInput.type = "password";
   tokenInput.autocomplete = "new-password";
   tokenInput.spellcheck = false;
+  tokenInput.dir = "auto";
   tokenInput.placeholder = t("region.relay_token_placeholder");
   const tokenSave = el("button", "button button--tonal", t("region.relay.save_token"));
   tokenSave.type = "button";
@@ -198,7 +200,7 @@ export default {
       const fragment = document.createDocumentFragment();
       for (const h of check.hosts || []) {
         const item = el("li", "region__host");
-        item.append(el("span", "region__hostname", h.host));
+        item.append(el("span", "region__hostname text-ltr", h.host));
         const chip = el("span", "chip", t(("region.host.") + (h.status || "unknown")));
         chip.dataset.tone = h.status === "blocked" ? "bad" : h.status === "unknown" ? "warn" : "good";
         item.append(chip);

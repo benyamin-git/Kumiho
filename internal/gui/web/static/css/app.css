@@ -51,6 +51,18 @@ html[lang="fa"] {
   --font-sans: "Vazirmatn", system-ui, "Segoe UI", sans-serif;
 }
 
+/* Persian glyphs need more vertical room than the Latin system stack; the
+ * type scale itself stays unchanged (D33). Headings stay tighter than body
+ * copy so they still read as headings at the same sizes. */
+html[lang="fa"] body {
+  line-height: 1.75;
+}
+
+html[lang="fa"] :is(h1, h2, h3, h4, h5, h6),
+html[lang="fa"] .set__heading {
+  line-height: 1.4;
+}
+
 /* The catalogs load before the shell paints; visibility (not display) keeps
  * the final layout stable while hiding the English first paint. app.js removes
  * the class after initI18n resolves, including on a catalog failure. */
@@ -602,6 +614,28 @@ select.input {
 /* ------------------------------------------------------------------------
  * Utilities
  * ---------------------------------------------------------------------- */
+
+/* A Latin technical value (version, email, host:port, URL) inside Persian
+ * copy. The isolate keeps the surrounding sentence from reordering it. */
+.text-ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Directional glyphs (back/forward/chevron/arrow) mirror with the writing
+ * direction; brand marks, flags, checks and status dots opt out. The web UI
+ * currently draws no directional glyph (the native select and disclosure
+ * markers follow the document direction themselves), but the classes are the
+ * contract future icons inherit. */
+[dir="rtl"] .icon--directional {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .icon--directional.icon--keep,
+[dir="rtl"] .icon--keep {
+  transform: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

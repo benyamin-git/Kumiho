@@ -136,9 +136,11 @@ function checkBlock(check) {
     item.append(detail);
   }
   if (check.remediation && (check.status === "warn" || check.status === "fail")) {
-    const fix = el("p", "diag__check-line diag__check-fix",
-      t("diagnostics.fix") + " " + check.remediation);
-    fix.dir = "ltr";
+    const fix = el("p", "diag__check-line diag__check-fix");
+    // The label is localized, the remediation stays the English doctor fact;
+    // the bdi keeps the fact intact without turning the whole line LTR.
+    fix.dir = "auto";
+    fix.append(t("diagnostics.fix") + " ", el("bdi", null, check.remediation));
     if (check.tone) fix.dataset.tone = check.tone;
     item.append(fix);
   }
@@ -326,6 +328,8 @@ export default {
       statusText: null,
       statusTone: null,
       statusDetail: null,
+      statusCode: null,
+      statusVerb: null,
       copyNotice: "",
       copyError: "",
       copyErrorDetail: "",
@@ -586,16 +590,30 @@ export default {
       const notice = snapshot.diagnostics_notice;
       if (notice && notice.tone === "bad") {
         const presentation = noticeText(notice);
-        return { text: presentation.text, tone: "bad", detail: presentation.detail };
+        return {
+          text: presentation.text,
+          tone: "bad",
+          detail: presentation.detail,
+          code: notice.code || "",
+          verb: (notice.params && notice.params.verb) || "",
+        };
       }
       if (notice) {
         const presentation = noticeText(notice);
         if (presentation.text) {
           const tone = notice.tone === "good" || notice.tone === "warn" ? notice.tone : "";
-          return { text: presentation.text, tone: tone, detail: presentation.detail };
+          return {
+            text: presentation.text,
+            tone: tone,
+            detail: presentation.detail,
+            code: notice.code || "",
+            verb: (notice.params && notice.params.verb) || "",
+          };
         }
       }
-      if (view.copyNotice) return { text: view.copyNotice, tone: "good", detail: "" };
+      if (view.copyNotice) {
+        return { text: view.copyNotice, tone: "good", detail: "", code: "diagnostics.copy.done" };
+      }
       const checks = (doctor && doctor.checks) || [];
       if (checks.length > 0) return Object.assign(summaryLine(checks), { detail: "" });
       return { text: "", tone: "", detail: "" };
@@ -603,14 +621,24 @@ export default {
 
     function renderStatus(snapshot) {
       const line = statusLine(snapshot);
-      if (line.text === view.statusText && line.tone === view.statusTone && line.detail === view.statusDetail) return;
+      const code = line.code || "";
+      const verb = line.verb || "";
+      if (line.text === view.statusText && line.tone === view.statusTone &&
+          line.detail === view.statusDetail && code === view.statusCode &&
+          verb === view.statusVerb) return;
       view.statusText = line.text;
       view.statusTone = line.tone;
       view.statusDetail = line.detail;
+      view.statusCode = code;
+      view.statusVerb = verb;
       ui.status.textContent = line.text;
       ui.status.title = line.text;
       if (line.tone) ui.status.dataset.tone = line.tone;
       else delete ui.status.dataset.tone;
+      if (code) ui.status.dataset.code = code;
+      else delete ui.status.dataset.code;
+      if (verb) ui.status.dataset.verb = verb;
+      else delete ui.status.dataset.verb;
       ui.status.hidden = line.text === "";
       ui.details.textContent = line.detail;
       ui.details.hidden = line.detail === "";
