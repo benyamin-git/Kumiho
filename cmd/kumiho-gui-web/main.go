@@ -267,15 +267,15 @@ func (d *devService) run(name string) {
 		d.publish(gui.ServiceState{Installed: true, State: "start pending", Busy: true})
 		time.Sleep(700 * time.Millisecond)
 		d.publish(gui.ServiceState{Installed: true, State: "running"})
-		d.ctrl.SetDiagnosticsNotice("Service started", "good")
+		d.ctrl.SetDiagnosticsNoticeCode("diagnostics.service.done", map[string]any{"verb": "start", "code": 0}, "Service started", "good")
 	case gui.ActionServiceStop:
 		d.publish(gui.ServiceState{Installed: true, State: "stop pending", Busy: true})
 		time.Sleep(700 * time.Millisecond)
 		d.publish(gui.ServiceState{Installed: true, State: "stopped"})
-		d.ctrl.SetDiagnosticsNotice("Service stopped", "good")
+		d.ctrl.SetDiagnosticsNoticeCode("diagnostics.service.done", map[string]any{"verb": "stop", "code": 0}, "Service stopped", "good")
 	default: // cleanup
 		time.Sleep(900 * time.Millisecond)
-		d.ctrl.SetDiagnosticsNotice("Cleanup finished", "good")
+		d.ctrl.SetDiagnosticsNoticeCode("diagnostics.cleanup.done", map[string]any{"code": 0}, "Cleanup finished", "good")
 	}
 	log.Printf("dev service: %s done", name)
 }

@@ -287,3 +287,66 @@ func TestFrozenActionVocabulary(t *testing.T) {
 }
 
 func float64Ptr(v float64) *float64 { return &v }
+
+// TestStructuredFieldsJSON pins the additive notice/raw-field wire shape:
+// every new field is omitted when zero and present when set, so an old
+// client sees exactly the earlier payload until the controller has codes.
+func TestStructuredFieldsJSON(t *testing.T) {
+	zero, err := EncodeState(State{
+		Notice:  &Notice{Message: "message only"},
+		Status:  &StatusView{Label: "Off"},
+		Service: ServiceState{},
+		Login:   &LoginView{},
+	})
+	if err != nil {
+		t.Fatalf("EncodeState: %v", err)
+	}
+	for _, unwanted := range []string{`"code"`, `"params"`, `"state":"`, `"since"`, `"rates_up"`, `"error_code"`} {
+		if strings.Contains(string(zero), unwanted) {
+			t.Fatalf("zero structured fields contain %s: %s", unwanted, zero)
+		}
+	}
+
+	populated, err := EncodeState(State{
+		Notice: &Notice{
+			Code:    "dashboard.connect.failed",
+			Params:  map[string]any{"error": "edge refused"},
+			Message: "could not connect: edge refused",
+			Tone:    "bad",
+		},
+		Status: &StatusView{
+			Label:          "Connected",
+			State:          "CONNECTED",
+			Since:          1700000000,
+			TokenExpires:   1700000100,
+			QuotaResetUnix: 1700000200,
+			RatesUp:        1.5,
+			RatesDown:      2.5,
+			TotalsUp:       10,
+			TotalsDown:     20,
+		},
+		Service: ServiceState{Installed: true, State: "running", Code: "running"},
+		Login:   &LoginView{Step: "error", ErrorCode: "bad_request"},
+	})
+	if err != nil {
+		t.Fatalf("EncodeState: %v", err)
+	}
+	for _, wanted := range []string{
+		`"code":"dashboard.connect.failed"`,
+		`"params":{"error":"edge refused"}`,
+		`"state":"CONNECTED"`,
+		`"since":1700000000`,
+		`"token_expires":1700000100`,
+		`"quota_reset_unix":1700000200`,
+		`"rates_up":1.5`,
+		`"rates_down":2.5`,
+		`"totals_up":10`,
+		`"totals_down":20`,
+		`"service":{"installed":true,"state":"running","code":"running"}`,
+		`"error_code":"bad_request"`,
+	} {
+		if !strings.Contains(string(populated), wanted) {
+			t.Fatalf("populated structured fields missing %s: %s", wanted, populated)
+		}
+	}
+}

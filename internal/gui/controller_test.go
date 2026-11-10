@@ -1508,8 +1508,8 @@ func TestSetServiceStateAndDiagnosticsNotice(t *testing.T) {
 	ctrl := NewController(f, Options{DoctorRun: testDoctorReport})
 
 	ctrl.SetServiceState(ServiceState{Installed: true, State: "running"})
-	if got := ctrl.Snapshot().Service; got != (ServiceState{Installed: true, State: "running"}) {
-		t.Fatalf("service = %+v, want the published snapshot", got)
+	if got := ctrl.Snapshot().Service; got != (ServiceState{Installed: true, State: "running", Code: "running"}) {
+		t.Fatalf("service = %+v, want the published snapshot plus its stable code", got)
 	}
 
 	ctrl.SetDiagnosticsNotice("Cleanup finished", toneGood)
@@ -2863,5 +2863,296 @@ func TestAccountActionNamesAreAccepted(t *testing.T) {
 		if _, ok := knownActions[name]; !ok {
 			t.Errorf("knownActions is missing %q", name)
 		}
+	}
+}
+
+// TestNoticeCodesAndParams pins the v0.12.0 structured notice projection:
+// every representative action carries a stable code and raw params while the
+// English Message stays exactly what earlier clients and tests expect.
+func TestNoticeCodesAndParams(t *testing.T) {
+	t.Run("connect failure", func(t *testing.T) {
+		f := newFakeDaemon()
+		f.connectErr = errors.New("edge refused")
+		ctrl := NewController(f, Options{})
+		_ = ctrl.Dispatch(Action{Name: ActionConnect})
+		n := ctrl.Snapshot().Notice
+		requireNotice(t, n, "dashboard.connect.failed", "could not connect: edge refused")
+		if got := n.Params["error"]; got != "edge refused" {
+			t.Fatalf("params[error] = %v, want edge refused", got)
+		}
+	})
+
+	t.Run("location saved", func(t *testing.T) {
+		f := newFakeDaemon()
+		ctrl := NewController(f, Options{})
+		if err := ctrl.Dispatch(Action{
+			Name:    ActionSelectLocation,
+			Payload: []byte(`{"country_code":"DE","city_code":"ber","server":"de1.example:443"}`),
+		}); err != nil {
+			t.Fatalf("Dispatch(select_location): %v", err)
+		}
+		n := ctrl.Snapshot().Notice
+		requireNotice(t, n, "dashboard.location.saved", "Location saved")
+		if got := n.Params["country_code"]; got != "DE" {
+			t.Fatalf("params[country_code] = %v, want DE", got)
+		}
+		if got := n.Params["server"]; got != "de1.example:443" {
+			t.Fatalf("params[server] = %v, want de1.example:443", got)
+		}
+	})
+
+	t.Run("setting saved and reset", func(t *testing.T) {
+		f := newFakeDaemon()
+		f.settings = api.SettingsView{Language: "system", MTU: 1500}
+		ctrl := NewController(f, Options{})
+		if err := ctrl.Dispatch(Action{
+			Name:    ActionSettingsSet,
+			Payload: []byte(`{"key":"mtu","value":"1400"}`),
+		}); err != nil {
+			t.Fatalf("Dispatch(settings_set): %v", err)
+		}
+		n := ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.saved", "MTU saved")
+		if n.Params["key"] != "mtu" || n.Params["value"] != "1400" {
+			t.Fatalf("params = %#v, want key mtu value 1400", n.Params)
+		}
+
+		if err := ctrl.Dispatch(Action{
+			Name:    ActionSettingsSet,
+			Payload: []byte(`{"key":"mtu","reset":true}`),
+		}); err != nil {
+			t.Fatalf("Dispatch(settings_set reset): %v", err)
+		}
+		n = ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.reset", "MTU reset to the configured value")
+		if n.Params["key"] != "mtu" {
+			t.Fatalf("params = %#v, want key mtu", n.Params)
+		}
+	})
+
+	t.Run("relay ok rejected unreachable", func(t *testing.T) {
+		f := newFakeDaemon()
+		ctrl := NewController(f, Options{})
+		latency := 8.5
+		f.relayResult = api.RelayTestResult{OK: true, Status: 200, LatencyMS: &latency}
+		if err := ctrl.Dispatch(Action{Name: ActionRelayTest}); err != nil {
+			t.Fatalf("Dispatch(relay_test): %v", err)
+		}
+		n := ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.relay.ok", "Relay OK — 8 ms")
+		if got := n.Params["latency_ms"]; got != latency {
+			t.Fatalf("params[latency_ms] = %v, want %v", got, latency)
+		}
+
+		f.set(func(d *fakeDaemon) {
+			d.relayResult = api.RelayTestResult{OK: false, Status: 401}
+			d.relayErr = nil
+		})
+		if err := ctrl.Dispatch(Action{Name: ActionRelayTest}); err != nil {
+			t.Fatalf("Dispatch(relay_test rejected): %v", err)
+		}
+		n = ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.relay.rejected", "Relay rejected the token")
+		if got := n.Params["status"]; got != 401 {
+			t.Fatalf("params[status] = %v, want 401", got)
+		}
+
+		f.set(func(d *fakeDaemon) { d.relayErr = errors.New("dial tcp: no route") })
+		if err := ctrl.Dispatch(Action{Name: ActionRelayTest}); err == nil {
+			t.Fatal("Dispatch(relay_test unreachable) = nil, want error")
+		}
+		n = ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.relay.unreachable", "Relay unreachable: dial tcp: no route")
+		if got := n.Params["error"]; got != "dial tcp: no route" {
+			t.Fatalf("params[error] = %v, want the raw error", got)
+		}
+	})
+
+	t.Run("update available and current", func(t *testing.T) {
+		f := newFakeDaemon()
+		ctrl := NewController(f, Options{UpdateCheck: func(context.Context) (UpdateInfo, error) {
+			return UpdateInfo{
+				Current: "v0.12.0",
+				Latest:  "v0.13.0",
+				URL:     "https://example.test/v0.13.0",
+			}, nil
+		}})
+		if err := ctrl.Dispatch(Action{Name: ActionUpdateCheck}); err != nil {
+			t.Fatalf("Dispatch(update_check): %v", err)
+		}
+		n := ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.update.available", "Kumiho v0.13.0 is available")
+		if n.Params["latest"] != "v0.13.0" || n.Params["current"] != "v0.12.0" {
+			t.Fatalf("params = %#v, want raw current/latest", n.Params)
+		}
+		if n.Params["url"] != "https://example.test/v0.13.0" {
+			t.Fatalf("params[url] = %v", n.Params["url"])
+		}
+
+		ctrl = NewController(f, Options{UpdateCheck: func(context.Context) (UpdateInfo, error) {
+			return UpdateInfo{Current: "v0.12.0", Latest: "V0.12.0", URL: "https://example.test/v0.12.0"}, nil
+		}})
+		if err := ctrl.Dispatch(Action{Name: ActionUpdateCheck}); err != nil {
+			t.Fatalf("Dispatch(update_check current): %v", err)
+		}
+		n = ctrl.Snapshot().SettingsNotice
+		requireNotice(t, n, "settings.update.current", "Kumiho is up to date")
+		if n.Params["current"] != "v0.12.0" {
+			t.Fatalf("params = %#v, want the raw current", n.Params)
+		}
+	})
+
+	t.Run("signed in", func(t *testing.T) {
+		f := newFakeDaemon()
+		f.loginStatusState = api.LoginState{Step: "done", Email: "user@example.com"}
+		ctrl := NewController(f, Options{})
+		if err := ctrl.Dispatch(Action{
+			Name:    ActionLoginStatus,
+			Payload: []byte(`{"login_id":"login-1"}`),
+		}); err != nil {
+			t.Fatalf("Dispatch(login_status): %v", err)
+		}
+		n := ctrl.Snapshot().Notice
+		requireNotice(t, n, "account.signed_in", "Signed in as user@example.com")
+		if got := n.Params["email"]; got != "user@example.com" {
+			t.Fatalf("params[email] = %v, want user@example.com", got)
+		}
+	})
+
+	t.Run("sign-out failure", func(t *testing.T) {
+		f := newFakeDaemon()
+		f.logoutErr = errors.New("internal")
+		ctrl := NewController(f, Options{})
+		if err := ctrl.Dispatch(Action{Name: ActionLogout}); err == nil {
+			t.Fatal("Dispatch(logout) = nil, want error")
+		}
+		n := ctrl.Snapshot().AccountNotice
+		requireNotice(t, n, "account.sign_out.failed", "could not sign out: internal")
+		if got := n.Params["error"]; got != "internal" {
+			t.Fatalf("params[error] = %v, want internal", got)
+		}
+	})
+
+	t.Run("logs subscribe failure", func(t *testing.T) {
+		f := newFakeDaemon()
+		f.subscribeErr = errors.New("nope")
+		ctrl := NewController(f, Options{})
+		if err := ctrl.Dispatch(Action{Name: ActionLogsSubscribe}); err == nil {
+			t.Fatal("Dispatch(logs_subscribe) = nil, want error")
+		}
+		n := ctrl.Snapshot().LogsNotice
+		requireNotice(t, n, "logs.subscribe.failed", "could not subscribe to the logs: nope")
+		if got := n.Params["error"]; got != "nope" {
+			t.Fatalf("params[error] = %v, want nope", got)
+		}
+	})
+
+	t.Run("cleanup done", func(t *testing.T) {
+		ctrl := NewController(newFakeDaemon(), Options{})
+		ctrl.SetDiagnosticsNoticeCode("diagnostics.cleanup.done", map[string]any{"code": 0}, "Cleanup finished", toneGood)
+		n := ctrl.Snapshot().DiagnosticsNotice
+		requireNotice(t, n, "diagnostics.cleanup.done", "Cleanup finished")
+		if got := n.Params["code"]; got != 0 {
+			t.Fatalf("params[code] = %v, want 0", got)
+		}
+	})
+}
+
+func requireNotice(t *testing.T, n *Notice, code, message string) {
+	t.Helper()
+	if n == nil {
+		t.Fatalf("notice = nil, want code %q", code)
+	}
+	if n.Code != code {
+		t.Fatalf("notice code = %q, want %q (message %q)", n.Code, code, n.Message)
+	}
+	if n.Message != message {
+		t.Fatalf("notice message = %q, want %q", n.Message, message)
+	}
+	if n.Params == nil {
+		t.Fatalf("notice params = nil, want raw params for %q", code)
+	}
+}
+
+func TestStatusViewRawFields(t *testing.T) {
+	f := newFakeDaemon()
+	since := time.Now().Add(-time.Minute).Unix()
+	reset := int64(1700000000)
+	f.status = api.Status{
+		State:        "CONNECTED",
+		Since:        since,
+		TokenExpires: 1800000000,
+		Quota:        &api.Quota{Reset: &reset},
+		Rates:        &api.ByteRates{Up: 1.5, Down: 2.5},
+		Totals:       &api.ByteCounters{Up: 10, Down: 20},
+	}
+	ctrl := NewController(f, Options{})
+	if err := ctrl.refreshStatus(context.Background()); err != nil {
+		t.Fatalf("refreshStatus: %v", err)
+	}
+	v := ctrl.Snapshot().Status
+	if v == nil {
+		t.Fatal("status = nil")
+	}
+	if v.State != "CONNECTED" || v.Since != since || v.TokenExpires != 1800000000 || v.QuotaResetUnix != reset {
+		t.Fatalf("raw status = %+v", v)
+	}
+	if v.RatesUp != 1.5 || v.RatesDown != 2.5 || v.TotalsUp != 10 || v.TotalsDown != 20 {
+		t.Fatalf("raw rates/totals = %+v", v)
+	}
+	if v.Label != "Connected" || v.TokenExpiry == "" || v.QuotaReset != "2023-11-14" || v.Rates == "" || v.Totals == "" {
+		t.Fatalf("formatted fallbacks changed: %+v", v)
+	}
+}
+
+func TestServiceStateCodeMapping(t *testing.T) {
+	cases := map[string]string{
+		"running":          "running",
+		"stopped":          "stopped",
+		"start pending":    "start_pending",
+		"stop pending":     "stop_pending",
+		"paused":           "paused",
+		"not installed":    "not_installed",
+		"unknown":          "unknown",
+		"continue pending": "unknown",
+		"state 127":        "unknown",
+	}
+	for state, want := range cases {
+		if got := serviceStateCode(state); got != want {
+			t.Errorf("serviceStateCode(%q) = %q, want %q", state, got, want)
+		}
+	}
+	ctrl := NewController(newFakeDaemon(), Options{})
+	ctrl.SetServiceState(ServiceState{Installed: true, State: "start pending"})
+	got := ctrl.Snapshot().Service
+	if got.State != "start pending" || got.Code != "start_pending" {
+		t.Fatalf("service = %+v, want the English word plus start_pending", got)
+	}
+}
+
+// TestLoginViewErrorCode pins the controller-side error code projection: a
+// protocol RemoteError's stable code lands on LoginView.ErrorCode while the
+// raw English error string stays unchanged, and a successful poll clears it.
+func TestLoginViewErrorCode(t *testing.T) {
+	f := newFakeDaemon()
+	f.loginStatusErr = &api.RemoteError{Code: "bad_request", Message: "bad login id"}
+	ctrl := NewController(f, Options{})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStatus, Payload: []byte(`{"login_id":"gone"}`)}); err == nil {
+		t.Fatal("Dispatch(login_status) = nil, want the remote error")
+	}
+	login := ctrl.Snapshot().Login
+	if login == nil || login.ErrorCode != "bad_request" || login.Error != "bad_request: bad login id" {
+		t.Fatalf("login = %+v, want the raw error and bad_request code", login)
+	}
+
+	f.set(func(d *fakeDaemon) {
+		d.loginStatusErr = nil
+		d.loginStatusState = api.LoginState{Step: "done", Email: "user@example.com"}
+	})
+	if err := ctrl.Dispatch(Action{Name: ActionLoginStatus, Payload: []byte(`{"login_id":"gone"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_status done): %v", err)
+	}
+	if got := ctrl.Snapshot().Login.ErrorCode; got != "" {
+		t.Fatalf("ErrorCode after success = %q, want empty", got)
 	}
 }

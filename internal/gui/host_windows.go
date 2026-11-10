@@ -698,7 +698,15 @@ func (h *host) runServiceStartStop(start bool) {
 	})
 
 	msg, tone := serviceOutcomeNotice(verb, code, err)
-	h.ctrl.SetDiagnosticsNotice(msg, tone)
+	noticeCode := "diagnostics.service.done"
+	if tone == toneBad {
+		noticeCode = "diagnostics.service.failed"
+	}
+	params := map[string]any{"verb": verb, "code": code}
+	if err != nil {
+		params["error"] = err.Error()
+	}
+	h.ctrl.SetDiagnosticsNoticeCode(noticeCode, params, msg, tone)
 	h.log.logf("service %s: code=%d err=%v state=%+v", verb, code, err, final)
 }
 
@@ -708,7 +716,15 @@ func (h *host) runServiceStartStop(start bool) {
 func (h *host) runCleanup() {
 	code, err := cleanupCommand()
 	msg, tone := cleanupOutcomeNotice(code, err)
-	h.ctrl.SetDiagnosticsNotice(msg, tone)
+	noticeCode := "diagnostics.cleanup.done"
+	if tone == toneBad {
+		noticeCode = "diagnostics.cleanup.failed"
+	}
+	params := map[string]any{"code": code}
+	if err != nil {
+		params["error"] = err.Error()
+	}
+	h.ctrl.SetDiagnosticsNoticeCode(noticeCode, params, msg, tone)
 	h.log.logf("cleanup: code=%d err=%v", code, err)
 }
 
@@ -912,7 +928,7 @@ func (h *host) applyPrefs(act Action) error {
 	}
 	if err := prefs.Save(updated); err != nil {
 		if updated.Autostart != current.Autostart {
-			h.ctrl.SetSettingsNotice("could not change the login setting: "+err.Error(), toneBad)
+			h.ctrl.SetSettingsNoticeCode("settings.autostart.failed", map[string]any{"error": err.Error()}, "could not change the login setting: "+err.Error(), toneBad)
 		}
 		return fmt.Errorf("prefs_set: %w", err)
 	}
@@ -928,9 +944,9 @@ func (h *host) applyPrefs(act Action) error {
 			// The stored flag is kept (inventory §Tray/app lifecycle): the
 			// row shows the choice and the next launch re-syncs the entry.
 			h.log.logf("autostart: %v", err)
-			h.ctrl.SetSettingsNotice("could not change the login setting: "+err.Error(), toneBad)
+			h.ctrl.SetSettingsNoticeCode("settings.autostart.failed", map[string]any{"error": err.Error()}, "could not change the login setting: "+err.Error(), toneBad)
 		} else {
-			h.ctrl.SetSettingsNotice("Start at login saved", toneGood)
+			h.ctrl.SetSettingsNoticeCode("settings.autostart.saved", nil, "Start at login saved", toneGood)
 		}
 	}
 	if updated.Theme != current.Theme || updated.Accent != current.Accent {

@@ -117,41 +117,52 @@ type Daemon interface {
 // otherwise it is a screen-local success notice that retires when Expires
 // passes (the inventory's 10 s "Notices / toasts" lifetime).
 type Notice struct {
-	Message string     `json:"message,omitempty"`
-	Tone    string     `json:"tone,omitempty"` // info|good|bad|warn
-	Expires *time.Time `json:"expires,omitempty"`
+	Code    string         `json:"code,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
+	Message string         `json:"message,omitempty"`
+	Tone    string         `json:"tone,omitempty"` // info|good|bad|warn
+	Expires *time.Time     `json:"expires,omitempty"`
 }
 
 // StatusView is the controller's projection of api.Status: the state word
 // and the derived labels the Dashboard card renders (inventory §Dashboard).
 type StatusView struct {
-	Label          string `json:"label"` // Off, Connected, Proxy only, ...
-	Connected      bool   `json:"connected,omitempty"`
-	ProxyOnly      bool   `json:"proxy_only,omitempty"`
-	Authenticated  bool   `json:"authenticated,omitempty"`
-	Email          string `json:"email,omitempty"`
-	Uptime         string `json:"uptime,omitempty"` // only while connected
-	Location       string `json:"location,omitempty"`
-	Server         string `json:"server,omitempty"`
-	KillSwitch     bool   `json:"kill_switch,omitempty"`
-	Autoconnect    bool   `json:"autoconnect,omitempty"`
-	ExitIP         string `json:"exit_ip,omitempty"`
-	ExitCountry    string `json:"exit_country,omitempty"`
-	Rates          string `json:"rates,omitempty"`
-	Totals         string `json:"totals,omitempty"`
-	TokenExpiry    string `json:"token_expiry,omitempty"`
-	PassExpiry     string `json:"pass_expiry,omitempty"`
-	PassExpires    int64  `json:"pass_expires,omitempty"`
-	QuotaText      string `json:"quota_text,omitempty"`
-	QuotaRemaining *int64 `json:"quota_remaining,omitempty"`
-	QuotaLimit     *int64 `json:"quota_limit,omitempty"`
-	QuotaReset     string `json:"quota_reset,omitempty"`
+	Label          string  `json:"label"` // Off, Connected, Proxy only, ...
+	State          string  `json:"state,omitempty"`
+	Since          int64   `json:"since,omitempty"`
+	TokenExpires   int64   `json:"token_expires,omitempty"`
+	QuotaResetUnix int64   `json:"quota_reset_unix,omitempty"`
+	RatesUp        float64 `json:"rates_up,omitempty"`
+	RatesDown      float64 `json:"rates_down,omitempty"`
+	TotalsUp       int64   `json:"totals_up,omitempty"`
+	TotalsDown     int64   `json:"totals_down,omitempty"`
+	Connected      bool    `json:"connected,omitempty"`
+	ProxyOnly      bool    `json:"proxy_only,omitempty"`
+	Authenticated  bool    `json:"authenticated,omitempty"`
+	Email          string  `json:"email,omitempty"`
+	Uptime         string  `json:"uptime,omitempty"` // only while connected
+	Location       string  `json:"location,omitempty"`
+	Server         string  `json:"server,omitempty"`
+	KillSwitch     bool    `json:"kill_switch,omitempty"`
+	Autoconnect    bool    `json:"autoconnect,omitempty"`
+	ExitIP         string  `json:"exit_ip,omitempty"`
+	ExitCountry    string  `json:"exit_country,omitempty"`
+	Rates          string  `json:"rates,omitempty"`
+	Totals         string  `json:"totals,omitempty"`
+	TokenExpiry    string  `json:"token_expiry,omitempty"`
+	PassExpiry     string  `json:"pass_expiry,omitempty"`
+	PassExpires    int64   `json:"pass_expires,omitempty"`
+	QuotaText      string  `json:"quota_text,omitempty"`
+	QuotaRemaining *int64  `json:"quota_remaining,omitempty"`
+	QuotaLimit     *int64  `json:"quota_limit,omitempty"`
+	QuotaReset     string  `json:"quota_reset,omitempty"`
 }
 
 // LoginView is the daemon-driven sign-in projection (inventory §Onboarding).
 type LoginView struct {
 	Step               string `json:"step,omitempty"` // email|password|2fa|browser|done|error|cancelled
 	Email              string `json:"email,omitempty"`
+	ErrorCode          string `json:"error_code,omitempty"`
 	Method             string `json:"method,omitempty"` // email|browser
 	VerificationMethod string `json:"verification_method,omitempty"`
 	VerificationReason string `json:"verification_reason,omitempty"`
@@ -169,6 +180,9 @@ type ServiceState struct {
 	// State is the service state word: running, stopped, start pending, stop
 	// pending, paused, not installed or unknown.
 	State string `json:"state,omitempty"`
+	// Code is the stable machine value for State: running, stopped,
+	// start_pending, stop_pending, paused, not_installed or unknown.
+	Code string `json:"code,omitempty"`
 	// Busy is true while a start/stop action is in flight: the service card
 	// shows the pending word and keeps its buttons inert.
 	Busy bool `json:"busy,omitempty"`
@@ -564,18 +578,18 @@ func (c *Controller) dispatchConnect(act Action) error {
 	if req.KillSwitch != "" {
 		if _, err := c.d.SetSetting(ctx, api.SettingsSetPayload{Key: "kill_switch", Value: req.KillSwitch}); err != nil {
 			c.observe(err)
-			c.setNotice(slotShared, "could not connect: "+err.Error(), toneBad, 0)
+			c.setNoticeCode(slotShared, "dashboard.connect.failed", map[string]any{"error": err.Error()}, "could not connect: "+err.Error(), toneBad, 0)
 			return err
 		}
 		c.observe(nil)
 	}
 	if _, err := c.d.Connect(ctx, req.ConnectPayload); err != nil {
 		c.observe(err)
-		c.setNotice(slotShared, "could not connect: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotShared, "dashboard.connect.failed", map[string]any{"error": err.Error()}, "could not connect: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
-	c.setNotice(slotShared, "Connected", toneInfo, 0)
+	c.setNoticeCode(slotShared, "dashboard.connect.done", nil, "Connected", toneInfo, 0)
 	c.refreshStatus(ctx)
 	return nil
 }
@@ -585,11 +599,11 @@ func (c *Controller) dispatchDisconnect() error {
 	defer cancel()
 	if _, err := c.d.Disconnect(ctx); err != nil {
 		c.observe(err)
-		c.setNotice(slotShared, "could not disconnect: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotShared, "dashboard.disconnect.failed", map[string]any{"error": err.Error()}, "could not disconnect: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
-	c.setNotice(slotShared, "Disconnected", toneInfo, 0)
+	c.setNoticeCode(slotShared, "dashboard.disconnect.done", nil, "Disconnected", toneInfo, 0)
 	c.refreshStatus(ctx)
 	return nil
 }
@@ -604,10 +618,14 @@ func (c *Controller) dispatchSelectLocation(act Action) error {
 	_, err = c.d.SelectLocation(ctx, p)
 	if err != nil {
 		c.observe(err)
-		c.setNotice(slotShared, "could not save the location: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotShared, "dashboard.location.failed",
+			map[string]any{"error": err.Error(), "country_code": p.CountryCode, "city_code": p.CityCode, "server": p.Server, "fastest": p.Fastest},
+			"could not save the location: "+err.Error(), toneBad, 0)
 	} else {
 		c.observe(nil)
-		c.setNotice(slotShared, "Location saved", toneInfo, 0)
+		c.setNoticeCode(slotShared, "dashboard.location.saved",
+			map[string]any{"country_code": p.CountryCode, "city_code": p.CityCode, "server": p.Server, "fastest": p.Fastest},
+			"Location saved", toneInfo, 0)
 	}
 	// The selection is broadcast as a status event either way; refresh keeps
 	// the snapshot truthful without waiting for the event (TUI parity).
@@ -630,7 +648,7 @@ func (c *Controller) dispatchPing(act Action) error {
 		c.pingBusy = false
 		c.mu.Unlock()
 		c.observe(err)
-		c.setNotice(slotLocations, "Speed test failed: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLocations, "locations.ping.failed", map[string]any{"error": err.Error()}, "Speed test failed: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -647,14 +665,17 @@ func (c *Controller) dispatchFavoriteLocation(act Action) error {
 	defer cancel()
 	if _, err := c.d.FavoriteLocation(ctx, p); err != nil {
 		c.observe(err)
-		c.setNotice(slotLocations, "Could not update favorites: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLocations, "locations.favorite.failed",
+			map[string]any{"error": err.Error(), "favorite": p.Favorite},
+			"Could not update favorites: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
+	params := map[string]any{"country_code": p.CountryCode, "city_code": p.CityCode, "server": p.Server}
 	if p.Favorite {
-		c.setNotice(slotLocations, "Favorite saved", toneGood, c.opts.NoticeTTL)
+		c.setNoticeCode(slotLocations, "locations.favorite.saved", params, "Favorite saved", toneGood, c.opts.NoticeTTL)
 	} else {
-		c.setNotice(slotLocations, "Favorite removed", toneGood, c.opts.NoticeTTL)
+		c.setNoticeCode(slotLocations, "locations.favorite.removed", params, "Favorite removed", toneGood, c.opts.NoticeTTL)
 	}
 	c.loadLocations(context.Background(), false, true)
 	return nil
@@ -668,11 +689,11 @@ func (c *Controller) dispatchClearRecents(act Action) error {
 	defer cancel()
 	if _, err := c.d.ClearRecents(ctx); err != nil {
 		c.observe(err)
-		c.setNotice(slotLocations, "Could not clear recent locations: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLocations, "locations.recents.failed", map[string]any{"error": err.Error()}, "Could not clear recent locations: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
-	c.setNotice(slotLocations, "Recent locations cleared", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotLocations, "locations.recents.cleared", nil, "Recent locations cleared", toneGood, c.opts.NoticeTTL)
 	c.loadLocations(context.Background(), false, true)
 	return nil
 }
@@ -686,7 +707,7 @@ func (c *Controller) dispatchRegionCheck(act Action) error {
 	res, err := c.d.RegionCheck(ctx)
 	if err != nil {
 		c.observe(err)
-		c.setNotice(slotShared, "could not check Mozilla's hosts: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotShared, "dashboard.region.failed", map[string]any{"error": err.Error()}, "could not check Mozilla's hosts: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -712,7 +733,7 @@ func (c *Controller) dispatchPrepare(act Action) error {
 	res, err := c.d.Prepare(ctx)
 	if err != nil {
 		c.observe(err)
-		c.setNotice(slotShared, "could not prepare: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotShared, "dashboard.prepare.failed", map[string]any{"error": err.Error()}, "could not prepare: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -720,7 +741,7 @@ func (c *Controller) dispatchPrepare(act Action) error {
 	c.mu.Lock()
 	c.prepareResult = &cp
 	c.mu.Unlock()
-	c.setNotice(slotShared, "Prepared. Turn off the other VPN, then connect.", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotShared, "dashboard.prepare.done", nil, "Prepared. Turn off the other VPN, then connect.", toneGood, c.opts.NoticeTTL)
 	// Refresh the status so the pass expiry lands in the handoff card.
 	if st, serr := c.d.Status(ctx); serr == nil {
 		c.applyStatus(st)
@@ -770,11 +791,14 @@ func (c *Controller) dispatchRelayTest(act Action) error {
 	defer cancel()
 	res, err := c.d.RelayTest(ctx)
 	if err != nil {
+		res = api.RelayTestResult{Error: err.Error()}
 		c.observe(err)
+		cp := res
 		c.mu.Lock()
-		c.relayTest = &api.RelayTestResult{Error: err.Error()}
+		c.relayTest = &cp
 		c.mu.Unlock()
-		c.setNotice(slotSettings, relayTestNotice(api.RelayTestResult{Error: err.Error()}), toneBad, 0)
+		code, params := relayTestNoticeMeta(res)
+		c.setNoticeCode(slotSettings, code, params, relayTestNotice(res), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -788,7 +812,8 @@ func (c *Controller) dispatchRelayTest(act Action) error {
 		tone = toneBad
 		ttl = 0
 	}
-	c.setNotice(slotSettings, relayTestNotice(res), tone, ttl)
+	code, params := relayTestNoticeMeta(res)
+	c.setNoticeCode(slotSettings, code, params, relayTestNotice(res), tone, ttl)
 	return nil
 }
 
@@ -807,15 +832,17 @@ func (c *Controller) dispatchSettingsSet(act Action) error {
 	defer cancel()
 	if _, err := c.d.SetSetting(ctx, p); err != nil {
 		c.observe(err)
-		c.setNotice(slotSettings, "could not change the setting: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotSettings, "settings.save.failed",
+			map[string]any{"key": p.Key, "value": p.Value, "reset": p.Reset, "error": err.Error()},
+			"could not change the setting: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
 	label := settingLabel(p.Key)
 	if p.Reset {
-		c.setNotice(slotSettings, label+" reset to the configured value", toneGood, c.opts.NoticeTTL)
+		c.setNoticeCode(slotSettings, "settings.reset", map[string]any{"key": p.Key}, label+" reset to the configured value", toneGood, c.opts.NoticeTTL)
 	} else {
-		c.setNotice(slotSettings, label+" saved", toneGood, c.opts.NoticeTTL)
+		c.setNoticeCode(slotSettings, "settings.saved", map[string]any{"key": p.Key, "value": p.Value}, label+" saved", toneGood, c.opts.NoticeTTL)
 	}
 	// The inventory's mutation sequence: refresh the status and reload the
 	// settings so values and override marks stay truthful.
@@ -845,7 +872,7 @@ func (c *Controller) dispatchUpdateCheck() error {
 	defer cancel()
 	info, err := c.opts.UpdateCheck(ctx)
 	if err != nil {
-		c.setNotice(slotSettings, "could not check for updates: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotSettings, "settings.update.failed", map[string]any{"error": err.Error()}, "could not check for updates: "+err.Error(), toneBad, 0)
 		return err
 	}
 	if info.Current == "" {
@@ -855,9 +882,11 @@ func (c *Controller) dispatchUpdateCheck() error {
 	c.update = info
 	c.mu.Unlock()
 	if sameRelease(info.Current, info.Latest) {
-		c.setNotice(slotSettings, "Kumiho is up to date", toneGood, c.opts.NoticeTTL)
+		c.setNoticeCode(slotSettings, "settings.update.current", map[string]any{"current": info.Current}, "Kumiho is up to date", toneGood, c.opts.NoticeTTL)
 	} else {
-		c.setNotice(slotSettings, "Kumiho "+info.Latest+" is available", toneInfo, c.opts.NoticeTTL)
+		c.setNoticeCode(slotSettings, "settings.update.available",
+			map[string]any{"current": info.Current, "latest": info.Latest, "url": info.URL},
+			"Kumiho "+info.Latest+" is available", toneInfo, c.opts.NoticeTTL)
 	}
 	return nil
 }
@@ -936,7 +965,9 @@ func (c *Controller) dispatchLogin(act Action) error {
 			// the account-flow ownership survives for the next paste.
 			c.observe(err)
 			c.mu.Lock()
-			c.ensureLoginLocked().Error = err.Error()
+			login := c.ensureLoginLocked()
+			login.Error = err.Error()
+			login.ErrorCode = remoteErrorCode(err)
 			c.mu.Unlock()
 			c.loginActionError(act.Name, accountFlow, err)
 			return err
@@ -978,13 +1009,16 @@ func (c *Controller) dispatchLogin(act Action) error {
 		login.URL = ""
 		login.ID = ""
 		login.Error = ""
+		login.ErrorCode = ""
 		c.accountFlow = false
 		c.mu.Unlock()
 		slot := slotShared
+		code := "onboarding.sign_in.cancelled"
 		if accountAction {
 			slot = slotAccount
+			code = "account.add.cancelled"
 		}
-		c.setNotice(slot, "Sign-in cancelled", toneInfo, c.opts.NoticeTTL)
+		c.setNoticeCode(slot, code, nil, "Sign-in cancelled", toneInfo, c.opts.NoticeTTL)
 		return nil
 	default:
 		var p api.Login2FAPayload
@@ -1001,6 +1035,7 @@ func (c *Controller) dispatchLogin(act Action) error {
 		}
 		login := c.ensureLoginLocked()
 		login.Error = err.Error()
+		login.ErrorCode = remoteErrorCode(err)
 		if statusAction {
 			// A failed poll ends the browser wait: the UI keys its polling
 			// on the browser step, and a transient error must not spin
@@ -1020,16 +1055,18 @@ func (c *Controller) dispatchLogin(act Action) error {
 			// limit, failed save). Never turn it into a success notice; keep
 			// the error on the owning screen until another action replaces it.
 			slot := slotShared
+			code := "onboarding.sign_in.failed"
 			if accountFlow {
 				slot = slotAccount
+				code = "account.add.failed"
 			}
-			c.setNotice(slot, st.Error, toneBad, 0)
+			c.setNoticeCode(slot, code, map[string]any{"error": st.Error}, st.Error, toneBad, 0)
 		} else if owned && st.Step == "done" {
-			message := "Account added"
 			if st.Email != "" {
-				message = "Signed in as " + st.Email
+				c.setNoticeCode(slotAccount, "account.signed_in", map[string]any{"email": st.Email}, "Signed in as "+st.Email, toneGood, c.opts.NoticeTTL)
+			} else {
+				c.setNoticeCode(slotAccount, "account.added", nil, "Account added", toneGood, c.opts.NoticeTTL)
 			}
-			c.setNotice(slotAccount, message, toneGood, c.opts.NoticeTTL)
 		}
 		// A terminal reply refreshes the status and both account snapshots:
 		// a fresh authenticated snapshot clears the stale "already signed
@@ -1054,27 +1091,28 @@ func (c *Controller) dispatchLogin(act Action) error {
 // on its status line).
 func (c *Controller) loginActionError(name string, accountFlow bool, err error) {
 	prefix := "sign-in failed: "
+	code := "onboarding.sign_in.failed"
 	slot := slotShared
 	switch name {
 	case ActionAccountsAddStart:
-		prefix, slot = "could not start sign-in: ", slotAccount
+		prefix, code, slot = "could not start sign-in: ", "account.add.start_failed", slotAccount
 	case ActionAccountsAddStatus:
-		prefix, slot = "could not check sign-in: ", slotAccount
+		prefix, code, slot = "could not check sign-in: ", "account.add.check_failed", slotAccount
 	case ActionAccountsAddCancel:
-		prefix, slot = "could not cancel sign-in: ", slotAccount
+		prefix, code, slot = "could not cancel sign-in: ", "account.add.cancel_failed", slotAccount
 	case ActionLoginComplete:
-		prefix = "could not finish sign-in: "
+		prefix, code = "could not finish sign-in: ", "onboarding.sign_in.complete_failed"
 		if accountFlow {
-			slot = slotAccount
+			slot, code = slotAccount, "account.add.complete_failed"
 		}
 	case ActionLoginStart:
-		prefix = "could not start sign-in: "
+		prefix, code = "could not start sign-in: ", "onboarding.sign_in.start_failed"
 	case ActionLoginStatus:
-		prefix = "could not check sign-in: "
+		prefix, code = "could not check sign-in: ", "onboarding.sign_in.check_failed"
 	case ActionLoginCancel:
-		prefix = "could not cancel sign-in: "
+		prefix, code = "could not cancel sign-in: ", "onboarding.sign_in.cancel_failed"
 	}
-	c.setNotice(slot, prefix+err.Error(), toneBad, 0)
+	c.setNoticeCode(slot, code, map[string]any{"error": err.Error()}, prefix+err.Error(), toneBad, 0)
 }
 
 // dispatchAccountsList refreshes the account list and active selection.
@@ -1093,7 +1131,7 @@ func (c *Controller) loadAccounts(ctx context.Context) error {
 	view, err := c.d.AccountsList(actx)
 	if err != nil {
 		c.observe(err)
-		c.setNotice(slotAccount, "could not load accounts: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.list.load_failed", map[string]any{"error": err.Error()}, "could not load accounts: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1135,18 +1173,18 @@ func (c *Controller) dispatchAccountsUse(act Action) error {
 	}
 	if c.accountChangeBlocked() {
 		err := errors.New("disconnect before switching accounts")
-		c.setNotice(slotAccount, err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.switch.blocked", nil, err.Error(), toneBad, 0)
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), accountTimeout)
 	defer cancel()
 	if _, err := c.d.AccountsUse(ctx, p); err != nil {
 		c.observe(err)
-		c.setNotice(slotAccount, "could not switch account: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.switch.failed", map[string]any{"error": err.Error()}, "could not switch account: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
-	c.setNotice(slotAccount, "Account switched", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotAccount, "account.switched", nil, "Account switched", toneGood, c.opts.NoticeTTL)
 	c.afterAccountChange(ctx)
 	return c.loadAccounts(ctx)
 }
@@ -1158,18 +1196,18 @@ func (c *Controller) dispatchAccountsRemove(act Action) error {
 	}
 	if c.accountChangeBlocked() {
 		err := errors.New("disconnect before removing an account")
-		c.setNotice(slotAccount, err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.remove.blocked", nil, err.Error(), toneBad, 0)
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), accountTimeout)
 	defer cancel()
 	if _, err := c.d.AccountsRemove(ctx, p); err != nil {
 		c.observe(err)
-		c.setNotice(slotAccount, "could not remove the account: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.remove.failed", map[string]any{"error": err.Error()}, "could not remove the account: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
-	c.setNotice(slotAccount, "Account removed", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotAccount, "account.removed", nil, "Account removed", toneGood, c.opts.NoticeTTL)
 	c.afterAccountChange(ctx)
 	return c.loadAccounts(ctx)
 }
@@ -1183,11 +1221,11 @@ func (c *Controller) dispatchAccountsUpdate(act Action) error {
 	defer cancel()
 	if _, err := c.d.AccountsUpdate(ctx, p); err != nil {
 		c.observe(err)
-		c.setNotice(slotAccount, "could not rename the account: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.rename.failed", map[string]any{"error": err.Error()}, "could not rename the account: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
-	c.setNotice(slotAccount, "Account renamed", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotAccount, "account.renamed", nil, "Account renamed", toneGood, c.opts.NoticeTTL)
 	c.afterAccountChange(ctx)
 	return c.loadAccounts(ctx)
 }
@@ -1201,7 +1239,7 @@ func (c *Controller) dispatchAccountsSetRotation(act Action) error {
 	defer cancel()
 	if _, err := c.d.AccountsSetRotation(ctx, p); err != nil {
 		c.observe(err)
-		c.setNotice(slotAccount, "could not save rotation settings: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.rotation.failed", map[string]any{"error": err.Error()}, "could not save rotation settings: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1209,7 +1247,7 @@ func (c *Controller) dispatchAccountsSetRotation(act Action) error {
 	if p.Enabled {
 		state = fmt.Sprintf("on at %d%%", p.Threshold)
 	}
-	c.setNotice(slotAccount, "Account rotation "+state, toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotAccount, "account.rotation.saved", map[string]any{"enabled": p.Enabled, "threshold": p.Threshold}, "Account rotation "+state, toneGood, c.opts.NoticeTTL)
 	return c.loadAccounts(ctx)
 }
 
@@ -1227,7 +1265,7 @@ func (c *Controller) dispatchLogout() error {
 	defer cancel()
 	if _, err := c.d.Logout(ctx); err != nil {
 		c.observe(err)
-		c.setNotice(slotAccount, "could not sign out: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotAccount, "account.sign_out.failed", map[string]any{"error": err.Error()}, "could not sign out: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1237,7 +1275,7 @@ func (c *Controller) dispatchLogout() error {
 	// stale waiting card must not survive the session it belonged to.
 	c.login = nil
 	c.mu.Unlock()
-	c.setNotice(slotAccount, "Signed out", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotAccount, "account.signed_out", nil, "Signed out", toneGood, c.opts.NoticeTTL)
 	c.refreshStatus(ctx)
 	c.ensureAccount(ctx)
 	_ = c.loadAccounts(ctx)
@@ -1254,7 +1292,7 @@ func (c *Controller) dispatchLogsSnapshot(act Action) error {
 	snap, err := c.d.LogsSnapshot(ctx, p.Level)
 	if err != nil {
 		c.observe(err)
-		c.setNotice(slotLogs, "could not load the logs: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLogs, "logs.load.failed", map[string]any{"error": err.Error()}, "could not load the logs: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1279,7 +1317,7 @@ func (c *Controller) dispatchLogsSubscribe(act Action) error {
 	defer cancel()
 	if _, err := c.d.LogsSubscribe(ctx, p.Level); err != nil {
 		c.observe(err)
-		c.setNotice(slotLogs, "could not subscribe to the logs: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLogs, "logs.subscribe.failed", map[string]any{"error": err.Error()}, "could not subscribe to the logs: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1295,7 +1333,7 @@ func (c *Controller) dispatchLogsUnsubscribe() error {
 	defer cancel()
 	if _, err := c.d.LogsUnsubscribe(ctx); err != nil {
 		c.observe(err)
-		c.setNotice(slotLogs, "could not unsubscribe from the logs: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLogs, "logs.unsubscribe.failed", map[string]any{"error": err.Error()}, "could not unsubscribe from the logs: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1311,14 +1349,14 @@ func (c *Controller) dispatchLogsClear() error {
 	defer cancel()
 	if _, err := c.d.LogsClear(ctx); err != nil {
 		c.observe(err)
-		c.setNotice(slotLogs, "could not clear the logs: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLogs, "logs.clear.failed", map[string]any{"error": err.Error()}, "could not clear the logs: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
 	c.mu.Lock()
 	c.logs = nil
 	c.mu.Unlock()
-	c.setNotice(slotLogs, "Logs cleared", toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotLogs, "logs.clear.done", nil, "Logs cleared", toneGood, c.opts.NoticeTTL)
 	return nil
 }
 
@@ -1355,20 +1393,20 @@ func (c *Controller) dispatchLogsExport(act Action) error {
 	c.mu.Unlock()
 	visible := visibleLogs(entries, minLevel, p.Search)
 	if len(visible) == 0 {
-		c.setNotice(slotLogs, "Nothing to export", toneInfo, c.opts.NoticeTTL)
+		c.setNoticeCode(slotLogs, "logs.export.empty", nil, "Nothing to export", toneInfo, c.opts.NoticeTTL)
 		return nil
 	}
 	if c.opts.LogsExport == nil {
 		err := errors.New("log export is not available")
-		c.setNotice(slotLogs, "could not export the logs: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLogs, "logs.export.failed", map[string]any{"error": err.Error()}, "could not export the logs: "+err.Error(), toneBad, 0)
 		return err
 	}
 	path, err := c.opts.LogsExport(renderLogText(visible))
 	if err != nil {
-		c.setNotice(slotLogs, "could not export the logs: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotLogs, "logs.export.failed", map[string]any{"error": err.Error()}, "could not export the logs: "+err.Error(), toneBad, 0)
 		return err
 	}
-	c.setNotice(slotLogs, "Exported to "+path, toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slotLogs, "logs.export.done", map[string]any{"path": path}, "Exported to "+path, toneGood, c.opts.NoticeTTL)
 	return nil
 }
 
@@ -1400,17 +1438,21 @@ func (c *Controller) dispatchOpenLogsFolder(act Action) error {
 	default:
 		return fmt.Errorf("open_logs_folder: unknown notice surface %q", p.Notice)
 	}
+	surface := "logs"
+	if slot == slotDiagnostics {
+		surface = "diagnostics"
+	}
 	if c.opts.OpenLogsFolder == nil {
 		err := errors.New("opening the log folder is not available")
-		c.setNotice(slot, "could not open the log folder: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slot, surface+".folder.failed", map[string]any{"error": err.Error()}, "could not open the log folder: "+err.Error(), toneBad, 0)
 		return err
 	}
 	dir, err := c.opts.OpenLogsFolder()
 	if err != nil {
-		c.setNotice(slot, "could not open the log folder: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slot, surface+".folder.failed", map[string]any{"error": err.Error()}, "could not open the log folder: "+err.Error(), toneBad, 0)
 		return err
 	}
-	c.setNotice(slot, "Opened "+dir, toneGood, c.opts.NoticeTTL)
+	c.setNoticeCode(slot, surface+".folder.done", map[string]any{"path": dir}, "Opened "+dir, toneGood, c.opts.NoticeTTL)
 	return nil
 }
 
@@ -1446,6 +1488,9 @@ func (c *Controller) dispatchDoctorRun() error {
 // controller itself never touches the SCM, so the engine stays OS-free. It
 // is safe for concurrent use.
 func (c *Controller) SetServiceState(s ServiceState) {
+	if s.Code == "" {
+		s.Code = serviceStateCode(s.State)
+	}
 	c.mu.Lock()
 	c.service = s
 	c.mu.Unlock()
@@ -1479,11 +1524,16 @@ func (c *Controller) SetAutostart(v bool) {
 // The Settings screen already renders State.SettingsNotice on its status line,
 // so no extra UI wiring is needed. It is safe for concurrent use.
 func (c *Controller) SetSettingsNotice(message, tone string) {
+	c.SetSettingsNoticeCode("", nil, message, tone)
+}
+
+// SetSettingsNoticeCode is SetSettingsNotice with a stable code and raw params.
+func (c *Controller) SetSettingsNoticeCode(code string, params map[string]any, message, tone string) {
 	ttl := c.opts.NoticeTTL
 	if tone == toneBad {
 		ttl = 0
 	}
-	c.setNotice(slotSettings, message, tone, ttl)
+	c.setNoticeCode(slotSettings, code, params, message, tone, ttl)
 }
 
 // SetDiagnosticsNotice publishes one Diagnostics-screen result notice (T3.3;
@@ -1492,11 +1542,17 @@ func (c *Controller) SetSettingsNotice(message, tone string) {
 // it, everything else carries the 10 s success lifetime (inventory
 // §Diagnostics status line). It is safe for concurrent use.
 func (c *Controller) SetDiagnosticsNotice(message, tone string) {
+	c.SetDiagnosticsNoticeCode("", nil, message, tone)
+}
+
+// SetDiagnosticsNoticeCode is SetDiagnosticsNotice with a stable code and raw
+// params for the cleanup and service outcomes.
+func (c *Controller) SetDiagnosticsNoticeCode(code string, params map[string]any, message, tone string) {
 	ttl := c.opts.NoticeTTL
 	if tone == toneBad {
 		ttl = 0
 	}
-	c.setNotice(slotDiagnostics, message, tone, ttl)
+	c.setNoticeCode(slotDiagnostics, code, params, message, tone, ttl)
 }
 
 // visibleLogs returns the buffer entries matching the screen's local level
@@ -1571,7 +1627,7 @@ func (c *Controller) dispatchRefresh(act Action) error {
 	}
 	err = c.refreshStatus(context.Background())
 	if err != nil {
-		c.setNotice(slotShared, "could not refresh the status: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotShared, "dashboard.refresh.failed", map[string]any{"error": err.Error()}, "could not refresh the status: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.ensureAccount(context.Background())
@@ -1657,7 +1713,7 @@ func (c *Controller) refreshStatus(ctx context.Context) error {
 		c.mu.Lock()
 		if !c.statusLoaded {
 			c.statusError = err.Error()
-			c.notice = newNotice(0, "could not refresh the status: "+err.Error(), toneBad)
+			c.notice = newNoticeCode(0, "dashboard.refresh.failed", map[string]any{"error": err.Error()}, "could not refresh the status: "+err.Error(), toneBad)
 		}
 		c.mu.Unlock()
 		return err
@@ -1679,6 +1735,7 @@ func (c *Controller) applyStatus(st api.Status) {
 	c.statusError = ""
 	if st.Authenticated && c.login != nil && c.login.Error != "" {
 		c.login.Error = ""
+		c.login.ErrorCode = ""
 	}
 }
 
@@ -1694,7 +1751,7 @@ func (c *Controller) loadSettings(ctx context.Context) error {
 	view, err := c.d.Settings(ctx)
 	if err != nil {
 		c.observe(err)
-		c.setNotice(slotSettings, "could not load the settings: "+err.Error(), toneBad, 0)
+		c.setNoticeCode(slotSettings, "settings.load.failed", map[string]any{"error": err.Error()}, "could not load the settings: "+err.Error(), toneBad, 0)
 		return err
 	}
 	c.observe(nil)
@@ -1731,7 +1788,7 @@ func (c *Controller) ensureAccount(ctx context.Context) {
 		info, err := c.d.Account(actx)
 		if err != nil {
 			c.observe(err)
-			c.setNotice(slotAccount, "could not load the account: "+err.Error(), toneBad, 0)
+			c.setNoticeCode(slotAccount, "account.load.failed", map[string]any{"error": err.Error()}, "could not load the account: "+err.Error(), toneBad, 0)
 			return
 		}
 		c.observe(nil)
@@ -1783,7 +1840,7 @@ func (c *Controller) loadLocations(ctx context.Context, refresh, force bool) {
 		if err != nil {
 			c.observe(err)
 			// The status line shows the raw load error (inventory §Locations).
-			c.setNotice(slotLocations, err.Error(), toneBad, 0)
+			c.setNoticeCode(slotLocations, "locations.load.failed", map[string]any{"error": err.Error()}, err.Error(), toneBad, 0)
 			return
 		}
 		c.observe(nil)
@@ -1891,12 +1948,13 @@ func (c *Controller) mergeLogin(st api.LoginState) bool {
 		previousStep == "browser" && previousID != "" && previousID == st.LoginID
 	if !sameWaitingFlow {
 		login.Error = st.Error
+		login.ErrorCode = ""
 	}
 	if st.Step == "done" && st.Error == "" {
 		if login.Email != "" {
-			c.notice = newNotice(0, "Signed in as "+login.Email, toneInfo)
+			c.notice = newNoticeCode(0, "account.signed_in", map[string]any{"email": login.Email}, "Signed in as "+login.Email, toneInfo)
 		} else {
-			c.notice = newNotice(0, "Signed in", toneInfo)
+			c.notice = newNoticeCode(0, "account.signed_in", nil, "Signed in", toneInfo)
 		}
 	}
 	// A done+error reply is still terminal: refreshing the status lets an
@@ -1924,13 +1982,25 @@ const (
 	slotDiagnostics
 )
 
-// setNotice replaces one notice surface. A ttl of 0 makes the notice persist
-// until another action replaces it (errors and the shared notices); a
-// positive ttl is the inventory's screen-local success lifetime.
+// setNotice replaces one notice surface without a structured code. It stays
+// for external host messages and for callers that only have English text.
+// A ttl of 0 makes the notice persist until another action replaces it
+// (errors and the shared notices); a positive ttl is the inventory's
+// screen-local success lifetime.
 func (c *Controller) setNotice(slot noticeSlot, msg, tone string, ttl time.Duration) {
+	c.setNoticeCode(slot, "", nil, msg, tone, ttl)
+}
+
+// setNoticeCode replaces one notice surface with a stable code and raw params
+// alongside the unchanged English fallback message. The JS catalog formats
+// the code; old clients and logs keep reading Message.
+func (c *Controller) setNoticeCode(slot noticeSlot, code string, params map[string]any, msg, tone string, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	n := newNotice(ttl, msg, tone)
+	c.assignNoticeLocked(slot, newNoticeCode(ttl, code, params, msg, tone))
+}
+
+func (c *Controller) assignNoticeLocked(slot noticeSlot, n *Notice) {
 	switch slot {
 	case slotShared:
 		c.notice = n
@@ -1997,10 +2067,20 @@ func clearNoticeError(n *Notice) *Notice {
 }
 
 func newNotice(ttl time.Duration, msg, tone string) *Notice {
+	return newNoticeCode(ttl, "", nil, msg, tone)
+}
+
+func newNoticeCode(ttl time.Duration, code string, params map[string]any, msg, tone string) *Notice {
 	if msg == "" {
 		return nil
 	}
-	n := &Notice{Message: msg, Tone: tone}
+	n := &Notice{Code: code, Message: msg, Tone: tone}
+	if len(params) > 0 {
+		n.Params = make(map[string]any, len(params))
+		for k, v := range params {
+			n.Params[k] = v
+		}
+	}
 	if ttl > 0 {
 		expires := time.Now().Add(ttl)
 		n.Expires = &expires
@@ -2018,6 +2098,12 @@ func liveNotice(n *Notice, now time.Time) *Notice {
 		return nil
 	}
 	cp := *n
+	if n.Params != nil {
+		cp.Params = make(map[string]any, len(n.Params))
+		for k, v := range n.Params {
+			cp.Params[k] = v
+		}
+	}
 	return &cp
 }
 
@@ -2043,6 +2129,17 @@ func (c *Controller) retireNotices(now time.Time) {
 // observe records one daemon call's transport health: any success proves the
 // control pipe is up; a dial failure flips the reachability flag the shell
 // uses for the Set up Kumiho gate (inventory §behavioral).
+// remoteErrorCode returns the daemon's stable code for a protocol error, or
+// the empty string for transport and local errors. It is the only bridge from
+// a raw *api.RemoteError to the GUI projection.
+func remoteErrorCode(err error) string {
+	var remote *api.RemoteError
+	if errors.As(err, &remote) {
+		return remote.Code
+	}
+	return ""
+}
+
 func (c *Controller) observe(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -2061,6 +2158,9 @@ func (c *Controller) statusViewLocked(now time.Time) *StatusView {
 	st := c.status
 	v := &StatusView{
 		Label:         stateLabel(st.State),
+		State:         st.State,
+		Since:         st.Since,
+		TokenExpires:  st.TokenExpires,
 		Connected:     st.State == "CONNECTED" || st.State == "PROXY_ONLY",
 		ProxyOnly:     st.State == "PROXY_ONLY" || st.ProxyOnly,
 		Authenticated: st.Authenticated,
@@ -2085,6 +2185,15 @@ func (c *Controller) statusViewLocked(now time.Time) *StatusView {
 	v.QuotaText, v.QuotaRemaining, v.QuotaLimit = quotaView(st.Quota)
 	if st.Quota != nil && st.Quota.Reset != nil {
 		v.QuotaReset = time.Unix(*st.Quota.Reset, 0).UTC().Format("2006-01-02")
+		v.QuotaResetUnix = *st.Quota.Reset
+	}
+	if st.Rates != nil {
+		v.RatesUp = st.Rates.Up
+		v.RatesDown = st.Rates.Down
+	}
+	if st.Totals != nil {
+		v.TotalsUp = st.Totals.Up
+		v.TotalsDown = st.Totals.Down
 	}
 	v.Rates = ratesLabel(st.Rates)
 	v.Totals = totalsLabel(st.Totals)
@@ -2248,6 +2357,24 @@ func settingLabel(key string) string {
 }
 
 // stateLabel maps a daemon state to the inventory's state word.
+// serviceStateCode maps the card's English SCM word to the stable value the
+// JS catalog and the host use. States without a stable value (the transient
+// continue/pause-pending words and the numeric fallback) are unknown.
+func serviceStateCode(state string) string {
+	switch state {
+	case "running", "stopped", "start_pending", "stop_pending", "paused", "not_installed", "unknown":
+		return state
+	case "start pending":
+		return "start_pending"
+	case "stop pending":
+		return "stop_pending"
+	case "not installed":
+		return "not_installed"
+	default:
+		return "unknown"
+	}
+}
+
 func stateLabel(state string) string {
 	switch state {
 	case "", "IDLE":
@@ -2280,6 +2407,29 @@ func rttLabel(ms *float64) string {
 
 // relayTestNotice renders the settings notice for one relay probe result.
 // The token itself never appears here or anywhere else in the projection.
+// relayTestNoticeMeta returns the stable code and raw params for one relay
+// probe. The token never appears in either.
+func relayTestNoticeMeta(res api.RelayTestResult) (string, map[string]any) {
+	if res.OK {
+		params := map[string]any{"status": res.Status}
+		if res.LatencyMS != nil {
+			params["latency_ms"] = *res.LatencyMS
+		}
+		return "settings.relay.ok", params
+	}
+	if res.Status == 401 || res.Status == 403 {
+		return "settings.relay.rejected", map[string]any{"status": res.Status}
+	}
+	params := map[string]any{}
+	if res.Status != 0 {
+		params["status"] = res.Status
+	}
+	if res.Error != "" {
+		params["error"] = res.Error
+	}
+	return "settings.relay.unreachable", params
+}
+
 func relayTestNotice(res api.RelayTestResult) string {
 	if res.OK {
 		if res.LatencyMS != nil {
