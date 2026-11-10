@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-10
+
 ### Fixed
 
 - **Android blocked-region recovery is easier to reach.** A connect failure

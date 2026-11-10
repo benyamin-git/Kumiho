@@ -137,8 +137,10 @@ them locally for any change under `android/`, `mobile/` or
   `v0.7.2` release on 2026-10-30, the `v0.8.0` release on 2026-10-30, the
   `v0.8.1` release on 2026-10-30, the `v0.8.2` release on 2026-10-30, the
   `v0.8.3` release on 2026-10-31, the `v0.9.0` release on 2026-10-31, the
-  `v0.9.1` release on 2026-11-01, the `v0.9.2` release on 2026-11-02 and the
-  `v0.9.3` release on 2026-11-03; each
+  `v0.9.1` release on 2026-11-01, the `v0.9.2` release on 2026-11-02, the
+  `v0.9.3` release on 2026-11-03, the `v0.10.0` and `v0.10.1` releases on
+  2026-11-05, the `v0.10.2` release on 2026-11-06, the `v0.10.3` release on
+  2026-11-09 and the `v0.11.0` release on 2026-11-10; each
   release workflow uploaded the desktop and Android assets. See
   [docs/android-testing.md](docs/android-testing.md).
 
