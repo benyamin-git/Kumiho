@@ -216,11 +216,14 @@ func TestApplyPrefsAutostart(t *testing.T) {
 
 // TestApplyPrefsLanguage pins the language-only cache write: en/fa persist,
 // empty clears, an invalid value is rejected, and none of these touch the
-// theme path (the test host has no server or webview, so a reload would
-// panic).
+// theme path (the test host has no webview, so a reload would panic; the
+// language path only writes the server cache).
 func TestApplyPrefsLanguage(t *testing.T) {
 	useTempPrefs(t)
-	h := &host{prefs: prefs.Prefs{Theme: "dark", Accent: "blue"}}
+	h := &host{
+		prefs:  prefs.Prefs{Theme: "dark", Accent: "blue"},
+		server: &web.Server{},
+	}
 
 	apply := func(raw string) error {
 		return h.applyPrefs(Action{Name: ActionPrefsSet, Payload: []byte(raw)})
