@@ -825,8 +825,8 @@ private fun RegionRow(    spec: SettingSpec,
 }
 
 /**
- * The write-only relay token row. The stored value is never shown; the only
- * visible state is Set/Not set, and Clear drops the runtime override.
+ * The write-only relay token row. The stored value is never shown; Set opens
+ * the editor, Replace appears once a token exists, and Clear drops it.
  */
 @Composable
 private fun SecretRelayRow(
@@ -854,7 +854,7 @@ private fun SecretRelayRow(
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = Dimens.TouchTarget),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -876,37 +876,34 @@ private fun SecretRelayRow(
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    Text(
-                        text = settingDisplayValue(spec, state.valueOf(spec.key)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag(SettingsTags.value(spec.key)),
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                if (set) {
+                    if (set) {
+                        TextButton(
+                            onClick = onReset,
+                            enabled = !state.applying,
+                            modifier = Modifier
+                                .heightIn(min = Dimens.TouchTarget)
+                                .testTag(SettingsTags.RELAY_TOKEN_CLEAR),
+                        ) {
+                            Text(stringResource(R.string.settings_clear))
+                        }
+                    }
                     TextButton(
-                        onClick = onReset,
+                        onClick = onEdit,
                         enabled = !state.applying,
                         modifier = Modifier
                             .heightIn(min = Dimens.TouchTarget)
-                            .testTag(SettingsTags.RELAY_TOKEN_CLEAR),
+                            .testTag(SettingsTags.RELAY_TOKEN_SET),
                     ) {
-                        Text(stringResource(R.string.settings_clear))
+                        Text(
+                            stringResource(
+                                if (set) {
+                                    R.string.settings_relay_token_replace_action
+                                } else {
+                                    R.string.settings_relay_token_set_action
+                                },
+                            ),
+                        )
                     }
-                }
-                TextButton(
-                    onClick = onEdit,
-                    enabled = !state.applying,
-                    modifier = Modifier
-                        .heightIn(min = Dimens.TouchTarget)
-                        .testTag(SettingsTags.RELAY_TOKEN_SET),
-                ) {
-                    Text(stringResource(R.string.settings_relay_token_set_action))
                 }
             }
             if (error != null) {

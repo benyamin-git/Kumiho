@@ -326,6 +326,7 @@
     <string name="settings_relay_token_not_set">Not set</string>
     <string name="settings_relay_token_set">Set</string>
     <string name="settings_relay_token_set_action">Set</string>
+    <string name="settings_relay_token_replace_action">Replace</string>
     <string name="settings_clear">Clear</string>
     <string name="settings_label_relay_test">Test relay</string>
     <string name="settings_hint_relay_test">Sends one control-plane probe through the relay.</string>

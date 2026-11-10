@@ -569,8 +569,9 @@ remain open.
 - [ ] Open Settings → Region. Confirm `allow_locked` toggles the Locations
       footer and list. Enter a malformed `relay_url` and confirm the engine's
       error; enter a valid HTTPS origin.
-- [ ] Set a relay token: the row shows **Set**, never the value; **Clear**
-      removes it and returns to **Not set**.
+- [ ] Set a relay token: the row offers **Set** and never shows the value;
+      after saving it offers **Replace** and **Clear**; **Clear** removes it
+      and returns the row to **Set**.
 - [ ] Tap **Test** with no relay URL (`relay_url is not set`), with a rejecting
       token (**Relay rejected the token**) and with a reachable URL (**Relay
       OK — N ms**). Confirm no probe sends tunnel traffic.

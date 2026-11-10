@@ -365,8 +365,8 @@ be an HTTPS origin with no path, query, fragment or userinfo. The relay is
 used only after HTTP 451 and never proxies the browser sign-in page; its help
 text says so.
 
-The token row shows only **Set** or **Not set**, never the value. **Set** opens
-a masked editor; an existing token adds **Clear**, which deletes it
+The token row never shows the value. **Set** opens a masked editor; once a
+token exists the row offers **Replace** and **Clear**, and **Clear** deletes it
 immediately. The engine stores `relay.token` beside `tokens.json` in the
 app-private no-backup state with mode 0600, and the UI only receives
 `relay_token_set`. **Test** runs one control-plane probe and shows
