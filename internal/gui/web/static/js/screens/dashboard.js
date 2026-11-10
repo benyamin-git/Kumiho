@@ -29,7 +29,7 @@
  * on this screen.
  */
 
-import { connectionStatus } from "../store.js";
+import { t, formatBytes, formatDate, formatDateTime, formatDuration, noticeText } from "../i18n.js";
 import { flagIcon } from "../flags.js";
 
 // The busy guard's settle: an action whose signals repeat byte-for-byte (an
@@ -39,28 +39,28 @@ const BUSY_SETTLE_MS = 3000;
 
 // The status card's rows in the inventory's canonical order.
 const ROWS = [
-  ["uptime", "Uptime"],
-  ["location", "Location"],
-  ["exit_ip", "Exit IP"],
-  ["rates", "Rates"],
-  ["totals", "Totals"],
-  ["kill_switch", "Kill switch"],
-  ["autoconnect", "Autoconnect"],
-  ["token_expiry", "Token expiry"],
-  ["pass_expiry", "Pass expiry"],
-  ["quota", "Quota"],
-  ["quota_reset", "Quota resets"],
+  ["uptime", "dashboard.row.uptime"],
+  ["location", "dashboard.row.location"],
+  ["exit_ip", "dashboard.row.exit_ip"],
+  ["rates", "dashboard.row.rates"],
+  ["totals", "dashboard.row.totals"],
+  ["kill_switch", "dashboard.row.kill_switch"],
+  ["autoconnect", "dashboard.row.autoconnect"],
+  ["token_expiry", "dashboard.row.token_expiry"],
+  ["pass_expiry", "dashboard.row.pass_expiry"],
+  ["quota", "dashboard.row.quota"],
+  ["quota_reset", "dashboard.row.quota_reset"],
 ];
 
-// The state words whose primary label is `Disconnect` (inventory §Dashboard
-// action row). Every other word — Off, Error, Not signed in, and the
-// pre-status/unreachable words — keeps `Connect`.
-const DISCONNECT_WORDS = [
-  "Connected",
-  "Proxy only",
-  "Connecting",
-  "Reconnecting",
-  "Waiting for network",
+// The raw controller states whose primary label is `Disconnect` (inventory
+// §Dashboard action row). Every other state — IDLE, FATAL, UNAUTHENTICATED,
+// and the pre-status/unreachable words — keeps `Connect`.
+const DISCONNECT_STATES = [
+  "CONNECTED",
+  "PROXY_ONLY",
+  "CONNECTING",
+  "RECONNECTING",
+  "WAITING_NETWORK",
 ];
 
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
@@ -78,13 +78,13 @@ function el(tag, className, text) {
 function build(host) {
   const root = el("div", "dash");
 
-  const primary = el("button", "button button--filled dash__primary", "Connect");
+  const primary = el("button", "button button--filled dash__primary", t("dashboard.connect"));
   primary.type = "button";
 
   // The Connect options disclosure (D13): a plain aria-expanded + controls
   // trigger, not a menu — the popover holds a small form, and Tab/Esc are its
   // whole keyboard story.
-  const trigger = el("button", "button button--tonal", "Options");
+  const trigger = el("button", "button button--tonal", t("dashboard.options"));
   trigger.type = "button";
   trigger.setAttribute("aria-expanded", "false");
   trigger.setAttribute("aria-controls", "dash-connect-options");
@@ -92,10 +92,10 @@ function build(host) {
   const popover = el("div", "dash__options");
   popover.id = "dash-connect-options";
   popover.setAttribute("role", "group");
-  popover.setAttribute("aria-label", "Connect options");
+  popover.setAttribute("aria-label", t("dashboard.connect_options_aria"));
   popover.hidden = true;
 
-  const locationLabel = el("label", "field__label", "Location");
+  const locationLabel = el("label", "field__label", t("dashboard.location_label"));
   locationLabel.htmlFor = "dash-opt-location";
   const location = document.createElement("select");
   location.className = "input";
@@ -113,16 +113,16 @@ function build(host) {
   proxyInput.id = "dash-opt-proxy";
   const proxyLabel = el("label", null);
   proxyLabel.htmlFor = "dash-opt-proxy";
-  proxyLabel.append("Proxy only", el("span", "dash__hint", "Keep system routing untouched; SOCKS5 proxy only."));
+  proxyLabel.append(t("dashboard.proxy_only"), el("span", "dash__hint", t("dashboard.proxy_hint")));
   const proxyRow = el("div", "dash__check");
   proxyRow.append(proxyInput, proxyLabel);
 
   const killGroup = document.createElement("fieldset");
   killGroup.className = "dash__group";
-  const killLegend = el("legend", "field__label", "Kill switch");
+  const killLegend = el("legend", "field__label", t("dashboard.kill_switch"));
   const killRadios = [];
   const killOptions = el("div", "dash__radios");
-  for (const [value, text] of [["on", "On"], ["off", "Off"], ["last", "Last"]]) {
+  for (const [value, text] of [["on", t("common.on")], ["off", t("common.off")], ["last", t("common.last")]]) {
     const wrap = el("label", "dash__radio");
     const input = document.createElement("input");
     input.type = "radio";
@@ -132,10 +132,10 @@ function build(host) {
     killOptions.append(wrap);
     killRadios.push(input);
   }
-  const killHint = el("span", "dash__hint", "Last keeps the value currently in effect.");
+  const killHint = el("span", "dash__hint", t("dashboard.kill_switch_hint"));
   killGroup.append(killLegend, killOptions, killHint);
 
-  const optConnect = el("button", "button button--filled", "Connect");
+  const optConnect = el("button", "button button--filled", t("dashboard.connect"));
   optConnect.type = "button";
 
   popover.append(locationField, proxyRow, killGroup, optConnect);
@@ -143,7 +143,7 @@ function build(host) {
   const menu = el("div", "dash__menu");
   menu.append(trigger, popover);
 
-  const refresh = el("button", "button button--tonal dash__refresh", "Refresh");
+  const refresh = el("button", "button button--tonal dash__refresh", t("common.refresh"));
   refresh.type = "button";
 
   const actions = el("div", "dash__actions");
@@ -152,8 +152,8 @@ function build(host) {
   const card = document.createElement("dl");
   card.className = "card dash__card";
   const rows = new Map();
-  for (const [key, label] of ROWS) {
-    const dt = el("dt", null, label);
+  for (const [key, labelKey] of ROWS) {
+    const dt = el("dt", null, t(labelKey));
     const dd = document.createElement("dd");
     const value = el("span", "dash__value");
     dd.append(value);
@@ -162,7 +162,7 @@ function build(host) {
     if (key === "quota") {
       bar = el("div", "dash__bar");
       bar.setAttribute("role", "progressbar");
-      bar.setAttribute("aria-label", "Quota remaining");
+      bar.setAttribute("aria-label", t("dashboard.quota_aria"));
       fill = el("div", "dash__bar-fill");
       bar.append(fill);
       bar.hidden = true;
@@ -178,10 +178,10 @@ function build(host) {
   const notice = el("p", "dash__notice");
   notice.setAttribute("aria-live", "polite");
   notice.hidden = true;
-  const retry = el("button", "button button--tonal dash__retry", "Retry");
+  const retry = el("button", "button button--tonal dash__retry", t("common.retry"));
   retry.type = "button";
   retry.hidden = true;
-  const guide = el("button", "button button--tonal dash__retry", "Blocked region guide");
+  const guide = el("button", "button button--tonal dash__retry", t("dashboard.blocked_region_guide"));
   guide.type = "button";
   guide.hidden = true;
   guide.addEventListener("click", function () {
@@ -189,8 +189,11 @@ function build(host) {
   });
   const noticeRow = el("div", "dash__notice-row");
   noticeRow.append(notice, retry, guide);
+  const details = el("p", "dash__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
-  root.append(actions, card, noticeRow);
+  root.append(actions, card, noticeRow, details);
   host.append(root);
 
   return {
@@ -208,6 +211,7 @@ function build(host) {
     notice: notice,
     retry: retry,
     guide: guide,
+    details: details,
   };
 }
 
@@ -318,8 +322,12 @@ export default {
     }
 
     function renderActions(snapshot) {
-      view.disconnect = DISCONNECT_WORDS.indexOf(connectionStatus(snapshot, ctx.store.hasState()).word) >= 0;
-      ui.primary.textContent = view.disconnect ? "Disconnect" : "Connect";
+      const state = snapshot.status && snapshot.status.state
+        ? String(snapshot.status.state).toUpperCase()
+        : "";
+      view.disconnect = DISCONNECT_STATES.indexOf(state) >= 0;
+      ui.primary.textContent = t(view.disconnect ? "dashboard.disconnect" : "dashboard.connect");
+      ui.optConnect.textContent = t("dashboard.connect");
       ui.primary.disabled = view.busy;
       ui.optConnect.disabled = view.busy || view.disconnect;
     }
@@ -364,7 +372,7 @@ export default {
     // choice while it survives the list.
     function rebuildLocations() {
       let found = false;
-      const options = [el("option", null, "Saved selection")];
+      const options = [el("option", null, t("dashboard.saved_selection"))];
       options[0].value = "";
       for (const country of view.locations) {
         const option = el("option", null, country.name + " (" + country.code + ")");
@@ -387,20 +395,71 @@ export default {
       entry.dd.hidden = !show;
     }
 
+    function uptimeText(status) {
+      if (!status || !status.since) return "";
+      return formatDuration(Math.max(0, Date.now() / 1000 - Number(status.since)));
+    }
+
+    function ratesText(status) {
+      if (!status) return "";
+      if (typeof status.rates_up !== "number" && typeof status.rates_down !== "number") return "";
+      return t("dashboard.rates_value", {
+        up: formatBytes(status.rates_up || 0),
+        down: formatBytes(status.rates_down || 0),
+      });
+    }
+
+    function totalsText(status) {
+      if (!status) return "";
+      if (typeof status.totals_up !== "number" && typeof status.totals_down !== "number") return "";
+      return t("dashboard.totals_value", {
+        up: formatBytes(status.totals_up || 0),
+        down: formatBytes(status.totals_down || 0),
+      });
+    }
+
+    function expiryText(seconds) {
+      return typeof seconds === "number" && seconds > 0 ? formatDateTime(seconds) : "";
+    }
+
+    function quotaText(status) {
+      if (!status) return "";
+      const remaining = status.quota_remaining;
+      const limit = status.quota_limit;
+      if (typeof remaining === "number" && typeof limit === "number") {
+        return t("dashboard.quota_remaining_of", {
+          remaining: formatBytes(remaining),
+          limit: formatBytes(limit),
+        });
+      }
+      if (typeof remaining === "number") {
+        return t("dashboard.quota_remaining", { remaining: formatBytes(remaining) });
+      }
+      if (typeof limit === "number") {
+        return t("dashboard.quota_limit", { limit: formatBytes(limit) });
+      }
+      return "";
+    }
+
+    function quotaResetText(status) {
+      if (!status || typeof status.quota_reset_unix !== "number" || status.quota_reset_unix <= 0) return "";
+      return formatDate(status.quota_reset_unix);
+    }
+
     function renderRows(status) {
-      setRow(ui.rows.get("uptime"), status ? status.uptime || "" : "");
+      setRow(ui.rows.get("uptime"), uptimeText(status));
       setRow(ui.rows.get("location"), status ? locationText(status) : "");
       setRow(ui.rows.get("exit_ip"), status ? exitText(status) : "");
-      setRow(ui.rows.get("rates"), status ? status.rates || "" : "");
-      setRow(ui.rows.get("totals"), status ? status.totals || "" : "");
+      setRow(ui.rows.get("rates"), ratesText(status));
+      setRow(ui.rows.get("totals"), totalsText(status));
       // Kill switch and Autoconnect are hidden until the first status; a
-      // false bool is omitted from the wire, so "Off" is the right default.
-      setRow(ui.rows.get("kill_switch"), status ? (status.kill_switch ? "On" : "Off") : "", status ? (status.kill_switch ? "good" : "warn") : "");
-      setRow(ui.rows.get("autoconnect"), status ? (status.autoconnect ? "On" : "Off") : "");
-      setRow(ui.rows.get("token_expiry"), status ? status.token_expiry || "" : "");
-      setRow(ui.rows.get("pass_expiry"), status ? status.pass_expiry || "" : "");
-      setRow(ui.rows.get("quota"), status ? status.quota_text || "" : "");
-      setRow(ui.rows.get("quota_reset"), status ? status.quota_reset || "" : "");
+      // false bool is omitted from the wire, so the off word is the default.
+      setRow(ui.rows.get("kill_switch"), status ? (status.kill_switch ? t("common.on") : t("common.off")) : "", status ? (status.kill_switch ? "good" : "warn") : "");
+      setRow(ui.rows.get("autoconnect"), status ? (status.autoconnect ? t("common.on") : t("common.off")) : "");
+      setRow(ui.rows.get("token_expiry"), expiryText(status && status.token_expires));
+      setRow(ui.rows.get("pass_expiry"), expiryText(status && status.pass_expires));
+      setRow(ui.rows.get("quota"), quotaText(status));
+      setRow(ui.rows.get("quota_reset"), quotaResetText(status));
 
       // The quota bar: only when both numbers are known and the limit is
       // positive; the fill is remaining/limit clamped to 0..1.
@@ -420,10 +479,11 @@ export default {
 
     function renderNotice(snapshot) {
       const notice = snapshot.notice;
-      if (notice && notice.message) {
-        ui.notice.textContent = notice.message;
-        ui.notice.title = notice.message;
-        if (notice.tone) ui.notice.dataset.tone = notice.tone;
+      const presentation = noticeText(notice);
+      if (presentation.text) {
+        ui.notice.textContent = presentation.text;
+        ui.notice.title = presentation.text;
+        if (presentation.tone) ui.notice.dataset.tone = presentation.tone;
         else delete ui.notice.dataset.tone;
         ui.notice.hidden = false;
       } else {
@@ -432,14 +492,18 @@ export default {
         delete ui.notice.dataset.tone;
         ui.notice.hidden = true;
       }
+      ui.details.textContent = presentation.detail;
+      ui.details.hidden = presentation.detail === "";
       // Retry (same action as Refresh) only for a failed first status load
       // on a reachable daemon; the unreachable case is the shell's gate.
       ui.retry.hidden = !(snapshot.status === undefined && notice && snapshot.reachable === true);
       // The region fix lives in the reusable guide: offer it beside the
-      // notice for the two bootstrap errors.
-      const message = (notice && notice.message) || "";
-      ui.guide.hidden = !(notice && notice.tone === "bad" &&
-        /HTTP 451|prepared pass|region/i.test(message));
+      // notice when the daemon asks for the blocked-region flow or the raw
+      // connect error names the 451/prepared-pass path.
+      const code = (notice && notice.code) || "";
+      const blocked = code === "dashboard.region.failed" || code === "dashboard.prepare.failed" ||
+        (code === "dashboard.connect.failed" && /HTTP 451|prepared pass|region/i.test(presentation.detail));
+      ui.guide.hidden = !(notice && notice.tone === "bad" && blocked);
     }
 
     function optionsPayload() {

@@ -18,6 +18,7 @@
  */
 
 import { flagIcon } from "../flags.js";
+import { t, formatNumber, noticeText } from "../i18n.js";
 
 const SEPARATOR = " · ";
 const ROW_PX = 48;
@@ -42,7 +43,7 @@ function isRecommended(country) {
 }
 
 function displayCountryName(country) {
-  if (isRecommended(country)) return "Recommended";
+  if (isRecommended(country)) return t("locations.recommended");
   const name = String((country && country.name) || "").trim();
   return name || String((country && country.code) || "").trim().toUpperCase();
 }
@@ -89,13 +90,16 @@ function buildRows(locations) {
   let index = 0;
   for (const country of locations || []) {
     const countryName = displayCountryName(country);
+    const rawCountryName = String((country && country.name) || "").trim();
     const countryCode = String((country && country.code) || "").trim();
     const recommended = isRecommended(country);
     const locked = !!country.locked;
     for (const city of (country && country.cities) || []) {
       const cityName = String((city && city.name) || "").trim();
       const cityCode = String((city && city.code) || "").trim();
-      const visibleCity = cityName && cityName.toLowerCase() !== countryName.toLowerCase()
+      const visibleCity = cityName &&
+        cityName.toLowerCase() !== countryName.toLowerCase() &&
+        cityName.toLowerCase() !== rawCountryName.toLowerCase()
         ? cityName
         : "";
       for (const server of (city && city.servers) || []) {
@@ -177,11 +181,13 @@ function latencyLabel(snapshot, row, busy) {
   const key = String(row.address || "").toLowerCase();
   if (busy) {
     const live = liveRTTs(snapshot)[key];
-    return live === undefined ? "—" : String(live);
+    return live === undefined ? "—" : formatNumber(live);
   }
   const sample = latencySamples(snapshot)[key];
   if (sample === undefined) return "—";
-  return sample.rtt_ms == null ? "timeout" : Math.round(Number(sample.rtt_ms)) + " ms";
+  return sample.rtt_ms == null
+    ? t("locations.timeout")
+    : formatNumber(Math.round(Number(sample.rtt_ms))) + " " + t("locations.ms");
 }
 
 function compareRows(a, b, sortMode, latency) {
@@ -287,22 +293,22 @@ function isSelected(row, snapshot) {
 function build(host) {
   const root = el("div", "loc");
 
-  const refresh = el("button", "button button--tonal loc__refresh", "Refresh");
+  const refresh = el("button", "button button--tonal loc__refresh", t("common.refresh"));
   refresh.type = "button";
-  const pingAll = el("button", "button button--tonal loc__ping-all", "Ping all");
+  const pingAll = el("button", "button button--tonal loc__ping-all", t("locations.ping_all"));
   pingAll.type = "button";
-  const locked = el("button", "button button--text loc__locked-action", "Show locked locations");
+  const locked = el("button", "button button--text loc__locked-action", t("locations.show_locked"));
   locked.type = "button";
   const actions = el("div", "loc__actions");
   actions.append(refresh, pingAll, locked);
 
-  const filterLabel = el("label", "field__label", "Search locations");
+  const filterLabel = el("label", "field__label", t("locations.search_label"));
   filterLabel.htmlFor = "loc-filter";
   const filter = document.createElement("input");
   filter.type = "text";
   filter.id = "loc-filter";
   filter.className = "input";
-  filter.placeholder = "Country, city, server, or protocol";
+  filter.placeholder = t("locations.search_placeholder");
   filter.autocomplete = "off";
   filter.spellcheck = false;
   const filterField = el("div", "field loc__field");
@@ -310,7 +316,7 @@ function build(host) {
 
   const list = el("div", "card loc__list");
   list.setAttribute("role", "listbox");
-  list.setAttribute("aria-label", "Locations");
+  list.setAttribute("aria-label", t("locations.list_aria"));
   list.tabIndex = 0;
   list.hidden = true;
 
@@ -320,8 +326,11 @@ function build(host) {
   const status = el("p", "loc__status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
+  const details = el("p", "loc__details");
+  details.dir = "ltr";
+  details.hidden = true;
 
-  root.append(actions, filterField, list, empty, status);
+  root.append(actions, filterField, list, empty, status, details);
   host.append(root);
 
   return {
@@ -333,6 +342,7 @@ function build(host) {
     list: list,
     empty: empty,
     status: status,
+    details: details,
   };
 }
 
@@ -368,16 +378,17 @@ export default {
       placeholder: null,
       statusText: null,
       statusTone: null,
+      statusDetail: null,
     };
 
     function isSpeedFailure(notice) {
-      return !!notice && typeof notice.message === "string" &&
-        notice.message.indexOf("Speed test failed: ") === 0;
+      return !!notice && notice.code === "locations.ping.failed";
     }
 
     function loadError(snapshot) {
       const notice = snapshot.locations_notice;
-      return notice && notice.tone === "bad" && !isSpeedFailure(notice) ? notice.message : "";
+      if (!notice || notice.tone !== "bad" || isSpeedFailure(notice)) return "";
+      return noticeText(notice).text;
     }
 
     function visibleRows(snapshot) {
@@ -428,8 +439,8 @@ export default {
         : {
           footer: false,
           address: "",
-          title: "Fastest",
-          detail: "Run Ping all to enable Fastest",
+          title: t("locations.fastest"),
+          detail: t("locations.fastest_empty_detail"),
           disabled: true,
           fastest: true,
           section: "fastest",
@@ -439,7 +450,7 @@ export default {
       if (fastest) {
         fastestRows[0].fastest = true;
         fastestRows[0].disabled = false;
-        fastestRows[0].title = "Fastest" + SEPARATOR + fastest.title;
+        fastestRows[0].title = t("locations.fastest_with", { title: fastest.title });
       }
 
       const favoriteRows = favorites.map(function (row) {
@@ -463,14 +474,14 @@ export default {
         );
       });
 
-      const sections = [{ id: "fastest", title: "Fastest", rows: fastestRows }];
+      const sections = [{ id: "fastest", title: t("locations.fastest"), rows: fastestRows }];
       if (favoriteRows.length > 0) {
-        sections.push({ id: "favorites", title: "Favorites", rows: favoriteRows });
+        sections.push({ id: "favorites", title: t("locations.favorites"), rows: favoriteRows });
       }
       if (recentRows.length > 0) {
-        sections.push({ id: "recent", title: "Recent", rows: recentRows, clearable: true });
+        sections.push({ id: "recent", title: t("locations.recent"), rows: recentRows, clearable: true });
       }
-      sections.push({ id: "locations", title: "Locations", rows: full });
+      sections.push({ id: "locations", title: t("locations.locations"), rows: full });
       return { sections: sections, full: full };
     }
 
@@ -517,9 +528,9 @@ export default {
           const title = el("h3", "loc__heading-title", section ? section.title : "");
           heading.append(title);
           if (section && section.clearable) {
-            const clear = el("button", "button button--text loc__clear", "Clear");
+            const clear = el("button", "button button--text loc__clear", t("locations.clear"));
             clear.type = "button";
-            clear.setAttribute("aria-label", "Clear recent locations");
+            clear.setAttribute("aria-label", t("locations.clear_recent_aria"));
             clear.addEventListener("click", onClearRecents);
             heading.append(clear);
           }
@@ -548,8 +559,8 @@ export default {
 
         const trailing = el("span", "loc__trailing");
         if (row.locked) {
-          const badge = el("span", "loc__locked-badge", "Locked");
-          badge.setAttribute("aria-label", "Locked");
+          const badge = el("span", "loc__locked-badge", t("locations.locked"));
+          badge.setAttribute("aria-label", t("locations.locked"));
           trailing.append(badge);
         }
         const latency = el("span", "loc__latency");
@@ -599,8 +610,8 @@ export default {
           if (entry.star.textContent !== want) entry.star.textContent = want;
           const name = [row.countryName, row.cityName].filter(Boolean).join(" ");
           const labelText = row.favorite
-            ? "Remove favorite " + name
-            : "Favorite " + name;
+            ? t("locations.unfavorite", { name: name })
+            : t("locations.favorite", { name: name });
           if (entry.star.getAttribute("aria-label") !== labelText) {
             entry.star.setAttribute("aria-label", labelText);
           }
@@ -629,10 +640,10 @@ export default {
       let placeholder = "";
       if (empty) {
         placeholder = !snapshot.locations_loaded && !loadError(snapshot)
-          ? "Loading locations…"
+          ? t("locations.loading")
           : view.filter.trim() !== ""
-            ? "No locations match the filter."
-            : "No locations loaded";
+            ? t("locations.no_match")
+            : t("locations.empty");
       }
       if (placeholder !== view.placeholder) {
         view.placeholder = placeholder;
@@ -647,28 +658,41 @@ export default {
     function statusLine(snapshot) {
       const error = loadError(snapshot);
       const notice = snapshot.locations_notice;
-      if (!snapshot.locations_loaded && !error) return { text: "Loading locations...", tone: "" };
-      if (error) return { text: error, tone: "bad" };
-      if (view.pingBusy) return { text: "Pinging " + view.pingHosts.length + " servers...", tone: "" };
-      if (isSpeedFailure(notice)) return { text: notice.message, tone: "bad" };
+      if (!snapshot.locations_loaded && !error) return { text: t("locations.loading_status"), tone: "", detail: "" };
+      if (error) {
+        return { text: error, tone: "bad", detail: noticeText(notice).detail };
+      }
+      if (view.pingBusy) {
+        return { text: t("locations.pinging", { count: formatNumber(view.pingHosts.length) }), tone: "", detail: "" };
+      }
+      if (isSpeedFailure(notice)) {
+        const failed = noticeText(notice);
+        return { text: failed.text, tone: "bad", detail: failed.detail };
+      }
       if (snapshot.locations_loaded && view.fullRows.length === 0 && view.filter.trim() !== "") {
-        return { text: "No locations match the filter", tone: "" };
+        return { text: t("locations.no_match_status"), tone: "", detail: "" };
       }
       const shared = snapshot.notice;
-      if (shared && shared.message) return { text: shared.message, tone: "" };
-      return { text: "", tone: "" };
+      if (shared) {
+        const presentation = noticeText(shared);
+        if (presentation.text) return { text: presentation.text, tone: shared.tone || "", detail: presentation.detail };
+      }
+      return { text: "", tone: "", detail: "" };
     }
 
     function renderStatus(snapshot) {
       const line = statusLine(snapshot);
-      if (line.text === view.statusText && line.tone === view.statusTone) return;
+      if (line.text === view.statusText && line.tone === view.statusTone && line.detail === view.statusDetail) return;
       view.statusText = line.text;
       view.statusTone = line.tone;
+      view.statusDetail = line.detail;
       ui.status.textContent = line.text;
       ui.status.title = line.text;
       if (line.tone) ui.status.dataset.tone = line.tone;
       else delete ui.status.dataset.tone;
       ui.status.hidden = line.text === "";
+      ui.details.textContent = line.detail;
+      ui.details.hidden = line.detail === "";
     }
 
     function renderActions(snapshot) {
@@ -676,7 +700,7 @@ export default {
       ui.refresh.disabled = busy;
       ui.pingAll.disabled = busy || allTargets().length === 0;
       const showLocked = !!snapshot.allow_locked;
-      const label = showLocked ? "Hide locked locations" : "Show locked locations";
+      const label = t(showLocked ? "locations.hide_locked" : "locations.show_locked");
       if (ui.locked.textContent !== label) ui.locked.textContent = label;
       ui.locked.setAttribute("aria-pressed", showLocked ? "true" : "false");
     }

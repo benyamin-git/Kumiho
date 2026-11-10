@@ -145,6 +145,23 @@ export function hasTranslation(key) {
   return lookup(key) !== undefined;
 }
 
+/**
+ * Present one structured controller notice: the localized summary from
+ * `notice.<code>` (with its raw params) and the raw engine error for the LTR
+ * details block. Unknown codes keep the controller's English message.
+ */
+export function noticeText(notice) {
+  if (!notice) return { text: "", detail: "", tone: "" };
+  const code = notice.code || "";
+  const key = code ? "notice." + code : "";
+  const params = notice.params || {};
+  const text = key && hasTranslation(key)
+    ? t(key, params)
+    : (notice.message || "");
+  const detail = typeof params.error === "string" ? params.error : "";
+  return { text: text, detail: detail, tone: notice.tone || "" };
+}
+
 /** Translate a key: active catalog, then English, then the key itself. */
 export function t(key, params) {
   const value = lookup(key);

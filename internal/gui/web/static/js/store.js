@@ -7,6 +7,8 @@
  * change, including a per-second uptime tick while connected).
  */
 
+import { t, hasTranslation } from "./i18n.js";
+
 const listeners = new Set();
 let state = {};
 let received = false;
@@ -54,13 +56,16 @@ export const store = {
  * (consumed as data-tone by the header and, later, by status chips).
  */
 export function connectionStatus(snapshot, hasState) {
-  if (!hasState) return { word: "Loading...", tone: "muted" };
-  if (!snapshot.reachable) return { word: "Daemon unreachable", tone: "warn" };
+  if (!hasState) return { word: t("shell.loading"), tone: "muted" };
+  if (!snapshot.reachable) return { word: t("shell.daemon_unreachable"), tone: "warn" };
   if (snapshot.status) {
-    return { word: snapshot.status.label || "Off", tone: "plain" };
+    const state = snapshot.status.state || "";
+    const key = state ? "state." + state : "";
+    if (key && hasTranslation(key)) return { word: t(key), tone: "plain" };
+    return { word: snapshot.status.label || t("state.IDLE"), tone: "plain" };
   }
-  if (snapshot.status_error) return { word: "Status unavailable", tone: "bad" };
-  return { word: "Loading...", tone: "muted" };
+  if (snapshot.status_error) return { word: t("shell.status_unavailable"), tone: "bad" };
+  return { word: t("shell.loading"), tone: "muted" };
 }
 
 /**
