@@ -103,6 +103,7 @@ object EngineJson {
         allowLocked = boolean(fields, "allow_locked"),
         relayUrl = string(fields, "relay_url"),
         relayTokenSet = boolean(fields, "relay_token_set"),
+        language = stringOrEmpty(fields, "language").ifEmpty { "system" },
     )
 
     fun loginState(json: String): LoginState = loginState(parseObject(json, "login state"))

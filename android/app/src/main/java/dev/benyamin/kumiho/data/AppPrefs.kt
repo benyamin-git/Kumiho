@@ -36,11 +36,23 @@ interface ThemePreferences {
     suspend fun setAccent(id: String)
 }
 
+/** The language mirror the repository reads before the engine is available. */
+interface LanguagePreferences {
+    /** The cached engine preference (`system|en|fa`), or empty when unset. */
+    val language: Flow<String>
+
+    suspend fun setLanguage(value: String)
+}
+
 /**
  * Typed access to the app preferences. Empty values mean "follow the system"
  * for the theme and "blue" for the accent; the caller resolves them.
  */
-class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore, BypassSettingsStore {
+class AppPrefs(context: Context) :
+    ThemePreferences,
+    LanguagePreferences,
+    SplitTunnelStore,
+    BypassSettingsStore {
     private val store = context.applicationContext.kumihoDataStore
 
     /** The stored theme id, or null when the user has not chosen one. */
@@ -48,6 +60,9 @@ class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore, BypassSet
 
     /** The stored accent id, or null when the user has not chosen one. */
     override val accent: Flow<String?> = store.data.map { it[KEY_ACCENT] }
+
+    /** The cached engine language preference; empty means no cached choice. */
+    override val language: Flow<String> = store.data.map { it[KEY_LANGUAGE].orEmpty() }
 
     /** Whether the four-step setup finished. */
     val setupComplete: Flow<Boolean> = store.data.map { it[KEY_SETUP_COMPLETE] ?: false }
@@ -75,6 +90,12 @@ class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore, BypassSet
         store.edit { it[KEY_ACCENT] = id }
     }
 
+    override suspend fun setLanguage(value: String) {
+        store.edit {
+            if (value.isEmpty()) it.remove(KEY_LANGUAGE) else it[KEY_LANGUAGE] = value
+        }
+    }
+
     override suspend fun setSplitMode(mode: SplitMode) {
         store.edit { it[KEY_SPLIT_MODE] = mode.name }
     }
@@ -94,6 +115,7 @@ class AppPrefs(context: Context) : ThemePreferences, SplitTunnelStore, BypassSet
     private companion object {
         val KEY_THEME = stringPreferencesKey("theme")
         val KEY_ACCENT = stringPreferencesKey("accent")
+        val KEY_LANGUAGE = stringPreferencesKey("language")
         val KEY_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
         val KEY_SPLIT_MODE = stringPreferencesKey("split_mode")
         val KEY_SPLIT_PACKAGES = stringSetPreferencesKey("split_packages")

@@ -79,6 +79,7 @@ data class Settings(
     val allowLocked: Boolean = false,
     val relayUrl: String? = null,
     val relayTokenSet: Boolean = false,
+    val language: String = "system",
 )
 
 /** One persisted favorite or recent location (`api.LocationRef`). */

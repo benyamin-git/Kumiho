@@ -235,7 +235,8 @@ class EngineJsonTest {
               "keepalive_profile": "aggressive",
               "allow_locked": true,
               "relay_url": "https://relay.example.test",
-              "relay_token_set": true
+              "relay_token_set": true,
+              "language": "fa"
             }
             """.trimIndent(),
         )
@@ -267,6 +268,7 @@ class EngineJsonTest {
         assertTrue(settings.allowLocked)
         assertEquals("https://relay.example.test", settings.relayUrl)
         assertTrue(settings.relayTokenSet)
+        assertEquals("fa", settings.language)
     }
 
     @Test
@@ -294,6 +296,7 @@ class EngineJsonTest {
         assertFalse(settings.allowLocked)
         assertNull(settings.relayUrl)
         assertFalse(settings.relayTokenSet)
+        assertEquals("system", settings.language)
     }
 
     @Test

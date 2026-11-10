@@ -15,18 +15,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.ui.account.AccountRoute
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
@@ -62,50 +68,65 @@ fun KumihoApp(
     onTvConnectConsumed: () -> Unit = {},
 ) {
     val paletteState by container.themeRepository.state.collectAsStateWithLifecycle()
+    val language by container.languageRepository.effective.collectAsStateWithLifecycle()
+    val baseContext = LocalContext.current
+    val localizedContext = remember(language, baseContext) {
+        container.languageRepository.localizedContext(baseContext)
+    }
     // null means "not read yet": a returning user must never see the setup
     // screen flash before the stored completion arrives.
     val setupComplete by container.appPrefs.setupComplete
         .collectAsStateWithLifecycle(initialValue = null)
     val nav = remember { ShellNavigation() }
-    when (val state = paletteState) {
-        PaletteState.Loading -> KumihoLoadingSurface()
-        is PaletteState.Error -> PaletteErrorSurface(state.message, container.themeRepository::retry)
-        is PaletteState.Ready -> {
-            val guideOpen by container.guide.visible.collectAsStateWithLifecycle()
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (isTv) {
-                    TvKumihoTheme(colors = state.colors) {
-                        TvRoot(
-                            container = container,
-                            tvConnectRequested = tvConnectRequested,
-                            onConnectConsumed = onTvConnectConsumed,
-                        )
-                    }
-                } else {
-                    KumihoTheme(colors = state.colors) {
-                        when (setupComplete) {
-                            null -> SetupGateLoading()
-                            false -> SetupRoute(container)
-                            true -> AppShell(
-                                nav = nav,
-                                home = { DashboardRoute(container) },
-                                locations = { LocationsRoute(container) },
-                                account = { AccountRoute(container) },
-                                settings = { SettingsRoute(container) },
-                                logs = { LogsRoute(container) },
-                                diagnostics = { DiagnosticsRoute(container) },
+    CompositionLocalProvider(
+        LocalContext provides localizedContext,
+        LocalConfiguration provides localizedContext.resources.configuration,
+        LocalLayoutDirection provides if (language == AppLanguage.PERSIAN) {
+            LayoutDirection.Rtl
+        } else {
+            LayoutDirection.Ltr
+        },
+    ) {
+        when (val state = paletteState) {
+            PaletteState.Loading -> KumihoLoadingSurface()
+            is PaletteState.Error -> PaletteErrorSurface(state.message, container.themeRepository::retry)
+            is PaletteState.Ready -> {
+                val guideOpen by container.guide.visible.collectAsStateWithLifecycle()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (isTv) {
+                        TvKumihoTheme(colors = state.colors) {
+                            TvRoot(
+                                container = container,
+                                tvConnectRequested = tvConnectRequested,
+                                onConnectConsumed = onTvConnectConsumed,
                             )
                         }
+                    } else {
+                        KumihoTheme(colors = state.colors) {
+                            when (setupComplete) {
+                                null -> SetupGateLoading()
+                                false -> SetupRoute(container)
+                                true -> AppShell(
+                                    nav = nav,
+                                    home = { DashboardRoute(container) },
+                                    locations = { LocationsRoute(container) },
+                                    account = { AccountRoute(container) },
+                                    settings = { SettingsRoute(container) },
+                                    logs = { LogsRoute(container) },
+                                    diagnostics = { DiagnosticsRoute(container) },
+                                )
+                            }
+                        }
                     }
-                }
-                // The guide covers the wizard and both shells; it is reached
-                // from setup, Settings → Region and the dashboard notice.
-                if (guideOpen) {
-                    KumihoTheme(colors = state.colors) {
-                        BlockedRegionGuide(
-                            container = container,
-                            onClose = container.guide::close,
-                        )
+                    // The guide covers the wizard and both shells; it is reached
+                    // from setup, Settings → Region and the dashboard notice.
+                    if (guideOpen) {
+                        KumihoTheme(colors = state.colors) {
+                            BlockedRegionGuide(
+                                container = container,
+                                onClose = container.guide::close,
+                            )
+                        }
                     }
                 }
             }

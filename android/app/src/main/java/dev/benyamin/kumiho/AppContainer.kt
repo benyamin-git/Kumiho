@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import dev.benyamin.kumiho.data.AllowBypassRepository
 import dev.benyamin.kumiho.data.AppPrefs
 import dev.benyamin.kumiho.data.InstalledAppsRepository
+import dev.benyamin.kumiho.data.LanguageRepository
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
@@ -14,10 +15,13 @@ import dev.benyamin.kumiho.vpn.BypassSettingsProvider
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import dev.benyamin.kumiho.widget.WidgetRefresh
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -31,6 +35,13 @@ class AppContainer(context: Context) {
 
     /** The app preferences DataStore. */
     val appPrefs = AppPrefs(appContext)
+
+    /** Cached language, QS/notification locale and the engine preference. */
+    val languageRepository = LanguageRepository(
+        prefs = appPrefs,
+        scope = scope,
+        systemLanguage = { appContext.resources.configuration.locales[0].language },
+    )
 
     /** The shared Blocked region guide visibility (v0.11.0). */
     val guide = GuideController()
@@ -81,12 +92,24 @@ class AppContainer(context: Context) {
 
     /** Starts app-scoped work. Idempotent. */
     fun start() {
+        languageRepository.start()
         themeRepository.start()
         splitTunnelRepository.start()
         allowBypassRepository.start()
         // Starts the tile/widget collector only after `container` is published,
         // so its first widget refresh can read the container back safely.
         vpnServiceCoordinator.start()
+        scope.launch {
+            val engine = vpnServiceCoordinator.engine.filterNotNull().first()
+            val settings = try {
+                engine.settings()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                return@launch
+            }
+            languageRepository.syncEngine(settings.language)
+        }
         // A widget cannot render before the palette is ready; repaint both
         // whenever the theme or accent resolves, including after a change.
         scope.launch {
