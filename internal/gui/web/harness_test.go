@@ -441,6 +441,49 @@ func TestHarnessPrefsSetLiveTheme(t *testing.T) {
 	}
 }
 
+// TestHarnessPrefsSetLanguage pins the first-paint cache path without a page
+// reload: en/fa persist, empty clears, an invalid value is rejected, and the
+// theme CSS stays untouched.
+func TestHarnessPrefsSetLanguage(t *testing.T) {
+	f := startFixture(t, fixtureOptions{})
+
+	got := postAction(t, f.base(),
+		`{"type":"action","name":"`+gui.ActionPrefsSet+`","payload":{"language":"fa"}}`)
+	if got.status != http.StatusOK {
+		t.Fatalf("POST prefs_set language = %d (%s); want 200", got.status, got.body)
+	}
+	saved, err := prefs.Load()
+	if err != nil {
+		t.Fatalf("prefs.Load: %v", err)
+	}
+	if saved.Language != "fa" {
+		t.Fatalf("saved language = %q, want fa", saved.Language)
+	}
+	after := do(t, http.MethodGet, f.base(), nil)
+	if !strings.Contains(after.body, "color-scheme:dark") {
+		t.Errorf("language-only prefs_set changed the theme CSS")
+	}
+
+	cleared := postAction(t, f.base(),
+		`{"type":"action","name":"`+gui.ActionPrefsSet+`","payload":{"language":""}}`)
+	if cleared.status != http.StatusOK {
+		t.Fatalf("POST prefs_set clear = %d (%s); want 200", cleared.status, cleared.body)
+	}
+	saved, err = prefs.Load()
+	if err != nil {
+		t.Fatalf("prefs.Load: %v", err)
+	}
+	if saved.Language != "" {
+		t.Fatalf("saved language = %q after clear, want empty", saved.Language)
+	}
+
+	bad := postAction(t, f.base(),
+		`{"type":"action","name":"`+gui.ActionPrefsSet+`","payload":{"language":"de"}}`)
+	if bad.status != http.StatusBadRequest {
+		t.Errorf("POST prefs_set with an invalid language = %d (%s); want 400", bad.status, bad.body)
+	}
+}
+
 // TestHarnessPrefsSetOnboarded pins the T3.4 wiring: the wizard's
 // `prefs_set {"onboarded":true}` persists gui.toml and mirrors the flag into
 // the host state (State.Onboarded), exactly as the shell does — the wizard

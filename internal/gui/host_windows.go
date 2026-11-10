@@ -262,6 +262,11 @@ func (h *host) run() error {
 		p = prefs.Prefs{Theme: string(theme.Light), Accent: theme.Accents[0].Name, Autostart: true}
 	}
 	h.prefs = p
+	systemLanguage := prefs.SystemLanguage()
+	cachedLanguage := h.prefs.Language
+	if cachedLanguage == "" {
+		cachedLanguage = systemLanguage
+	}
 
 	// The stored autostart flag is mirrored into the per-user Run entry at
 	// every launch (inventory §Tray/app lifecycle), so the logon registration
@@ -346,6 +351,8 @@ func (h *host) run() error {
 	h.ctrl = NewController(h.client, Options{
 		Theme:          string(th),
 		Accent:         accent,
+		Language:       cachedLanguage,
+		SystemLanguage: systemLanguage,
 		Onboarded:      h.prefs.Onboarded,
 		Autostart:      &autostart,
 		LogsExport:     h.logsExport,
@@ -840,10 +847,11 @@ func (h *host) openExternal(act Action) error {
 // prefsSetPayload is the prefs_set action's payload: any subset of the GUI
 // preferences the page may change.
 type prefsSetPayload struct {
-	Theme     string `json:"theme,omitempty"`
-	Accent    string `json:"accent,omitempty"`
-	Autostart *bool  `json:"autostart,omitempty"`
-	Onboarded *bool  `json:"onboarded,omitempty"`
+	Theme     string  `json:"theme,omitempty"`
+	Accent    string  `json:"accent,omitempty"`
+	Language  *string `json:"language,omitempty"`
+	Autostart *bool   `json:"autostart,omitempty"`
+	Onboarded *bool   `json:"onboarded,omitempty"`
 }
 
 // applyPrefs handles prefs_set host-side: persist gui.toml, then apply a
@@ -864,7 +872,10 @@ type prefsSetPayload struct {
 // prefs are written before the registry so a Save failure leaves nothing
 // half-applied. Onboarded (T3.4) is persisted and pushed into the controller
 // through SetOnboarded, so the wizard's `Open Kumiho` reaches the UI as the
-// ratified State.Onboarded projection immediately.
+// ratified State.Onboarded projection immediately. Language (T5.1) is the
+// first-paint cache only: it is written for the next launch, the engine
+// setting stays authoritative, and a language-only change never reloads the
+// page.
 func (h *host) applyPrefs(act Action) error {
 	p, err := decodePayload[prefsSetPayload](act)
 	if err != nil {
@@ -877,6 +888,14 @@ func (h *host) applyPrefs(act Action) error {
 	}
 	if p.Accent != "" {
 		updated.Accent = p.Accent
+	}
+	if p.Language != nil {
+		switch *p.Language {
+		case "", "en", "fa":
+			updated.Language = *p.Language
+		default:
+			return fmt.Errorf("prefs_set: language: %q is not en, fa or empty", *p.Language)
+		}
 	}
 	if p.Autostart != nil {
 		updated.Autostart = *p.Autostart
@@ -922,8 +941,8 @@ func (h *host) applyPrefs(act Action) error {
 			h.webview.Navigate(h.server.URL())
 		})
 	}
-	h.log.logf("prefs_set: theme=%s accent=%s autostart=%v onboarded=%v",
-		updated.Theme, updated.Accent, updated.Autostart, updated.Onboarded)
+	h.log.logf("prefs_set: theme=%s accent=%s language=%q autostart=%v onboarded=%v",
+		updated.Theme, updated.Accent, updated.Language, updated.Autostart, updated.Onboarded)
 	return nil
 }
 

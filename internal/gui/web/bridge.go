@@ -455,10 +455,11 @@ func (h *Harness) pushNow() {
 // prefsSetPayload is the prefs_set action payload: any subset of the GUI
 // preferences the page may change (the shell's shape).
 type prefsSetPayload struct {
-	Theme     string `json:"theme,omitempty"`
-	Accent    string `json:"accent,omitempty"`
-	Autostart *bool  `json:"autostart,omitempty"`
-	Onboarded *bool  `json:"onboarded,omitempty"`
+	Theme     string  `json:"theme,omitempty"`
+	Accent    string  `json:"accent,omitempty"`
+	Language  *string `json:"language,omitempty"`
+	Autostart *bool   `json:"autostart,omitempty"`
+	Onboarded *bool   `json:"onboarded,omitempty"`
 }
 
 // applyPrefs handles prefs_set host-side, mirroring the Windows shell: merge
@@ -488,6 +489,14 @@ func (h *Harness) applyPrefs(raw json.RawMessage) error {
 	if p.Accent != "" {
 		updated.Accent = p.Accent
 	}
+	if p.Language != nil {
+		switch *p.Language {
+		case "", "en", "fa":
+			updated.Language = *p.Language
+		default:
+			return fmt.Errorf("prefs_set: language: %q is not en, fa or empty", *p.Language)
+		}
+	}
 	if p.Autostart != nil {
 		updated.Autostart = *p.Autostart
 	}
@@ -511,8 +520,8 @@ func (h *Harness) applyPrefs(raw json.RawMessage) error {
 		if updated.Theme != current.Theme || updated.Accent != current.Accent {
 			h.cfg.Server.SetThemeCSS(css)
 		}
-		h.logf("prefs_set: theme=%s accent=%s autostart=%v onboarded=%v",
-			updated.Theme, updated.Accent, updated.Autostart, updated.Onboarded)
+		h.logf("prefs_set: theme=%s accent=%s language=%q autostart=%v onboarded=%v",
+			updated.Theme, updated.Accent, updated.Language, updated.Autostart, updated.Onboarded)
 	}
 	h.pushNow()
 	return nil

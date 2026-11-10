@@ -209,3 +209,47 @@ func TestApplyPrefsAutostart(t *testing.T) {
 		}
 	})
 }
+
+// TestApplyPrefsLanguage pins the language-only cache write: en/fa persist,
+// empty clears, an invalid value is rejected, and none of these touch the
+// theme path (the test host has no server or webview, so a reload would
+// panic).
+func TestApplyPrefsLanguage(t *testing.T) {
+	useTempPrefs(t)
+	h := &host{prefs: prefs.Prefs{Theme: "dark", Accent: "blue"}}
+
+	apply := func(raw string) error {
+		return h.applyPrefs(Action{Name: ActionPrefsSet, Payload: []byte(raw)})
+	}
+	if err := apply(`{"language":"fa"}`); err != nil {
+		t.Fatalf("applyPrefs(fa): %v", err)
+	}
+	saved, err := prefs.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if saved.Language != "fa" || h.currentPrefs().Language != "fa" {
+		t.Fatalf("saved/in-memory language = %q/%q, want fa", saved.Language, h.currentPrefs().Language)
+	}
+	if saved.Theme != "dark" || saved.Accent != "blue" {
+		t.Fatalf("appearance changed on a language-only save: %+v", saved)
+	}
+
+	if err := apply(`{"language":""}`); err != nil {
+		t.Fatalf("applyPrefs(clear): %v", err)
+	}
+	saved, err = prefs.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if saved.Language != "" || h.currentPrefs().Language != "" {
+		t.Fatalf("cleared language = %q/%q, want empty", saved.Language, h.currentPrefs().Language)
+	}
+
+	if err := apply(`{"language":"de"}`); err == nil {
+		t.Fatal("applyPrefs accepted an invalid language")
+	}
+	if h.currentPrefs().Language != "" {
+		t.Fatalf("in-memory language = %q after the rejected write, want empty", h.currentPrefs().Language)
+	}
+}

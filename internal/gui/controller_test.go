@@ -761,6 +761,74 @@ func TestDispatchSettingsLoadFailure(t *testing.T) {
 	}
 }
 
+func TestResolveLanguage(t *testing.T) {
+	cases := []struct {
+		pref   string
+		system string
+		want   string
+	}{
+		{"system", "fa", "fa"},
+		{"system", "en", "en"},
+		{"", "fa", "fa"},
+		{"", "en", "en"},
+		{"fa", "en", "fa"},
+		{"en", "fa", "en"},
+		{"bogus", "fa", "fa"},
+	}
+	for _, tc := range cases {
+		if got := resolveLanguage(tc.pref, tc.system); got != tc.want {
+			t.Errorf("resolveLanguage(%q, %q) = %q, want %q", tc.pref, tc.system, got, tc.want)
+		}
+	}
+}
+
+func TestLanguageProjectionSeedsFromSystem(t *testing.T) {
+	ctrl := NewController(newFakeDaemon(), Options{SystemLanguage: "fa"})
+	snap := ctrl.Snapshot()
+	if snap.Language != "fa" || snap.SystemLanguage != "fa" {
+		t.Fatalf("language/system = %q/%q, want fa/fa", snap.Language, snap.SystemLanguage)
+	}
+}
+
+func TestLanguageProjectionLoadsAndRepublishes(t *testing.T) {
+	f := newFakeDaemon()
+	f.settings = api.SettingsView{Language: "fa"}
+	ctrl := NewController(f, Options{Language: "en", SystemLanguage: "en"})
+	if snap := ctrl.Snapshot(); snap.Language != "en" || snap.SystemLanguage != "en" {
+		t.Fatalf("first paint language/system = %q/%q, want en/en", snap.Language, snap.SystemLanguage)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionSettingsGet}); err != nil {
+		t.Fatalf("Dispatch(settings_get): %v", err)
+	}
+	if got := ctrl.Snapshot().Language; got != "fa" {
+		t.Fatalf("language after load = %q, want fa", got)
+	}
+
+	f.set(func(d *fakeDaemon) { d.settings.Language = "en" })
+	if err := ctrl.Dispatch(Action{Name: ActionSettingsGet}); err != nil {
+		t.Fatalf("Dispatch(settings_get) after change: %v", err)
+	}
+	if got := ctrl.Snapshot().Language; got != "en" {
+		t.Fatalf("language after republish = %q, want en", got)
+	}
+}
+
+func TestLanguageProjectionExplicitEnglishOnPersianSystem(t *testing.T) {
+	f := newFakeDaemon()
+	f.settings = api.SettingsView{Language: "en"}
+	ctrl := NewController(f, Options{Language: "fa", SystemLanguage: "fa"})
+	if err := ctrl.Dispatch(Action{Name: ActionSettingsGet}); err != nil {
+		t.Fatalf("Dispatch(settings_get): %v", err)
+	}
+	snap := ctrl.Snapshot()
+	if snap.Language != "en" {
+		t.Fatalf("language = %q, want the explicit en", snap.Language)
+	}
+	if snap.SystemLanguage != "fa" {
+		t.Fatalf("system_language = %q, want fa", snap.SystemLanguage)
+	}
+}
+
 func TestNewControllerUpdateCurrent(t *testing.T) {
 	ctrl := NewController(newFakeDaemon(), Options{})
 	// The Version row shows the running build from the first snapshot,

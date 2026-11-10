@@ -179,6 +179,12 @@ type Options struct {
 	// Theme and Accent are the initial house appearance carried in State.
 	Theme  string
 	Accent string
+	// Language is the cached effective UI language (en|fa) for the first
+	// paint. Empty resolves through SystemLanguage.
+	Language string
+	// SystemLanguage is the resolved OS UI language (en|fa); it feeds the
+	// System preview in the language picker. Empty means en.
+	SystemLanguage string
 	// Onboarded is the initial onboarding flag from gui.toml (T3.4): while
 	// false the UI shows the first-run wizard. The shell and the harness
 	// pass prefs.Onboarded at construction and flip it through SetOnboarded
@@ -317,6 +323,12 @@ type Controller struct {
 	theme  string
 	accent string
 
+	// language is the effective UI language (en|fa); systemLanguage is the
+	// OS resolution used by the System picker row. The engine setting is
+	// authoritative and loadSettings reconciles language.
+	language       string
+	systemLanguage string
+
 	// onboarded carries the first-run wizard flag (T3.4); see
 	// Options.Onboarded and SetOnboarded.
 	onboarded bool
@@ -344,18 +356,39 @@ func NewController(d Daemon, opts Options) *Controller {
 		v := *opts.Autostart
 		autostart = &v
 	}
+	systemLanguage := opts.SystemLanguage
+	if systemLanguage != "fa" {
+		systemLanguage = "en"
+	}
 	return &Controller{
-		d:         d,
-		opts:      opts,
-		reachable: true, // ready until a dial failure proves otherwise
-		theme:     opts.Theme,
-		accent:    opts.Accent,
-		onboarded: opts.Onboarded,
-		autostart: autostart,
+		d:              d,
+		opts:           opts,
+		reachable:      true, // ready until a dial failure proves otherwise
+		theme:          opts.Theme,
+		accent:         opts.Accent,
+		language:       resolveLanguage(opts.Language, systemLanguage),
+		systemLanguage: systemLanguage,
+		onboarded:      opts.Onboarded,
+		autostart:      autostart,
 		// The Version row shows the running build from the first snapshot,
 		// before any check has run (T2.4 ruling).
 		update: UpdateInfo{Current: version.Version},
 	}
+}
+
+// resolveLanguage applies the engine preference (system|en|fa) to the OS
+// language. Explicit en/fa win; system and any unknown value follow the OS.
+func resolveLanguage(pref, system string) string {
+	switch pref {
+	case "fa":
+		return "fa"
+	case "en":
+		return "en"
+	}
+	if system == "fa" {
+		return "fa"
+	}
+	return "en"
 }
 
 // Snapshot returns the current state. Expired notices are dropped and uptime
@@ -412,6 +445,8 @@ func (c *Controller) Snapshot() State {
 		DiagnosticsNotice: liveNotice(c.diagnosticsNotice, now),
 		Theme:             c.theme,
 		Accent:            c.accent,
+		Language:          c.language,
+		SystemLanguage:    c.systemLanguage,
 		Service:           c.service,
 		Update:            c.update,
 	}
@@ -1666,6 +1701,7 @@ func (c *Controller) loadSettings(ctx context.Context) error {
 	c.mu.Lock()
 	cp := view
 	c.settings = &cp
+	c.language = resolveLanguage(view.Language, c.systemLanguage)
 	c.settingsNotice = clearNoticeError(c.settingsNotice)
 	c.mu.Unlock()
 	return nil

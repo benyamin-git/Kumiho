@@ -181,6 +181,7 @@ func settingsView() api.SettingsView {
 		DoHProvider:          "automatic",
 		AllowLAN:             false,
 		LogLevel:             "info",
+		Language:             "system",
 		RedactTargets:        true,
 		KillSwitch:           "on",
 		Autoconnect:          "off",

@@ -46,9 +46,10 @@ const (
 // Prefs mirrors gui.toml (D31). Window geometry is returned as saved, with no
 // clamping; the zero value means "no saved geometry".
 type Prefs struct {
-	Theme  string `toml:"theme"`
-	Accent string `toml:"accent"`
-	Window struct {
+	Theme    string `toml:"theme"`
+	Accent   string `toml:"accent"`
+	Language string `toml:"language"`
+	Window   struct {
 		X         int  `toml:"x"`
 		Y         int  `toml:"y"`
 		Width     int  `toml:"width"`
@@ -118,7 +119,20 @@ func normalize(p Prefs) Prefs {
 	if !knownAccent(p.Accent) {
 		p.Accent = defaultAccent
 	}
+	switch p.Language {
+	case "en", "fa":
+	default:
+		p.Language = ""
+	}
 	return p
+}
+
+// SystemLanguage returns the OS UI language: fa only when the OS is set to
+// Persian, otherwise en. The host uses it for the first paint and for the
+// System preview in the language picker; the engine setting stays
+// authoritative.
+func SystemLanguage() string {
+	return platformSystemLanguage()
 }
 
 // knownAccent reports whether name is one of the six house accents.

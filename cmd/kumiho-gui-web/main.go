@@ -87,6 +87,8 @@ func run(port int) error {
 	ctrl := gui.NewController(m, gui.Options{
 		Theme:          string(th),
 		Accent:         accent,
+		Language:       "en",
+		SystemLanguage: "en",
 		Onboarded:      p.Onboarded,
 		LogsExport:     devLogsExport,
 		OpenLogsFolder: devOpenLogsFolder,

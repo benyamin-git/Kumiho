@@ -258,6 +258,12 @@ type State struct {
 	Theme  string `json:"theme,omitempty"`
 	Accent string `json:"accent,omitempty"`
 
+	// Language is the effective UI language (en|fa); SystemLanguage is the
+	// OS resolution used for the System preview in the picker. The engine
+	// setting is authoritative and is reconciled on every settings load.
+	Language       string `json:"language,omitempty"`
+	SystemLanguage string `json:"system_language,omitempty"`
+
 	// Service and Update are GUI-side projections filled by their tasks
 	// (service control, the manual update check); they are not protocol
 	// types.

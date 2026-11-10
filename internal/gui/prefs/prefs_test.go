@@ -50,6 +50,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	want := Prefs{
 		Theme:          "oled",
 		Accent:         "rose",
+		Language:       "fa",
 		Autostart:      false,
 		Onboarded:      true,
 		CloseHintShown: true,
@@ -67,7 +68,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 	for _, key := range []string{
-		`theme = "oled"`, `accent = "rose"`, `autostart = false`,
+		`theme = "oled"`, `accent = "rose"`, `language = "fa"`, `autostart = false`,
 		`onboarded = true`, `close_hint_shown = true`, "[window]",
 		"x = -300", "y = 40", "width = 1280", "height = 800",
 		"maximized = true",
@@ -93,6 +94,7 @@ func TestLoadExactTags(t *testing.T) {
 	const doc = `
 theme = "light"
 accent = "teal"
+language = "fa"
 autostart = false
 onboarded = true
 close_hint_shown = true
@@ -111,7 +113,7 @@ height = 500
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	want := Prefs{Theme: "light", Accent: "teal", Onboarded: true, CloseHintShown: true}
+	want := Prefs{Theme: "light", Accent: "teal", Language: "fa", Onboarded: true, CloseHintShown: true}
 	want.Window.X, want.Window.Y = -320, 48
 	want.Window.Width, want.Window.Height = 1234, 500
 	if got != want {
@@ -121,8 +123,8 @@ height = 500
 
 func TestLoadUnknownValuesFallBack(t *testing.T) {
 	cases := map[string]string{
-		"unknown": "theme = \"banana\"\naccent = \"chartreuse\"\n",
-		"empty":   "theme = \"\"\naccent = \"\"\n",
+		"unknown": "theme = \"banana\"\naccent = \"chartreuse\"\nlanguage = \"de\"\n",
+		"empty":   "theme = \"\"\naccent = \"\"\nlanguage = \"\"\n",
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -139,6 +141,64 @@ func TestLoadUnknownValuesFallBack(t *testing.T) {
 			want := Prefs{Theme: themeDark, Accent: defaultAccent, Autostart: true}
 			if got != want {
 				t.Errorf("Load() = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestLanguageNormalization(t *testing.T) {
+	for raw, want := range map[string]string{
+		"en":     "en",
+		"fa":     "fa",
+		"system": "",
+		"de":     "",
+		"":       "",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			path := tempPath(t)
+			forceTheme(t, themeLight)
+			doc := "language = \"" + raw + "\"\n"
+			if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got.Language != want {
+				t.Fatalf("Language = %q, want %q", got.Language, want)
+			}
+		})
+	}
+}
+
+func TestSystemLanguageEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the Windows implementation reads GetUserDefaultUILanguage")
+	}
+	cases := []struct {
+		name       string
+		lcAll      string
+		lcMessages string
+		lang       string
+		want       string
+	}{
+		{"lc_all_fa", "fa_IR.UTF-8", "en_US.UTF-8", "en_US.UTF-8", "fa"},
+		{"lc_messages_fa", "", "fa_IR.UTF-8", "en_US.UTF-8", "fa"},
+		{"lang_fallback_fa", "", "", "fa_IR.UTF-8", "fa"},
+		{"lang_bare_fa", "", "", "fa", "fa"},
+		{"lc_all_wins_english", "en_US.UTF-8", "fa_IR.UTF-8", "fa_IR.UTF-8", "en"},
+		{"lc_all_c", "C", "fa_IR.UTF-8", "fa_IR.UTF-8", "en"},
+		{"empty", "", "", "", "en"},
+		{"english", "en_US.UTF-8", "", "fa_IR.UTF-8", "en"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LC_ALL", tc.lcAll)
+			t.Setenv("LC_MESSAGES", tc.lcMessages)
+			t.Setenv("LANG", tc.lang)
+			if got := SystemLanguage(); got != tc.want {
+				t.Fatalf("SystemLanguage() = %q, want %q", got, tc.want)
 			}
 		})
 	}

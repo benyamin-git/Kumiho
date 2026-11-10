@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -38,4 +39,21 @@ func platformThemeDefault() string {
 		return themeDark
 	}
 	return themeLight
+}
+
+var (
+	kernel32                 = windows.NewLazySystemDLL("kernel32.dll")
+	getUserDefaultUILanguage = kernel32.NewProc("GetUserDefaultUILanguage")
+)
+
+// platformSystemLanguage reads the user's Windows UI language. The primary
+// language id is the low 10 bits of the LANGID; 0x29 is Persian. Any failure
+// or other language maps to English.
+func platformSystemLanguage() string {
+	id, _, _ := getUserDefaultUILanguage.Call()
+	const persian = 0x29
+	if uint16(id)&0x3ff == persian {
+		return "fa"
+	}
+	return "en"
 }
