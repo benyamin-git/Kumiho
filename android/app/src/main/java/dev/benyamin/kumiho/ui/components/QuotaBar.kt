@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -20,6 +21,12 @@ import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.theme.PillShape
+
+/** Stable tags for the quota track and its inline-start fill. */
+object QuotaBarTags {
+    const val TRACK = "quota_track"
+    const val FILL = "quota_fill"
+}
 
 /**
  * A quota bar. The fill tone shifts as the remaining fraction crosses the
@@ -54,6 +61,7 @@ fun KumihoQuotaBar(
                 .height(8.dp)
                 .clip(PillShape)
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .testTag(QuotaBarTags.TRACK)
                 .semantics { progressBarRangeInfo = ProgressBarRangeInfo(clamped, 0f..1f) },
         ) {
             Box(
@@ -61,7 +69,8 @@ fun KumihoQuotaBar(
                     .fillMaxWidth(clamped)
                     .fillMaxHeight()
                     .clip(PillShape)
-                    .background(fill),
+                    .background(fill)
+                    .testTag(QuotaBarTags.FILL),
             )
         }
     }

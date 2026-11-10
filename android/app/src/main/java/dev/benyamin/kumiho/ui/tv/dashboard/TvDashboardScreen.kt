@@ -22,10 +22,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -41,6 +43,7 @@ import dev.benyamin.kumiho.ui.dashboard.DashboardTags
 import dev.benyamin.kumiho.ui.dashboard.noticeActionLabel
 import dev.benyamin.kumiho.ui.dashboard.noticeText
 import dev.benyamin.kumiho.ui.dashboard.phaseLabel
+import dev.benyamin.kumiho.ui.i18n.BidiText
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.tv.components.TvButton
 import dev.benyamin.kumiho.ui.tv.components.TvDialog
@@ -62,6 +65,7 @@ fun TvDashboardScreen(
     val powerFocus = remember { FocusRequester() }
     val optionsFocus = remember { FocusRequester() }
     val locationFocus = remember { FocusRequester() }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     Box(
         modifier = modifier
@@ -101,6 +105,7 @@ fun TvDashboardScreen(
                         optionsFocus = optionsFocus,
                         locationFocus = locationFocus,
                         hasLocationCard = state.showLocationCard,
+                        rtl = rtl,
                     )
                 }
                 TvDashboardCards(
@@ -143,6 +148,7 @@ private fun PowerHero(
     optionsFocus: FocusRequester,
     locationFocus: FocusRequester,
     hasLocationCard: Boolean,
+    rtl: Boolean,
 ) {
     val label = phaseLabel(state.phase)
     val status = state.status
@@ -156,7 +162,7 @@ private fun PowerHero(
     val server = if (state.phase.active) DashboardFormat.hostOf(status?.server) else null
     val connectionLine = when {
         !state.phase.active -> null
-        location != null && server != null -> "$location · $server"
+        location != null && server != null -> "$location · ${BidiText.isolateLtr(server)}"
         location != null -> location
         server != null -> server
         else -> null
@@ -185,7 +191,9 @@ private fun PowerHero(
             .focusRequester(powerFocus)
             .focusProperties {
                 down = optionsFocus
-                if (hasLocationCard) right = locationFocus
+                if (hasLocationCard) {
+                    if (rtl) left = locationFocus else right = locationFocus
+                }
             },
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -239,7 +247,9 @@ private fun PowerHero(
             .focusRequester(optionsFocus)
             .focusProperties {
                 up = powerFocus
-                if (hasLocationCard) right = locationFocus
+                if (hasLocationCard) {
+                    if (rtl) left = locationFocus else right = locationFocus
+                }
             },
     )
     if (state.powerBusy) {

@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
@@ -42,6 +43,16 @@ import dev.benyamin.kumiho.ui.components.moreRouteIcon
 import dev.benyamin.kumiho.ui.screens.HomePlaceholder
 import dev.benyamin.kumiho.ui.screens.PlaceholderScreen
 import dev.benyamin.kumiho.ui.theme.Dimens
+
+/** Stable tags for the shell surfaces and their navigation order. */
+object ShellTags {
+    const val BOTTOM_BAR = "shell_bottom_bar"
+    const val RAIL = "shell_rail"
+    const val TOP_BAR = "shell_top_bar"
+
+    fun tab(id: String): String = "shell_tab_$id"
+    fun railTab(id: String): String = "shell_rail_$id"
+}
 
 /**
  * The shell. It owns the only [Scaffold], the 64dp top bar and navigation: a
@@ -226,7 +237,10 @@ private fun BottomBar(
 ) {
     // A page that has moved into the More sheet keeps More marked.
     val marked = if (selected in tabs) selected else Destination.More
-    NavigationBar(modifier = modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+    NavigationBar(
+        modifier = modifier.testTag(ShellTags.BOTTOM_BAR),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
         tabs.forEach { destination ->
             NavigationBarItem(
                 selected = destination == marked,
@@ -234,6 +248,7 @@ private fun BottomBar(
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
                 label = { Text(stringResource(destination.labelRes)) },
                 alwaysShowLabel = true,
+                modifier = Modifier.testTag(ShellTags.tab(destination.route.ifEmpty { "more" })),
             )
         }
     }
@@ -245,7 +260,10 @@ private fun NavRail(
     onSelect: (Destination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    NavigationRail(modifier = modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+    NavigationRail(
+        modifier = modifier.testTag(ShellTags.RAIL),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
         Destination.tabs.forEach { destination ->
             NavigationRailItem(
                 selected = destination == selected,
@@ -253,6 +271,7 @@ private fun NavRail(
                 icon = { Icon(painter = destinationIcon(destination), contentDescription = null) },
                 label = { Text(stringResource(destination.labelRes)) },
                 alwaysShowLabel = true,
+                modifier = Modifier.testTag(ShellTags.railTab(destination.route.ifEmpty { "more" })),
             )
         }
     }

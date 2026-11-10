@@ -20,9 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -63,6 +65,7 @@ fun TvConnectOptionsPage(
     val backFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
     val colors = MaterialTheme.colorScheme
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     Box(
         modifier = modifier
@@ -120,7 +123,7 @@ fun TvConnectOptionsPage(
                         .testTag(DashboardTags.SHEET_PROXY_ONLY)
                         .focusRequester(proxyFocus)
                         .focusProperties {
-                            left = firstFocus
+                            if (rtl) right = firstFocus else left = firstFocus
                             down = lockdownFocus
                         },
                 ) {
@@ -162,7 +165,7 @@ fun TvConnectOptionsPage(
                         .testTag(DashboardTags.SHEET_LOCKDOWN)
                         .focusRequester(lockdownFocus)
                         .focusProperties {
-                            left = firstFocus
+                            if (rtl) right = firstFocus else left = firstFocus
                             up = proxyFocus
                             down = if (state.optionsConnectEnabled) connectFocus else backFocus
                         },
@@ -247,6 +250,7 @@ private fun Picker(
 ) {
     val choice = state.effectiveChoice
     val colors = MaterialTheme.colorScheme
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     ChoiceRow(
         title = stringResource(R.string.dashboard_picker_recommended),
         summary = stringResource(R.string.dashboard_picker_recommended_text),
@@ -255,7 +259,9 @@ private fun Picker(
         modifier = Modifier
             .testTag(DashboardTags.PICKER_RECOMMENDED)
             .focusRequester(firstFocus)
-            .focusProperties { right = rightFocus },
+            .focusProperties {
+                if (rtl) left = rightFocus else right = rightFocus
+            },
     )
     if (state.status?.location != null) {
         val saved = if (state.locationIsRecommended) {
@@ -270,7 +276,9 @@ private fun Picker(
             onClick = actions.onSelectSaved,
             modifier = Modifier
                 .testTag(DashboardTags.PICKER_SAVED)
-                .focusProperties { right = rightFocus },
+                .focusProperties {
+                if (rtl) left = rightFocus else right = rightFocus
+            },
         )
     }
 
@@ -317,7 +325,9 @@ private fun Picker(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(countryTag(country.code))
-                        .focusProperties { right = rightFocus },
+                        .focusProperties {
+                if (rtl) left = rightFocus else right = rightFocus
+            },
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -337,7 +347,7 @@ private fun Picker(
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            text = if (expanded) "▾" else "▸",
+                            text = if (expanded) "▾" else if (rtl) "◂" else "▸",
                             style = MaterialTheme.typography.titleSmall,
                             color = colors.onSurfaceVariant,
                         )
@@ -356,7 +366,9 @@ private fun Picker(
                             modifier = Modifier
                                 .padding(start = TvDimens.Space4)
                                 .testTag(cityTag(country.code, city.code))
-                                .focusProperties { right = rightFocus },
+                                .focusProperties {
+                if (rtl) left = rightFocus else right = rightFocus
+            },
                         )
                     }
                 }

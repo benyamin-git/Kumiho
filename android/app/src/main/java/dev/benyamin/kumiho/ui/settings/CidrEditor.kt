@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
@@ -57,6 +58,7 @@ fun CidrEditor(
             minLines = 3,
             maxLines = 5,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
         )
         CidrNote(
             text = stringResource(R.string.settings_cidr_hint),

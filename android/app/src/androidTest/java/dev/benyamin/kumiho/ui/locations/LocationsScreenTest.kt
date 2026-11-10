@@ -22,6 +22,7 @@ import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
+import dev.benyamin.kumiho.ui.i18n.BidiText
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
@@ -124,7 +125,11 @@ class LocationsScreenTest {
         scrollTo(rowTag("us", "nyc", EDGE_ADDRESS))
         row.assertIsSelected()
         rule.onNodeWithTag(rowTag("us", "nyc", SHARE_ADDRESS)).assertIsNotSelected()
-        rule.onNodeWithText("United States · New York · $EDGE_ADDRESS · connect, quic").assertExists()
+        rule.onNodeWithText(
+            "United States · New York · " +
+                "${BidiText.isolateLtr(EDGE_ADDRESS)} · " +
+                BidiText.isolateLtr("connect, quic"),
+        ).assertExists()
     }
 
     @Test
@@ -135,7 +140,11 @@ class LocationsScreenTest {
             ),
         )
 
-        rule.onNodeWithText("United States · New York · $QUARANTINED_ADDRESS · connect").assertExists()
+        rule.onNodeWithText(
+            "United States · New York · " +
+                "${BidiText.isolateLtr(QUARANTINED_ADDRESS)} · " +
+                BidiText.isolateLtr("connect"),
+        ).assertExists()
     }
 
     // ---- filter and controls --------------------------------------------

@@ -16,6 +16,7 @@ import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
+import dev.benyamin.kumiho.ui.i18n.BidiText
 import dev.benyamin.kumiho.ui.locations.LocationTree
 import dev.benyamin.kumiho.ui.locations.LocationsActions
 import dev.benyamin.kumiho.ui.locations.LocationsState
@@ -95,7 +96,11 @@ class TvLocationsScreenTest : TvTestBase() {
         rule.onNodeWithTag(serverRowTag("us", "nyc", EDGE_ADDRESS)).assertIsSelected()
         rule.onNodeWithTag(LocationsTags.SUMMARY).assertIsDisplayed()
         rule
-            .onNodeWithText("United States · New York · $EDGE_ADDRESS · connect, quic")
+            .onNodeWithText(
+                "United States · New York · " +
+                    "${BidiText.isolateLtr(EDGE_ADDRESS)} · " +
+                    BidiText.isolateLtr("connect, quic"),
+            )
             .assertExists()
     }
 

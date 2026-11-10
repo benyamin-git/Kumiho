@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.theme.Dimens
@@ -31,7 +32,10 @@ fun KumihoTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Surface(color = MaterialTheme.colorScheme.background, modifier = modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = modifier.testTag(ShellTags.TOP_BAR),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

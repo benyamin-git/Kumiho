@@ -43,6 +43,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
@@ -153,6 +154,7 @@ fun SignInPane(
                         imeAction = ImeAction.Done,
                     ),
                     keyboardActions = KeyboardActions(onDone = { onSubmitEmail(email) }),
+                    textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(emailFocus)
@@ -203,6 +205,7 @@ fun SignInPane(
                             onSubmitPassword(value)
                         },
                     ),
+                    textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(passwordFocus)
@@ -274,6 +277,7 @@ fun SignInPane(
                             onSubmitCode(value)
                         },
                     ),
+                    textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(codeFocus)

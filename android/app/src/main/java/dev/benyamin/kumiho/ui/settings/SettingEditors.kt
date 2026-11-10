@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.StatusTone
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
@@ -371,6 +372,7 @@ fun SettingEditorDialog(
                         maxLines = 1,
                         enabled = !locked,
                         isError = invalid != null,
+                        textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                         visualTransformation = if (spec.kind == SettingKind.SECRET) {
                             PasswordVisualTransformation()
                         } else {

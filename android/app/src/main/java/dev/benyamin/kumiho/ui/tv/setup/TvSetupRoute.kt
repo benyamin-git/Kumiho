@@ -47,6 +47,7 @@ import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.account.BrowserPasteMessage
 import dev.benyamin.kumiho.ui.account.pasteMessageText
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.settings.LANGUAGE_OPTIONS
 import dev.benyamin.kumiho.ui.settings.languageLabel
 import dev.benyamin.kumiho.ui.setup.SetupActions
@@ -997,7 +998,7 @@ private fun TvField(
             label = { androidx.compose.material3.Text(label) },
             singleLine = true,
             enabled = enabled,
-            textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+            textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.ltrTechnical(),
             visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(onDone = { onDone() }),

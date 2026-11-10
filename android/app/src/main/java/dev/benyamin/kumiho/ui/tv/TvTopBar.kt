@@ -29,6 +29,7 @@ import dev.benyamin.kumiho.ui.tv.theme.TvDimens
 
 /** Stable tags for every shell surface a connected test traverses. */
 object TvShellTags {
+    const val RAIL = "tv_rail"
     const val RAIL_PREFIX = "tv_rail_"
     const val MORE = "tv_more_page"
     const val MORE_LOGS = "tv_more_logs"
@@ -50,7 +51,8 @@ fun TvRail(
     Column(
         modifier = modifier
             .width(TvDimens.RailWidth)
-            .padding(end = TvDimens.Space2),
+            .padding(end = TvDimens.Space2)
+            .testTag(TvShellTags.RAIL),
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
     ) {
         Text(

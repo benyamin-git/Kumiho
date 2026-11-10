@@ -69,6 +69,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.AppLanguage
+import dev.benyamin.kumiho.ui.i18n.BidiText
 import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
@@ -388,9 +389,9 @@ internal fun selectionText(selection: LocationSelection?): String {
         selection.countryName?.let(parts::add)
         selection.cityName?.let(parts::add)
     }
-    selection.serverAddress?.let(parts::add)
+    selection.serverAddress?.let { parts += BidiText.isolateLtr(it) }
     if (selection.protocolNames.isNotEmpty()) {
-        parts += selection.protocolNames.joinToString(", ")
+        parts += BidiText.isolateLtr(selection.protocolNames.joinToString(", "))
     }
     return parts.joinToString(separator)
 }

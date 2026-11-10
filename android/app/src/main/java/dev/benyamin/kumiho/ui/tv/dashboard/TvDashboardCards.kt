@@ -17,8 +17,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -51,12 +53,14 @@ fun TvDashboardCards(
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
     ) {
         if (state.showLocationCard) {
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
             LocationCard(
                 state = state,
                 onOpenOptions = onOpenOptions,
                 powerFocus = powerFocus,
                 optionsFocus = optionsFocus,
                 locationFocus = locationFocus,
+                rtl = rtl,
             )
         }
         if (state.showExitCard) {
@@ -78,6 +82,7 @@ private fun LocationCard(
     powerFocus: FocusRequester,
     optionsFocus: FocusRequester,
     locationFocus: FocusRequester,
+    rtl: Boolean,
 ) {
     val status = state.status
     val country = if (state.locationIsRecommended) {
@@ -102,7 +107,7 @@ private fun LocationCard(
             .focusRequester(locationFocus)
             .focusProperties {
                 down = optionsFocus
-                left = powerFocus
+                if (rtl) right = powerFocus else left = powerFocus
             },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(TvDimens.Space1)) {

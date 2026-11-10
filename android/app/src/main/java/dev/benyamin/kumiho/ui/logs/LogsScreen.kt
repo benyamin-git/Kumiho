@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,10 +41,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.core.content.FileProvider
@@ -353,7 +356,10 @@ private fun LogConsole(
         contentPadding = PaddingValues(bottom = Dimens.Space4),
     ) {
         itemsIndexed(entries, key = { index, entry -> "$index-${entry.time}-${entry.tag}" }) { index, entry ->
-            LogRow(entry = entry, index = index, onCopy = onCopy)
+            // Logs are raw English; keep the console a real LTR block in Persian.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                LogRow(entry = entry, index = index, onCopy = onCopy)
+            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
         if (entries.size >= LogFilter.MAX_ENTRIES) {

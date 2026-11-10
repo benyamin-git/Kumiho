@@ -50,6 +50,7 @@ import dev.benyamin.kumiho.engine.RegionHost
 import dev.benyamin.kumiho.engine.RelayTest
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.ui.i18n.PersianFormat
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import kotlinx.coroutines.delay
@@ -353,6 +354,7 @@ fun BlockedRegionGuide(
                             onValueChange = { relayUrl = it },
                             label = { Text(stringResource(R.string.guide_relay_url)) },
                             singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedButton(
@@ -374,6 +376,7 @@ fun BlockedRegionGuide(
                             onValueChange = { relayToken = it },
                             label = { Text(stringResource(R.string.guide_relay_token)) },
                             singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedButton(

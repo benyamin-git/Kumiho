@@ -18,6 +18,7 @@ import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoPowerButton
 import dev.benyamin.kumiho.ui.components.KumihoStatusChip
 import dev.benyamin.kumiho.ui.components.StatusTone
+import dev.benyamin.kumiho.ui.i18n.BidiText
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 
@@ -45,7 +46,7 @@ fun PowerHero(
     val server = if (state.phase.active) DashboardFormat.hostOf(status?.server) else null
     val connectionLine = when {
         !state.phase.active -> null
-        location != null && server != null -> "$location · $server"
+        location != null && server != null -> "$location · ${BidiText.isolateLtr(server)}"
         location != null -> location
         server != null -> server
         else -> null

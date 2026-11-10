@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoCard
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 
@@ -182,6 +183,7 @@ fun BrowserWaitingCard(
                     keyboardType = KeyboardType.Uri,
                     imeAction = ImeAction.Done,
                 ),
+                textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
                 keyboardActions = KeyboardActions(onDone = { onPasteSubmit() }),
                 modifier = Modifier
                     .fillMaxWidth()

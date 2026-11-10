@@ -47,6 +47,7 @@ import dev.benyamin.kumiho.ui.settings.SettingKind
 import dev.benyamin.kumiho.ui.settings.SettingSpec
 import dev.benyamin.kumiho.ui.settings.SettingInput
 import dev.benyamin.kumiho.ui.settings.LANGUAGE_OPTIONS
+import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.settings.SettingsActions
 import dev.benyamin.kumiho.ui.settings.SettingsAppState
 import dev.benyamin.kumiho.ui.settings.SettingsCatalog
@@ -1238,7 +1239,7 @@ private fun TvInput(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+            textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.ltrTechnical(),
             visualTransformation = if (masked) {
                 PasswordVisualTransformation()
             } else {
