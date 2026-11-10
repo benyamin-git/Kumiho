@@ -2,8 +2,8 @@
 
 Kumiho ships one APK for phones and televisions. On a TV it uses the same
 engine, `VpnService`, account store, split tunneling and diagnostics as the
-phone app, with a ten-foot Compose for TV shell: a left rail, a large focus
-ring and remote-only controls.
+phone app, with a ten-foot Compose for TV shell: a navigation rail (left in
+English, right in Persian), a large focus ring and remote-only controls.
 
 ## Requirements
 
@@ -51,9 +51,12 @@ rejects it.
 
 ## First run
 
-1. Accept the consent step. Continue runs the six-host region preflight; a
-   blocked network opens the same **Blocked region** guide as the phone (a
-   separate screen, not a fifth step).
+1. Choose **System**, **English** or **فارسی** in the inline language row at
+   the top of the consent step, then accept it. The language row stays visible
+   above the scrollable consent copy so the D-pad can reach it first. Continue
+   runs the six-host region preflight; a blocked network opens the same
+   **Blocked region** guide as the phone (a separate screen, not a fifth
+   step).
 2. Sign in with Firefox Accounts. **Continue in browser** opens the in-app
    WebView; the HTTPS Firefox Accounts success redirect is intercepted and
    returns to the app. If the WebView cannot start, use **Paste redirect URL
@@ -84,6 +87,31 @@ Every action on Home, Locations, Account, Settings, split tunneling, Logs and
 Diagnostics is reachable without a pointer. Focus is never drawn only with
 colour: rows scale and gain a border when focused.
 
+## Language and RTL
+
+The TV app shares the phone app's `language` setting (`system`, `en` or `fa`,
+default `system`) and the same DataStore mirror.
+
+- **Language row.** It is the first row of **Settings → Kumiho app** and it is
+  also inline on the consent step. The three choices are **System**,
+  **English** and **فارسی**; the current choice is checked, and **System**
+  shows the resolved language in the note.
+- **Immediate switching.** Changing the language rebuilds the TV context and
+  the channel without reconnecting the tunnel or restarting setup.
+- **RTL rail.** Persian puts the rail on the right and mirrors the rail order,
+  focus movement, back/forward chevrons, dialogs and progress. Flags, the
+  Kumiho banner/logo and the power glyph stay unmirrored.
+- **Remote focus.** Moving between rail and content follows the visual
+  direction: Right reaches the content from the right-side rail, and Left
+  returns to it. The rail focuses the selected tab when a screen opens, so a
+  programmatic open (for example the connect card) never leaves focus on Home.
+- **Typography and values.** Persian uses Vazirmatn with the TV type scale and
+  more line height; English keeps the system font. Persian digits and Jalali
+  dates appear in user-facing values, while IPs, ports, versions, hostnames,
+  logs and diagnostic facts stay Latin and isolated.
+- **System surfaces.** The Google TV channel and the status notification use
+  the localized context after a change.
+
 ## TV behaviour
 
 - The tunnel, watchdog, quota polling and account rotation run in the same
@@ -108,7 +136,8 @@ colour: rows scale and gain a border when focused.
   focus stays on the list after a search or a speed-order switch. The speed
   order applies only to the full list when the engine emits `ping_done`; there
   is no timer.
-- Settings includes **Region**: a **Blocked region** guide action, then
+- Settings starts with the app-level **Language** row, then the themed
+  catalog. It includes **Region**: a **Blocked region** guide action, then
   `allow_locked`, the HTTPS `relay_url`, a
   write-only `relay_token` with Set/Clear, and a **Test relay** action with
   its inline result. Region help text states that the relay is used only

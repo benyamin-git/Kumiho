@@ -8,6 +8,64 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-10
+
+Language and RTL: the Windows GUI and the Android phone/TV app now ship in
+English and Persian, with a first-run choice and a full right-to-left layout.
+The TUI, CLI and logs stay English.
+
+### Added
+
+- **Persian and English in the Windows GUI and Android.** The engine gains the
+  `language` setting (`system`, `en` or `fa`, default `system`), shared through
+  `settings_set` and `SettingsView`. Choose **System**, **English** or
+  **فارسی** on the GUI/Android welcome step or in **Settings → Kumiho app →
+  Language**; the change applies immediately without reconnecting or resetting
+  setup. **System** resolves to Persian only when the OS UI language is
+  Persian, and to English everywhere else.
+- **Full RTL layout.** The GUI rail, navigation order, lists, dialogs,
+  progress and directional icons mirror in Persian; the Android phone and TV
+  shells mirror the bottom bar, rail, tabs, focus movement and dialogs. Flags,
+  logos and the power glyph stay unmirrored. Persian bullets anchor to the
+  inline start instead of the physical left.
+- **Persian typography and values.** Vazirmatn 33.003 (four static weights) is
+  bundled for Persian only — WOFF2 in the GUI and TTF on Android; English
+  keeps the system font. Persian digits and Jalali dates are used in
+  user-facing values, while IPs, ports, versions, hostnames, emails, logs and
+  diagnostic facts stay Latin and bidi-isolated.
+- **Localized system surfaces.** Android notification channels, the Quick
+  Settings tile, both home-screen widgets and the Google TV channel follow the
+  app language. The Windows tray menu, tooltip and first-close hint follow the
+  GUI language.
+- **`README.fa.md` and Persian screenshots.** A full RTL Persian README links
+  back to the English source of truth and documents the Persian UI. The
+  translation glossary and style guide live in `docs/translations/fa.md`.
+- **Versioned release assets.** Primary downloads now carry the exact release
+  tag (for example `Kumiho-v0.12.0-Windows-amd64.zip`). Stable aliases remain
+  for `/releases/latest` and the README. `SHA256SUMS-v0.12.0` and
+  `SHA256SUMS` have identical contents and cover both filename sets.
+
+### Changed
+
+- The GUI caches the last effective language in `gui.toml` for the first paint
+  and reconciles it with the engine state. Android mirrors the choice in
+  DataStore so the first composition and system surfaces start in the right
+  language.
+- Known errors show a Persian summary and action; unknown errors show the
+  generic Persian summary and keep the raw English detail in a left-to-right
+  details block.
+- Language labels and actions are localized in Logs and Diagnostics; log
+  lines, check titles and technical facts remain English.
+
+### Fixed
+
+- Mixed Persian/Latin connection and location lines no longer reorder or leave
+  a separator at the wrong end.
+- Persian byte sizes no longer show a trailing `.0`, and TV setup keeps the
+  language picker visible above the consent copy.
+- The TV rail now focuses the selected tab when a screen opens, instead of
+  always focusing Home.
+
 ## [0.11.1] - 2026-11-10
 
 ### Fixed

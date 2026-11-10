@@ -15,7 +15,7 @@ installing, the first-run wizard, each screen, the tray, diagnostics and
 uninstalling.
 
 > **Reading the current UI.** This guide describes the app shipping with
-> v0.4.0. The older walk-era inventory in
+> v0.12.0. The older walk-era inventory in
 > [gui-feature-inventory.md](gui-feature-inventory.md) describes an earlier
 > native build and differs in places; where they disagree, the running app is
 > authoritative.
@@ -30,6 +30,50 @@ uninstalling.
 - The Kumiho service running (`Get-Service kumiho`). The app can start
   without it, but the header reads `Daemon unreachable` and nothing loads
   until the service is back.
+
+## Language and RTL
+
+The app ships in English and Persian. The language is an engine setting
+(`language` = `system`, `en` or `fa`, default `system`); every client of a
+given daemon reads the same key, so the GUI and the CLI agree on what is
+configured even though only the GUI renders Persian.
+
+- **First run.** The welcome/consent step starts with the inline language
+  control: **System**, **English** or **فارسی**. Switching takes effect
+  immediately and keeps the current step and consent tick. The wizard still
+  has five steps.
+- **Settings.** The first row of **Settings → Kumiho app**, above Theme, is
+  **Language**. The same control appears in the setup wizard; there is no
+  separate language dialog.
+- **System** resolves to Persian only when the Windows user-interface
+  language is Persian (LANGID `0x29`). Every other UI language resolves to
+  English. When **System** is selected, the row shows the language it
+  currently resolves to, so it is never ambiguous.
+- **First paint.** The effective language is cached in `gui.toml`. The shell
+  uses that cache for the first paint instead of flashing English, then
+  reconciles with the engine's `language` setting when the controller state
+  arrives. An explicit `?lang=fa` or `?lang=en` query parameter is a
+  capture/dev override: it forces the catalog for that page load and skips
+  the controller reconciliation.
+- **Immediate switching.** Changing the language does not reconnect the
+  tunnel, reload the app or reset setup. The same screen is rendered again in
+  the new catalog, including the tray menu, status words and tooltips.
+- **Full RTL.** Persian lays the shell out right-to-left: the rail moves to
+  the right, navigation order mirrors, directional icons and progress bars
+  mirror, and the onboarding bullets sit on the right. Flags, the Kumiho
+  logo, the power glyph and platform logos stay unmirrored.
+- **Typography.** Persian uses the bundled Vazirmatn 33.003 family (regular,
+  medium, semibold and bold WOFF2), with more body line height for Persian
+  shaping. English keeps the system UI font; no font is fetched from the
+  network.
+- **Mixed text.** Persian digits and Jalali dates are used for user-facing
+  values. IP addresses, ports, versions, hostnames, emails, logs, diagnostic
+  facts and engine messages stay Latin and are isolated from the surrounding
+  Persian so bidi ordering cannot scramble them.
+- **Errors.** The visible summary and action are Persian. Known error codes
+  map to a Persian message; unknown codes use the generic Persian error.
+  The raw English detail stays available in an expandable, left-to-right
+  block. The tray notification text follows the effective language.
 
 ## Installing
 
@@ -71,9 +115,11 @@ window instead of opening another (see [Tray and lifecycle](#tray-and-lifecycle)
 Before the first connect, the app shows a five-step setup wizard instead of
 the screens. The rail and header are hidden while it runs. Its steps are:
 
-1. **Welcome to Kumiho** — the consent gate. Read the two panels (*What
-   Kumiho does* and *What to keep in mind*), then tick **I understand** to
-   unlock **Continue**. Continue first probes Mozilla's control-plane hosts;
+1. **Welcome to Kumiho** — the consent gate. The inline **System / English /
+   فارسی** control is at the top of this step; changing it keeps the step and
+   the tick. Read the two panels (*What Kumiho does* and *What to keep in
+   mind*), then tick **I understand** to unlock **Continue**. Continue first
+   probes Mozilla's control-plane hosts;
    if this network answers HTTP 451, the reusable **Blocked region** screen
    opens before sign-in. The tick itself is not persisted: if you quit before
    finishing, the wizard starts at this step again next launch.
@@ -102,7 +148,9 @@ go straight to the shell.
 
 ## The shell
 
-The window has a header and a left rail; one screen is shown at a time.
+The window has a header and a navigation rail; one screen is shown at a time.
+The rail is on the left in English and on the right in Persian, and the list
+order mirrors with it.
 
 - **Header.** The screen title on the left; the daemon status word on the
   right. The word is one of:
@@ -212,6 +260,9 @@ and a **Refresh** action.
 
 **Kumiho app** — per-user choices that apply immediately:
 
+- **Language** — `System`, `English` or `فارسی`; the first row in this group,
+  above Theme. **System** shows the language it resolves to (see
+  [Language and RTL](#language-and-rtl)).
 - **Theme** — `Light`, `Dark` or `OLED`.
 - **Accent** — `Blue`, `Teal`, `Green`, `Orange`, `Rose` or `Violet`.
 - **Start at login** — `on`/`off`; whether the app opens in the tray when you
@@ -359,10 +410,13 @@ Right-click the tray icon to connect or quit.*
 (`--tray-start`); **Quit** from the tray exits fully. A second launch focuses
 the existing window rather than starting a second copy.
 
-The app's own preferences (window size and position, theme, accent, autostart,
-the tray hint) live in `%APPDATA%\kumiho\gui.toml`; override the location with
-`KUMIHO_GUI_PREFS`. The daemon's own config and state stay under
-`%ProgramData%\kumiho` (see [usage.md](usage.md#files)).
+The app's own preferences (window size and position, theme, accent, the last
+effective UI language, autostart and the tray hint) live in
+`%APPDATA%\kumiho\gui.toml`; override the location with `KUMIHO_GUI_PREFS`.
+The daemon's own config and state stay under `%ProgramData%\kumiho` (see
+[usage.md](usage.md#files)). The `gui.toml` language is only a first-paint
+cache; the engine setting is authoritative and every settings load rewrites
+the cache.
 
 ## Diagnostics tools
 

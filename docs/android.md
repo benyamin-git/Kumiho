@@ -6,21 +6,20 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.10.1**
-(`versionCode` 1001); the README carries the latest published release and
+This guide describes the app as implemented for **v0.12.0**
+(`versionCode` 1200); the README carries the latest published release and
 download links. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. Physical acceptance for v0.6.0 through v0.10.1 is still pending.
-> The production-signed
-> [v0.10.1 release](https://github.com/benyamin-git/kumiho/releases/tag/v0.10.1)
-> ships the three Android APKs with `SHA256SUMS`. The signing key and GitHub
-> Actions secret values remain user-owned. Local builds are test builds, not
-> published releases. The direct Firefox Accounts OAuth browser flow described
-> below replaced the v0.6.0 flow and is in the published v0.10.1 APK.
+> full pass. Physical acceptance for v0.6.0 through v0.12.0 is still pending.
+> Each full GitHub release carries the three production-signed Android APKs
+> with `SHA256SUMS`. The signing key and GitHub Actions secret values remain
+> user-owned. Local builds are test builds, not published releases. The direct
+> Firefox Accounts OAuth browser flow described below replaced the v0.6.0 flow
+> and is in the published Android builds.
 
 ## Requirements
 
@@ -40,8 +39,9 @@ download links. Read the honesty note below before relying on it.
   verifier also checks `zipalign -P 16` on every APK. A physical 16 KB device
   run remains an unticked acceptance item.
 
-The app is English-only, uses logical start/end layout, and needs no Google
-Play services.
+The app ships in English and Persian, uses logical start/end layout, and needs
+no Google Play services. The language is selected in setup or Settings; see
+[Language and RTL](#language-and-rtl).
 
 ## Installing and updating
 
@@ -65,14 +65,19 @@ three APKs and `SHA256SUMS`:
 
 | Asset | ABI | Use |
 |---|---|---|
-| `Kumiho-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
-| `Kumiho-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
-| `Kumiho-Android-universal.apk` | both | One file if unsure |
+| `Kumiho-v0.12.0-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
+| `Kumiho-v0.12.0-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
+| `Kumiho-v0.12.0-Android-universal.apk` | both | One file if unsure |
 
-Those stable names are attached by `.github/workflows/release.yml` from the
-per-version builds produced by `scripts/android-release.sh`. Download from the
-project's GitHub Releases and check the APK against the `SHA256SUMS`
-published with it. Never install an APK from an untrusted mirror.
+The versioned names are the primary v0.12.0 assets. The release also keeps the
+stable aliases `Kumiho-Android-arm64-v8a.apk`,
+`Kumiho-Android-armeabi-v7a.apk` and `Kumiho-Android-universal.apk` for
+`/releases/latest` and the README. Both sets are produced by
+`.github/workflows/release.yml` from the per-version builds made by
+`scripts/android-release.sh`, and `SHA256SUMS-v0.12.0` (identical to
+`SHA256SUMS`) lists both. Download from the project's GitHub Releases and
+check the APK against the checksum file published with it. Never install an
+APK from an untrusted mirror.
 
 ### Updating
 
@@ -108,7 +113,9 @@ The setup flow runs before the shell and has four numbered steps. The bottom
 action is fixed, and the consent tick on step 1 shares that surface with the
 disabled **Continue** so it is always visible.
 
-1. **Consent.** Read what Kumiho routes (the traffic of apps that use the
+1. **Consent.** Choose **System**, **English** or **فارسی** in the inline
+   language control at the top of the step. Switching keeps the step and the
+   consent tick. Read what Kumiho routes (the traffic of apps that use the
    tunnel goes to a Kumiho proxy server), what stays on the phone (tokens,
    settings, server list and logs in private storage; no telemetry) and the
    local-proxy warning. Tick *I understand what Kumiho routes…* to enable
@@ -157,6 +164,45 @@ open; the rail always shows all five. **More** is a sheet with those pages,
 then **Logs** and **Diagnostics**, which open as pages with a back arrow. Light,
 Dark and OLED themes and six accents are in Settings; the first run follows the
 system's light/dark preference, and OLED is opt-in.
+
+## Language and RTL
+
+The app ships in English and Persian. The choice is stored as the engine
+`language` setting (`system`, `en` or `fa`, default `system`) and mirrored in
+DataStore so the first composition can render the right language before the
+engine answers. The local mirror wins at startup; the engine setting wins when
+it arrives.
+
+- **Setup.** The consent step starts with the inline **System / English /
+  فارسی** control. Switching keeps the current step, the consent tick and any
+  sign-in progress, and updates the whole app immediately.
+- **Settings.** The first row of **Settings → Kumiho app**, above Theme, is
+  **Language**. The control is app-level, not one of the 25 engine catalog
+  rows.
+- **System** resolves to Persian only when the Android UI language is Persian
+  (`Locale.getDefault().language == "fa"`); every other language resolves to
+  English. The row shows the resolved language while **System** is selected.
+- **Immediate switching.** The activity is recreated with a localized context;
+  no tunnel reconnect, setup reset or app restart is required. Notification
+  channels, the Quick Settings tile, both home-screen widgets and the Google
+  TV channel are rebuilt or updated with the localized context.
+- **Full RTL.** Persian sets `LayoutDirection.Rtl` at the Compose root. The
+  bottom bar order, navigation rail, tabs, dialogs, lists, progress and
+  directional icons mirror; flags, the Kumiho logo and the power glyph stay
+  unmirrored. TV focus and D-pad directions follow the same rule.
+- **Typography.** Persian uses the bundled Vazirmatn 33.003 TTF family
+  (regular, medium, semibold and bold) with more line height. English keeps
+  the system font; no font is downloaded.
+- **Mixed text.** Persian digits and Jalali dates are used for user-facing
+  values. IP addresses, ports, versions, hostnames, emails, log lines,
+  diagnostic facts and engine messages stay Latin, isolated with
+  `BidiText.isolateLtr` (LRI/PDI) where they share a line.
+- **Errors.** The summary and action are Persian. Known error codes map to a
+  Persian message; unknown codes use the generic Persian error. The raw
+  English detail stays in a left-to-right details block.
+- **Logs and diagnostics.** The labels and actions are localized; the log
+  lines, check titles and technical values remain English so they stay
+  searchable and copyable.
 
 ## Dashboard
 
@@ -302,6 +348,9 @@ connections outside the tunnel setting.
 
 ### Kumiho app
 
+- **Language** — System, English or فارسی; the first row, above Theme. The
+  app-level language is stored immediately and to the engine; **System**
+  resolves to Persian only for a Persian Android UI language.
 - **Theme** — Light, Dark or OLED; applies immediately.
 - **Accent** — Blue (default), Teal, Green, Orange, Rose, Violet.
 - **Version** — the app version and the embedded engine version.
@@ -828,7 +877,8 @@ daemon or your Firefox Account.
   from `ANY` replies, so an app that tries IPv6 first falls back to IPv4
   without waiting for a timeout. There is no IPv6 leak, but there is also no
   IPv6 connectivity.
-- **English-only** UI (logical start/end layout, but no translations).
+- **English and Persian UI only.** The TUI, CLI and English docs stay in
+  English; no other language ships in v0.12.0.
 - **No launcher long-press shortcuts**; the home-screen widgets and Quick
   Settings tile are the fast paths.
 - **No auto-update and no in-app APK install.** The update check only opens
@@ -846,9 +896,9 @@ daemon or your Firefox Account.
 - **Non-DNS UDP is blocked** inside the tunnel (QUIC/HTTP3 falls back to TCP;
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
 - **Physical acceptance is a partial pass with user-accepted exceptions.**
-  The signed `v0.6.0` release is published, but v0.6.0 physical acceptance is
-  pending and the untested checklist items remain exceptions; see
-  [android-testing.md](android-testing.md).
+  The signed Android releases are published, but physical acceptance for
+  v0.6.0 through v0.12.0 is still pending and the untested checklist items
+  remain exceptions; see [android-testing.md](android-testing.md).
 
 ## Desktop parity
 

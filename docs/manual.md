@@ -24,6 +24,15 @@ the other two commands are the same.
 
 Done. From then on it starts by itself, even after a reboot.
 
+## Language
+
+The **Windows GUI** and the **Android phone/TV app** ship in English and
+Persian. Choose **System**, **English** or **فارسی** on the first setup step or
+in **Settings → Kumiho app → Language**; the change applies immediately.
+**System** means Persian only when the device's own UI language is Persian,
+and English for every other language. The TUI, the CLI, the logs and this
+manual stay English.
+
 ## Everyday use (inside `kumiho`)
 
 | Key | What happens |
