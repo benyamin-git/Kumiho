@@ -74,11 +74,11 @@
     <string name="setup_finish_without_connect">پایان بدون اتصال</string>
     <string name="setup_error_title">Kumiho نتوانست راه‌اندازی را ذخیره کند</string>
     <string name="consent_title">پیش از اتصال</string>
-    <string name="consent_intro">Kumiho روی این گوشی یک VPN اجرا می‌کند. تا زمانی که متصل است، ترافیک برنامه‌هایی که از تونل استفاده می‌کنند به یک سرور پروکسی Kumiho می‌رود و آن سرور به سایت‌هایی که خواسته‌اید دسترسی پیدا می‌کند. همین کار نشانی شما را از آن سایت‌ها دور نگه می‌دارد و تونل را کار می‌اندازد.</string>
-    <string name="consent_future">اندروید در گامی بعدی مجوز VPN را می‌خواهد. تا زمانی که آن را ندهید و متصل نشوید، هیچ ترافیکی مسیریابی نمی‌شود.</string>
+    <string name="consent_intro">Kumiho روی این گوشی یک VPN اجرا می‌کند. تا زمانی که متصل است، ترافیک برنامه‌هایی که از تونل استفاده می‌کنند به یک سرور پروکسی Kumiho می‌رود و آن سرور به سایت‌هایی که خواسته‌اید دسترسی پیدا می‌کند. همین کار باعث می‌شود آن سایت‌ها نشانی شما را نبینند و تونل کار کند.</string>
+    <string name="consent_future">اندروید در گام بعدی مجوز VPN را می‌خواهد. تا زمانی که آن را ندهید و متصل نشوید، هیچ ترافیکی مسیریابی نمی‌شود.</string>
     <string name="consent_local_title">چه چیزهایی روی این گوشی می‌ماند</string>
     <string name="consent_local_tokens">توکن‌های حساب Firefox شما فقط در حافظهٔ خصوصی برنامهٔ Kumiho نوشته می‌شوند. پشتیبان‌گیری اندروید و انتقال دستگاه برای این برنامه خاموش است، بنابراین هرگز از گوشی کپی نمی‌شوند.</string>
-    <string name="consent_local_data">تنظیمات، فهرست سرورها و گزارش‌های اتصال فایل‌های محلی در همان حافظهٔ خصوصی هستند. گزارش تنها زمانی از گوشی خارج می‌شود که خودتان آن را به اشتراک بگذارید.</string>
+    <string name="consent_local_data">تنظیمات، فهرست سرورها و گزارش‌های اتصال، فایل‌های محلی در همان حافظهٔ خصوصی هستند. گزارش تنها زمانی از گوشی خارج می‌شود که خودتان آن را به اشتراک بگذارید.</string>
     <string name="consent_local_no_telemetry">هیچ دورسنجی، تحلیل یا گزارش خرابی وجود ندارد. هیچ چیزی برای توسعه‌دهندگان Kumiho فرستاده نمی‌شود.</string>
     <string name="consent_proxy_title">پروکسی‌های محلی</string>
     <string name="consent_proxy_text">تا زمانی که تونل برقرار است، Kumiho روی رابط لوپ‌بک این گوشی به پروکسی SOCKS5 محلی خود و، اگر آن را روشن کنید، به پروکسی HTTP محلی خود نیز گوش می‌دهد. هر برنامه‌ای روی این گوشی می‌تواند از آن‌ها استفاده کند، پس آن‌ها را در سطح کل دستگاه در نظر بگیرید. دستگاه‌های دیگر در شبکهٔ شما نمی‌توانند به آن‌ها دسترسی داشته باشند.</string>
@@ -612,7 +612,7 @@
     <string name="account_signing_out">در حال خروج…</string>
     <string name="account_sign_out_note">خروج، توکن‌ها را پاک می‌کند، از Firefox Accounts می‌خواهد نشست این دستگاه را باطل کند و تونل را قطع می‌کند. برنامه در همین صفحه می‌ماند.</string>
     <string name="account_sign_out_title">از Firefox Accounts خارج شوید؟</string>
-    <string name="account_sign_out_text">توکن‌های شما پاک و تونل قطع می‌شود. Kumiho همچنین از Firefox Accounts می‌خواهد نشست مرورگری این دستگاه را باطل کند؛ اگر این درخواست ناموفق باشد، خروج همچنان به‌صورت محلی کامل می‌شود. هر زمان می‌توانید دوباره وارد شوید.</string>
+    <string name="account_sign_out_text">توکن‌های شما پاک و تونل قطع می‌شود. Kumiho همچنین از Firefox Accounts می‌خواهد نشست مرورگر این دستگاه را باطل کند؛ اگر این درخواست ناموفق باشد، خروج همچنان به‌صورت محلی کامل می‌شود. هر زمان می‌توانید دوباره وارد شوید.</string>
     <string name="account_sign_out_confirm">خروج</string>
     <string name="account_sign_out_cancel">لغو</string>
     <string name="account_accounts_title">حساب‌ها</string>
@@ -657,7 +657,7 @@
     <string name="account_remove_confirm">حذف</string>
     <string name="account_remove_cancel">لغو</string>
     <string name="account_sign_out_all">خروج از همه</string>
-    <string name="account_sign_out_all_text">همهٔ حساب‌ها حذف و توکن‌هایشان پاک می‌شوند. Kumiho همچنین از Firefox Accounts می‌خواهد نشست‌های مرورگری آن‌ها را باطل کند؛ باطل شدن ناموفق هرگز مانع خروج محلی نمی‌شود. تونل قطع می‌شود.</string>
+    <string name="account_sign_out_all_text">همهٔ حساب‌ها حذف و توکن‌هایشان پاک می‌شوند. Kumiho همچنین از Firefox Accounts می‌خواهد نشست‌های مرورگر آن‌ها را باطل کند؛ باطل شدن ناموفق هرگز مانع خروج محلی نمی‌شود. تونل قطع می‌شود.</string>
     <string name="account_accounts_failed">فهرست حساب‌ها بارگذاری نشد.</string>
     <string name="account_action_failed">اقدام حساب ناموفق بود.</string>
     <string name="account_rotation_failed">تنظیم چرخش ذخیره نشد.</string>
@@ -700,10 +700,10 @@
     <string name="guide_connect">اتصال</string>
     <string name="guide_option_one">گزینه ۱: VPN دیگری دارم (توصیه‌شده)</string>
     <string name="guide_option_one_step1">VPN دیگر خود را روشن کنید.</string>
-    <string name="guide_option_one_step2">با حساب Firefoxی که اشتراک VPN دارد وارد Kumiho شوید.</string>
+    <string name="guide_option_one_step2">با حساب Firefox که اشتراک VPN دارد وارد Kumiho شوید.</string>
     <string name="guide_option_one_step3">«آماده‌سازی» را انتخاب کنید. Kumiho فهرست سرورها، نمایهٔ شما و سپس گذر را دریافت می‌کند.</string>
     <string name="guide_option_one_step4">وقتی گذر آماده شد، VPN دیگر را خاموش کنید.</string>
-    <string name="guide_option_one_step5">«اتصال» را انتخاب کنید. Kumiho از طریق تونل خودش به تازه‌سازی ادامه می‌دهد.</string>
+    <string name="guide_option_one_step5">«اتصال» را انتخاب کنید. Kumiho از طریق تونل خودش گذر را تازه می‌کند.</string>
     <string name="guide_option_one_note">تنها اگر Kumiho بیش از ۱۰ دقیقه خاموش بماند، دوباره به VPN دیگر نیاز دارید.</string>
     <string name="guide_option_two">گزینه ۲: استفاده از رله</string>
     <string name="guide_option_two_intro">docs/relay.md را مستقر کنید یا از رله‌ای که به آن اعتماد دارید استفاده کنید. رله فقط درخواست‌های مسدود Mozilla را رسیدگی می‌کند.</string>

@@ -57,7 +57,8 @@ object PersianFormat {
             value /= UNIT
         }
         val scaled = bytes.toDouble() / divisor.toDouble()
-        return "${formatNumber(scaled, 1)} ${byteUnits[exponent]}"
+        val decimals = if (scaled == scaled.toLong().toDouble()) 0 else 1
+        return "${formatNumber(scaled, decimals)} ${byteUnits[exponent]}"
     }
 
     /** `42s`, `3m 20s`, `2h 5m` in English; `۴۲ ثانیه` etc. in Persian. */

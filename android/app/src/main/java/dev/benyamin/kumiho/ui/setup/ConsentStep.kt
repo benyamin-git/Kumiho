@@ -1,6 +1,7 @@
 package dev.benyamin.kumiho.ui.setup
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -128,24 +129,24 @@ fun ConsentTickRow(
     }
 }
 
-/** One paragraph behind a bullet, so a list reads as a list without art. */
+/** One paragraph behind a bullet, so a list reads as a list without art.
+ * The bullet is anchored to the inline start with [Alignment.TopStart] instead
+ * of row order, which keeps it on the right in Persian and on the left in
+ * English regardless of how a parent measures the row. */
 @Composable
 private fun Bullet(text: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Text(
-            text = "•",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    Box(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.padding(start = Dimens.Space5),
+        )
+        Text(
+            text = "•",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.TopStart),
         )
     }
 }

@@ -389,11 +389,12 @@ internal fun selectionText(selection: LocationSelection?): String {
         selection.countryName?.let(parts::add)
         selection.cityName?.let(parts::add)
     }
-    selection.serverAddress?.let { parts += BidiText.isolateLtr(it) }
+    selection.serverAddress?.let(parts::add)
     if (selection.protocolNames.isNotEmpty()) {
-        parts += BidiText.isolateLtr(selection.protocolNames.joinToString(", "))
+        parts += selection.protocolNames.joinToString(", ")
     }
-    return parts.joinToString(separator)
+    val line = parts.joinToString(separator)
+    return if (parts.size > 1) BidiText.isolateLtr(line) else line
 }
 
 // ---- sections and server cards ------------------------------------------

@@ -201,9 +201,16 @@ class DashboardFormatTest {
     fun persianUsesPersianDigitsUnitsAndJalaliDates() {
         assertEquals("۱٫۵ کیلوبایت", DashboardFormat.humanBytes(1536, AppLanguage.PERSIAN))
         assertEquals(
-            "۱٫۵ کیلوبایت باقی‌مانده از ۲٫۰ کیلوبایت",
+            "۱٫۵ کیلوبایت باقی‌مانده از ۲ کیلوبایت",
             DashboardFormat.quotaLabel(
                 Quota(limit = 2048L, remaining = 1536L, reset = null),
+                AppLanguage.PERSIAN,
+            ),
+        )
+        assertEquals(
+            "۱۲ گیگابایت باقی‌مانده از ۵۰ گیگابایت",
+            DashboardFormat.quotaLabel(
+                Quota(limit = 50L * GIB, remaining = 12L * GIB, reset = null),
                 AppLanguage.PERSIAN,
             ),
         )

@@ -162,7 +162,12 @@ private fun PowerHero(
     val server = if (state.phase.active) DashboardFormat.hostOf(status?.server) else null
     val connectionLine = when {
         !state.phase.active -> null
-        location != null && server != null -> "$location · ${BidiText.isolateLtr(server)}"
+        location != null && server != null ->
+            if (location == stringResource(R.string.dashboard_location_recommended)) {
+                "$location · ${BidiText.isolateLtr(server)}"
+            } else {
+                BidiText.isolateLtr("$location · $server")
+            }
         location != null -> location
         server != null -> server
         else -> null

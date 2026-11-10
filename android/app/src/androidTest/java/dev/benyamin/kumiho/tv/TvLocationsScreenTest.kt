@@ -97,9 +97,7 @@ class TvLocationsScreenTest : TvTestBase() {
         rule.onNodeWithTag(LocationsTags.SUMMARY).assertIsDisplayed()
         rule
             .onNodeWithText(
-                "United States · New York · " +
-                    "${BidiText.isolateLtr(EDGE_ADDRESS)} · " +
-                    BidiText.isolateLtr("connect, quic"),
+                BidiText.isolateLtr("United States · New York · $EDGE_ADDRESS · connect, quic"),
             )
             .assertExists()
     }

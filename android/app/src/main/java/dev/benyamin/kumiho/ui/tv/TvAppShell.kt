@@ -47,7 +47,9 @@ fun TvAppShell(
     val railFocus = remember {
         Destination.tabs.associateWith { FocusRequester() }
     }
-    LaunchedEffect(Unit) { runCatching { railFocus.getValue(Destination.Home).requestFocus() } }
+    LaunchedEffect(state.selectedTab) {
+        runCatching { railFocus.getValue(state.selectedTab).requestFocus() }
+    }
 
     BackHandler(enabled = moreOpen || state.moreRoute != null) {
         when {

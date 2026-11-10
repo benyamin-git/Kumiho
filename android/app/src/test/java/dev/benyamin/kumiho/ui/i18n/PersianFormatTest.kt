@@ -46,6 +46,7 @@ class PersianFormatTest {
         assertEquals("۰ بایت", PersianFormat.formatBytes(0))
         assertEquals("۱٫۵ کیلوبایت", PersianFormat.formatBytes(1536))
         assertEquals("۱۲٫۳ گیگابایت", PersianFormat.formatBytes(13_207_024_436L))
+        assertEquals("۵۰ گیگابایت", PersianFormat.formatBytes(50L * 1024L * 1024L * 1024L))
         assertEquals("1.5 KiB", PersianFormat.formatBytes(1536, AppLanguage.ENGLISH))
     }
 
