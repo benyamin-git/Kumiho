@@ -126,8 +126,9 @@ them locally for any change under `android/`, `mobile/` or
   latest release after the Android phone and TV builds pass, so
   `/releases/latest` and the stable README download links resolve; v0.7.2 and
   earlier remain prereleases. Hyphenated tags are not published.
-  Assets use stable, version-free names; the release description is built from
-  the matching `CHANGELOG.md` section plus a download table. The manual
+  Assets use versioned primary names plus stable aliases; the release
+  description is built from the matching `CHANGELOG.md` section plus a download
+  table. The manual
   checklist (including the repository About panel) is
   [docs/releasing.md](docs/releasing.md).
 - The Android CI job and release steps are implemented and were exercised by
@@ -140,8 +141,9 @@ them locally for any change under `android/`, `mobile/` or
   `v0.9.1` release on 2026-11-01, the `v0.9.2` release on 2026-11-02, the
   `v0.9.3` release on 2026-11-03, the `v0.10.0` and `v0.10.1` releases on
   2026-11-05, the `v0.10.2` release on 2026-11-06, the `v0.10.3` release on
-  2026-11-09 and the `v0.11.0` and `v0.11.1` releases on 2026-11-10; each
-  release workflow uploaded the desktop and Android assets. See
+  2026-11-09, the `v0.11.0` and `v0.11.1` releases on 2026-11-10 and the
+  `v0.12.1` language and RTL release on 2026-11-11; each release workflow
+  uploaded the desktop and Android assets. See
   [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
@@ -202,6 +204,17 @@ them locally for any change under `android/`, `mobile/` or
   modal, a GUI `#/blocked-region` route, and an Android app-scoped overlay
   shared by phone and TV; `kumiho prepare [--json]` and `kumiho guide` are
   additive CLI commands. Protocol v1 stays byte-compatible.
+- **v0.12.1 language and RTL**: `internal/settings` owns the `language` key
+  (`system`, `en` or `fa`, default `system`), shared by the Windows GUI and
+  Android. GUI strings live in `internal/gui/web/static/i18n/{en,fa}.json`;
+  Android strings live in `res/values/strings.xml` and
+  `res/values-fa/strings.xml`, with Vazirmatn bundled for Persian. The Android
+  root in `ui/App.kt` replaces `LocalContext` with a localized configuration
+  context, so it must capture and re-provide
+  `LocalActivityResultRegistryOwner`; otherwise setup's VPN and notification
+  launchers throw before first paint. `README.fa.md` and
+  `docs/translations/fa.md` are part of the release. The TUI, CLI and logs stay
+  English.
 - **v0.9.0 region truth**: `internal/relay` is an `http.RoundTripper` that
   sends a control-plane request through the user's Worker only after HTTP 451,
   with exactly one retry, the five-host allowlist and

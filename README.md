@@ -69,14 +69,13 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.11.1
+## What's new in v0.12.1
 
-- **Blocked-region recovery is easier to reach on Android** — a connect failure
-  caused by HTTP 451 or an expired prepared pass now offers **Open guide**
-  instead of a retry that cannot succeed.
-- **The guide and relay controls fit the screen** — the guide respects the
-  status bar and display cutout, and the relay token actions stay inline with
-  the label.
+- **English and Persian, with a full RTL layout** — the Windows GUI and the
+  Android phone/TV app now ship in both languages, with a first-run choice,
+  Persian typography and Jalali dates. See [README.fa.md](README.fa.md).
+- **Android starts reliably** — the app no longer closes right after
+  “Starting the local engine…”.
 
 See the [changelog](CHANGELOG.md) for details.
 
