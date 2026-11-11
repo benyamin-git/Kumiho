@@ -8,10 +8,9 @@ and this project adheres to
 
 ## [Unreleased]
 
-## [0.12.1] - 2026-11-11
+## [0.12.0] - 2026-11-11
 
-The first published build of the language and RTL release, superseding the
-unpublished 0.12.0 draft.
+The first published build of the language and RTL release.
 
 Language and RTL: the Windows GUI and the Android phone/TV app now ship in
 English and Persian, with a first-run choice and a full right-to-left layout.
@@ -44,8 +43,8 @@ The TUI, CLI and logs stay English.
   back to the English source of truth and documents the Persian UI. The
   translation glossary and style guide live in `docs/translations/fa.md`.
 - **Versioned release assets.** Primary downloads now carry the exact release
-  tag (for example `Kumiho-v0.12.1-Windows-amd64.zip`). Stable aliases remain
-  for `/releases/latest` and the README. `SHA256SUMS-v0.12.1` and
+  tag (for example `Kumiho-v0.12.0-Windows-amd64.zip`). Stable aliases remain
+  for `/releases/latest` and the README. `SHA256SUMS-v0.12.0` and
   `SHA256SUMS` have identical contents and cover both filename sets.
 
 ### Changed

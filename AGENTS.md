@@ -142,7 +142,7 @@ them locally for any change under `android/`, `mobile/` or
   `v0.9.3` release on 2026-11-03, the `v0.10.0` and `v0.10.1` releases on
   2026-11-05, the `v0.10.2` release on 2026-11-06, the `v0.10.3` release on
   2026-11-09, the `v0.11.0` and `v0.11.1` releases on 2026-11-10 and the
-  `v0.12.1` language and RTL release on 2026-11-11; each release workflow
+  `v0.12.0` language and RTL release on 2026-11-11; each release workflow
   uploaded the desktop and Android assets. See
   [docs/android-testing.md](docs/android-testing.md).
 
@@ -204,7 +204,7 @@ them locally for any change under `android/`, `mobile/` or
   modal, a GUI `#/blocked-region` route, and an Android app-scoped overlay
   shared by phone and TV; `kumiho prepare [--json]` and `kumiho guide` are
   additive CLI commands. Protocol v1 stays byte-compatible.
-- **v0.12.1 language and RTL**: `internal/settings` owns the `language` key
+- **v0.12.0 language and RTL**: `internal/settings` owns the `language` key
   (`system`, `en` or `fa`, default `system`), shared by the Windows GUI and
   Android. GUI strings live in `internal/gui/web/static/i18n/{en,fa}.json`;
   Android strings live in `res/values/strings.xml` and

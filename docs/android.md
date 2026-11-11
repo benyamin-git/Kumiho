@@ -6,15 +6,15 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v0.12.1**
-(`versionCode` 1201); the README carries the latest published release and
+This guide describes the app as implemented for **v0.12.0**
+(`versionCode` 1200); the README carries the latest published release and
 download links. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. Physical acceptance for v0.6.0 through v0.12.1 is still pending.
+> full pass. Physical acceptance for v0.6.0 through v0.12.0 is still pending.
 > Each full GitHub release carries the three production-signed Android APKs
 > with `SHA256SUMS`. The signing key and GitHub Actions secret values remain
 > user-owned. Local builds are test builds, not published releases. The direct
@@ -65,16 +65,16 @@ three APKs and `SHA256SUMS`:
 
 | Asset | ABI | Use |
 |---|---|---|
-| `Kumiho-v0.12.1-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
-| `Kumiho-v0.12.1-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
-| `Kumiho-v0.12.1-Android-universal.apk` | both | One file if unsure |
+| `Kumiho-v0.12.0-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
+| `Kumiho-v0.12.0-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
+| `Kumiho-v0.12.0-Android-universal.apk` | both | One file if unsure |
 
-The versioned names are the primary v0.12.1 assets. The release also keeps the
+The versioned names are the primary v0.12.0 assets. The release also keeps the
 stable aliases `Kumiho-Android-arm64-v8a.apk`,
 `Kumiho-Android-armeabi-v7a.apk` and `Kumiho-Android-universal.apk` for
 `/releases/latest` and the README. Both sets are produced by
 `.github/workflows/release.yml` from the per-version builds made by
-`scripts/android-release.sh`, and `SHA256SUMS-v0.12.1` (identical to
+`scripts/android-release.sh`, and `SHA256SUMS-v0.12.0` (identical to
 `SHA256SUMS`) lists both. Download from the project's GitHub Releases and
 check the APK against the checksum file published with it. Never install an
 APK from an untrusted mirror.
@@ -878,7 +878,7 @@ daemon or your Firefox Account.
   without waiting for a timeout. There is no IPv6 leak, but there is also no
   IPv6 connectivity.
 - **English and Persian UI only.** The TUI, CLI and English docs stay in
-  English; no other language ships in v0.12.1.
+  English; no other language ships in v0.12.0.
 - **No launcher long-press shortcuts**; the home-screen widgets and Quick
   Settings tile are the fast paths.
 - **No auto-update and no in-app APK install.** The update check only opens
@@ -897,7 +897,7 @@ daemon or your Firefox Account.
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
 - **Physical acceptance is a partial pass with user-accepted exceptions.**
   The signed Android releases are published, but physical acceptance for
-  v0.6.0 through v0.12.1 is still pending and the untested checklist items
+  v0.6.0 through v0.12.0 is still pending and the untested checklist items
   remain exceptions; see [android-testing.md](android-testing.md).
 
 ## Desktop parity

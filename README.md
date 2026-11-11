@@ -69,7 +69,7 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.12.1
+## What's new in v0.12.0
 
 - **English and Persian, with a full RTL layout** — the Windows GUI and the
   Android phone/TV app now ship in both languages, with a first-run choice,
