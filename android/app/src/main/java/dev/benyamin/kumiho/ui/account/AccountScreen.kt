@@ -38,6 +38,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -619,6 +620,7 @@ private fun AccountListRow(
                 }
             }
         }
+        val localizedContext = LocalContext.current
         Box {
             IconButton(
                 onClick = { menu = true },
@@ -630,41 +632,46 @@ private fun AccountListRow(
                 )
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (account.id != activeID) {
+                // The menu composes in its own window; re-provide the
+                // localized context captured outside it so its labels stay
+                // Persian there.
+                CompositionLocalProvider(LocalContext provides localizedContext) {
+                    if (account.id != activeID) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.account_use)) },
+                            onClick = {
+                                menu = false
+                                actions.onUse(account.id)
+                            },
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.account_use)) },
+                        text = { Text(stringResource(R.string.account_reauth)) },
                         onClick = {
                             menu = false
-                            actions.onUse(account.id)
+                            actions.onReauth(account)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.account_rename)) },
+                        onClick = {
+                            menu = false
+                            actions.onRenameRequest(account)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.account_remove),
+                                color = loss,
+                            )
+                        },
+                        onClick = {
+                            menu = false
+                            actions.onRemoveRequest(account)
                         },
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.account_reauth)) },
-                    onClick = {
-                        menu = false
-                        actions.onReauth(account)
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.account_rename)) },
-                    onClick = {
-                        menu = false
-                        actions.onRenameRequest(account)
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.account_remove),
-                            color = loss,
-                        )
-                    },
-                    onClick = {
-                        menu = false
-                        actions.onRemoveRequest(account)
-                    },
-                )
             }
         }
     }

@@ -87,7 +87,7 @@ object DashboardFormat {
     fun ratesLabel(rates: ByteRates?, language: AppLanguage = AppLanguage.ENGLISH): String? {
         if (rates == null || (rates.up == 0.0 && rates.down == 0.0)) return null
         return if (language == AppLanguage.PERSIAN) {
-            "بالا ${humanBytes(rates.up.toLong(), language)}/ث · پایین ${humanBytes(rates.down.toLong(), language)}/ث"
+            "آپلود ${humanBytes(rates.up.toLong(), language)}/ث · دانلود ${humanBytes(rates.down.toLong(), language)}/ث"
         } else {
             "up ${humanBytes(rates.up.toLong(), language)}/s / down ${humanBytes(rates.down.toLong(), language)}/s"
         }
@@ -97,7 +97,7 @@ object DashboardFormat {
     fun totalsLabel(totals: ByteCounters?, language: AppLanguage = AppLanguage.ENGLISH): String? {
         if (totals == null) return null
         return if (language == AppLanguage.PERSIAN) {
-            "بالا ${humanBytes(totals.up, language)} · پایین ${humanBytes(totals.down, language)}"
+            "آپلود ${humanBytes(totals.up, language)} · دانلود ${humanBytes(totals.down, language)}"
         } else {
             "up ${humanBytes(totals.up, language)} / down ${humanBytes(totals.down, language)}"
         }

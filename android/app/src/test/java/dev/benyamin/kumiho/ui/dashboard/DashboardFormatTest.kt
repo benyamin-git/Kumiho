@@ -215,14 +215,14 @@ class DashboardFormatTest {
             ),
         )
         assertEquals(
-            "بالا ۱٫۲ مگابایت/ث · پایین ۳٫۴ مگابایت/ث",
+            "آپلود ۱٫۲ مگابایت/ث · دانلود ۳٫۴ مگابایت/ث",
             DashboardFormat.ratesLabel(
                 ByteRates(up = 1.2 * MIB, down = 3.4 * MIB),
                 AppLanguage.PERSIAN,
             ),
         )
         assertEquals(
-            "بالا ۱۲٫۳ مگابایت · پایین ۴۵٫۶ مگابایت",
+            "آپلود ۱۲٫۳ مگابایت · دانلود ۴۵٫۶ مگابایت",
             DashboardFormat.totalsLabel(
                 ByteCounters(up = 12_897_485L, down = 47_817_523L),
                 AppLanguage.PERSIAN,

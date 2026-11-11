@@ -39,21 +39,21 @@ Play Store یا F-Droid وجود ندارد. این پیوندها آخرین ا
 
 ## تصاویر
 
-با دادهٔ نمونه گرفته شده‌اند: تصاویر Windows GUI در پوستهٔ Dark و تصاویر
-Android در پوستهٔ Light. تصاویر فارسی رابط، نسخهٔ راست‌به‌چپ را نشان
+با دادهٔ نمونه گرفته شده‌اند: تصاویر Windows GUI در تم تیره و تصاویر
+Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راست‌به‌چپ را نشان
 می‌دهند؛ TUI عمداً انگلیسی می‌ماند.
 
 ### Windows GUI
 
 | داشبورد | تنظیمات |
 | --- | --- |
-| ![داشبورد فارسی Windows GUI: تونل متصل، سهمیه و مجموع نشست](screenshots/fa/windows-gui/dashboard.png) | ![تنظیمات فارسی Windows GUI: بخش منطقه، رله و راهنمای منطقهٔ مسدود](screenshots/fa/windows-gui/settings.png) |
+| ![داشبورد فارسی Windows GUI: تونل متصل، سهمیه و مجموع اتصال](screenshots/fa/windows-gui/dashboard.png) | ![تنظیمات فارسی Windows GUI: بخش منطقه، رله و راهنمای منطقهٔ مسدود](screenshots/fa/windows-gui/settings.png) |
 
 ### Linux TUI
 
 | داشبورد | مکان‌ها |
 | --- | --- |
-| ![داشبورد TUI لینوکس: وضعیت اتصال، نوار سهمیه و مجموع نشست](screenshots/linux-tui/dashboard.png) | ![مکان‌های TUI لینوکس: بخش‌های سریع‌ترین، محبوب و اخیر بالای ردیف‌ها](screenshots/linux-tui/locations.png) |
+| ![داشبورد TUI لینوکس: وضعیت اتصال، نوار سهمیه و مجموع اتصال](screenshots/linux-tui/dashboard.png) | ![مکان‌های TUI لینوکس: بخش‌های سریع‌ترین، محبوب و اخیر بالای ردیف‌ها](screenshots/linux-tui/locations.png) |
 
 ![تنظیمات TUI لینوکس: ردیف‌های رله و راهنمای منطقه](screenshots/linux-tui/settings.png)
 
@@ -63,7 +63,7 @@ Android در پوستهٔ Light. تصاویر فارسی رابط، نسخهٔ �
 
 | داشبورد | تنظیمات |
 | --- | --- |
-| <img src="screenshots/fa/android-phone/dashboard.png" width="260" alt="داشبورد فارسی Android: تونل متصل با سهمیه و مجموع نشست"> | <img src="screenshots/fa/android-phone/settings.png" width="260" alt="تنظیمات فارسی Android: ردیف زبان و کارت‌های برنامه و سیستم"> |
+| <img src="screenshots/fa/android-phone/dashboard.png" width="260" alt="داشبورد فارسی Android: تونل متصل با سهمیه و مجموع اتصال"> | <img src="screenshots/fa/android-phone/settings.png" width="260" alt="تنظیمات فارسی Android: ردیف زبان و کارت‌های برنامه و سیستم"> |
 
 ### Android TV
 
@@ -142,7 +142,7 @@ APK مناسب دستگاه خود را دانلود و باز کنید. وقت�
 ## امکانات
 
 - **حساب Firefox شما** — ورود با رمز یا مرورگر، 2FA، حداکثر پنج حساب با
-  برچسب، چرخش سهمیه و خروج سراسری از نشست.
+  برچسب، چرخش سهمیه و خروج سراسری از حساب‌ها.
 - **عبور از چالش لبهٔ موزیلا** — چالش Fastly حل و درخواست دوباره ارسال
   می‌شود؛ اگر چالش همچنان API رمز را مسدود کند، همان ورود در مرورگر ادامه
   می‌یابد و به بن‌بست نمی‌رسد.

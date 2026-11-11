@@ -34,12 +34,16 @@ the build so a missing key is never treated as a release-ready fallback.
 | server | سرور | |
 | location | مکان | A country/city/server selection. |
 | connect | اتصال | As a state/action noun. |
+| session | اتصال | The VPN session/card; a browser sign-in session is `ورود`. |
+| upload | آپلود | Data sent through the tunnel; never `بالا`. |
+| download | دانلود | Data received through the tunnel; never `پایین`. |
 | disconnect | قطع اتصال | |
 | sign in | ورود | Sign-in flow. |
 | sign out | خروج | |
 | confirm | تأیید | |
 | settings | تنظیمات | |
 | dashboard | داشبورد | |
+| More (menu or sheet) | بیشتر | The overflow menu and the More sheet title. |
 | logs | گزارش‌ها | |
 | diagnostics | عیب‌یابی | |
 | quota | سهمیه | |
@@ -76,8 +80,8 @@ the build so a missing key is never treated as a release-ready fallback.
 | Quick Settings tile | کاشی تنظیمات سریع | |
 | notification | اعلان | |
 | channel | کانال | |
-| theme | پوسته | |
-| accent | رنگ تأکیدی | |
+| theme | تم | The color theme; `پوسته` is only the TV/phone shell. |
+| accent | رنگ اصلی | Not `رنگ تأکید`. |
 | version | نسخه | |
 | update | به‌روزرسانی | |
 | release | انتشار | |

@@ -10,7 +10,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoRow
@@ -34,6 +36,7 @@ fun MoreSheet(
     onSelectTab: (Destination) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val localizedContext = LocalContext.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = modifier,
@@ -43,26 +46,30 @@ fun MoreSheet(
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = Dimens.Space3),
-        ) {
-            KumihoSectionHeader(title = stringResource(R.string.more_title))
-            overflow.forEach { destination ->
-                KumihoRow(
-                    title = stringResource(destination.labelRes),
-                    icon = destinationIcon(destination),
-                    onClick = { onSelectTab(destination) },
-                )
-            }
-            MoreRoute.entries.forEach { route ->
-                KumihoRow(
-                    title = stringResource(route.labelRes),
-                    icon = moreRouteIcon(route),
-                    onClick = { onOpen(route) },
-                )
+        // The sheet composes in its own window; re-provide the localized
+        // context captured above so stringResource stays Persian there.
+        CompositionLocalProvider(LocalContext provides localizedContext) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = Dimens.Space3),
+            ) {
+                KumihoSectionHeader(title = stringResource(R.string.more_title))
+                overflow.forEach { destination ->
+                    KumihoRow(
+                        title = stringResource(destination.labelRes),
+                        icon = destinationIcon(destination),
+                        onClick = { onSelectTab(destination) },
+                    )
+                }
+                MoreRoute.entries.forEach { route ->
+                    KumihoRow(
+                        title = stringResource(route.labelRes),
+                        icon = moreRouteIcon(route),
+                        onClick = { onOpen(route) },
+                    )
+                }
             }
         }
     }

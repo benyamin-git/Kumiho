@@ -1,15 +1,20 @@
 package dev.benyamin.kumiho.ui.shell
 
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -17,10 +22,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import java.util.Locale
 import org.junit.Rule
 import org.junit.Test
 
@@ -35,23 +42,41 @@ class ShellMoreRoutesTest {
 
     private var state by mutableStateOf(ShellNavState())
 
-    private fun show(widthDp: Int? = null) {
+    private fun show(widthDp: Int? = null, language: AppLanguage = AppLanguage.ENGLISH) {
         rule.setContent {
-            KumihoTheme(
-                colors = PaletteMapping.fromJson(
-                    dev.benyamin.kumiho.go.mobile.Mobile.palette(
-                        ThemeId.LIGHT.id,
-                        KumihoAccent.BLUE.id,
+            val baseContext = LocalContext.current
+            val baseConfiguration = LocalConfiguration.current
+            val localizedContext = remember(language, baseConfiguration) {
+                baseContext.createConfigurationContext(
+                    Configuration(baseConfiguration).apply {
+                        setLocale(
+                            if (language == AppLanguage.PERSIAN) {
+                                Locale.forLanguageTag("fa")
+                            } else {
+                                Locale.ENGLISH
+                            },
+                        )
+                    },
+                )
+            }
+            CompositionLocalProvider(LocalContext provides localizedContext) {
+                KumihoTheme(
+                    colors = PaletteMapping.fromJson(
+                        dev.benyamin.kumiho.go.mobile.Mobile.palette(
+                            ThemeId.LIGHT.id,
+                            KumihoAccent.BLUE.id,
+                        ),
+                        ThemeId.LIGHT,
+                        KumihoAccent.BLUE,
                     ),
-                    ThemeId.LIGHT,
-                    KumihoAccent.BLUE,
-                ),
-            ) {
-                if (widthDp == null) {
-                    Shell()
-                } else {
-                    Box(modifier = Modifier.width(widthDp.dp).fillMaxHeight()) {
+                    language = language,
+                ) {
+                    if (widthDp == null) {
                         Shell()
+                    } else {
+                        Box(modifier = Modifier.width(widthDp.dp).fillMaxHeight()) {
+                            Shell()
+                        }
                     }
                 }
             }
@@ -105,6 +130,22 @@ class ShellMoreRoutesTest {
         rule.waitForIdle()
 
         rule.onNodeWithTag("slot_diagnostics").assertIsDisplayed()
+    }
+
+    /**
+     * The sheet owns its own window; the Persian resources must be resolved
+     * from the localized context captured before that window, not from the
+     * Activity locale.
+     */
+    @Test
+    fun theMoreSheetUsesPersianResources() {
+        show(language = AppLanguage.PERSIAN)
+
+        rule.onNodeWithText("بیشتر").performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("گزارش‌ها").assertIsDisplayed()
+        rule.onNodeWithText("عیب‌یابی").assertIsDisplayed()
     }
 
     @Test

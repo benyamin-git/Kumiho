@@ -18,8 +18,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +58,7 @@ fun ConnectOptionsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val proxyLabel = stringResource(R.string.dashboard_options_proxy_only)
+    val localizedContext = LocalContext.current
     ModalBottomSheet(
         onDismissRequest = onClose,
         modifier = modifier.testTag(DashboardTags.SHEET),
@@ -65,87 +68,92 @@ fun ConnectOptionsSheet(
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = Dimens.Space3)
-                .verticalScroll(rememberScrollState())
-                .testTag(DashboardTags.SHEET_CONTENT),
-        ) {
-            KumihoSectionHeader(title = stringResource(R.string.dashboard_options_title))
-            CompactLocationPicker(
-                state = state,
-                onSelectRecommended = onSelectRecommended,
-                onSelectSaved = onSelectSaved,
-                onToggleCountry = onToggleCountry,
-                onSelectCity = onSelectCity,
-                onReload = onReloadLocations,
-            )
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(vertical = Dimens.Space2),
-            )
-            Row(
+        // The sheet composes in its own window; re-provide the localized
+        // context captured above so stringResource stays Persian there.
+        CompositionLocalProvider(LocalContext provides localizedContext) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),
-                verticalAlignment = Alignment.CenterVertically,
+                    .navigationBarsPadding()
+                    .padding(bottom = Dimens.Space3)
+                    .verticalScroll(rememberScrollState())
+                    .testTag(DashboardTags.SHEET_CONTENT),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = proxyLabel,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = stringResource(R.string.dashboard_options_proxy_only_text),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                KumihoSectionHeader(title = stringResource(R.string.dashboard_options_title))
+                CompactLocationPicker(
+                    state = state,
+                    onSelectRecommended = onSelectRecommended,
+                    onSelectSaved = onSelectSaved,
+                    onToggleCountry = onToggleCountry,
+                    onSelectCity = onSelectCity,
+                    onReload = onReloadLocations,
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.padding(vertical = Dimens.Space2),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = proxyLabel,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.dashboard_options_proxy_only_text),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.options.proxyOnly,
+                        onCheckedChange = onToggleProxyOnly,
+                        modifier = Modifier
+                            .testTag(DashboardTags.SHEET_PROXY_ONLY)
+                            .semantics { contentDescription = proxyLabel },
                     )
                 }
-                Switch(
-                    checked = state.options.proxyOnly,
-                    onCheckedChange = onToggleProxyOnly,
-                    modifier = Modifier
-                        .testTag(DashboardTags.SHEET_PROXY_ONLY)
-                        .semantics { contentDescription = proxyLabel },
+                val lockdownValue = stringResource(
+                    if (state.lockdown) R.string.dashboard_on else R.string.dashboard_off,
                 )
-            }
-            val lockdownValue = stringResource(
-                if (state.lockdown) R.string.dashboard_on else R.string.dashboard_off,
-            )
-            KumihoSettingRow(
-                title = stringResource(R.string.dashboard_options_lockdown),
-                summary = stringResource(R.string.dashboard_options_lockdown_summary),
-                value = lockdownValue,                onClick = onOpenVpnSettings,
-                modifier = Modifier.testTag(DashboardTags.SHEET_LOCKDOWN),
-            )
-            val hint = sheetHintText(state.sheetHint)
-            if (hint != null) {
-                Text(
-                    text = hint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (state.sheetHint == SheetHint.DISCONNECT_FIRST) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                KumihoSettingRow(
+                    title = stringResource(R.string.dashboard_options_lockdown),
+                    summary = stringResource(R.string.dashboard_options_lockdown_summary),
+                    value = lockdownValue,
+                    onClick = onOpenVpnSettings,
+                    modifier = Modifier.testTag(DashboardTags.SHEET_LOCKDOWN),
+                )
+                val hint = sheetHintText(state.sheetHint)
+                if (hint != null) {
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state.sheetHint == SheetHint.DISCONNECT_FIRST) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier
+                            .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
+                            .testTag(DashboardTags.SHEET_HINT),
+                    )
+                }
+                Button(
+                    onClick = onConnect,
+                    enabled = state.optionsConnectEnabled,
                     modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
-                        .testTag(DashboardTags.SHEET_HINT),
-                )
-            }
-            Button(
-                onClick = onConnect,
-                enabled = state.optionsConnectEnabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
-                    .heightIn(min = Dimens.ControlHeight)
-                    .testTag(DashboardTags.SHEET_CONNECT),
-            ) {
-                Text(stringResource(R.string.dashboard_options_connect))
+                        .heightIn(min = Dimens.ControlHeight)
+                        .testTag(DashboardTags.SHEET_CONNECT),
+                ) {
+                    Text(stringResource(R.string.dashboard_options_connect))
+                }
             }
         }
     }
