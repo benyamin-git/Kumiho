@@ -6,7 +6,11 @@ builds a **draft** release. Test the draft's Android phone and TV APKs, then
 publish it manually. The workflow never publishes a release itself.
 
 From v0.12.0 onward every downloadable primary asset carries the exact release
-tag, and stable aliases stay attached for `/releases/latest` and the README.
+tag. Stable aliases stay attached for `/releases/latest` compatibility. From
+the next release onward, user-facing download links (README, `README.fa.md`,
+release notes and handoffs) use the versioned primary names, never the aliases
+or an ad-hoc file share. The v0.12.0 README still uses the stable aliases and
+is intentionally unchanged; update it with the next release.
 
 ## Before tagging
 
@@ -46,7 +50,9 @@ tag, and stable aliases stay attached for `/releases/latest` and the README.
 ## Versioned assets and aliases
 
 For tag `vX.Y.Z`, the workflow stages both filename sets from the same build
-outputs:
+outputs. The versioned primary is the only user-facing name; the stable alias
+is a compatibility convenience for `/releases/latest` and must not be
+advertised in the README, release notes or a handoff.
 
 | Versioned primary | Stable alias |
 | --- | --- |
@@ -68,7 +74,9 @@ directory.
 The upload includes all twelve archives/APKs, both checksum files, and no
 other generated material. The release notes download table uses the versioned
 primary names and links the versioned checksum; a short note explains the
-stable aliases, and the notes link the Persian README.
+stable aliases, and the notes link the Persian README. The README and
+`README.fa.md` download tables must use the same versioned primary names and
+link `SHA256SUMS-vX.Y.Z`.
 
 ## Tag and build the draft
 
@@ -85,13 +93,16 @@ stable aliases, and the notes link the Persian README.
 - [ ] Leave the draft untouched for the user's review. Publishing is a manual
   decision: either the GitHub UI (**Publish release** with **Set as the latest
   release**) or `gh release edit vX.Y.Z --draft=false --latest`.
-- [ ] After publication, verify
-  `/releases/latest/download/<asset>` links resolve and update the README
-  **What's new** block and the Persian README to the just-published release.
+- [ ] After publication, verify `/releases/latest` resolves to the new release
+  for compatibility, update the README **What's new** block and the Persian
+  README to the just-published release, and switch both README download tables
+  and their checksum link to the versioned `vX.Y.Z` assets.
 - [ ] If the app gained a new platform or major capability, update the About
   description and topics again after the release.
 
 While a release is a draft, `/releases/latest` still points at the previous
-published release, so the README download links keep working during testing.
-Do not add `--prerelease` unless you deliberately want to break the stable
-download links until the next full release.
+published release, so the README download table and the compatibility links
+keep working during testing. After publication, switch the README table to the
+new versioned assets. Do not add `--prerelease` unless you deliberately want
+to break the `/releases/latest` compatibility links until the next full
+release.

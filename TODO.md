@@ -119,6 +119,9 @@ Android TV, Windows GUI and the TUI.
     names for v0.7.2 and earlier.
   - Full releases start at v0.8.0 so `/releases/latest/download/...` works;
     v0.7.2 and earlier remain prereleases.
+  - Superseded 2026-11-11: user-facing README links use the tagged primary
+    names from the next release onward (D3); stable aliases are
+    compatibility-only.
 
 - [x] **C5 — Add repository badges**
   - Done: latest release, total downloads and licence badges, linked to the
@@ -175,12 +178,26 @@ Android TV, Windows GUI and the TUI.
     `scripts/android-setup.sh` now drops the cached archive and retries the
     install up to three times; the third failure still fails the job.
 
+- [ ] **D3 — Use tagged asset names in the README download tables**
+  - Problem: the v0.12.0 `README.md` and `README.fa.md` use
+    `/releases/latest/download/...` stable aliases, so a downloaded APK is
+    named `Kumiho-Android-arm64-v8a.apk` without the tag. The generated release
+    notes already use the tagged primary names.
+  - Next release: point both README download tables and their checksum link at
+    `.../releases/download/vX.Y.Z/Kumiho-vX.Y.Z-...` and
+    `SHA256SUMS-vX.Y.Z`. Keep stable aliases only for `/releases/latest`
+    compatibility; do not advertise them or use an ad-hoc file share for the
+    handoff.
+  - The v0.12.0 README is intentionally unchanged per the user's request.
+
 ## Decisions captured on 2026-10-29
 
 - Target the next release, **v0.8.0**.
 - Apply UI polish to all clients where the surface exists.
 - “GitHub About” means the repository sidebar description/website/topics.
-- Use stable, version-free release asset names for direct latest links.
+- ~~Use stable, version-free release asset names for direct latest links.~~
+  Superseded 2026-11-11: user-facing downloads use the tagged primary names;
+  stable aliases are compatibility-only.
 - Update check fails on **every attempt**.
 - README target: **end users only**; technical material moves to docs.
 - Battery palette: green Unrestricted, amber Optimized, red Restricted, grey
@@ -188,3 +205,11 @@ Android TV, Windows GUI and the TUI.
 - Phone screenshots: Dashboard, Locations and Settings.
 - Android TV screenshots get their own section.
 - “What's new” shows only the latest **published** release.
+
+## Decisions captured on 2026-11-11
+
+- From the next release onward, user-facing download links use the tagged
+  asset name; stable aliases are compatibility-only and are not advertised.
+- Handoffs use the tagged GitHub asset, not an ad-hoc file share.
+- The v0.12.0 README is intentionally unchanged; D3 updates it with the next
+  release.
