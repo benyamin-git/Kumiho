@@ -8,7 +8,10 @@ and this project adheres to
 
 ## [Unreleased]
 
-## [0.12.0] - 2026-11-10
+## [0.12.1] - 2026-11-11
+
+The first published build of the language and RTL release, superseding the
+unpublished 0.12.0 draft.
 
 Language and RTL: the Windows GUI and the Android phone/TV app now ship in
 English and Persian, with a first-run choice and a full right-to-left layout.
@@ -41,8 +44,8 @@ The TUI, CLI and logs stay English.
   back to the English source of truth and documents the Persian UI. The
   translation glossary and style guide live in `docs/translations/fa.md`.
 - **Versioned release assets.** Primary downloads now carry the exact release
-  tag (for example `Kumiho-v0.12.0-Windows-amd64.zip`). Stable aliases remain
-  for `/releases/latest` and the README. `SHA256SUMS-v0.12.0` and
+  tag (for example `Kumiho-v0.12.1-Windows-amd64.zip`). Stable aliases remain
+  for `/releases/latest` and the README. `SHA256SUMS-v0.12.1` and
   `SHA256SUMS` have identical contents and cover both filename sets.
 
 ### Changed
@@ -65,6 +68,11 @@ The TUI, CLI and logs stay English.
   language picker visible above the consent copy.
 - The TV rail now focuses the selected tab when a screen opens, instead of
   always focusing Home.
+- **Android no longer closes while setup starts.** The localized root replaced
+  the host context, so the setup flow's VPN and notification permission
+  launchers lost their activity result owner and the app stopped right after
+  `Starting the local engine…`. The root now restores the owner, and localized
+  screens start activities on the host activity.
 
 ## [0.11.1] - 2026-11-10
 
