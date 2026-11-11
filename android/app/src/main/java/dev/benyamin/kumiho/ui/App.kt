@@ -1,5 +1,6 @@
 package dev.benyamin.kumiho.ui
 
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,12 @@ fun KumihoApp(
     val paletteState by container.themeRepository.state.collectAsStateWithLifecycle()
     val language by container.languageRepository.effective.collectAsStateWithLifecycle()
     val baseContext = LocalContext.current
+    // LocalContext is replaced below with a configuration context. Capture the
+    // activity's result registry first: ActivityResultRegistryOwner's default
+    // is derived from LocalContext, and a plain context would hide the launchers.
+    val activityResultRegistryOwner = checkNotNull(LocalActivityResultRegistryOwner.current) {
+        "KumihoApp needs an ActivityResultRegistryOwner"
+    }
     val localizedContext = remember(language, baseContext) {
         container.languageRepository.localizedContext(baseContext)
     }
@@ -80,6 +87,7 @@ fun KumihoApp(
     val nav = remember { ShellNavigation() }
     CompositionLocalProvider(
         LocalContext provides localizedContext,
+        LocalActivityResultRegistryOwner provides activityResultRegistryOwner,
         LocalConfiguration provides localizedContext.resources.configuration,
         LocalLayoutDirection provides if (language == AppLanguage.PERSIAN) {
             LayoutDirection.Rtl

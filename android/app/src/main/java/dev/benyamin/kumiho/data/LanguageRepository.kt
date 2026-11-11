@@ -1,7 +1,11 @@
 package dev.benyamin.kumiho.data
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.res.Configuration
+import android.os.Bundle
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -102,7 +106,7 @@ class LanguageRepository(
         val configuration = Configuration(base.resources.configuration)
         configuration.setLocale(locale)
         configuration.setLayoutDirection(locale)
-        return base.createConfigurationContext(configuration)
+        return HostContext(base, base.createConfigurationContext(configuration))
     }
 
     private fun apply(value: String) {
@@ -115,6 +119,33 @@ class LanguageRepository(
     private fun persist(value: String, version: Int) {
         scope.launch {
             if (localChoiceVersion.get() == version) prefs.setLanguage(normalize(value))
+        }
+    }
+
+    /**
+     * Keeps resource lookup localized while activity starts still target the
+     * host task. [Context.createConfigurationContext] returns a plain context,
+     * and `startActivity` from it without `FLAG_ACTIVITY_NEW_TASK` throws on
+     * Android 8+.
+     */
+    private class HostContext(
+        private val host: Context,
+        localized: Context,
+    ) : ContextWrapper(localized) {
+        override fun startActivity(intent: Intent) {
+            if (host is Activity) {
+                host.startActivity(intent)
+            } else {
+                super.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+
+        override fun startActivity(intent: Intent, options: Bundle?) {
+            if (host is Activity) {
+                host.startActivity(intent, options)
+            } else {
+                super.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options)
+            }
         }
     }
 

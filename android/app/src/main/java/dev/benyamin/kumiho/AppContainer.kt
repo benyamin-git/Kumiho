@@ -127,10 +127,14 @@ class AppContainer(context: Context) {
             languageRepository.effective.collect {
                 WidgetRefresh.request(appContext)
                 TvChannelPublisher.publish(appContext)
-                TileService.requestListeningState(
-                    appContext,
-                    ComponentName(appContext, QuickConnectTileService::class.java),
-                )
+                try {
+                    TileService.requestListeningState(
+                        appContext,
+                        ComponentName(appContext, QuickConnectTileService::class.java),
+                    )
+                } catch (_: RuntimeException) {
+                    // No tile in this process/session; the next change asks again.
+                }
             }
         }
     }
