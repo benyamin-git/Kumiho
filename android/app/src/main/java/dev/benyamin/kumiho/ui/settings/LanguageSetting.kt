@@ -15,8 +15,10 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -64,31 +66,35 @@ fun LanguageSetting(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = Dimens.Space1)
-                .testTag(SettingsTags.LANGUAGE_CONTROL),
-        ) {
-            LANGUAGE_OPTIONS.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = option == preference,
-                    enabled = !applying,
-                    onClick = { onSelected(option) },
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = LANGUAGE_OPTIONS.size,
-                    ),
-                    label = {
-                        Text(
-                            text = languageLabel(option),
-                            maxLines = 1,
-                        )
-                    },
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = Dimens.TouchTarget)
-                        .testTag(SettingsTags.languageOption(option)),
-                )
+        // See ThemeSetting: a pure RTL/LTR change leaves the cached directional
+        // outline stale, so remount the row when the direction changes.
+        key(LocalLayoutDirection.current) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Dimens.Space1)
+                    .testTag(SettingsTags.LANGUAGE_CONTROL),
+            ) {
+                LANGUAGE_OPTIONS.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = option == preference,
+                        enabled = !applying,
+                        onClick = { onSelected(option) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = LANGUAGE_OPTIONS.size,
+                        ),
+                        label = {
+                            Text(
+                                text = languageLabel(option),
+                                maxLines = 1,
+                            )
+                        },
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = Dimens.TouchTarget)
+                            .testTag(SettingsTags.languageOption(option)),
+                    )
+                }
             }
         }
         if (preference == "system") {

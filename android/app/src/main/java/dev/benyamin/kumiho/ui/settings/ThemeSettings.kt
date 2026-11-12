@@ -24,9 +24,11 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -66,27 +68,32 @@ fun ThemeSetting(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = Dimens.Space1)
-                .testTag(SettingsTags.THEME_CONTROL),
-        ) {
-            ThemeId.entries.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = option == theme,
-                    onClick = { onThemeSelected(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeId.entries.size),
-                    label = {
-                        Text(
-                            text = themeLabel(option),
-                            maxLines = 1,
-                        )
-                    },
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = Dimens.TouchTarget)
-                        .testTag(SettingsTags.themeOption(option.id)),
-                )
+        // Material3 caches the segmented button's directional outline. A pure
+        // RTL/LTR change keeps the old corners until the row is remounted, so
+        // key the row on the layout direction.
+        key(LocalLayoutDirection.current) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Dimens.Space1)
+                    .testTag(SettingsTags.THEME_CONTROL),
+            ) {
+                ThemeId.entries.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = option == theme,
+                        onClick = { onThemeSelected(option) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeId.entries.size),
+                        label = {
+                            Text(
+                                text = themeLabel(option),
+                                maxLines = 1,
+                            )
+                        },
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = Dimens.TouchTarget)
+                            .testTag(SettingsTags.themeOption(option.id)),
+                    )
+                }
             }
         }
     }

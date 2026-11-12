@@ -215,9 +215,11 @@ them locally for any change under `android/`, `mobile/` or
   root in `ui/App.kt` replaces `LocalContext` with a localized configuration
   context, so it must capture and re-provide
   `LocalActivityResultRegistryOwner`; otherwise setup's VPN and notification
-  launchers throw before first paint. `README.fa.md` and
-  `docs/translations/fa.md` are part of the release. The TUI, CLI and logs stay
-  English.
+  launchers throw before first paint. The Settings language and theme rows are
+  keyed on `LocalLayoutDirection`: Material3 caches the segmented buttons'
+  directional outline, so an RTL/LTR switch must remount them or the old
+  corners remain. `README.fa.md` and `docs/translations/fa.md` are part of the
+  release. The TUI, CLI and logs stay English.
 - **v0.9.0 region truth**: `internal/relay` is an `http.RoundTripper` that
   sends a control-plane request through the user's Worker only after HTTP 451,
   with exactly one retry, the five-host allowlist and
