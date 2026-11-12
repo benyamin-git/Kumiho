@@ -193,6 +193,23 @@ Android TV, Windows GUI and the TUI.
   - Done 2026-11-12 (v0.13.0): both READMEs link the v0.13.0 versioned
     primaries and `SHA256SUMS-v0.13.0`.
 
+## Release follow-ups
+
+- [ ] **C8 — Regenerate the Android screenshots for v0.13.0**
+  - Problem: the phone and TV captures still show the pre-0.13 Settings and
+    Locations layout; the Windows GUI and TUI captures are current.
+  - Next: run the connected screenshot tests on an API 36 phone and TV
+    emulator, then update `screenshots/android-phone/`,
+    `screenshots/android-tv/` and the Persian phone/TV captures.
+
+- [ ] **C9 — Harden the netmon coalescing test**
+  - Problem: `TestCoalesceCollapsesBurst` failed once in the v0.13.0 CI race
+    run and passed on rerun. The test can consume the first wake-up while the
+    coalescer is still draining the burst, so its "exactly one" assertion is
+    timing-dependent.
+  - Next: make the burst/ack barrier deterministic without weakening the
+    cap-1 guarantee.
+
 ## Decisions captured on 2026-10-29
 
 - Target the next release, **v0.8.0**.
