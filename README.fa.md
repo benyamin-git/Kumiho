@@ -26,12 +26,12 @@ HTTP/2 CONNECT عبور می‌دهد. Android همان موتور Go را در 
 
 | پلتفرم | دانلود |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Linux-arm64.zip) |
-| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Linux-arm64.zip) |
+| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Android-universal.apk) |
 
 همهٔ فایل‌ها در
-[SHA256SUMS-v0.12.1](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/SHA256SUMS-v0.12.1)
+[SHA256SUMS-v0.13.0](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/SHA256SUMS-v0.13.0)
 فهرست شده‌اند. Android فقط به‌صورت نصب دستی (sideload) عرضه می‌شود؛ نسخه‌ای در
 Play Store یا F-Droid وجود ندارد. نسخه‌های پیش‌انتشار v0.7.2 و پیش‌تر در
 [صفحهٔ انتشارها](https://github.com/benyamin-git/Kumiho/releases) باقی می‌مانند.
@@ -70,14 +70,14 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 | --- |
 | <img src="screenshots/fa/android-tv/home.png" width="420" alt="خانهٔ فارسی Android TV: داشبورد ده‌فوتی با فوکوس کنترل"> |
 
-## تازه‌های نسخهٔ 0.12.1
+## تازه‌های نسخهٔ 0.13.0
 
-- **اصلاح واژه‌ها و منوهای فارسی** — نرخ‌ها و مجموع‌های داشبورد از
-  «آپلود/دانلود» استفاده می‌کنند، تنظیمات از «تم» و «رنگ اصلی»، و منوها و
-  پنجره‌های بازشو برچسب‌های فارسی خود را حفظ می‌کنند.
-- **رفع نمایش دکمه‌های تنظیمات Android پس از تغییر زبان** — ردیف‌های تم و
-  زبان هنگام جابه‌جایی بین فارسی و انگلیسی دیگر گوشه‌های قدیمی را نگه
-  نمی‌دارند.
+- **حساب‌ها در تنظیمات** — رابط گرافیکی Windows و برنامهٔ Android (گوشی و TV)
+  اکنون فهرست حساب‌ها، افزودن حساب، ورود دوباره و خروج سراسری را در بالای
+  تنظیمات مدیریت می‌کنند؛ صفحهٔ جداگانهٔ حساب حذف شده است.
+- **مکان‌ها و تنظیمات ساده‌تر** — فهرست تخت سرورها با جستجوی فشرده، پرچم‌های
+  واقعی بزرگ‌تر و سرصفحه‌ها و نمادهای گروه‌های تنظیمات؛ کارت سهمیه و بخش‌های
+  موارد دلخواه و اخیر حذف شده‌اند.
 
 تغییرات کامل در [تاریخچهٔ تغییرات](CHANGELOG.md) آمده است.
 

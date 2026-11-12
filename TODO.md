@@ -190,6 +190,8 @@ Android TV, Windows GUI and the TUI.
   - The v0.12.0 README is intentionally unchanged per the user's request.
   - Done 2026-11-12: both READMEs link the v0.12.1 versioned primaries and
     `SHA256SUMS-v0.12.1`.
+  - Done 2026-11-12 (v0.13.0): both READMEs link the v0.13.0 versioned
+    primaries and `SHA256SUMS-v0.13.0`.
 
 ## Decisions captured on 2026-10-29
 
