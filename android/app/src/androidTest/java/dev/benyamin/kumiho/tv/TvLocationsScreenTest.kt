@@ -106,9 +106,20 @@ class TvLocationsScreenTest : TvTestBase() {
     fun searchFiltersTheFlatRows() {
         show(state(query = "ber"))
 
+        rule.onNodeWithTag(LocationsTags.SEARCH).assertExists()
         rule.onNodeWithTag(serverRowTag("de", "ber", BER_ADDRESS)).assertExists()
         rule.onNodeWithTag(serverRowTag("rec", "rec", AUTO_ADDRESS)).assertDoesNotExist()
         rule.onNodeWithTag(serverRowTag("us", "nyc", EDGE_ADDRESS)).assertDoesNotExist()
+    }
+
+    @Test
+    fun searchStartsAsAnIconAndExpandsTheField() {
+        show()
+
+        rule.onNodeWithTag(LocationsTags.SEARCH).assertDoesNotExist()
+        rule.onNodeWithTag(LocationsTags.SEARCH_TOGGLE).performClick()
+        rule.onNodeWithTag(LocationsTags.SEARCH).assertExists()
+        rule.onNodeWithText(text(R.string.locations_search_placeholder)).assertExists()
     }
 
     @Test
@@ -122,9 +133,10 @@ class TvLocationsScreenTest : TvTestBase() {
     }
 
     @Test
-    fun pingAllIsTheOnlyActionAndUsesEveryTarget() {
+    fun refreshPingAllAndSearchAreTheToolbarActions() {
         show()
 
+        rule.onNodeWithTag(LocationsTags.SEARCH_TOGGLE).assertExists()
         rule.onNodeWithTag(LocationsTags.PING_ALL).assertIsEnabled().performClick()
         assertEquals(listOf("ping-all"), calls)
         rule.onNodeWithTag("locations_test_speed").assertDoesNotExist()

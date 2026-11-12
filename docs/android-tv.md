@@ -78,13 +78,14 @@ install.
 - **Center/Select** activates the focused control.
 - **Back** returns from a dialog or the More page. From a top-level tab,
   Back exits to the TV launcher.
-- **Home / Locations / Account / Settings** are the four rail tabs.
-  **More** opens Logs and Diagnostics.
+- **Home / Locations / Settings / More** are the four rail tabs.
+  **More** opens Logs and Diagnostics; account management is the first group
+  of Settings, not a tab.
 - Text fields (search, settings editors) open the system on-screen keyboard.
   Enter/Search closes the keyboard; the field keeps its value.
 
-Every action on Home, Locations, Account, Settings, split tunneling, Logs and
-Diagnostics is reachable without a pointer. Focus is never drawn only with
+Every action on Home, Locations, Settings (including its Account group), split
+tunneling, Logs and Diagnostics is reachable without a pointer. Focus is never drawn only with
 colour: rows scale and gain a border when focused.
 
 ## Language and RTL
@@ -122,22 +123,23 @@ default `system`) and the same DataStore mirror.
   without a browser still shows the release notes and download link.
 - Logs can be viewed, copied line by line and shared with Android's share
   sheet. Diagnostics can be copied and re-run.
-- The Locations tab has pinned **Fastest**, **Favorites** and **Recent**
-  sections above one flat server list. Each server is a rounded house card
-  (surface fill, 1 dp outline, 12 dp radius) with real 32×24 flags, a two-line
-  `Country · City` / `host:port · protocols` body, search, a favorite star,
-  a **Clear** action on Recent, **Ping all**, and a **Show locked locations**
+- The Locations tab has a pinned **Fastest** row above one flat server list.
+  Each server is a rounded house card
+  (surface fill, 1 dp outline, 12 dp radius) with real 48×36 flags, a two-line
+  `Country · City` / `host:port · protocols` body, a magnifying-glass action
+  that expands the search field, **Ping all**, and a **Show locked locations**
   / **Hide locked locations** footer. The selected card adds the primary tint,
-  a matching outline and a check; the body and star are separate focus targets
-  and the focus ring is the only outline drawn inside the card. Fastest stays
-  disabled with its honest hint until a fresh Ping all produces an RTT;
-  selecting it resolves once to the actual server. Locked rows carry a text
-  **Locked** badge. There are no carets or expand/collapse controls, and D-pad
-  focus stays on the list after a search or a speed-order switch. The speed
-  order applies only to the full list when the engine emits `ping_done`; there
-  is no timer.
-- Settings starts with the app-level **Language** row, then the themed
-  catalog. It includes **Region**: a **Blocked region** guide action, then
+  a matching outline and a check; the whole card is one focus target and the
+  focus ring is the only outline drawn inside it. Fastest stays disabled with
+  its honest hint until a fresh Ping all produces an RTT; selecting it resolves
+  once to the actual server. Locked rows carry a text **Locked** badge. There
+  are no carets or expand/collapse controls, and a search keeps the list in
+  place without resetting the speed order. The speed order applies only to the
+  full list when the engine emits `ping_done`; there is no timer.
+- Settings starts with the **Account** group (see the phone guide), then the
+  **Kumiho app** group with its **Language** row and the themed catalog. Every
+  group header carries a primary-tinted icon beside its title. It includes
+  **Region**: a **Blocked region** guide action, then
   `allow_locked`, the HTTPS `relay_url`, a
   write-only `relay_token` with Set/Clear, and a **Test relay** action with
   its inline result. Region help text states that the relay is used only
@@ -196,13 +198,13 @@ TV's own launcher or Wi-Fi behaviour.
 - [ ] Setup: consent, browser sign-in (WebView), VPN permission,
       notifications and Always-on guidance all complete with the remote.
 - [ ] Dashboard: connect, disconnect, reconnect and the options page.
-- [ ] Locations: search and no-match copy, real 32×24 flags, rounded
-      focusable server cards with one outline per card, Fastest/Favorites/Recent
-      sections, favorite star and Clear, select a server, then Ping all and
-      inspect the speed order (Recommended first, failures last); toggle the
-      locked footer and confirm there are no carets or expand/collapse
-      controls.
-- [ ] Account: add, rename, remove, rotate and sign out.
+- [ ] Locations: the magnifying-glass action expands and focuses search, then
+      search and no-match copy, real 48×36 flags, rounded focusable server
+      cards with one outline per card, the pinned Fastest row, select a server,
+      then Ping all and inspect the speed order (Recommended first, failures
+      last); toggle the locked footer and confirm there are no carets or
+      expand/collapse controls.
+- [ ] Settings → Account: add, rename, remove and sign out.
 - [ ] Settings: theme, accent, update check, split tunneling, bypass, every
       engine row/dialog, and the Region URL/token/Test relay controls.
 - [ ] Logs: filter, search, follow and copy/share.

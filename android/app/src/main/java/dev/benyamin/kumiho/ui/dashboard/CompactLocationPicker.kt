@@ -137,8 +137,8 @@ private fun CountryRow(
         leading = {
             CountryFlags.Flag(
                 code = countryCode,
-                width = 20.dp,
-                height = 15.dp,
+                width = 24.dp,
+                height = 18.dp,
                 modifier = Modifier.testTag(countryFlagTag(countryCode)),
             )
         },

@@ -91,18 +91,3 @@ export function accountMethodWord(method) {
       return method ? String(method) : "";
   }
 }
-
-/**
- * Percent of the quota remaining, rounded to a whole percent, or null when
- * the list snapshot has no complete quota. Values are clamped to 0–100: a
- * stale daemon sample can report remaining > limit after a plan change, and
- * the row must never print 118%.
- */
-export function accountQuotaPercent(account) {
-  const quota = account && account.quota;
-  if (!quota || typeof quota.limit !== "number" || typeof quota.remaining !== "number" || quota.limit <= 0) {
-    return null;
-  }
-  const pct = Math.round((quota.remaining / quota.limit) * 100);
-  return Math.max(0, Math.min(100, pct));
-}

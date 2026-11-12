@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.benyamin.kumiho.BuildConfig
 import dev.benyamin.kumiho.data.AppLanguage
+import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.AccountSummary
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.engine.City
@@ -31,6 +34,9 @@ import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.engine.Settings
+import dev.benyamin.kumiho.ui.account.AccountActions
+import dev.benyamin.kumiho.ui.account.AccountSectionUi
+import dev.benyamin.kumiho.ui.account.AccountUiState
 import dev.benyamin.kumiho.ui.dashboard.DashboardActions
 import dev.benyamin.kumiho.ui.dashboard.DashboardPhase
 import dev.benyamin.kumiho.ui.dashboard.DashboardState
@@ -133,12 +139,12 @@ class LanguageTvScreenshotsTest : TvTestBase() {
                                 actions = locationsActions(),
                             )
                         },
-                        account = {},
                         settings = {
                             TvSettingsScreen(
                                 state = settingsState(),
                                 appState = appState(),
                                 actions = settingsActions(),
+                                account = accountSection(),
                             )
                         },
                         logs = {},
@@ -292,6 +298,43 @@ class LanguageTvScreenshotsTest : TvTestBase() {
         battery = BatteryOptimization.OPTIMIZED,
         languagePreference = "system",
         effectiveLanguage = AppLanguage.PERSIAN,
+    )
+
+    private fun accountSection() = AccountSectionUi(
+        state = AccountUiState(
+            loading = false,
+            account = Account(
+                email = "user@example.com",
+                uid = "9f3c2a7d",
+                subscribed = true,
+                maxBytes = 50L * GIB,
+                limitedBandwidth = false,
+                quotaRemaining = 12L * GIB,
+                tokenExpires = 1_800_000_000L,
+                error = null,
+            ),
+            accounts = Accounts(
+                accounts = listOf(
+                    AccountSummary(
+                        id = "a",
+                        email = "user@example.com",
+                        label = "",
+                        method = "browser",
+                        active = true,
+                        reauthRequired = false,
+                        lastUsedAt = 1_761_086_400L,
+                        quota = null,
+                    ),
+                ),
+                active = "a",
+                rotation = false,
+                threshold = 10,
+                lastMethod = "browser",
+                notice = null,
+                error = null,
+            ),
+        ),
+        actions = AccountActions(),
     )
 
     private fun settingsActions() = SettingsActions(

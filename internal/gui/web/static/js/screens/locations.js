@@ -1,12 +1,12 @@
-/* The Locations screen: pinned Fastest / Favorites / Recent sections above
- * the full server list, the live search, Refresh and Ping-all actions, the
- * locked-list footer action, and the tone-coloured status line.
+/* The Locations screen: the pinned Fastest row above the full server list,
+ * the live search, Refresh and Ping-all actions, the locked-list footer
+ * action, and the tone-coloured status line.
  *
  * The controller owns every fetch and the latency projection. This screen
  * builds the display rows from `state.locations` (connect target, protocols,
- * Recommended flag, search haystack), resolves the persisted favorite/recent
- * refs, filters and orders the full list locally, and sends only actions.
- * The Fastest row and the pinned sections never participate in speed order.
+ * Recommended flag, search haystack), filters and orders the full list
+ * locally, and sends only actions. The Fastest row never participates in
+ * speed order.
  *
  * Ping labels read `state.rtts` while a run is busy and the controller's
  * `state.latency` cache when idle. The run ends only on the daemon's
@@ -240,46 +240,23 @@ function dataSignature(locations) {
   return signature;
 }
 
-function refKey(ref) {
-  return [
-    normalizedCode(ref && ref.country_code),
-    normalizedCode(ref && ref.city_code),
-    String((ref && ref.server) || "").toLowerCase(),
-  ].join("/");
+function withSection(row, section) {
+  return Object.assign({}, row, { section: section });
 }
 
-function resolvedRefRows(refs, rows) {
-  const out = [];
-  const seen = new Set();
-  for (const ref of refs || []) {
-    if (!ref) continue;
-    const server = String(ref.server || "").toLowerCase();
-    let row = rows.find(function (candidate) {
-      return candidate.address.toLowerCase() === server;
-    });
-    if (!row) {
-      const country = normalizedCode(ref.country_code);
-      const city = normalizedCode(ref.city_code);
-      row = rows.find(function (candidate) {
-        return normalizedCode(candidate.countryCode) === country &&
-          (!city || normalizedCode(candidate.cityCode) === city);
-      });
-    }
-    if (!row) continue;
-    const key = row.address.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(row);
-  }
-  return out;
-}
-
-function withState(row, section, favorite, recent) {
-  return Object.assign({}, row, {
-    section: section,
-    favorite: !!favorite,
-    recent: !!recent,
-  });
+/** The 24-unit Material search glyph, inlined so the button needs no asset. */
+function searchIcon() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.classList.add("loc__search-icon");
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute("d", "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z");
+  svg.append(path);
+  return svg;
 }
 
 function isSelected(row, snapshot) {
@@ -300,8 +277,15 @@ function build(host) {
   pingAll.type = "button";
   const locked = el("button", "button button--text loc__locked-action", t("locations.show_locked"));
   locked.type = "button";
+  const search = el("button", "button button--text loc__search");
+  search.type = "button";
+  search.setAttribute("aria-label", t("locations.search_label"));
+  search.setAttribute("aria-controls", "loc-filter");
+  search.setAttribute("aria-expanded", "false");
+  search.title = t("locations.search_label");
+  search.append(searchIcon());
   const actions = el("div", "loc__actions");
-  actions.append(refresh, pingAll, locked);
+  actions.append(search, refresh, pingAll, locked);
 
   const filterLabel = el("label", "field__label", t("locations.search_label"));
   filterLabel.htmlFor = "loc-filter";
@@ -314,6 +298,7 @@ function build(host) {
   filter.spellcheck = false;
   const filterField = el("div", "field loc__field");
   filterField.append(filterLabel, filter);
+  filterField.hidden = true;
 
   const list = el("div", "card loc__list");
   list.setAttribute("role", "listbox");
@@ -339,6 +324,8 @@ function build(host) {
     refresh: refresh,
     pingAll: pingAll,
     locked: locked,
+    search: search,
+    filterField: filterField,
     filter: filter,
     list: list,
     empty: empty,
@@ -374,7 +361,6 @@ export default {
       pingAnswered: false,
       pingDoneSeq: 0,
       frozenLatency: null,
-      favoriteOverrides: {},
       // DOM-render bookkeeping so envelopes only touch what changed.
       placeholder: null,
       statusText: null,
@@ -402,29 +388,6 @@ export default {
     function sectionsFor(snapshot) {
       const rows = visibleRows(snapshot);
       const latency = latencySamples(snapshot);
-      const favorites = resolvedRefRows(snapshot.favorites, rows);
-      favorites.sort(function (a, b) {
-        const country = a.countryName.toLowerCase().localeCompare(b.countryName.toLowerCase());
-        if (country !== 0) return country;
-        const city = a.cityName.toLowerCase().localeCompare(b.cityName.toLowerCase());
-        if (city !== 0) return city;
-        return a.address.toLowerCase().localeCompare(b.address.toLowerCase());
-      });
-      const recents = resolvedRefRows(snapshot.recents, rows);
-      const favoriteKeys = new Set(favorites.map(function (row) { return row.address.toLowerCase(); }));
-      const recentKeys = new Set(recents.map(function (row) { return row.address.toLowerCase(); }));
-      // Drop optimistic stars once the authoritative state agrees.
-      for (const address of Object.keys(view.favoriteOverrides)) {
-        if (favoriteKeys.has(address) === view.favoriteOverrides[address]) {
-          delete view.favoriteOverrides[address];
-        }
-      }
-      const isFavorite = function (row) {
-        const key = row.address.toLowerCase();
-        return Object.prototype.hasOwnProperty.call(view.favoriteOverrides, key)
-          ? view.favoriteOverrides[key]
-          : favoriteKeys.has(key);
-      };
 
       let fastest = null;
       let fastestValue = Infinity;
@@ -436,7 +399,7 @@ export default {
         }
       }
       const fastestRows = [fastest
-        ? withState(fastest, "fastest", false, false)
+        ? withSection(fastest, "fastest")
         : {
           footer: false,
           address: "",
@@ -445,8 +408,6 @@ export default {
           disabled: true,
           fastest: true,
           section: "fastest",
-          favorite: false,
-          recent: false,
         }];
       if (fastest) {
         fastestRows[0].fastest = true;
@@ -454,34 +415,16 @@ export default {
         fastestRows[0].title = t("locations.fastest_with", { title: fastest.title });
       }
 
-      const favoriteRows = favorites.map(function (row) {
-        return withState(row, "favorites", isFavorite(row), recentKeys.has(row.address.toLowerCase()));
-      });
-      const recentRows = recents.map(function (row) {
-        return withState(row, "recent", isFavorite(row), true);
-      });
-
       const sortLatency = view.pingBusy && view.frozenLatency ? view.frozenLatency : latency;
       const full = sortRows(
         matchingRows(rows, view.filter),
         view.sortMode,
         sortLatency,
       ).map(function (row) {
-        return withState(
-          row,
-          "locations",
-          isFavorite(row),
-          recentKeys.has(row.address.toLowerCase()),
-        );
+        return withSection(row, "locations");
       });
 
       const sections = [{ id: "fastest", title: t("locations.fastest"), rows: fastestRows }];
-      if (favoriteRows.length > 0) {
-        sections.push({ id: "favorites", title: t("locations.favorites"), rows: favoriteRows });
-      }
-      if (recentRows.length > 0) {
-        sections.push({ id: "recent", title: t("locations.recent"), rows: recentRows, clearable: true });
-      }
       sections.push({ id: "locations", title: t("locations.locations"), rows: full });
       return { sections: sections, full: full };
     }
@@ -528,13 +471,6 @@ export default {
           heading.setAttribute("role", "presentation");
           const title = el("h3", "loc__heading-title", section ? section.title : "");
           heading.append(title);
-          if (section && section.clearable) {
-            const clear = el("button", "button button--text loc__clear", t("locations.clear"));
-            clear.type = "button";
-            clear.setAttribute("aria-label", t("locations.clear_recent_aria"));
-            clear.addEventListener("click", onClearRecents);
-            heading.append(clear);
-          }
           frag.append(heading);
         }
 
@@ -569,21 +505,14 @@ export default {
         const latency = el("span", "loc__latency");
         const latencyText = el("bdi");
         latency.append(latencyText);
-        const star = el("button", "button loc__star icon--keep");
-        star.type = "button";
-        star.hidden = !!row.fastest;
-        star.addEventListener("click", function (event) {
-          event.stopPropagation();
-          onFavorite(row);
-        });
         const check = el("span", "loc__check icon--keep", "✓");
         check.setAttribute("aria-hidden", "true");
         check.hidden = true;
-        trailing.append(latency, star, check);
+        trailing.append(latency, check);
         rowEl.append(trailing);
 
         frag.append(rowEl);
-        els.push({ el: rowEl, latency: latencyText, star: star, check: check });
+        els.push({ el: rowEl, latency: latencyText, check: check });
       });
       ui.list.replaceChildren(frag);
       view.rowEls = els;
@@ -597,7 +526,7 @@ export default {
       view.current = Math.max(0, Math.min(view.current, view.rows.length - 1));
     }
 
-    /** Per-envelope row updates: latency, selected mark, star and current. */
+    /** Per-envelope row updates: latency, selected mark and current. */
     function renderRowState(snapshot, live) {
       for (let i = 0; i < view.rows.length; i++) {
         const row = view.rows[i];
@@ -605,22 +534,6 @@ export default {
         const label = latencyLabel(snapshot, row, view.pingBusy);
         const latency = label || "—";
         if (entry.latency.textContent !== latency) entry.latency.textContent = latency;
-
-        if (!entry.star.hidden) {
-          const pressed = row.favorite ? "true" : "false";
-          if (entry.star.getAttribute("aria-pressed") !== pressed) {
-            entry.star.setAttribute("aria-pressed", pressed);
-          }
-          const want = row.favorite ? "★" : "☆";
-          if (entry.star.textContent !== want) entry.star.textContent = want;
-          const name = [row.countryName, row.cityName].filter(Boolean).join(" ");
-          const labelText = row.favorite
-            ? t("locations.unfavorite", { name: name })
-            : t("locations.favorite", { name: name });
-          if (entry.star.getAttribute("aria-label") !== labelText) {
-            entry.star.setAttribute("aria-label", labelText);
-          }
-        }
 
         const selected = isSelected(row, snapshot);
         const wantSelected = selected ? "true" : "false";
@@ -772,8 +685,6 @@ export default {
           row.key || row.address,
           row.title,
           row.detail,
-          row.favorite ? "f" : "",
-          row.recent ? "r" : "",
           row.locked ? "l" : "",
           row.disabled ? "d" : "",
         ].join("\u0000");
@@ -829,32 +740,6 @@ export default {
       render();
       ctx.send("refresh", { locations: true }).then(function (err) {
         if (err) console.warn("kumiho: locations refresh refused: " + err);
-      });
-    }
-
-    function onFavorite(row) {
-      if (!row || row.fastest || row.disabled || !row.address) return;
-      const favorite = !row.favorite;
-      view.favoriteOverrides[row.address.toLowerCase()] = favorite;
-      view.rowsSignature = "";
-      render();
-      ctx.send("favorite_location", {
-        country_code: row.countryCode,
-        city_code: row.cityCode,
-        server: row.address,
-        favorite: favorite,
-      }).then(function (err) {
-        if (!err) return;
-        delete view.favoriteOverrides[row.address.toLowerCase()];
-        view.rowsSignature = "";
-        render();
-        console.warn("kumiho: locations favorite refused: " + err);
-      });
-    }
-
-    function onClearRecents() {
-      ctx.send("clear_recents", {}).then(function (err) {
-        if (err) console.warn("kumiho: locations clear_recents refused: " + err);
       });
     }
 
@@ -947,6 +832,14 @@ export default {
       render();
     }
 
+    function onOpenSearch() {
+      ui.search.setAttribute("aria-expanded", "true");
+      ui.search.hidden = true;
+      ui.filterField.hidden = false;
+      ui.filter.focus();
+    }
+
+    ui.search.addEventListener("click", onOpenSearch);
     ui.refresh.addEventListener("click", onRefresh);
     ui.pingAll.addEventListener("click", onPingAll);
     ui.locked.addEventListener("click", onLocked);

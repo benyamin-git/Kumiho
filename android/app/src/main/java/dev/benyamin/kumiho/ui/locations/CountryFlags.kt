@@ -39,8 +39,8 @@ object CountryFlags {
         code: String?,
         modifier: Modifier = Modifier,
         recommended: Boolean = false,
-        width: Dp = 24.dp,
-        height: Dp = 18.dp,
+        width: Dp = 40.dp,
+        height: Dp = 30.dp,
     ) {
         val colors = LocalKumihoColors.current
         val resource = if (recommended) null else resourceFor(code)

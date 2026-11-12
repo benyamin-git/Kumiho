@@ -1,53 +1,46 @@
-/* The Account screen (inventory §Account, extended by v0.6.0): the account
- * list and rotation card above the entitlement card (Email, UID,
- * Subscription, Quota, Bandwidth, Token expiry) with its Yes/No/Unknown and
- * Limited/Unlimited words and tones, the tonal Sign out action, its modal
- * confirmation dialog (a native <dialog>: Cancel focused by default, Esc and
- * Enter cancel, the destructive confirm in the loss colour), and the status
- * line.
+/* The Account section of Settings: the daemon's `accounts_list` projection
+ * (label/email, method word, active marker, re-auth warning), the tonal Sign
+ * out action with its modal confirmation dialog (a native <dialog>: Cancel
+ * focused by default, Esc and Enter cancel, the destructive confirm in the
+ * loss colour), and the status line. Firefox removed the quota, so the old
+ * entitlement card (email, UID, subscription, quota, bandwidth, token
+ * expiry) and the rotation card are gone; account management and sign-out
+ * are the useful surface.
  *
- * The v0.6.0 rows are the daemon's `accounts_list` projection: label/email,
- * method word, active marker, re-auth warning and the quota percent left.
  * Each row's overflow menu dispatches Use, Rename, Re-authenticate and
  * Remove; Add account offers browser sign-in (the first choice) or the
  * password form reused from onboarding. A browser flow shows the waiting
  * card, opens the URL once through `open_external`, polls
  * `accounts_add_status` every second, finishes through `login_complete` with
  * the redirect URL pasted from the browser's address bar, and cancels through
- * `accounts_add_cancel`. Rotation is a switch plus a 1–50% threshold.
+ * `accounts_add_cancel`.
  *
  * Everything renders from the store's state envelopes (the controller
- * projection); actions go through the transport and the screen re-renders
+ * projection); actions go through the transport and the section re-renders
  * from the next envelope — "" means accepted, never completed (T1.7). The
  * wire carries no account-loading or logout-in-flight flag (reported as
  * projection gaps): "Loading account..." is `account` absent with no
- * account notice, and the sign-out guard runs screen-side from the confirm
+ * account notice, and the sign-out guard runs section-side from the confirm
  * click until the logout's completion evidence — the account notice moving
  * ("Signed out" / "could not sign out: <err>") or the reloaded account
  * snapshot changing — with the T2.2 pattern's settle timer behind a
  * byte-identical repeat.
  *
- * The card gate is the inventory's: the card and the Sign out button appear
- * only for a loaded, signed-in snapshot (local session facts present). An
- * anonymous snapshot — the daemon answers "not signed in" — shows no card
- * and the status line's "Not signed in". A non-fatal entitlement-lookup
- * failure keeps the local rows (Subscription `Unknown`, warn) and warns on
- * the status line; the row values pass through the wire's ~raw projection,
- * so this screen formats the quota (humanBytes) and the expiry (RFC3339)
- * with the controller's exact wording.
+ * The sign-out gate is the inventory's: the Sign out button appears only for
+ * a loaded, signed-in snapshot (local session facts present). An anonymous
+ * snapshot — the daemon answers "not signed in" — shows no card and the
+ * status line's "Not signed in".
  *
- * Wording authority: the row labels and order, the Yes/No/Unknown and
- * Limited/Unlimited words with their tones, the status-line priority, the
+ * Wording authority: the row labels and order, the status-line priority, the
  * sign-out dialog body lines, and the capture hint
- * (`#/account?state=signout-confirm`, scripts/visual/README.md) come from
- * inventory §Account. The shell header's title row supplies the `Account`
- * heading (T2.1; screens do not repeat it).
+ * (`#/settings?state=signout-confirm`, scripts/visual/README.md).
  *
- * The router links css/screens/account.css from the registry entry.
+ * Settings mounts this module in its own section and links
+ * css/account-section.css from its registry entry.
  */
 
-import { accountMethodWord, accountName, accountQuotaPercent } from "../store.js";
-import { t, formatBytes, formatDateTime, formatNumber, noticeText, errorSummary } from "../i18n.js";
+import { accountMethodWord, accountName } from "./store.js";
+import { t, noticeText, errorSummary } from "./i18n.js";
 
 // The sign-out guard's settle (the dashboard/locations/settings T2.2
 // pattern): a logout whose completion evidence repeats byte-for-byte stops
@@ -61,16 +54,6 @@ const POLL_MS = 1000;
 // The daemon's account cap; Add account is disabled at the limit.
 const MAX_ACCOUNTS = 5;
 
-// The card's rows in the inventory's canonical order.
-const ROWS = [
-  ["email", "account.row.email"],
-  ["uid", "account.row.uid"],
-  ["subscription", "account.row.subscription"],
-  ["quota", "account.row.quota"],
-  ["bandwidth", "account.row.bandwidth"],
-  ["token_expiry", "account.row.token_expiry"],
-];
-
 // The known legacy-list notice is the one account-list string the engine
 // still emits in English; map that exact one-time message.
 const LEGACY_NOTICE = "Old browser sign-in removed. Add your Firefox account again.";
@@ -81,8 +64,10 @@ const LEGACY_NOTICE = "Old browser sign-in removed. Add your Firefox account aga
 let openedBrowserURL = "";
 
 // unmount()'s teardown, assigned by mount (the router mounts one screen at a
-// time, so one slot is enough).
+// time, so one slot is enough) and the mounted section's reload, exposed so
+// Settings' page-level Refresh reloads the account projection too.
 let cleanup = null;
+let reload = null;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -102,32 +87,6 @@ function loginFailure(login) {
 /** A loaded snapshot is signed in when its local session facts are present. */
 function signedIn(account) {
   return !!account && (!!account.email || !!account.uid);
-}
-
-/** The Subscription row value and tone (inventory §Account). */
-function subscriptionView(account) {
-  if (account.error) return { text: t("account.unknown"), tone: "warn" };
-  if (account.subscribed === true) return { text: t("account.yes"), tone: "good" };
-  if (account.subscribed === false) return { text: t("account.no"), tone: "" };
-  // The wire always carries the bool; an absent one is no answer to show,
-  // not a "No".
-  return { text: "", tone: "" };
-}
-
-/** The Quota row: "X remaining of Y", "X remaining" or "Y per period". */
-function quotaText(account) {
-  const remaining = account.quota_remaining;
-  const limit = account.max_bytes;
-  if (typeof remaining === "number" && typeof limit === "number") {
-    return t("account.quota.remaining_of", { remaining: formatBytes(remaining), limit: formatBytes(limit) });
-  }
-  if (typeof remaining === "number") {
-    return t("account.quota.remaining", { remaining: formatBytes(remaining) });
-  }
-  if (typeof limit === "number") {
-    return t("account.quota.per_period", { limit: formatBytes(limit) });
-  }
-  return "";
 }
 
 /** A cheap identity for the account snapshot (see fingerprint). */
@@ -194,19 +153,22 @@ function fieldBox(id, labelText, type, autocomplete) {
 /** Build the screen's DOM and return its element references. */
 function build(host) {
   const root = el("div", "acct");
+  // Programmatic focus target for the dialog focus-return when no action is
+  // available (tabindex -1 keeps it out of the tab order).
+  root.tabIndex = -1;
 
-  // Header actions: Refresh, Add account and the session-wide Sign out.
-  const refresh = el("button", "button button--tonal acct__refresh", t("common.refresh"));
-  refresh.type = "button";
+  // Header actions: Add account and the session-wide Sign out. Settings'
+  // page-level Refresh reloads the account projection too, so the section
+  // does not repeat it.
   const add = el("button", "button button--filled acct__add", t("account.add"));
   add.type = "button";
   const signout = el("button", "button button--tonal acct__signout", t("account.signout"));
   signout.type = "button";
   signout.hidden = true;
   const actions = el("div", "acct__actions");
-  actions.append(refresh, add, signout);
+  actions.append(add, signout);
 
-  // The account rows, above the entitlement card.
+  // The account rows.
   const accounts = el("section", "acct__accounts");
   const accountsHead = el("div", "acct__section-head");
   const accountsTitle = el("h2", "acct__section-title", t("account.accounts"));
@@ -279,46 +241,6 @@ function build(host) {
   formActions.append(formCancel, formSubmit);
   addform.append(addformTitle, addformBody, email.wrap, password.wrap, code.wrap, formStatus, formDetails, formActions);
   addform.setAttribute("aria-labelledby", addformTitle.id);
-
-  // The entitlement card (unchanged inventory rows).
-  const planTitle = el("h2", "acct__section-title", t("account.plan"));
-  planTitle.id = "acct-plan-title";
-  const card = document.createElement("dl");
-  card.className = "card acct__card";
-  card.setAttribute("aria-labelledby", planTitle.id);
-  card.hidden = true;
-  const rows = new Map();
-  for (const [key, labelKey] of ROWS) {
-    const dt = el("dt", null, t(labelKey));
-    const dd = document.createElement("dd");
-    const value = el("span", "acct__value");
-    dd.append(value);
-    // Rows are always present in canonical order and hidden while empty.
-    dt.hidden = true;
-    dd.hidden = true;
-    card.append(dt, dd);
-    rows.set(key, { dt: dt, dd: dd, value: value });
-  }
-
-  // Rotation: a switch and the 1–50% threshold, saved immediately.
-  const rotation = el("section", "card acct__rotation");
-  const rotationHead = el("div", "acct__rotation-head");
-  const rotationTitle = el("h2", "acct__rotation-title", t("account.rotation.title"));
-  rotationTitle.id = "acct-rotation-title";
-  const rotationToggle = el("button", "button button--tonal acct__toggle", "off");
-  rotationToggle.type = "button";
-  rotationToggle.id = "acct-rotation-toggle";
-  rotationToggle.setAttribute("aria-label", t("account.rotation.title"));
-  rotationHead.append(rotationTitle, rotationToggle);
-  const rotationBody = el("p", "acct__rotation-body", t("account.rotation.body"));
-  const threshold = fieldBox("acct-rotation-threshold", t("account.rotation.threshold"), "number", "off");
-  threshold.input.min = "1";
-  threshold.input.max = "50";
-  threshold.input.step = "1";
-  threshold.input.inputMode = "numeric";
-  threshold.input.dir = "ltr";
-  rotation.append(rotationHead, rotationBody, threshold.wrap);
-  rotation.setAttribute("aria-labelledby", rotationTitle.id);
 
   // The sign-out confirmation (the existing dialog).
   const dialog = el("dialog", "dialog acct__dialog");
@@ -406,9 +328,6 @@ function build(host) {
     accounts,
     waiting,
     addform,
-    planTitle,
-    card,
-    rotation,
     dialog,
     addDialog,
     renameDialog,
@@ -420,13 +339,10 @@ function build(host) {
 
   return {
     root: root,
-    refresh: refresh,
     add: add,
     signout: signout,
     list: list,
     empty: empty,
-    card: card,
-    rows: rows,
     waiting: waiting,
     waitingURL: waitingURL,
     redirect: redirect,
@@ -445,9 +361,6 @@ function build(host) {
     formDetails: formDetails,
     formCancel: formCancel,
     formSubmit: formSubmit,
-    rotation: rotation,
-    rotationToggle: rotationToggle,
-    threshold: threshold,
     dialog: dialog,
     cancel: cancel,
     confirm: confirm,
@@ -662,8 +575,8 @@ export default {
     }
 
     // The dialog's focus return: back to the trigger when it can still take
-    // focus (hidden or busy triggers hand off to Refresh, so keyboard focus
-    // never lands on the body).
+    // focus (hidden or busy triggers hand off to the remaining actions, so
+    // keyboard focus never lands on the body).
     function returnFocus(preferred) {
       if (preferred && !preferred.hidden && !preferred.disabled) {
         preferred.focus();
@@ -677,7 +590,7 @@ export default {
         ui.signout.focus();
         return;
       }
-      if (!ui.refresh.disabled) ui.refresh.focus();
+      ui.root.focus();
     }
 
     function openDialog(dialog, focus) {
@@ -701,12 +614,6 @@ export default {
     }
 
     // --------------------------------------------------------------- rows
-
-    function quotaLabel(account) {
-      const pct = accountQuotaPercent(account);
-      if (pct === null) return t("account.quota_unknown");
-      return t("account.quota_left", { percent: formatNumber(pct) });
-    }
 
     function rowNode(account, snapshot) {
       const name = accountName(account);
@@ -738,8 +645,7 @@ export default {
 
       const meta = el("div", "acct__meta");
       const method = el("span", "acct__method", accountMethodWord(account.method));
-      const quota = el("span", "acct__quota", quotaLabel(account));
-      meta.append(method, quota);
+      meta.append(method);
 
       const menu = el("details", "acct__menu");
       const summary = el("summary", "acct__menu-summary", t("account.more"));
@@ -814,27 +720,6 @@ export default {
       const label = t(count > 1 ? "account.signout_all" : "account.signout");
       if (ui.signout.textContent !== label) ui.signout.textContent = label;
       if (ui.signout.title !== label) ui.signout.title = label;
-    }
-
-    function renderRotation(snapshot) {
-      const accounts = snapshot.accounts || null;
-      const enabled = !!(accounts && accounts.rotation);
-      const text = t(enabled ? "common.on" : "common.off");
-      if (ui.rotationToggle.textContent !== text) ui.rotationToggle.textContent = text;
-      if (accounts) ui.rotationToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
-      else ui.rotationToggle.removeAttribute("aria-pressed");
-      const disabled = !accounts || view.busy;
-      if (ui.rotationToggle.disabled !== disabled) ui.rotationToggle.disabled = disabled;
-      if (ui.threshold.input.disabled !== disabled) ui.threshold.input.disabled = disabled;
-      if (accounts && document.activeElement !== ui.threshold.input) {
-        const value = String(accounts.rotation_threshold || 10);
-        if (ui.threshold.input.value !== value) ui.threshold.input.value = value;
-        ui.threshold.input.setAttribute("aria-valuetext",
-          t("account.rotation.value", { percent: formatNumber(value) }));
-      }
-      ui.threshold.input.setAttribute("aria-label", t("account.rotation.aria", {
-        percent: formatNumber((accounts && accounts.rotation_threshold) || 10),
-      }));
     }
 
     // ------------------------------------------------------ browser waiting
@@ -1015,9 +900,6 @@ export default {
       if (!accounts) return { text: t("account.status.loading_accounts"), tone: "", detail: "" };
       if (!account) return { text: t("account.status.loading_account"), tone: "", detail: "" };
       if (!signedIn(account)) return { text: t("account.status.not_signed_in"), tone: "", detail: "" };
-      if (account.error) {
-        return { text: t("account.subscription_unavailable"), tone: "warn", detail: account.error };
-      }
       return { text: "", tone: "", detail: "" };
     }
 
@@ -1034,39 +916,6 @@ export default {
       ui.status.hidden = line.text === "";
       ui.details.textContent = line.detail;
       ui.details.hidden = line.detail === "";
-    }
-
-    // ---------------------------------------------------------- entitlement
-
-    function renderCard(snapshot) {
-      const account = snapshot.account || null;
-      const show = signedIn(account);
-      if (ui.card.hidden !== !show) ui.card.hidden = !show;
-      if (!show) return;
-      const values = {
-        email: account.email || "",
-        uid: account.uid || "",
-        subscription: subscriptionView(account),
-        quota: quotaText(account),
-        bandwidth: {
-          text: t(account.limited_bandwidth ? "account.limited" : "account.unlimited"),
-          tone: account.limited_bandwidth ? "warn" : "",
-        },
-        token_expiry: account.token_expires > 0 ? formatDateTime(account.token_expires) : "",
-      };
-      for (const [key, entry] of ui.rows) {
-        const item = values[key];
-        const text = typeof item === "string" ? item : item.text;
-        const tone = typeof item === "string" ? "" : item.tone;
-        if (entry.value.textContent !== text) entry.value.textContent = text;
-        if (tone) entry.value.dataset.tone = tone;
-        else delete entry.value.dataset.tone;
-        const rowShown = text !== "";
-        if (entry.dt.hidden !== !rowShown) {
-          entry.dt.hidden = !rowShown;
-          entry.dd.hidden = !rowShown;
-        }
-      }
     }
 
     // ---------------------------------------------------------- dialogs
@@ -1379,32 +1228,8 @@ export default {
       });
     }
 
-    function onRotationToggle() {
-      const accounts = ctx.store.get().accounts;
-      if (!accounts || view.busy) return;
-      const enabled = !accounts.rotation;
-      const thresholdValue = Number(ui.threshold.input.value);
-      const threshold = Number.isInteger(thresholdValue) && thresholdValue >= 1 && thresholdValue <= 50
-        ? thresholdValue : (accounts.rotation_threshold || 10);
-      ctx.send("accounts_set_rotation", { enabled: enabled, rotation_threshold: threshold }).then(function (err) {
-        if (err) console.warn("kumiho: accounts_set_rotation refused: " + err);
-      });
-    }
+    reload = onRefresh;
 
-    function onThresholdChange() {
-      const accounts = ctx.store.get().accounts;
-      if (!accounts || view.busy) return;
-      const value = Number(ui.threshold.input.value);
-      if (!Number.isInteger(value) || value < 1 || value > 50) {
-        ui.threshold.input.value = String(accounts.rotation_threshold || 10);
-        return;
-      }
-      ctx.send("accounts_set_rotation", { enabled: !!accounts.rotation, rotation_threshold: value }).then(function (err) {
-        if (err) console.warn("kumiho: accounts_set_rotation refused: " + err);
-      });
-    }
-
-    ui.refresh.addEventListener("click", onRefresh);
     ui.add.addEventListener("click", onAdd);
     ui.signout.addEventListener("click", onSignout);
     ui.cancel.addEventListener("click", function () {
@@ -1459,8 +1284,6 @@ export default {
         submitPasswordStep();
       });
     }
-    ui.rotationToggle.addEventListener("click", onRotationToggle);
-    ui.threshold.input.addEventListener("change", onThresholdChange);
 
     // Every close returns focus to the trigger; the open handlers set the
     // initial focus (Cancel for destructive dialogs, browser for Add).
@@ -1488,8 +1311,6 @@ export default {
       const snapshot = ctx.store.get();
       settleGuards(snapshot);
       renderAccounts(snapshot);
-      renderCard(snapshot);
-      renderRotation(snapshot);
       renderWaiting(snapshot);
       renderAddForm(snapshot);
       renderDialog(snapshot);
@@ -1507,6 +1328,7 @@ export default {
 
     cleanup = function () {
       disposed = true;
+      reload = null;
       unsubscribe();
       clearTimeout(view.busyTimer);
       clearTimeout(view.startTimer);
@@ -1519,8 +1341,14 @@ export default {
     };
   },
 
+  /** Reload the daemon snapshot and the account list (Settings' Refresh). */
+  refresh() {
+    if (reload) reload();
+  },
+
   unmount() {
     if (cleanup) cleanup();
     cleanup = null;
+    reload = null;
   },
 };

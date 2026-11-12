@@ -35,7 +35,6 @@ fun TvAppShell(
     nav: ShellNavigation,
     home: @Composable () -> Unit,
     locations: @Composable () -> Unit,
-    account: @Composable () -> Unit,
     settings: @Composable () -> Unit,
     logs: @Composable () -> Unit,
     diagnostics: @Composable () -> Unit,
@@ -118,7 +117,6 @@ fun TvAppShell(
                         else -> when (state.tab) {
                             Destination.Home -> home()
                             Destination.Locations -> locations()
-                            Destination.Account -> account()
                             Destination.Settings -> settings()
                             Destination.More -> Unit
                         }

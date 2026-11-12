@@ -33,7 +33,7 @@ import org.junit.Test
 
 /**
  * The shell's T15 wiring: the More sheet opens Logs and Diagnostics as routes,
- * the Account tab renders its slot, and back returns to the tab underneath.
+ * settings renders its slot, and back returns to the tab underneath.
  */
 class ShellMoreRoutesTest {
 
@@ -100,7 +100,6 @@ class ShellMoreRoutesTest {
             },
             home = { Slot("home") },
             locations = { Slot("locations") },
-            account = { Slot("account") },
             settings = { Slot("settings") },
             logs = { Slot("logs") },
             diagnostics = { Slot("diagnostics") },
@@ -149,24 +148,27 @@ class ShellMoreRoutesTest {
     }
 
     @Test
-    fun theAccountTabRendersItsSlot() {
+    fun settingsOpensFromTheMoreSheetAndAccountIsNot() {
         show()
 
-        rule.onNodeWithText("Account").performClick()
+        rule.onNodeWithText("Settings").assertDoesNotExist()
+        rule.onNodeWithText("More").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Settings").performClick()
         rule.waitForIdle()
 
-        rule.onNodeWithTag("slot_account").assertIsDisplayed()
+        rule.onNodeWithTag("slot_settings").assertIsDisplayed()
+        rule.onNodeWithText("Account").assertDoesNotExist()
     }
 
     /**
-     * The regression this guards: on a narrow phone the five labels do not fit,
-     * and "Locations" used to wrap its last letter instead of the bar giving a
-     * page up. 200dp is a stress width, chosen so the assertion does not ride
-     * on the exact label metrics of one Roboto version.
+     * Settings is in the More sheet at every phone width, not only when the
+     * bar is too narrow. 360dp is a normal phone width, well above the point
+     * where four labels used to fit.
      */
     @Test
-    fun aNarrowBarMovesSettingsIntoTheMoreSheet() {
-        show(widthDp = 200)
+    fun settingsIsInTheMoreSheetAtEveryPhoneWidth() {
+        show(widthDp = 360)
 
         rule.onNodeWithText("Locations").assertIsDisplayed()
         rule.onNodeWithText("Settings").assertDoesNotExist()

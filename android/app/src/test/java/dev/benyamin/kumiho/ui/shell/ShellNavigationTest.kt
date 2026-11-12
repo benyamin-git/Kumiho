@@ -9,7 +9,7 @@ import org.junit.Test
 /**
  * The shell's navigation rules, exercised on the plain-Kotlin holder that
  * [AppShell] actually drives. No Compose is involved, so this runs on the JVM:
- * the breakpoint, the five items, the More routes and back all come from the
+ * the breakpoint, the four items, the More routes and back all come from the
  * same code the shell renders.
  */
 class ShellNavigationTest {
@@ -24,12 +24,11 @@ class ShellNavigationTest {
     }
 
     @Test
-    fun `exactly five destinations in shell order`() {
+    fun `exactly four destinations in shell order`() {
         assertEquals(
             listOf(
                 Destination.Home,
                 Destination.Locations,
-                Destination.Account,
                 Destination.Settings,
                 Destination.More,
             ),
@@ -38,45 +37,22 @@ class ShellNavigationTest {
     }
 
     @Test
-    fun `a narrow bar moves trailing pages into the More sheet`() {
-        // A "Locations" label at the bar's 12sp scale, in dp.
-        val label = 54f
-        // Five items need 322dp, four need 256dp, three need 190dp.
-        assertEquals(Destination.tabs, bottomBarTabs(widthDp = 360f, labelWidthDp = label))
-        assertEquals(
-            listOf(Destination.Home, Destination.Locations, Destination.Account, Destination.More),
-            bottomBarTabs(widthDp = 320f, labelWidthDp = label),
-        )
+    fun `phone bar keeps settings in the More sheet`() {
         assertEquals(
             listOf(Destination.Home, Destination.Locations, Destination.More),
-            bottomBarTabs(widthDp = 240f, labelWidthDp = label),
+            Destination.phoneTabs,
         )
-        // Home, Locations and More are the floor: the bar never shrinks past them.
-        assertEquals(
-            listOf(Destination.Home, Destination.Locations, Destination.More),
-            bottomBarTabs(widthDp = 120f, labelWidthDp = label),
-        )
-
-        // The sheet lists exactly what the bar gave up, still in shell order.
+        // The sheet lists the page the bar leaves out, still in shell order.
         assertEquals(
             listOf(Destination.Settings),
-            Destination.tabs - bottomBarTabs(widthDp = 320f, labelWidthDp = label).toSet(),
-        )
-        assertEquals(
-            listOf(Destination.Account, Destination.Settings),
-            Destination.tabs - bottomBarTabs(widthDp = 240f, labelWidthDp = label).toSet(),
-        )
-        // Bigger text moves a page out sooner, even on a wide phone.
-        assertEquals(
-            listOf(Destination.Home, Destination.Locations, Destination.Account, Destination.More),
-            bottomBarTabs(widthDp = 411f, labelWidthDp = 75f),
+            Destination.tabs - Destination.phoneTabs.toSet(),
         )
     }
 
     @Test
     fun `routes are the shell routes plus the two More routes`() {
         assertEquals(
-            listOf("home", "locations", "account", "settings"),
+            listOf("home", "locations", "settings"),
             Destination.tabs.filter { it != Destination.More }.map { it.route },
         )
         // More opens a sheet, so it has no route of its own: the sentinel is empty.
@@ -100,7 +76,6 @@ class ShellNavigationTest {
         val nav = ShellNavigation()
         listOf(
             Destination.Locations,
-            Destination.Account,
             Destination.Settings,
             Destination.Home,
         ).forEach { destination ->
@@ -144,13 +119,13 @@ class ShellNavigationTest {
     @Test
     fun `back returns from a More route to the tab beneath it`() {
         val nav = ShellNavigation()
-        nav.selectTab(Destination.Account)
+        nav.selectTab(Destination.Locations)
         nav.openMoreRoute(MoreRoute.Diagnostics)
 
         assertTrue(nav.back())
         assertNull(nav.current.moreRoute)
-        assertEquals(Destination.Account, nav.current.tab)
-        assertEquals("account", nav.current.route)
+        assertEquals(Destination.Locations, nav.current.tab)
+        assertEquals("locations", nav.current.route)
     }
 
     @Test

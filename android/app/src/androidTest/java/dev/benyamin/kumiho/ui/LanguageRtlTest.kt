@@ -97,7 +97,6 @@ class LanguageRtlTest {
                             onBack = { false },
                             home = {},
                             locations = {},
-                            account = {},
                             settings = {},
                             logs = {},
                             diagnostics = {},

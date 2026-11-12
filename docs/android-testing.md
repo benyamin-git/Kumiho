@@ -536,28 +536,25 @@ remain open.
 
 ### Locations
 
-- [ ] Open Locations on a phone. Expect pinned **Fastest**, **Favorites** and
-      **Recent** sections above one flat server-only list, no country or city
-      headers/carets and no expand/collapse action. Empty pinned sections are
-      hidden. Recommended is first in the full list; each row is a rounded card
-      with a hairline outline, and selecting one adds the primary tint, a
-      matching outline and the check. Rows show a real flag,
+- [ ] Open Locations on a phone. Expect a pinned **Fastest** row above one flat
+      server-only list, no country or city headers/carets and no
+      expand/collapse action. Recommended is first in the full list; each row
+      is a rounded card with a hairline outline, and selecting one adds the
+      primary tint, a matching outline and the check. Rows show a real flag,
       `Country · City`, then `hostname:port · protocols`, with latency or a
-      selection check trailing and a star button for favorites. A locked row
-      shows a **Locked** badge, and the footer toggles **Show/Hide locked
-      locations**.
+      selection check trailing. A locked row shows a **Locked** badge, and the
+      footer toggles **Show/Hide locked locations**.
 - [ ] Search by country name/code, city name/code, hostname, `host:port` and a
-      protocol name. A miss shows **No matches** with the search scope; the
-      placeholder reads **Country, city, server, or protocol**. No connected-
-      location hint appears.
+      protocol name. The field starts hidden; tap the magnifying-glass action
+      to expand it and take focus. A miss shows **No matches** with the search
+      scope; the placeholder reads **Country, city, server, or protocol**. No
+      connected-location hint appears.
 - [ ] Select a row: the check and summary update, and the next connection uses
       it. The current session is unchanged.
-- [ ] Favorite a server, confirm it appears in Favorites, then unfavorite it.
-      Tap **Clear** on Recent and confirm the section disappears.
 - [ ] Ping all while a search is active. Every visible server is probed even if
       filtered out; labels stream in without moving rows; the full list
       switches to speed order only when the engine emits `ping_done`
-      (Recommended first, failures last). Pinned sections keep their order.
+      (Recommended first, failures last). Fastest keeps its pinned position.
       Refresh restores country order and reloads fresh cached labels.
 - [ ] Confirm Fastest is disabled with **Run Ping all to enable Fastest** until
       a fresh result exists, then selecting it persists the actual server.

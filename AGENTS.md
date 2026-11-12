@@ -228,7 +228,8 @@ them locally for any change under `android/`, `mobile/` or
   marks `locked` records; the engine hides them unless `allow_locked` is on.
   Real-edge ping opens a temporary CONNECT session per candidate (4 in flight,
   10 s each), caches RTTs for 30 minutes and closes each run with `ping_done`.
-  Favorites and recents are `{country, city, server}` refs in `state.json`;
+  Favorites and recents stay as engine state (`state.json`) and additive
+  protocol commands for older clients; no current client surfaces them.
   Fastest resolves the minimum fresh RTT once and persists the actual server.
 - **Platform seam** (`internal/platform/`): `linux/` (TUN + tun2socks, policy
   routing/SO_MARK, nftables kill switch, resolvectl DNS, netlink watch),
@@ -265,7 +266,11 @@ them locally for any change under `android/`, `mobile/` or
   HTML/CSS/JS embedded with `go:embed` and served from an in-process loopback
   server; `internal/gui/mock` backs the harness and the Go tests,
   `internal/gui/theme` computes the palette, `internal/gui/prefs` owns
-  `gui.toml`. The harness binds `0.0.0.0:7407` (dev only, never released).
+  `gui.toml`. The five-item rail has no separate Account page: account
+  management, Add account and the session-wide sign-out are the first Settings
+  section (`js/account-section.js` plus `css/account-section.css`), and the
+  page-level Refresh reloads the account projection. The harness binds
+  `0.0.0.0:7407` (dev only, never released).
 - **Android app** (`mobile/`, `internal/platform/android/`, `android/`): the
   Go engine is embedded in the app process, not exposed over IPC. `mobile/`
   (module root, package `mobile`) is the gomobile facade: `Mobile.start`
@@ -290,14 +295,17 @@ them locally for any change under `android/`, `mobile/` or
   cookies persist across attempts and are cleared on sign-out.
   `ui/tv/` is the additive ten-foot shell (rail, focus surfaces, TV-native
   screens, setup and account reuse); `tv/TvEnvironment` selects it and
-  `tv/TvChannelPublisher` publishes the best-effort Google TV channel.
-  Settings has 25 catalog rows (23 engine rows, 22 writes plus the Test relay
+  `tv/TvChannelPublisher` publishes the best-effort Google TV channel. There
+  is no Account destination on the phone or TV: account management, Add
+  account and the session-wide sign-out are the first Settings group, and the
+  entitlement/quota cards are gone. Settings has 25 catalog rows (23 engine
+  rows, 22 writes plus the Test relay
   action, and 2 Android-owned read-only rows); the Region group owns
   `allow_locked`, `relay_url`, the write-only `relay_token` and `relay_test`,
   and a **Blocked region** guide action outside the catalog. The app-scoped
   `GuideController`/`AppContainer.guide` overlay is shared by phone and TV and
   is opened from setup consent, Settings → Region and the dashboard notice.
-  Favorites/Recent/Fastest/locked are shared engine state rendered by
+  Fastest and locked are shared engine state rendered by
   `LocationTree.sections`.
   `res/xml/network_security_config.xml` permits cleartext only for
   `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android
@@ -367,6 +375,10 @@ them locally for any change under `android/`, `mobile/` or
   Central, not vendored. The versions are pinned in
   `android/gradle/libs.versions.toml`; `--offline` works after the first
   resolve. Their Apache-2.0/BSD notices are recorded in `NOTICE`.
+- `scripts/flags/generate-android-flags.sh` renders the GUI SVGs directly at
+  192×144. Size librsvg with `-width 192 -height 144`; its default 100×100
+  square surface adds transparent top/bottom bands that look like padding
+  inside every flag border.
 - Update `NOTICE` when adding third-party code or binaries.
 
 ## Commit style

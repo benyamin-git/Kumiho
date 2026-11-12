@@ -26,12 +26,11 @@ user-visible string** (mind the `...` vs `…` differences — they are real).
 > order, kinds and enum cycles as the TUI. Everything else below describes
 > the app as it exists at `282d63c`.
 
-> **v0.9.0 note.** Locations now has pinned Fastest/Favorites/Recent sections,
-> favorite stars, a locked-locations action and real-edge Ping all completion
-> on `ping_done`. Settings gains the four Region rows (Allow locked locations,
-> Control-plane relay, write-only Relay token, Test relay). The sections below
-> describe the v0.9.0 behavior; the historical framing at `282d63c` still
-> applies to every other screen.
+> **v0.9.0 note.** Locations has a pinned Fastest row, a locked-locations
+> action and real-edge Ping all completion on `ping_done`. Settings gains the
+> four Region rows (Allow locked locations, Control-plane relay, write-only
+> Relay token, Test relay). The sections below describe the current behavior;
+> the historical framing at `282d63c` still applies to every other screen.
 
 ---
 
@@ -60,7 +59,7 @@ tray icon is the Kumiho fox artwork.
 3. **Body = navigation rail (left, fixed 200 units wide) + screen host
    (right).**
 
-**Navigation rail:** six destinations, top-aligned, each a 40-unit-high,
+**Navigation rail:** five destinations, top-aligned, each a 40-unit-high,
 200-wide selectable item with a decorative icon (only when a Segoe icon face
 is installed) and the destination label; the label is always visible, so
 selection never rests on colour alone. Items, top to bottom:
@@ -70,7 +69,6 @@ selection never rests on colour alone. Items, top to bottom:
 | `Dashboard` | home glyph |
 | `Locations` | pin glyph |
 | `Settings` | gear glyph |
-| `Account` | person glyph |
 | `Logs` | list/files glyph |
 | `Diagnostics` | pulse/health glyph |
 
@@ -103,12 +101,12 @@ connected. Everything else is on demand: first show, explicit Refresh/Re-run,
 or an action.
 
 **Screens with lazy behavior on show:** Locations loads the server list on
-first view; Settings fetches its snapshot on first view; Account fetches on
-first view; Logs seeds from a snapshot and subscribes on every visit and
-unsubscribes on leave; Diagnostics runs its check suite on its first visit
-only. Re-visiting a screen never re-fetches Locations/Settings/Account/
-Diagnostics unless you press the screen's Refresh / Re-run (Logs does
-re-snapshot on every visit).
+first view; Settings fetches its snapshot on first view and its Account
+section requests `accounts_list` on every mount; Logs seeds from a snapshot
+and subscribes on every visit and unsubscribes on leave; Diagnostics runs its
+check suite on its first visit only. Re-visiting a screen never re-fetches
+Locations/Settings/Diagnostics unless you press the screen's Refresh / Re-run
+(Logs does re-snapshot on every visit).
 
 ---
 
@@ -199,33 +197,31 @@ separate decorative node, never option text (D39).
 ## Locations
 
 **Reached:** rail item `Locations`. Loads the daemon's locations snapshot on
-first view (30 s timeout), including favorites, recents, cached latency and
-`allow_locked`. There are no country/city parent rows, carets or expansion
-state.
+first view (30 s timeout), including cached latency and `allow_locked`. There
+are no country/city parent rows, carets or expansion state.
 
 **Visible elements, top to bottom:**
 
 1. **Title row:** heading `Locations`.
-2. **Action row:** `Refresh` (tonal), `Ping all` (tonal) and a `Show locked
-   locations` / `Hide locked locations` text action. Refresh and Ping all are
-   disabled while a Ping all run is in flight; Ping all is also disabled when
-   there is no usable target. The locked action flips `allow_locked` and
-   reloads; hidden locked rows are excluded from targets.
-3. **Search row:** label `Search locations` and a single-line input with the
-   placeholder `Country, city, server, or protocol`. Typing filters the full
-   list immediately and case-insensitively on country name/code, city
-   name/code, hostname, `host:port` and protocol names. The filter is
-   session-local and does not reset the order; pinned sections stay visible.
+2. **Action row:** a magnifying-glass **Search locations** icon button,
+   `Refresh` (tonal), `Ping all` (tonal) and a `Show locked locations` /
+   `Hide locked locations` text action. The search button expands the search
+   row below and focuses it; the row stays open for the visit. Refresh and Ping
+   all are disabled while a Ping all run is in flight; Ping all is also
+   disabled when there is no usable target. The locked action flips
+   `allow_locked` and reloads; hidden locked rows are excluded from targets.
+3. **Search row (after expanding):** label `Search locations` and a
+   single-line input with the placeholder `Country, city, server, or
+   protocol`. Typing filters the full list immediately and case-insensitively
+   on country name/code, city name/code, hostname, `host:port` and protocol
+   names. The filter is session-local and does not reset the order; the Fastest
+   row stays visible.
 4. **Sectioned list** (card, minimum 200 units high, 36-unit rows):
    - **Fastest** — one pinned row. Disabled with `Run Ping all to enable
      Fastest` and no measurement until a fresh finite cached RTT exists; then
-     it shows the minimum RTT. Its star is hidden; selecting it sends
+     it shows the minimum RTT. Selecting it sends
      `select_location{fastest:true}`, which resolves once and persists the
      actual server.
-   - **Favorites** — resolved favorite refs, country/city order, each with
-     the same trailing star. Omitted when empty.
-   - **Recent** — resolved recents, newest first, capped at five, with a
-     `Clear` text button in the heading. Omitted when empty.
    - **Locations** — the full flat list, ordered Recommended first, then
      country A–Z, city A–Z and hostname A–Z.
 
@@ -236,8 +232,7 @@ state.
    - line 2: `host:port · protocol, protocol` (protocols are omitted when
      none);
    - trailing: `42 ms`, `timeout` or `—`, plus a check on the current
-     selection and a separate 40 px star button (accessible `Favorite` /
-     `Remove favorite`). Locked rows add a text `Locked` badge. The selection
+     selection. Locked rows add a text `Locked` badge. The selection
      is done by address and country; it persists without connecting.
 
    Quarantined servers, servers without a connect target and hidden locked
@@ -256,15 +251,13 @@ state.
 - **Click a server row**: persist it via the daemon (`Location saved`; no
   connect). Clicking Fastest persists the resolved fastest server. There is
   nothing to expand.
-- **Favorite star**: optimistically flips, sends `favorite_location`, and
-  rolls back on refusal. Fastest and disabled rows cannot be favorited.
-- **Clear**: sends `clear_recents`; the Recent section disappears immediately.
+- **Search icon**: reveals the search row and moves focus into the input; the
+  icon is hidden while the field is open.
 - **Locked action**: sends `settings_set allow_locked`; the next snapshot
   filters the list and footer label.
 - **Keyboard:** `Up`/`Down` move the current row; `PageUp`/`PageDown` move by
   a viewport; `Home`/`End` jump to first/last; `Enter` or `Space` selects the
-  current row; the star and Clear are real buttons in the tab order. Focus
-  movement scrolls the row into view.
+  current row. Focus movement scrolls the row into view.
 - **Mouse wheel:** scrolls three rows per notch.
 - **Refresh:** re-downloads the server list (30 s timeout) and resets the
   full list to country order; fresh cached RTTs still label rows. A failed
@@ -276,24 +269,26 @@ state.
   `ping_done_seq` change (with the fallback when it was busy and becomes
   idle); a run with at least one result switches the **full list** to speed
   order: finite RTTs ascending, failures and untested rows last, Recommended
-  always first. Pinned sections keep their order. A timeout counts as a
+  always first. Fastest keeps its pinned position. A timeout counts as a
   result; a transport failure leaves the current order alone. Refresh and
   adopting a changed server list both reset the full list to country order.
 
-**Data sources:** list, selection, `allow_locked`, favorites, recents and
-cached RTTs from the daemon snapshot; live RTT labels from streamed
-`ping_result` events and completion from `ping_done`; filter text, current
-row, sort mode, frozen order, favorite overrides and the local ping sequence
-are session-local (not persisted); the status notice comes from the shared
-view-model.
+**Data sources:** list, selection, `allow_locked` and cached RTTs from the
+daemon snapshot; live RTT labels from streamed `ping_result` events and
+completion from `ping_done`; filter text, current row, sort mode, frozen order
+and the local ping sequence are session-local (not persisted); the status
+notice comes from the shared view-model.
 
 ---
 
 ## Settings
 
 **Reached:** rail item `Settings`. Fetches the daemon settings snapshot on
-first view (15 s timeout). The list is divided into two sections with heading
-rows (heading size, bold):
+first view (15 s timeout). The page opens with the **Account** section (the
+former Account page, see below), then the settings sections. Each section is a
+card with a header band (heading size, bold, a bottom hairline and the next
+surface-container step) and a primary-tinted outline icon: person for Account,
+sliders for Kumiho app, a server for Background service and a globe for Region.
 
 ### `Kumiho app` (local GUI rows, from `gui.toml`; never overridden/reset)
 
@@ -435,93 +430,32 @@ rows from the daemon snapshot (`kill_switch`, `autoconnect`, `log_level`,
 
 ---
 
-## Account
+## Account (Settings section)
 
-**Reached:** rail item `Account`. Fetches the account snapshot on first view
-(35 s timeout; the daemon's online entitlement lookup may retry a token on
-the way).
+The former Account rail page is now the first section of **Settings**; there
+is no Account rail item or route, and Settings supplies the group heading. It
+holds the daemon's `accounts_list` projection and the account actions:
 
-**Visible elements:**
+1. Action row: filled `Add account` and the session-wide tonal `Sign out`
+   (shown once a local session or a stored account exists); the page-level
+   `Refresh` reloads the account projection too.
+2. **Accounts** section: heading `Accounts`, hint `Switch accounts here;
+   Kumiho keeps up to five.`, and one row per account. A row shows
+   label/email, method, active marker and `re-auth required` when applicable.
+   The row overflow menu offers `Use`, `Rename`, `Re-authenticate` (browser)
+   and `Remove`.
+3. **Browser waiting card** and the **Add account**, **Rename** and **Remove**
+   dialogs as before; the password form is the onboarding credential flow
+   inline.
+4. The sign-out confirmation and the status line are unchanged.
 
-1. Title row: heading `Account`.
-2. Action row: tonal `Refresh`, filled `Add account`, and the session-wide
-   tonal `Sign out` (shown once a local session or a stored account exists).
-3. **Accounts** section (hidden/empty until the snapshot loads): heading
-   `Accounts`, hint `Switch accounts here; Kumiho keeps up to five.`, and one
-   row per account. A row shows label/email, method, active marker, quota
-   percent and `re-auth required` when applicable. The row overflow menu
-   offers `Use`, `Rename`, `Re-authenticate` (browser) and `Remove`.
-4. **Browser waiting card** (one flow at a time): title `Waiting for browser
-   sign-in`, body explaining that the Firefox Accounts success page URL is
-   pasted back from the address bar (Kumiho stores the sign-in tokens, never
-   your password), the URL, **Open again**, a labelled **Redirect URL** field,
-   **Continue** and **Cancel**. The URL is opened once automatically and
-   polled every second; the card stays until the pasted URL completes the flow
-   or it is cancelled.
-5. **Add account dialog**: title `Add account`, body explaining browser is
-   the default, buttons `Cancel`, `Use password` and filled **Continue in
-   browser**. **Use password** reveals the onboarding-style email → password
-   → 2FA form inline.
-6. **Rename dialog**: title `Rename account`, body `Choose a short label for
-   this account.`, label field, `Cancel` and `Save`.
-7. **Remove dialog**: title `Remove account`, body `Remove this account?` /
-   `The stored sign-in tokens for this account are removed. Other accounts
-   stay signed in.` If it is the last account, the daemon clears the session
-   and disconnects; removing the active account of several selects the most
-   recently used remaining one (shown by the next snapshot).
-8. **Account rotation card**: heading `Account rotation`, on/off switch,
-   body `Before connecting, switch to another account when the active one
-   has less quota left than the threshold.`, and `Switch below (%)` (1–50,
-   default 10). Saved immediately; disabled while the snapshot is loading or
-   another account action is in flight.
-9. **Card** (hidden until a successful load confirms a signed-in session),
-   rows in order (label column 140):
-   - `Email` — account email.
-   - `UID` — Firefox Account UID from Guardian.
-   - `Subscription` — `Yes` (good), `No`, or `Unknown` (warn tone when the
-     online entitlement lookup failed).
-   - `Quota` — `X remaining of Y`, or `X remaining`, or `Y per period`.
-   - `Bandwidth` — `Limited` (warn tone) or `Unlimited`.
-   - `Token expiry` — RFC3339 UTC.
-   Rows with empty values are hidden; an anonymous session shows no card.
-10. **`Sign out`** (tonal) clears **every** account's stored tokens and
-    disconnects after confirmation (15 s timeout). While signing out the
-    button is disabled. Per-account `Remove` is a different action and leaves
-    the other sessions intact.
-11. **Status line**, priority: `Signing out...` (neutral) → `Loading
-    account...` → error (`could not load the account: <err>` or `could not
-    sign out: <err>`, bad tone) → 10 s notice (`Signed out`, good tone) →
-    `Loading account...` (never loaded) → `Not signed in` → `Subscription
-    details unavailable: <err>` (warn; local rows stay valid) → empty.
+**Interactions:** the page-level `Refresh` and the status line's `Retry`
+re-fetch; `Sign out` confirms first. A successful sign-out reloads the
+snapshot: the rows disappear and the status line reads `Not signed in`.
 
-**Interactions:** `Refresh`/`Retry` re-fetches; `Sign out` confirms first.
-A successful sign-out reloads the snapshot (the card disappears and the
-status shows `Not signed in` when the sign-out notice expires or is
-replaced).
-
-**Confirmation popup (shared house pattern; also used by onboarding):**
-title `Sign out`, heading `Sign out`, body text:
-
-> `Sign out of Kumiho?`
->
-> `The stored sign-in tokens are cleared and the tunnel disconnects.`
->
-> `Kumiho will also try to revoke its Mozilla sign-in; local sign-out completes offline.`
-
-For more than one account the question reads `Sign out of every account?`, the
-detail reads `All stored sign-in tokens are cleared and the tunnel disconnects.`
-and the disclosure uses `its Mozilla sign-ins`. Buttons `Cancel` (focused by
-default) and `Sign out` (or `Sign out all`). **Esc and Enter both
-cancel** (Enter is treated as the default action = Cancel); Space activates
-the focused button. The popup is modal (the main window is blocked while it
-is open); it is centred over the window, clamped to the monitor, and rounded
-on Windows 11 (square before).
-
-**Data sources:** the daemon's `accounts_list` projection (accounts, labels,
-rotation, threshold, last method and notice) plus local session facts and the
-best-effort Guardian entitlement; nothing persisted locally.
-
----
+Firefox dropped the 50 GB limit, so the entitlement card (`Email`, `UID`,
+`Subscription`, `Quota`, `Bandwidth`, `Token expiry`) and the quota-rotation
+card are gone. The daemon still exposes those fields to the CLI and TUI.
 
 ## Logs
 
@@ -1039,10 +973,11 @@ covering a missing/stopped service.
   15 s; account load 35 s; logout 15 s; logs snapshot 15 s / subscribe 10 s
   / unsubscribe 5 s / clear 5 s; onboarding login 60 s and autoconnect 15 s;
   setup retry 15 s.
-- Busy guards: connect/disconnect buttons, tray action, Settings mutation,
-  Account sign-out/add/use/remove/rename/re-auth/rotation, Onboarding busy
-  state, Diagnostics run, Ping all, Setup Retry, Logs reconcile — at most one
-  in flight, repeat clicks ignored or buttons disabled.
+- Busy guards: connect/disconnect buttons, tray action, Settings mutation, the
+  Settings Account section's sign-out/add/use/remove/rename/re-auth,
+  Onboarding busy state, Diagnostics run, Ping all, Setup Retry, Logs
+  reconcile — at most one in flight, repeat clicks ignored or buttons
+  disabled.
 - State words: `Off` (IDLE/empty), `Connected`, `Proxy only`, `Connecting`,
   `Reconnecting`, `Waiting for network`, `Not signed in`, `Error` (FATAL).
   The header additionally has `Loading...`, `Status unavailable`,
@@ -1058,9 +993,9 @@ covering a missing/stopped service.
 **Notices / toasts**
 
 - Two kinds:
-  1. **Screen-local notices** (Account, Settings, Logs, Setup, Diagnostics):
-     10-second lifetime (`noticeTTL`), then the status line returns to its
-     live state (retired by the 250 ms pump).
+  1. **Screen-local notices** (Settings and its Account section, Logs, Setup,
+     Diagnostics): 10-second lifetime (`noticeTTL`), then the status line
+     returns to its live state (retired by the 250 ms pump).
   2. **Shared view-model notices** (Dashboard, Locations, Onboarding): no
      timer; they persist until another action replaces them.
 - Notice wording always prefixes the failure: `could not connect: ...`,
@@ -1100,18 +1035,15 @@ covering a missing/stopped service.
 - Theme/accent: immediate shell rebuild (window closes/reopens); `Start at
   login`: immediate registry effect.
 
-**Account behavior**
+**Account section behavior**
 
-- Online entitlement failure is non-fatal: subscription shows `Unknown`
-  (warn) and the status line warns `Subscription details unavailable:
-  <err>` while local rows stay.
 - The list comes from `accounts_list`; use/remove/rename/re-auth each refresh
-  the list and entitlement. Adding a browser account shows the waiting card,
-  auto-opens each unique URL once and polls every second; password add reuses
-  the onboarding form inline.
-- Rotation runs only before connect. The switch saves immediately; the
-  threshold field validates 1–50 and is disabled while busy or loading.
-  Expired/exhausted accounts are skipped with the daemon's notice.
+  the list. Adding a browser account shows the waiting card, auto-opens each
+  unique URL once and polls every second; password add reuses the onboarding
+  form inline. The page-level `Refresh` reloads the account projection too.
+- Firefox removed the 50 GB VPN limit, so the section shows no entitlement or
+  quota rows, and rotation has no GUI control (the daemon setting remains for
+  the CLI and TUI).
 - Sign-out clears every account's tokens + disconnects only after
   confirmation; per-account remove leaves the other sessions in place.
   Success reloads the snapshot.

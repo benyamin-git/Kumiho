@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -19,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
-import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.i18n.BidiText
@@ -149,8 +147,9 @@ class LocationsScreenTest {
     fun theSearchPlaceholderCoversCountryCityServerAndProtocol() {
         show(state())
 
+        rule.onNodeWithTag(LocationsTags.SEARCH).assertDoesNotExist()
+        rule.onNodeWithTag(LocationsTags.SEARCH_TOGGLE).performClick()
         rule.onNodeWithTag(LocationsTags.SEARCH).assertExists()
-        rule.onNodeWithTag(LocationsTags.SEARCH).performClick()
         rule.onNodeWithText(text(R.string.locations_search_placeholder)).assertExists()
         rule.onNodeWithTag(LocationsTags.SEARCH).performTextInput("quic")
         assertEquals(listOf("query-quic"), calls)
@@ -164,9 +163,10 @@ class LocationsScreenTest {
     }
 
     @Test
-    fun refreshAndPingAllAreTheOnlyToolbarActions() {
+    fun refreshPingAllAndSearchAreTheToolbarActions() {
         show(state())
 
+        rule.onNodeWithTag(LocationsTags.SEARCH_TOGGLE).assertExists()
         rule.onNodeWithTag(LocationsTags.REFRESH).assertExists()
         rule.onNodeWithTag(LocationsTags.PING_ALL).assertExists()
         assertNoTag("locations_toggle_all")
@@ -227,28 +227,6 @@ class LocationsScreenTest {
         rule.onNodeWithTag(LocationsTags.FASTEST).performClick()
         assertTrue(calls.contains("fastest"))
         rule.onNodeWithText("Fastest").assertExists()
-    }
-
-    @Test
-    fun favoritesAndRecentSectionsCarryTheirHeadingsStarsAndClearAction() {
-        show(
-            state(
-                favorites = listOf(LocationRef("us", "nyc", EDGE_ADDRESS)),
-                recents = listOf(LocationRef("de", "ber", BER_ADDRESS)),
-            ),
-        )
-
-        scrollTo(LocationsTags.FAVORITES_HEADING)
-        rule.onNodeWithTag(LocationsTags.FAVORITES_HEADING).assertExists()
-        val edge = LocationTree.rows(COUNTRIES).first { it.address == EDGE_ADDRESS }
-        rule.onAllNodesWithTag(LocationsTags.favorite(edge)).onFirst().performClick()
-        scrollTo(LocationsTags.RECENT_HEADING)
-        rule.onNodeWithTag(LocationsTags.RECENT_HEADING).assertExists()
-        scrollTo(LocationsTags.CLEAR_RECENTS)
-        rule.onNodeWithTag(LocationsTags.CLEAR_RECENTS).performClick()
-
-        assertTrue(calls.contains("favorite-$EDGE_ADDRESS"))
-        assertTrue(calls.contains("clear-recents"))
     }
 
     @Test
@@ -351,8 +329,6 @@ class LocationsScreenTest {
         onDismissNotice = { calls += "dismiss-notice" },
         onRetryNotice = { calls += "retry-notice" },
         onSelectFastest = { calls += "fastest" },
-        onToggleFavorite = { calls += "favorite-${it.address}" },
-        onClearRecents = { calls += "clear-recents" },
         onToggleLocked = { calls += "toggle-locked" },
     )
 
@@ -370,8 +346,6 @@ class LocationsScreenTest {
         pingAllCount: Int = 0,
         savingServer: String? = null,
         notice: LocationsNotice? = null,
-        favorites: List<LocationRef> = emptyList(),
-        recents: List<LocationRef> = emptyList(),
         allowLocked: Boolean = false,
     ) = LocationsState(
         loading = loading,
@@ -388,8 +362,6 @@ class LocationsScreenTest {
         pingingAll = pingingAll,
         pingAllCount = pingAllCount,
         savingServer = savingServer,
-        favorites = favorites,
-        recents = recents,
         allowLocked = allowLocked,
     )
 

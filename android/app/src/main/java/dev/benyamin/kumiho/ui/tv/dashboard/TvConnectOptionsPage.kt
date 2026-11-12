@@ -336,8 +336,8 @@ private fun Picker(
                     ) {
                         CountryFlags.Flag(
                             code = country.code,
-                            width = 32.dp,
-                            height = 24.dp,
+                            width = 40.dp,
+                            height = 30.dp,
                             modifier = Modifier.testTag(countryFlagTag(country.code)),
                         )
                         Text(

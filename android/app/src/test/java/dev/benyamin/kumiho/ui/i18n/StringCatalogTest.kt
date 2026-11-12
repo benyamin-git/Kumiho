@@ -83,9 +83,6 @@ class StringCatalogTest {
             "diagnostics_report_host",
             "diagnostics_ports_value",
             "diagnostics_status_ok",
-            "account_threshold_value",
-            "account_threshold_decrease_symbol",
-            "account_threshold_increase_symbol",
         )
         val asciiLetter = Regex("[A-Za-z]")
         val persianLetter = Regex("[\\u0600-\\u06FF]")

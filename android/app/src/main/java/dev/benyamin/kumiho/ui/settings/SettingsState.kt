@@ -211,6 +211,7 @@ object SettingsTags {
     const val LAUNCH_ERROR_DISMISS = "settings_launch_error_dismiss"
 
     const val GROUP_APP = "settings_group_app"
+    const val GROUP_ACCOUNT = "settings_group_account"
     const val GROUP_CONNECTION = "settings_group_connection"
     const val GROUP_REGION = "settings_group_region"
     const val GROUP_ANDROID_VPN = "settings_group_android_vpn"

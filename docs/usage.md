@@ -28,7 +28,7 @@ app process. Its guide is [android.md](android.md).
     kumiho connect [--to CODE|CITY|HOST | --fastest] [--proxy-only] [--kill-switch=on|off|last]
     kumiho disconnect
     kumiho status [--json]      # state, location, quota, exit IP, rates
-    kumiho locations [--ping] [--json] [--refresh] [--favorites] [--recent]
+    kumiho locations [--ping] [--json] [--refresh]
     kumiho settings get [key] [--json]
     kumiho settings set <key> [value]
     kumiho settings reset <key>
@@ -43,14 +43,13 @@ listener on `127.0.0.1:1080`; the full tunnel also creates `foxy0` and routes
 TCP through it, with DNS carried as DoH over HTTPS inside the tunnel.
 
 `connect --fastest` selects the lowest fresh RTT from the last Ping all; it
-cannot be combined with `--to`. `locations --favorites` and `--recent` show
-only those sections (both flags union and deduplicate), and the normal country
-summary marks a favorite country with `*` and a recent country with `~` and
-prints the current fastest server when a fresh measurement exists. `--json`
-prints the complete `LocationsResult` object (`countries`, `favorites`,
-`recents`, `latency`, `allow_locked`), not only the country array. With
-`--ping`, results stream until the daemon's `ping_done` event; `--json` then
-refetches and prints the updated object.
+cannot be combined with `--to`. `locations` prints the current fastest server
+when a fresh measurement exists. `--json` prints the complete
+`LocationsResult` object (`countries`, `favorites`, `recents`, `latency`,
+`allow_locked`), not only the country array; the engine still reports
+favorites and recents for protocol compatibility, but no client surfaces
+them. With `--ping`, results stream until the daemon's `ping_done` event;
+`--json` then refetches and prints the updated object.
 
 `settings get` prints effective values; `settings get --json` prints the full
 `SettingsView` (`relay_token_set` is a boolean; the token itself is never
@@ -73,15 +72,13 @@ arrows/`hjkl` move, `enter` select/change, `esc` back. Enter on the dashboard's
 blocked-region notice opens the guide; the dashboard also shows the prepared
 pass countdown when a pass is stored.
 
-- **Locations** — pinned **Fastest**, **Favorites**, **Recent** and the full
-  flat server list. `P` pings every usable server and switches only the full
-  list to speed order when the daemon's `ping_done` event arrives; `f` toggles
-  the cursor row as a favorite, `c` clears recents from the Recent header, `L`
-  shows or hides locked locations, `/` searches country, city, server, address
-  and protocol, `enter` selects a server (or Fastest), and `r` refreshes. A
-  trailing `*` marks a favorite and `~` a recent; the leading `*` still marks
-  the persisted selection. A server that fails to connect 3 times in a row is
-  dropped and the next connect auto-picks (`REC` random, else the first
+- **Locations** — a pinned **Fastest** row and the full flat server list. `P`
+  pings every usable server and switches only the full list to speed order
+  when the daemon's `ping_done` event arrives; `L` shows or hides locked
+  locations, `/` searches country, city, server, address and protocol,
+  `enter` selects a server (or Fastest), and `r` refreshes. The leading `*`
+  marks the persisted selection. A server that fails to connect 3 times in a
+  row is dropped and the next connect auto-picks (`REC` random, else the first
   country).
 - **Settings** — every runtime setting: kill switch, autoconnect, log level,
   redaction, exit check, DoH provider, custom DNS, pinned edge, upstream
@@ -331,7 +328,7 @@ works through the local resolver, including TCP.
 | `/var/lib/kumiho/accounts.json` | v2 account store: active account, last method, up to five labeled browser/password accounts with FxA tokens (mode 0600) |
 | `/var/lib/kumiho/tokens.json` | rollback copy of the active account's tokens (mode 0600); migrated from legacy installs and removed on logout |
 | `/var/lib/kumiho/relay.token` | optional control-plane relay secret (mode 0600); never shown by a client |
-| `/var/lib/kumiho/state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides, favorites and recents |
+| `/var/lib/kumiho/state.json` | selection, failure counts, remembered kill-switch/autoconnect and runtime overrides |
 | `/var/lib/kumiho/serverlist.json` | cached server list; only used when a fetch fails |
 | `/run/kumiho/control.sock` | IPC socket (0660, group `kumiho`) |
 | `~/.config/kumiho/tui.toml` | per-user TUI prefs (`theme = "dark"` or `"mono"`) |
@@ -345,7 +342,7 @@ LocalSystem and Administrators) and the control endpoint is a named pipe:
 | `%ProgramData%\kumiho\accounts.json` | v2 account store (active id, last method, up to five accounts) |
 | `%ProgramData%\kumiho\tokens.json` | rollback copy of the active account's tokens; removed on logout |
 | `%ProgramData%\kumiho\relay.token` | optional control-plane relay secret (mode 0600); never shown by a client |
-| `%ProgramData%\kumiho\state.json` | selection, failure counts, remembered kill-switch/autoconnect, runtime overrides, favorites and recents |
+| `%ProgramData%\kumiho\state.json` | selection, failure counts, remembered kill-switch/autoconnect and runtime overrides |
 | `%ProgramData%\kumiho\serverlist.json` | cached server list; only used when a fetch fails |
 | `%ProgramData%\kumiho\logs\kumiho.log` | daemon log; at each service start a file larger than 5 MiB rotates to `kumiho.log.1` |
 | `\\.\pipe\kumiho\control` | named-pipe control endpoint (LocalSystem, Administrators, local group `kumiho`) |

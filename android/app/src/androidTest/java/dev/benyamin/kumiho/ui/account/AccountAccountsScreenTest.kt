@@ -26,7 +26,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** The account list, add dialog, rotation card and browser waiting card as drawn. */
+/** The account list, add dialog and browser waiting card as drawn. */
 class AccountAccountsScreenTest {
 
     @get:Rule
@@ -46,49 +46,46 @@ class AccountAccountsScreenTest {
                     KumihoAccent.BLUE,
                 ),
             ) {
-                AccountScreen(
-                    state = state,
-                    actions = AccountActions(
-                        onRefresh = { calls += "refresh" },
-                        onRetry = { calls += "retry" },
-                        onDismissMessage = { calls += "dismiss" },
-                        onSubmitEmail = { calls += "email" },
-                        onSubmitPassword = { calls += "password" },
-                        onSubmitCode = { calls += "code" },
-                        onRecheck = { calls += "recheck" },
-                        onSignOut = { calls += "sign-out" },
-                        onDismissSignOut = { calls += "dismiss-sign-out" },
-                        onConfirmSignOut = { calls += "confirm-sign-out" },
-                        onAddAccount = { calls += "add-account" },
-                        onDismissAdd = { calls += "dismiss-add" },
-                        onAddBrowser = { calls += "add-browser" },
-                        onAddPassword = { calls += "add-password" },
-                        onUse = { calls += "use-$it" },
-                        onReauth = { calls += "reauth-${it.id}" },
-                        onRemoveRequest = { calls += "remove-${it.id}" },
-                        onRemoveConfirm = { calls += "remove-confirm" },
-                        onDismissRemove = { calls += "dismiss-remove" },
-                        onRenameRequest = { calls += "rename-${it.id}" },
-                        onRenameConfirm = { calls += "rename-confirm" },
-                        onDismissRename = { calls += "dismiss-rename" },
-                        onRotation = { calls += "rotation-$it" },
-                        onThreshold = { calls += "threshold-$it" },
-                        onOpenBrowser = { calls += "open-browser" },
-                        onCloseBrowser = { calls += "close-browser" },
-                        onBrowserRedirect = { calls += "redirect-$it" },
-                        onToggleBrowserPaste = { calls += "toggle-paste" },
-                        onBrowserPasteChange = { calls += "paste-$it" },
-                        onBrowserPasteSubmit = { calls += "paste-submit" },
-                        onUseBrowserPassword = { calls += "use-password" },
-                        onCancelBrowser = { calls += "cancel-browser" },
-                        onBrowserUnavailable = { calls += "browser-unavailable" },
-                        onCancelAdd = { calls += "cancel-add" },
-                    ),
-                )
+                AccountSection(state = state, actions = actions())
+                AccountSectionDialogs(state = state, actions = actions())
             }
         }
         rule.waitForIdle()
     }
+
+    private fun actions() = AccountActions(
+        onRetry = { calls += "retry" },
+        onDismissMessage = { calls += "dismiss" },
+        onSubmitEmail = { calls += "email" },
+        onSubmitPassword = { calls += "password" },
+        onSubmitCode = { calls += "code" },
+        onRecheck = { calls += "recheck" },
+        onSignOut = { calls += "sign-out" },
+        onDismissSignOut = { calls += "dismiss-sign-out" },
+        onConfirmSignOut = { calls += "confirm-sign-out" },
+        onAddAccount = { calls += "add-account" },
+        onDismissAdd = { calls += "dismiss-add" },
+        onAddBrowser = { calls += "add-browser" },
+        onAddPassword = { calls += "add-password" },
+        onUse = { calls += "use-$it" },
+        onReauth = { calls += "reauth-${it.id}" },
+        onRemoveRequest = { calls += "remove-${it.id}" },
+        onRemoveConfirm = { calls += "remove-confirm" },
+        onDismissRemove = { calls += "dismiss-remove" },
+        onRenameRequest = { calls += "rename-${it.id}" },
+        onRenameConfirm = { calls += "rename-confirm" },
+        onDismissRename = { calls += "dismiss-rename" },
+        onOpenBrowser = { calls += "open-browser" },
+        onCloseBrowser = { calls += "close-browser" },
+        onBrowserRedirect = { calls += "redirect-$it" },
+        onToggleBrowserPaste = { calls += "toggle-paste" },
+        onBrowserPasteChange = { calls += "paste-$it" },
+        onBrowserPasteSubmit = { calls += "paste-submit" },
+        onUseBrowserPassword = { calls += "use-password" },
+        onCancelBrowser = { calls += "cancel-browser" },
+        onBrowserUnavailable = { calls += "browser-unavailable" },
+        onCancelAdd = { calls += "cancel-add" },
+    )
 
     @Test
     fun accountListShowsEveryAccountAndActiveMarker() {
@@ -101,12 +98,11 @@ class AccountAccountsScreenTest {
     }
 
     @Test
-    fun accountRowShowsMethodQuotaAndReauthBadge() {
+    fun accountRowShowsMethodAndReauthBadge() {
         show(AccountUiState(loading = false, account = account(), accounts = accounts()))
 
         rule.onNodeWithTag(AccountTags.method("a")).assertTextEquals("Browser")
-        rule.onNodeWithTag(AccountTags.quota("a")).assertTextEquals("82% left")
-        rule.onNodeWithTag(AccountTags.quota("b")).assertTextEquals("Quota unknown")
+        rule.onNodeWithTag(AccountTags.method("b")).assertTextEquals("Password")
         rule.onNodeWithTag(AccountTags.reauth("b")).assertIsDisplayed()
     }
 
@@ -190,19 +186,9 @@ class AccountAccountsScreenTest {
                     KumihoAccent.BLUE,
                 ),
             ) {
-                AccountScreen(
+                AccountSectionDialogs(
                     state = state,
                     actions = AccountActions(
-                        onRefresh = {},
-                        onRetry = {},
-                        onDismissMessage = {},
-                        onSubmitEmail = {},
-                        onSubmitPassword = {},
-                        onSubmitCode = {},
-                        onRecheck = {},
-                        onSignOut = {},
-                        onDismissSignOut = {},
-                        onConfirmSignOut = {},
                         onCloseBrowser = {
                             calls += "close-browser"
                             state = state.copy(browserWebViewOpen = false)
@@ -316,22 +302,6 @@ class AccountAccountsScreenTest {
         rule.onNodeWithTag(AccountTags.BROWSER_PASTE_SUBMIT).assertIsNotEnabled()
         rule.onNodeWithTag(AccountTags.BROWSER_USE_PASSWORD).assertIsNotEnabled()
         rule.onNodeWithTag(AccountTags.BROWSER_CANCEL).assertIsNotEnabled()
-    }
-
-    @Test
-    fun rotationSwitchAndThresholdRow() {
-        show(
-            AccountUiState(
-                loading = false,
-                account = account(),
-                accounts = accounts().copy(rotation = true, threshold = 20),
-            ),
-        )
-
-        rule.onNodeWithTag(AccountTags.ROTATION).assertIsDisplayed().performClick()
-        rule.onNodeWithTag(AccountTags.THRESHOLD).assertIsDisplayed()
-        rule.waitForIdle()
-        assertTrue(calls.contains("rotation-false"))
     }
 
     @Test

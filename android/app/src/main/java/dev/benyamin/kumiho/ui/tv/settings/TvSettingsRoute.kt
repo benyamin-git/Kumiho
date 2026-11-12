@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +31,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -41,6 +45,7 @@ import androidx.tv.material3.Text
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.BypassError
+import dev.benyamin.kumiho.ui.account.AccountSectionUi
 import dev.benyamin.kumiho.ui.settings.ApplyTiming
 import dev.benyamin.kumiho.ui.settings.RelayTestState
 import dev.benyamin.kumiho.ui.settings.SettingKind
@@ -70,6 +75,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoShapes
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.ui.components.StatusTone
+import dev.benyamin.kumiho.ui.components.settingsGroupIcon
 import androidx.compose.ui.graphics.Color
 import dev.benyamin.kumiho.vpn.SplitMode
 import dev.benyamin.kumiho.ui.tv.components.TvButton
@@ -85,8 +91,14 @@ fun TvSettingsRoute(container: AppContainer, modifier: Modifier = Modifier) {
     SettingsRoute(
         container = container,
         modifier = modifier,
-        content = { state, appState, actions ->
-            TvSettingsScreen(state = state, appState = appState, actions = actions, modifier = modifier)
+        content = { state, appState, actions, account ->
+            TvSettingsScreen(
+                state = state,
+                appState = appState,
+                actions = actions,
+                account = account,
+                modifier = modifier,
+            )
         },
         splitContent = { onBack -> TvSplitTunnelRoute(container = container, onBack = onBack, modifier = modifier) },
     )
@@ -103,6 +115,7 @@ fun TvSettingsScreen(
     state: SettingsState,
     appState: SettingsAppState,
     actions: SettingsActions,
+    account: AccountSectionUi = AccountSectionUi(),
     modifier: Modifier = Modifier,
 ) {
     var editing by remember { mutableStateOf<SettingSpec?>(null) }
@@ -155,6 +168,9 @@ fun TvSettingsScreen(
                 .testTag(SettingsTags.LIST),
             verticalArrangement = Arrangement.spacedBy(TvDimens.Space2),
         ) {
+            GroupHeader(stringResource(R.string.settings_group_account), SettingsTags.GROUP_ACCOUNT)
+            TvAccountSection(state = account.state, actions = account.actions)
+
             GroupHeader(stringResource(R.string.settings_group_app), SettingsTags.GROUP_APP)
 
             TvSectionCard {
@@ -412,6 +428,8 @@ fun TvSettingsScreen(
         }
     }
 
+    TvAccountDialogs(state = account.state, actions = account.actions)
+
     editing?.let { spec ->
         TvSettingEditor(
             spec = spec,
@@ -489,14 +507,29 @@ private fun ReleaseBrowser(url: String, onClose: () -> Unit) {
 
 @Composable
 private fun GroupHeader(title: String, tag: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.primary,
+    Row(
         modifier = Modifier
-            .padding(top = TvDimens.Space2)
-            .testTag(tag),
-    )
+            .fillMaxWidth()
+            .padding(top = TvDimens.Space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
+    ) {
+        Icon(
+            painter = settingsGroupIcon(tag),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp),
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() }
+                .testTag(tag),
+        )
+    }
 }
 
 @Composable

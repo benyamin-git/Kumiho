@@ -32,6 +32,18 @@
   margin-inline-start: auto;
 }
 
+/* Icon-only search trigger: 40 px square, no extra inline padding. */
+.loc__search {
+  min-inline-size: var(--control-h);
+  padding-inline: 0;
+}
+
+.loc__search-icon {
+  display: block;
+  inline-size: 20px;
+  block-size: 20px;
+}
+
 /* ---------------------------------------------------------------- sections */
 
 .loc__heading {
@@ -58,11 +70,6 @@ html[lang="fa"] .loc__heading-title {
   text-transform: none;
 }
 
-.loc__clear {
-  min-block-size: 40px;
-  padding-inline: var(--space-2);
-}
-
 /* ----------------------------------------------------------------- filter */
 
 /* The search field is wider than the old filter because its copy names every
@@ -70,6 +77,10 @@ html[lang="fa"] .loc__heading-title {
 .loc__field {
   inline-size: 320px;
   max-inline-size: 100%;
+}
+
+.loc__field[hidden] {
+  display: none;
 }
 
 /* ------------------------------------------------------------------- list */
@@ -132,8 +143,8 @@ html[lang="fa"] .loc__heading-title {
 .loc__flag {
   display: inline-flex;
   flex: none;
-  inline-size: 24px;
-  block-size: 18px;
+  inline-size: 40px;
+  block-size: 30px;
   overflow: hidden;
   border: 1px solid var(--outline);
   border-radius: 2px;
@@ -201,23 +212,6 @@ html[lang="fa"] .loc__heading-title {
 
 .loc__check[hidden] {
   display: none;
-}
-
-/* The favorite control is a real 40 px button with a visible focus ring; the
- * star glyph carries the state and aria-pressed carries it to assistive
- * technology. */
-.loc__star {
-  min-inline-size: 40px;
-  min-block-size: 40px;
-  padding: 0;
-  color: var(--text-muted);
-  font-size: var(--text-lg);
-  line-height: 1;
-  background: transparent;
-}
-
-.loc__star[aria-pressed="true"] {
-  color: var(--primary);
 }
 
 .loc__locked-badge {

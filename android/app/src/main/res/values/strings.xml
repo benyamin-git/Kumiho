@@ -290,15 +290,10 @@
     <string name="locations_message_ping_all_no_results">No server responded to Ping all.</string>
     <string name="locations_fastest">Fastest</string>
     <string name="locations_fastest_hint">Run Ping all to enable Fastest</string>
-    <string name="locations_favorites">Favorites</string>
-    <string name="locations_recent">Recent</string>
     <string name="locations_full_list">Locations</string>
-    <string name="locations_clear_recents">Clear</string>
     <string name="locations_show_locked">Show locked locations</string>
     <string name="locations_hide_locked">Hide locked locations</string>
     <string name="locations_locked">Locked</string>
-    <string name="locations_favorite">Favorite %1$s</string>
-    <string name="locations_remove_favorite">Remove favorite %1$s</string>
 
     <!-- Settings (T13). -->
     <string name="settings_loading">Loading settings…</string>
@@ -312,6 +307,7 @@
     <string name="settings_launch_failed">Android could not open that settings page.</string>
     <string name="settings_launch_failed_dismiss">Dismiss</string>
 
+    <string name="settings_group_account">Account</string>
     <string name="settings_group_app">Kumiho app</string>
     <string name="language_title">Language</string>
     <string name="language_hint">App language; changes immediately</string>
@@ -643,8 +639,6 @@
 
     <!-- Account (T15). -->
     <string name="account_loading">Loading your account…</string>
-    <string name="account_engine_unavailable_title">Kumiho cannot start</string>
-    <string name="account_engine_unavailable">The local engine is unavailable. Close Kumiho and open it again.</string>
     <string name="account_retry">Retry</string>
     <string name="account_dismiss">Dismiss</string>
     <string name="account_timeout">The account did not respond within 35 seconds. The last known details are still shown.</string>
@@ -652,33 +646,18 @@
     <string name="account_refresh_failed">The account details did not refresh. The last known details are still shown.</string>
     <string name="account_sign_out_failed">Signing out failed.</string>
     <string name="account_signed_out_title">Not signed in</string>
-    <string name="account_signed_out_text">Sign in with your Firefox Account to see your subscription, quota and token details.</string>
-    <string name="account_signed_in_note">Signed in. The account card replaces this pane.</string>
-    <string name="account_signed_in_title">Firefox Account</string>
-    <string name="account_not_reported">Not reported</string>
-    <string name="account_uid">Account UID</string>
-    <string name="account_subscription">Subscription</string>
-    <string name="account_subscribed">Active</string>
-    <string name="account_not_subscribed">No active subscription</string>
-    <string name="account_quota">Quota</string>
-    <string name="account_quota_none">No quota reported</string>
-    <string name="account_bandwidth">Bandwidth</string>
-    <string name="account_bandwidth_limited">Limited</string>
-    <string name="account_bandwidth_unlimited">Unlimited</string>
-    <string name="account_token">Token expires</string>
-    <string name="account_token_unknown">Not reported</string>
-    <string name="account_refresh">Refresh</string>
-    <string name="account_refreshing">Refreshing…</string>
+    <string name="account_signed_out_text">Sign in with your Firefox Account to use Kumiho.</string>
+    <string name="account_signed_in_note">Signed in to your Firefox Account.</string>
     <string name="account_notice_information">Information</string>
     <string name="account_sign_out">Sign out</string>
     <string name="account_signing_out">Signing out…</string>
-    <string name="account_sign_out_note">Signing out clears the tokens, asks Firefox Accounts to revoke this device\'s session, and disconnects the tunnel. The app stays on this screen.</string>
+    <string name="account_sign_out_note">Signing out clears the tokens, asks Firefox Accounts to revoke this device\'s session, and disconnects the tunnel.</string>
     <string name="account_sign_out_title">Sign out of Firefox Accounts?</string>
     <string name="account_sign_out_text">Your tokens are cleared and the tunnel disconnects. Kumiho also asks Firefox Accounts to revoke this device\'s browser session; if that request fails, sign-out still completes locally. You can sign in again at any time.</string>
     <string name="account_sign_out_confirm">Sign out</string>
     <string name="account_sign_out_cancel">Cancel</string>
     <string name="account_accounts_title">Accounts</string>
-    <string name="account_accounts_hint">Up to five. Rotation switches before connecting when enabled.</string>
+    <string name="account_accounts_hint">Up to five. Tap a row to make that account active.</string>
     <string name="account_add">Add</string>
     <string name="account_add_title">Add account</string>
     <string name="account_add_text">Use a browser or a password. Both add the account to this device.</string>
@@ -700,15 +679,6 @@
     <string name="account_remove">Remove</string>
     <string name="account_browser_title">Finish signing in</string>
     <string name="account_browser_hint">This screen updates automatically. If sign-in finishes elsewhere, paste the redirect URL below.</string>
-    <string name="account_rotation_title">Account rotation</string>
-    <string name="account_rotation_hint">Switch accounts before connecting when the active one is low on quota. Applies on the next connect.</string>
-    <string name="account_threshold_title">Rotation threshold</string>
-    <string name="account_threshold_hint">Switch when the active account has this much quota left or less.</string>
-    <string name="account_threshold_value">%1$d%%</string>
-    <string name="account_threshold_decrease">Lower rotation threshold</string>
-    <string name="account_threshold_increase">Raise rotation threshold</string>
-    <string name="account_threshold_decrease_symbol">−</string>
-    <string name="account_threshold_increase_symbol">+</string>
     <string name="account_rename_title">Rename account</string>
     <string name="account_rename_label">Label</string>
     <string name="account_rename_confirm">Save</string>
@@ -722,7 +692,6 @@
     <string name="account_sign_out_all_text">All accounts are removed and their tokens cleared. Kumiho also asks Firefox Accounts to revoke their browser sessions; a failed revocation never blocks the local sign-out. The tunnel disconnects.</string>
     <string name="account_accounts_failed">The account list did not load.</string>
     <string name="account_action_failed">The account action failed.</string>
-    <string name="account_rotation_failed">The rotation setting did not save.</string>
     <string name="account_no_browser">No browser is available. Use password, or paste the redirect URL if you can finish signing in elsewhere.</string>
 
     <!-- Shared browser sign-in waiting card. -->
@@ -809,13 +778,11 @@
     <!-- Shell destinations and placeholders. -->
     <string name="nav_home">Home</string>
     <string name="nav_locations">Locations</string>
-    <string name="nav_account">Account</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_more">More</string>
     <string name="nav_logs">Logs</string>
     <string name="nav_diagnostics">Diagnostics</string>
     <string name="placeholder_dashboard_waiting">The engine client is not wired yet. The dashboard arrives with it.</string>
-    <string name="placeholder_account_waiting">Not connected. Account details arrive with the engine client.</string>
     <string name="placeholder_route_waiting">Not connected. This screen arrives with the engine client.</string>
     <string name="placeholder_locations_waiting">Not connected. Location data arrives with the engine client.</string>
     <string name="placeholder_settings_waiting">Engine settings arrive with the engine client.</string>
@@ -825,7 +792,6 @@
     <string name="tv_more_back_hint">Press Back to return to the previous screen.</string>
     <string name="tv_dashboard_loading">Loading the VPN service…</string>
     <string name="tv_dashboard_unavailable">The VPN service is unavailable</string>
-    <string name="tv_account_loading">Loading your account…</string>
     <string name="diagnostics_facts_device">Device %1$s · SDK %2$s · Engine %3$s</string>
     <string name="diagnostics_facts_permission">VPN permission %1$s · Always-on %2$s · Lockdown %3$s</string>
     <string name="diagnostics_facts_notifications">Notifications %1$s · Battery optimized %2$s · Network %3$s</string>

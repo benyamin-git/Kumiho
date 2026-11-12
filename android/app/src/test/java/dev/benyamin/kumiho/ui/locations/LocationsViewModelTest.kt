@@ -4,7 +4,6 @@ import dev.benyamin.kumiho.engine.CachedPing
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
-import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.LocationsResult
 import dev.benyamin.kumiho.engine.PingDone
 import dev.benyamin.kumiho.engine.PingResult
@@ -499,7 +498,7 @@ class LocationsViewModelTest {
             assertFalse(viewModel.state.value.canPingAll)
         }
 
-    // ---- sections, favorites and locked rows -----------------------------
+    // ---- sections and locked rows ----------------------------------------
 
     @Test
     fun `cached latency builds Fastest and selecting it persists then reloads`() =
@@ -522,45 +521,6 @@ class LocationsViewModelTest {
             assertEquals(1, gateway.fastestSelections)
             assertEquals(2, gateway.locationCalls)
             assertFalse(viewModel.state.value.savingFastest)
-        }
-
-    @Test
-    fun `a favorite star flips optimistically and clear recent empties immediately`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(US)
-            gateway.recents = listOf(LocationRef("us", "nyc", EDGE_ADDRESS))
-            val viewModel = viewModel()
-            runCurrent()
-            val edge = viewModel.state.value.rows.first { it.server === EDGE }
-            val ref = LocationRef("us", "nyc", EDGE_ADDRESS)
-
-            viewModel.toggleFavorite(edge)
-            assertTrue(viewModel.state.value.isFavorite(edge))
-            assertTrue(viewModel.state.value.favorites.any { LocationTree.sameRef(it, ref) })
-            runCurrent()
-            assertEquals(listOf(ref to true), gateway.favoriteCalls)
-
-            viewModel.clearRecents()
-            assertTrue(viewModel.state.value.recents.isEmpty())
-            runCurrent()
-            assertEquals(1, gateway.clearRecentsCalls)
-        }
-
-    @Test
-    fun `a failed favorite restores the previous stars and shows the engine detail`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.countries = listOf(US)
-            val viewModel = viewModel()
-            runCurrent()
-            val edge = viewModel.state.value.rows.first { it.server === EDGE }
-            gateway.favoriteError = IllegalStateException("favorite failed")
-
-            viewModel.toggleFavorite(edge)
-            runCurrent()
-
-            assertFalse(viewModel.state.value.isFavorite(edge))
-            assertEquals("favorite failed", (viewModel.state.value.notice?.text as LocationsNoticeText.Raw).text)
-            assertEquals(2, gateway.locationCalls)
         }
 
     @Test
@@ -685,16 +645,11 @@ private class FakeGateway : LocationsGateway {
     override val pingDone: Flow<PingDone> = pingDoneSource
 
     var countries: List<Country> = emptyList()
-    var favorites: List<LocationRef> = emptyList()
-    var recents: List<LocationRef> = emptyList()
     var allowLocked: Boolean = false
     var cachedLatency: Map<String, Double?> = emptyMap()
     var locationsError: Exception? = null
     var selectError: Exception? = null
     var selectGate: CompletableDeferred<Unit>? = null
-    var favoriteError: Exception? = null
-    var favoriteGate: CompletableDeferred<Unit>? = null
-    var clearRecentsError: Exception? = null
     var fastestError: Exception? = null
     var lockedError: Exception? = null
     var pingError: Exception? = null
@@ -703,10 +658,8 @@ private class FakeGateway : LocationsGateway {
     val refreshFlags = mutableListOf<Boolean>()
     val selections = mutableListOf<SelectionRequest>()
     val pingCalls = mutableListOf<List<String>>()
-    val favoriteCalls = mutableListOf<Pair<LocationRef, Boolean>>()
     val lockedWrites = mutableListOf<Boolean>()
     var fastestSelections = 0
-    var clearRecentsCalls = 0
 
     override suspend fun locations(refresh: Boolean): LocationsResult {
         locationCalls++
@@ -714,8 +667,8 @@ private class FakeGateway : LocationsGateway {
         locationsError?.let { throw it }
         return LocationsResult(
             countries = countries,
-            favorites = favorites,
-            recents = recents,
+            favorites = emptyList(),
+            recents = emptyList(),
             latency = cachedLatency.mapValues { CachedPing(it.value, Instant.EPOCH) },
             allowLocked = allowLocked,
         )
@@ -730,18 +683,6 @@ private class FakeGateway : LocationsGateway {
     override suspend fun selectFastest() {
         fastestSelections++
         fastestError?.let { throw it }
-    }
-
-    override suspend fun favorite(ref: LocationRef, favorite: Boolean) {
-        favoriteCalls += ref to favorite
-        favoriteGate?.await()
-        favoriteError?.let { throw it }
-    }
-
-    override suspend fun clearRecents() {
-        clearRecentsCalls++
-        clearRecentsError?.let { throw it }
-        recents = emptyList()
     }
 
     override suspend fun setAllowLocked(enabled: Boolean) {

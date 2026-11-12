@@ -31,11 +31,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.destinationIcon
@@ -56,11 +53,11 @@ object ShellTags {
 
 /**
  * The shell. It owns the only [Scaffold], the 64dp top bar and navigation: a
- * bottom bar under 600dp, a navigation rail at or above it. A bottom bar too
- * narrow for all five labels hands its trailing pages to the More sheet. It
- * applies the system-bar insets once; the keyboard inset is left to the
- * screens' own `imePadding()`, so the bars stay under the keyboard instead of
- * counting it twice.
+ * bottom bar under 600dp, a navigation rail at or above it. The phone bar keeps
+ * Settings in the More sheet; the rail shows all four items. It applies the
+ * system-bar insets once; the keyboard inset is left to the screens' own
+ * `imePadding()`, so the bars stay under the keyboard instead of counting it
+ * twice.
  */
 @Composable
 fun AppShell(
@@ -68,7 +65,6 @@ fun AppShell(
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
     locations: @Composable () -> Unit = { LocationsPlaceholder() },
-    account: @Composable () -> Unit = { AccountPlaceholder() },
     settings: @Composable () -> Unit = { SettingsPlaceholder() },
     logs: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Logs) },
     diagnostics: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Diagnostics) },
@@ -82,7 +78,6 @@ fun AppShell(
         modifier = modifier,
         home = home,
         locations = locations,
-        account = account,
         settings = settings,
         logs = logs,
         diagnostics = diagnostics,
@@ -91,9 +86,9 @@ fun AppShell(
 
 /**
  * The stateless shell, so the navigation holder can be faked in tests. Every
- * destination is a slot: [home], [locations], [account], [settings] and the two
- * More routes, [logs] and [diagnostics]. All default to placeholders so the
- * shell stays renderable on its own; the app passes the real screens.
+ * destination is a slot: [home], [locations], [settings] and the two More
+ * routes, [logs] and [diagnostics]. All default to placeholders so the shell
+ * stays renderable on its own; the app passes the real screens.
  */
 @Composable
 fun AppShell(
@@ -104,7 +99,6 @@ fun AppShell(
     modifier: Modifier = Modifier,
     home: @Composable () -> Unit = { HomePlaceholder() },
     locations: @Composable () -> Unit = { LocationsPlaceholder() },
-    account: @Composable () -> Unit = { AccountPlaceholder() },
     settings: @Composable () -> Unit = { SettingsPlaceholder() },
     logs: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Logs) },
     diagnostics: @Composable () -> Unit = { MoreRoutePlaceholder(MoreRoute.Diagnostics) },
@@ -112,13 +106,12 @@ fun AppShell(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val mode = navMode(maxWidth.value)
         val barInsets = WindowInsets.safeDrawing.exclude(WindowInsets.ime)
-        // A narrow bottom bar gives up trailing pages to the More sheet rather
-        // than wrapping their labels; the rail always shows all five.
-        val labelWidth = widestLabelWidth().value
+        // Settings stays in the More sheet on the phone bar at every width;
+        // the rail keeps all four items.
         val barTabs = if (mode == NavMode.Rail) {
             Destination.tabs
         } else {
-            bottomBarTabs(maxWidth.value, labelWidth)
+            Destination.phoneTabs
         }
         val overflow = Destination.tabs - barTabs.toSet()
         var moreSheetOpen by remember { mutableStateOf(false) }
@@ -191,7 +184,7 @@ fun AppShell(
                             .widthIn(max = Dimens.ContentMaxWidth)
                             .fillMaxSize(),
                     ) {
-                        ScreenHost(state, home, locations, account, settings, logs, diagnostics)
+                        ScreenHost(state, home, locations, settings, logs, diagnostics)
                     }
                 }
             }
@@ -212,20 +205,6 @@ fun AppShell(
             )
         }
     }
-}
-
-/**
- * The widest bottom-bar label at the bar's own type scale, in dp. Measuring it
- * is what lets the bar react to the system font scale, not just the width.
- */
-@Composable
-private fun widestLabelWidth(): Dp {
-    val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.labelMedium
-    val widest = Destination.tabs.maxOf {
-        measurer.measure(stringResource(it.labelRes), style).size.width
-    }
-    return with(LocalDensity.current) { widest.toDp() }
 }
 
 @Composable
@@ -282,7 +261,6 @@ private fun ScreenHost(
     state: ShellNavState,
     home: @Composable () -> Unit,
     locations: @Composable () -> Unit,
-    account: @Composable () -> Unit,
     settings: @Composable () -> Unit,
     logs: @Composable () -> Unit,
     diagnostics: @Composable () -> Unit,
@@ -298,20 +276,9 @@ private fun ScreenHost(
     when (state.tab) {
         Destination.Home -> home()
         Destination.Locations -> locations()
-        Destination.Account -> account()
         Destination.Settings -> settings()
         Destination.More -> Unit
     }
-}
-
-/** The pre-T15 Account placeholder; the app passes the real screen. */
-@Composable
-private fun AccountPlaceholder() {
-    PlaceholderScreen(
-        title = stringResource(Destination.Account.labelRes),
-        message = stringResource(R.string.placeholder_account_waiting),
-        icon = destinationIcon(Destination.Account),
-    )
 }
 
 /** The pre-T15 More-route placeholder; the app passes the real screens. */

@@ -3,14 +3,10 @@ package dev.benyamin.kumiho.ui.account
 import dev.benyamin.kumiho.engine.Account
 import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.engine.Accounts
-import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.Quota
-import dev.benyamin.kumiho.ui.dashboard.DashboardFormat
 import dev.benyamin.kumiho.ui.setup.SignInPaneState
-import java.time.ZoneId
-import java.util.Locale
 
-/** Copy the account screen generates itself, resolved by the UI. */
+/** Copy the account section generates itself, resolved by the UI. */
 enum class AccountMessage {
     TIMEOUT,
     LOAD_FAILED,
@@ -18,7 +14,6 @@ enum class AccountMessage {
     SIGN_OUT_FAILED,
     ACCOUNTS_FAILED,
     ACTION_FAILED,
-    ROTATION_FAILED,
     NO_BROWSER,
 }
 
@@ -46,9 +41,8 @@ enum class BrowserPasteMessage {
 }
 
 /**
- * The account screen state. The signed-in card is driven by the engine's local
- * token facts; the sign-in pane is reused from setup and is shown whenever the
- * account is not signed in.
+ * The account section state. The sign-in pane is reused from setup and is
+ * shown whenever no account is stored.
  */
 data class AccountUiState(
     val loading: Boolean = true,
@@ -66,7 +60,6 @@ data class AccountUiState(
     val renameTarget: AccountSummary? = null,
     val addDialog: Boolean = false,
     val browser: BrowserSignIn? = null,
-    val rotationSaving: Boolean = false,
     /** The engine URL the in-app browser loads. */
     val browserLaunchURL: String? = null,
     /** The full-screen in-app browser window is open. */
@@ -105,8 +98,7 @@ data class AccountUiState(
 }
 
 /**
- * Pure account presentation rules. Formatting reuses the dashboard's desktop
- * wording, so the Account card and the Home quota card cannot disagree.
+ * Pure account presentation rules shared by the phone and TV sections.
  */
 object AccountFormat {
     /** The engine's local wording for a missing session (`Account` error). */
@@ -123,25 +115,6 @@ object AccountFormat {
     fun onlineError(account: Account?): String? = account?.error
         ?.trim()
         ?.takeIf { it.isNotEmpty() && !isNotSignedIn(account) }
-
-    /** The quota sentence, or null when the engine reported no quota fields. */
-    fun quota(account: Account?, language: AppLanguage = AppLanguage.ENGLISH): String? = account?.let {
-        DashboardFormat.quotaLabel(
-            Quota(limit = it.maxBytes, remaining = it.quotaRemaining, reset = null),
-            language,
-        )
-    }
-
-    /** The token expiry date, or null for an absent timestamp. */
-    fun tokenExpiry(
-        account: Account?,
-        zone: ZoneId = ZoneId.systemDefault(),
-        locale: Locale = Locale.getDefault(),
-        language: AppLanguage = AppLanguage.ENGLISH,
-    ): String? = DashboardFormat.dateLabel(account?.tokenExpires ?: 0L, zone, locale, language)
-
-    /** The engine's bandwidth flag: true means limited. */
-    fun bandwidthLimited(account: Account?): Boolean = account?.limitedBandwidth == true
 
     /** The remaining percentage, or null when the engine did not report it. */
     fun quotaPercent(quota: Quota?): Int? {

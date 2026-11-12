@@ -72,7 +72,6 @@ class TvTraversalTest : TvTestBase() {
                     nav = ShellNavigation(),
                     home = { Screen("home") },
                     locations = { Screen("locations") },
-                    account = { Screen("account") },
                     settings = { Screen("settings") },
                     logs = { Screen("logs") },
                     diagnostics = { Screen("diagnostics") },

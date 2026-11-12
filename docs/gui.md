@@ -162,8 +162,7 @@ order mirrors with it.
   - otherwise the live connection state: `Off`, `Connected`, `Proxy only`,
     `Connecting`, `Reconnecting`, `Waiting for network`, `Not signed in` or
     `Error`.
-- **Rail.** `Dashboard`, `Locations`, `Settings`, `Account`, `Logs`,
-  `Diagnostics`.
+- **Rail.** `Dashboard`, `Locations`, `Settings`, `Logs`, `Diagnostics`.
 
 ## Dashboard
 
@@ -206,46 +205,42 @@ header already says so and the card stays empty.
 
 ## Locations
 
-**Reached:** the `Locations` rail item. The screen has pinned **Fastest**,
-**Favorites**, **Recent** and **Locations** sections above the full flat
-server-only list; there are no country or city header rows, carets or
-expand/collapse controls. Empty Favorites/Recent sections disappear. The full
+**Reached:** the `Locations` rail item. The screen has a pinned **Fastest** row
+and a **Locations** section above the full flat server-only list; there are no
+country or city header rows, carets or expand/collapse controls. The full
 list is ordered Recommended first, then country A–Z, city A–Z and hostname
 A–Z. Each row shows a real 4:3 SVG country flag (a star for Recommended, a
 globe for an unknown code), the full `Country · City` on the first line and
 `hostname:port · protocols` on the second. The latency or the
-current-selection check trails the row; a separate star button toggles a
-favorite (40 px, with an accessible **Favorite**/**Remove favorite** label).
-Locked rows carry a text **Locked** badge. Quarantined and targetless servers
-are never listed.
+current-selection check trails the row. Locked rows carry a text **Locked**
+badge. Quarantined and targetless servers are never listed.
 
 **Fastest** is one pinned row. It is disabled with **Run Ping all to enable
 Fastest** until a fresh finite cached RTT exists, then shows the minimum RTT;
-selecting it resolves once to that actual server and persists it. **Favorites**
-are ordered by country/city, **Recent** newest first (max five) and the Recent
-header has **Clear** with no confirmation.
+selecting it resolves once to that actual server and persists it.
 
-The search box at the top narrows the full list live as you type. Its
-placeholder is **Country, city, server, or protocol**, and it matches country
-name/code, city name/code, hostname, `host:port` and protocol names,
-case-insensitively. A no-match result keeps the list area's `No locations
-match the filter.` copy and the status line's `No locations match the filter`.
-Pinned sections are not filtered.
+The action row is **Search** (a magnifying-glass icon), **Refresh**, **Ping
+all** and **Show/Hide locked locations**. The icon expands the search field
+below the row and focuses it; the field stays open for the visit. Search
+narrows the full list live as you type. Its placeholder is **Country, city,
+server, or protocol**, and it matches country name/code, city name/code,
+hostname, `host:port` and protocol names, case-insensitively. A no-match result
+keeps the list area's `No locations match the filter.` copy and the status
+line's `No locations match the filter`. The pinned Fastest row is not filtered.
 
-The action row is **Refresh**, **Ping all** and **Show/Hide locked
-locations**. Ping all opens a temporary real-edge session per visible server,
+Ping all opens a temporary real-edge session per visible server,
 regardless of the filter, deduped by address and skipping quarantined,
 targetless and hidden-locked entries; its status line reads `Pinging N
 servers...` and the button stays disabled until the daemon's `ping_done`
 arrives. Per-row labels update as results stream in and the daemon caches them
 for 30 minutes. Only a completed run with at least one result switches the
 **full list** to speed order: finite RTTs ascending, failures and untested
-rows last, and Recommended always first. Favorites, Recent and Fastest keep
-their pinned order. A timeout counts as a result; a transport failure leaves
-the current order alone. A new run keeps the current order while it is in
-flight. Refresh restores country order; a changed list is also a new visit and
-its cached fresh RTTs still label rows. A status line below reports the last
-action's result.
+rows last, and Recommended always first. Fastest keeps its pinned order. A
+timeout counts as a result; a transport failure leaves the current order
+alone. A new run keeps the current order while it is in flight. Refresh
+restores country order; a changed list is also a new visit and its cached
+fresh RTTs still label rows. A status line below reports the last action's
+result.
 
 The locked action flips `allow_locked` and reloads the list. When it is off,
 locked servers are hidden from the list and from Ping all; when on, they show
@@ -254,9 +249,44 @@ the badge. Clicking a server row saves it for the **next** connection (status
 
 ## Settings
 
-**Reached:** the `Settings` rail item. The screen has two panes — **Kumiho
-app** and **Background service**, the latter ending in a **Region** group —
-and a **Refresh** action.
+**Reached:** the `Settings` rail item. The screen opens with the **Account**
+section, then the two panes — **Kumiho app** and **Background service**, the
+latter ending in a **Region** group — and a **Refresh** action. Each section is
+a card with a distinct header band and a primary-tinted outline icon: person
+for Account, sliders for Kumiho app, a server for Background service and a
+globe for Region.
+
+**Account** — the Firefox account management that used to be its own page.
+It has **Add account** and a session-wide **Sign out** action, the account
+list, the browser waiting card and the sign-out dialog. The page-level
+**Refresh** reloads the account projection too.
+
+The list shows up to five accounts: label/email, method (`browser` or
+`password`), active marker and a re-authentication warning. The row overflow
+menu offers **Use**, **Rename**, **Re-authenticate** (browser) and **Remove**.
+**Add account** opens a dialog with **Continue in browser** (the default) or
+**Use password**; the password form is the onboarding credential flow inline.
+A browser flow shows the waiting card (engine URL, **Redirect URL**,
+**Continue**, **Open again** and **Cancel**), opens the URL once automatically,
+polls `accounts_add_status` every second and finishes when the pasted redirect
+URL is accepted. Removing one account leaves the others signed in; removing
+the active one selects the most recently used remaining account. After an
+upgrade from v0.6.0, accounts from the old opaque browser flow are removed and
+the status line shows **“Old browser sign-in removed. Add your Firefox account
+again.”**
+
+The tonal **Sign out** button opens a confirmation dialog — *Sign out of
+Kumiho?* / *The stored sign-in tokens are cleared and the tunnel disconnects.*
+/ *Kumiho will also try to revoke its Mozilla sign-in; local sign-out
+completes offline.* — before it clears **every** account and disconnects. The
+revocation is best effort: an offline or failed request never blocks the local
+sign-out. Signing out does not reopen the wizard: you stay in Settings, the
+account rows disappear, and the status line reads `Not signed in`. The
+wizard only reappears for a daemon that still reports setup as incomplete.
+
+The entitlement card (email, UID, subscription, quota, bandwidth and token
+expiry) and the quota-rotation card were removed once Firefox dropped the
+50 GB limit; the daemon still exposes those fields for the CLI and TUI.
 
 **Kumiho app** — per-user choices that apply immediately:
 
@@ -319,46 +349,6 @@ numbered wizard, so the wizard still has five steps.
 
 A status line under the rows reports the last change, including `Applying...`
 while a change is in flight. Only one change runs at a time.
-
-## Account
-
-**Reached:** the `Account` rail item. The screen has **Refresh**, **Add
-account** and a session-wide **Sign out** action, an account list, a browser
-waiting card, a rotation card and the entitlement card.
-
-The list shows up to five accounts: label/email, method (`browser` or
-`password`), active marker, percent quota left and a re-authentication warning.
-The row overflow menu offers **Use**, **Rename**, **Re-authenticate** (browser)
-and **Remove**. **Add account** opens a dialog with **Continue in browser**
-(the default) or **Use password**; the password form is the onboarding
-credential flow inline. A browser flow shows the waiting card (engine URL,
-**Redirect URL**, **Continue**, **Open again** and **Cancel**), opens the URL
-once automatically, polls `accounts_add_status` every second and finishes when
-the pasted redirect URL is accepted. Removing one account leaves the others
-signed in; removing the active one selects the most recently used remaining
-account. After an upgrade from v0.6.0, accounts from the old opaque browser
-flow are removed and the status line shows **“Old browser sign-in removed.
-Add your Firefox account again.”**
-
-The **Account rotation** card has an on/off switch and a **Switch below (%)**
-field (1–50, default 10), saved immediately. Rotation is off by default and
-runs only before the next connect; changing it never reconnects. Exhausted or
-expired accounts are skipped with a notice; connect fails only when every
-account is unusable.
-
-The entitlement card shows `Email`, `UID`, `Subscription`
-(`Yes`/`No`/`Unknown`), `Quota` (for example `38.0 GiB remaining of 512.0
-GiB`), `Bandwidth` (`Limited` or `Unlimited`) and `Token expiry`.
-
-The tonal **Sign out** button opens a confirmation dialog — *Sign out of
-Kumiho?* / *The stored sign-in tokens are cleared and the tunnel disconnects.*
-/ *Kumiho will also try to revoke its Mozilla sign-in; local sign-out
-completes offline.* — before it clears **every** account and disconnects. The
-revocation is best effort: an offline or failed request never blocks the local
-sign-out. Signing out does not
-reopen the wizard: you stay on the Account screen, the cards disappear, and
-the status line reads `Not signed in`. The wizard only reappears for a daemon
-that still reports setup as incomplete.
 
 ## Logs
 

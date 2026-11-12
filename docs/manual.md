@@ -38,7 +38,7 @@ manual stay English.
 | Key | What happens |
 |---|---|
 | `space` | connect / disconnect |
-| `o` | pick a country/server (`enter` select, `f` favorite, `P` test speed, `esc` back) |
+| `o` | pick a country/server (`enter` select, `P` test speed, `esc` back) |
 | `s` | settings (kill switch, autoconnect, DNS, MTU, TLS split, proxies, challenge solving, region/relay, keepalive…) — `enter` change, `d` reset |
 | `g` | live logs |
 | `a` | accounts and your subscription: email, data left, add/use/rename, rotation |
@@ -156,8 +156,6 @@ The full steps and the free Cloudflare Worker template are in
     kumiho status         # what's going on right now
     kumiho locations      # list countries and servers
     kumiho locations --ping    # measure every server through the real edge
-    kumiho locations --favorites
-    kumiho locations --recent
     kumiho relay test     # check the optional relay
     kumiho prepare        # server list + profile + one Guardian pass
     kumiho guide          # the Blocked region instructions

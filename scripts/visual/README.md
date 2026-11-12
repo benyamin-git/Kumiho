@@ -103,7 +103,6 @@ Screens (hash routes of the SPA, T2.1's router owns them):
 | dashboard | `#/dashboard` | T2.2 |
 | locations | `#/locations` | T2.3 |
 | settings | `#/settings` | T2.4 |
-| account | `#/account` | T3.1 |
 | logs | `#/logs` | T3.2 |
 | diagnostics | `#/diagnostics` | T3.3 |
 | blocked-region | `#/blocked-region` | v0.11.0 |
@@ -121,8 +120,8 @@ States, all driven through the harness (dark theme, blue accent):
 | `connecting` | `/dev/scenario connecting` |
 | `error` | `/dev/scenario error` (FATAL, exhausted quota) |
 | `connect-options` | route hint `#/dashboard?state=connect-options` |
-| `signout-confirm` | route hint `#/account?state=signout-confirm` |
-| `account-add` | Add account dialog (Dark) |
+| `signout-confirm` | route hint `#/settings?state=signout-confirm` (Settings → Account) |
+| `account-add` | Settings → Account → Add account dialog (Dark) |
 | `account-add-password` | Add account → Use password, first form (Light) |
 | `account-add-browser` | Add account → Continue in browser, waiting card (OLED) |
 | `cleanup-confirm` | route hint `#/diagnostics?state=cleanup-confirm` |

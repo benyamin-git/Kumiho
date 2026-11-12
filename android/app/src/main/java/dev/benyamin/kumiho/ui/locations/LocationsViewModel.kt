@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
 import dev.benyamin.kumiho.engine.EngineStatus
-import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.LocationsResult
 import dev.benyamin.kumiho.engine.PingDone
 import dev.benyamin.kumiho.engine.PingResult
@@ -45,10 +44,6 @@ interface LocationsGateway {
     /** Resolves and persists the lowest fresh finite RTT server. */
     suspend fun selectFastest()
 
-    suspend fun favorite(ref: LocationRef, favorite: Boolean)
-
-    suspend fun clearRecents()
-
     /** Writes `allow_locked`; the next locations read is re-filtered. */
     suspend fun setAllowLocked(enabled: Boolean)
 
@@ -86,14 +81,6 @@ class CoordinatorLocationsGateway(
 
     override suspend fun selectFastest() {
         coordinator.awaitEngine().selectLocation(fastest = true)
-    }
-
-    override suspend fun favorite(ref: LocationRef, favorite: Boolean) {
-        coordinator.awaitEngine().favoriteLocation(ref, favorite)
-    }
-
-    override suspend fun clearRecents() {
-        coordinator.awaitEngine().clearRecents()
     }
 
     override suspend fun setAllowLocked(enabled: Boolean) {
@@ -211,9 +198,6 @@ data class LocationsState(
     val savingFastest: Boolean = false,
     /** The allow-locked write is in flight. */
     val savingLocked: Boolean = false,
-    /** The engine-shared favorites and recents, newest recent first. */
-    val favorites: List<LocationRef> = emptyList(),
-    val recents: List<LocationRef> = emptyList(),
     /** Whether the locked rows are revealed. */
     val allowLocked: Boolean = false,
 ) {
@@ -228,12 +212,10 @@ data class LocationsState(
             latency
         }
 
-    /** The pinned sections and the full list, in display order. */
+    /** The pinned Fastest row and the full list, in display order. */
     val sections: LocationSections
         get() = LocationTree.sections(
             countries = countries,
-            favorites = favorites,
-            recents = recents,
             query = query,
             latency = pinnedLatency,
             sortMode = sortMode,
@@ -269,9 +251,6 @@ data class LocationsState(
 
     fun isSaving(server: Server): Boolean =
         savingServer == LocationTree.connectTarget(server)?.let(LocationTree::addressKey)
-
-    fun isFavorite(row: LocationRow): Boolean =
-        LocationTree.isFavorite(favorites, row, countries, allowLocked)
 
     val canSelectFastest: Boolean
         get() = fastest != null && !savingFastest && savingServer == null && !savingLocked
@@ -380,8 +359,6 @@ class LocationsViewModel(
         mutableState.update { current ->
             current.copy(
                 countries = result.countries,
-                favorites = result.favorites,
-                recents = result.recents,
                 allowLocked = result.allowLocked,
                 latency = cachedLatency(result),
                 loaded = true,
@@ -405,7 +382,7 @@ class LocationsViewModel(
 
     /**
      * Re-reads the tree after a mutation without blanking it or committing a
-     * fresh speed order. Pinned refs and allow-locked come from the engine.
+     * fresh speed order. Allow-locked comes from the engine.
      */
     private suspend fun reloadTree() {
         try {
@@ -535,70 +512,6 @@ class LocationsViewModel(
                         ),
                     )
                 }
-            }
-        }
-    }
-
-    /** Toggles one favorite optimistically; a failure restores and re-reads. */
-    fun toggleFavorite(row: LocationRow) {
-        val ref = LocationTree.refOf(row)
-        favorite(ref, !mutableState.value.isFavorite(row))
-    }
-
-    fun favorite(ref: LocationRef, favorite: Boolean) {
-        val previous = mutableState.value.favorites
-        val next = if (favorite) {
-            if (previous.any { LocationTree.sameRef(it, ref) }) {
-                previous
-            } else {
-                previous + ref
-            }
-        } else {
-            previous.filterNot { LocationTree.sameRef(it, ref) }
-        }
-        if (next == previous) return
-        mutableState.update { it.copy(favorites = next) }
-        viewModelScope.launch {
-            try {
-                gateway.favorite(ref, favorite)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                mutableState.update {
-                    it.copy(
-                        favorites = previous,
-                        notice = LocationsNotice(
-                            text = LocationsNoticeText.Raw(messageOf(error)),
-                            tone = LocationsNoticeTone.ERROR,
-                        ),
-                    )
-                }
-                reloadTree()
-            }
-        }
-    }
-
-    /** Empties Recent immediately; a failure restores the old list. */
-    fun clearRecents() {
-        val previous = mutableState.value.recents
-        if (previous.isEmpty()) return
-        mutableState.update { it.copy(recents = emptyList()) }
-        viewModelScope.launch {
-            try {
-                gateway.clearRecents()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                mutableState.update {
-                    it.copy(
-                        recents = previous,
-                        notice = LocationsNotice(
-                            text = LocationsNoticeText.Raw(messageOf(error)),
-                            tone = LocationsNoticeTone.ERROR,
-                        ),
-                    )
-                }
-                reloadTree()
             }
         }
     }

@@ -22,7 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** The account list, browser flow and rotation state machine on the JVM. */
+/** The account list and browser flow state machine on the JVM. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountAccountsTest {
 
@@ -40,8 +40,7 @@ class AccountAccountsTest {
         openExternalBrowser = openExternalBrowser,
         pollIntervalMillis = 3_000,
         browserPollIntervalMillis = 1_000,
-        thresholdDebounceMillis = 600,
-    )
+    ).also { it.setScreenResumed(true) }
 
     @Test
     fun `refresh loads accounts and active entitlement`() = runTest(mainRule.testDispatcher) {
@@ -269,31 +268,6 @@ class AccountAccountsTest {
         assertEquals("two@example.com", AccountFormat.nextActive(view, view.accounts[0])?.email)
         assertNull(AccountFormat.nextActive(view, view.accounts[1]))
         assertNull(AccountFormat.nextActive(null, view.accounts[0]))
-    }
-
-    @Test
-    fun `rotation threshold is clamped to 1-50`() = runTest(mainRule.testDispatcher) {
-        gateway.accountResult = { account() }
-        gateway.accountsResult = { accounts() }
-        val viewModel = viewModel()
-        runCurrent()
-
-        viewModel.setThreshold(0)
-        assertEquals(1, viewModel.state.value.accounts?.threshold)
-        advanceTimeBy(600)
-        runCurrent()
-        assertEquals(Triple(false, 1, false), gateway.rotationCalls.last())
-
-        viewModel.setThreshold(75)
-        assertEquals(50, viewModel.state.value.accounts?.threshold)
-        advanceTimeBy(600)
-        runCurrent()
-        assertEquals(Triple(false, 50, false), gateway.rotationCalls.last())
-
-        viewModel.setRotation(true)
-        runCurrent()
-        assertEquals(true, gateway.rotationCalls.last().first)
-        assertFalse(viewModel.state.value.rotationSaving)
     }
 
     @Test
@@ -633,26 +607,6 @@ class AccountAccountsTest {
         }
 
     @Test
-    fun `rotation threshold waits for the last value in a burst`() =
-        runTest(mainRule.testDispatcher) {
-            gateway.accountResult = { account() }
-            gateway.accountsResult = { accounts() }
-            val viewModel = viewModel()
-            runCurrent()
-
-            viewModel.setThreshold(11)
-            advanceTimeBy(300)
-            viewModel.setThreshold(12)
-            advanceTimeBy(300)
-            runCurrent()
-            assertTrue(gateway.rotationCalls.isEmpty())
-
-            advanceTimeBy(300)
-            runCurrent()
-            assertEquals(Triple(false, 12, false), gateway.rotationCalls.single())
-        }
-
-    @Test
     fun `rename normalizes the label before the engine call`() =
         runTest(mainRule.testDispatcher) {
             gateway.accountResult = { account() }
@@ -687,7 +641,6 @@ class AccountAccountsTest {
         val useCalls = mutableListOf<String>()
         val removeCalls = mutableListOf<String>()
         val renameCalls = mutableListOf<Pair<String, String>>()
-        val rotationCalls = mutableListOf<Triple<Boolean, Int, Boolean>>()
         val loginCancelCalls = mutableListOf<String>()
 
         override suspend fun account(): Account {
@@ -732,11 +685,6 @@ class AccountAccountsTest {
 
         override suspend fun renameAccount(id: String, label: String) {
             renameCalls += id to label
-        }
-
-        override suspend fun setRotation(enabled: Boolean, threshold: Int) {
-            rotationCalls += Triple(enabled, threshold, false)
-            accountsResult = { accounts().copy(rotation = enabled, threshold = threshold) }
         }
 
         override suspend fun loginEmail(email: String): LoginState =

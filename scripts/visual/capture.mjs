@@ -59,7 +59,7 @@ const WAIT_TIMEOUT_MS = 20000;
 const DEFAULT_THEME = "light";
 const DEFAULT_ACCENT = "blue";
 
-// The SPA's hash-route destinations (the rail's six destinations plus the
+// The SPA's hash-route destinations (the rail's five destinations plus the
 // onboarding wizard). T2.1's router owns these; the capture script only
 // navigates them. The wizard steps and dialogs are deep-linked with a
 // `?state=<name>` capture hint on the screen's route — the router should
@@ -73,7 +73,6 @@ const SCREENS = [
   { name: "dashboard", hash: "#/dashboard" },
   { name: "locations", hash: "#/locations" },
   { name: "settings", hash: "#/settings" },
-  { name: "account", hash: "#/account" },
   { name: "logs", hash: "#/logs" },
   { name: "diagnostics", hash: "#/diagnostics", wait: ".diag__check" },
   { name: "blocked-region", hash: "#/blocked-region" },
@@ -120,13 +119,13 @@ const STATES = [
     hint: "connect-options",
     select: { selector: "#dash-opt-location", value: "DE" },
   },
-  { name: "signout-confirm", screen: "account", hint: "signout-confirm" },
+  { name: "signout-confirm", screen: "settings", hint: "signout-confirm" },
   {
-    // The v0.6.0 account list's Add account dialog, browser and password
+    // The Settings Account section's Add account dialog, browser and password
     // choices, and the browser waiting card. The mock flow stays pending until
     // login_complete (or cancel), so the waiting card is captureable.
     name: "account-add",
-    screen: "account",
+    screen: "settings",
     click: [".acct__add"],
     waitAfter: ".acct__add-dialog[open]",
   },
@@ -134,14 +133,14 @@ const STATES = [
     // A theme change forces a full reload, which closes the previous
     // dialog; this state also proves the password form in the Light theme.
     name: "account-add-password",
-    screen: "account",
+    screen: "settings",
     theme: "light",
     click: [".acct__add", ".acct__add-password"],
     waitAfter: "#acct-add-email",
   },
   {
     name: "account-add-browser",
-    screen: "account",
+    screen: "settings",
     theme: "oled",
     click: [".acct__add", ".acct__add-browser"],
     waitAfter: ".acct__waiting:not([hidden])",
@@ -466,8 +465,8 @@ function stateFile(state) {
 
 // With --only, the default run is filtered to one destination: the screen's
 // three themes, the dashboard accent sweep for dashboard, its states (plus
-// account/diagnostics/logs hints), and no dev panel. --only dev is the dev
-// panel alone.
+// the Settings account, diagnostics and logs states), and no dev panel.
+// --only dev is the dev panel alone.
 function buildPlan(only) {
   const plan = [];
   const wanted = (screen) => !only || only === screen;

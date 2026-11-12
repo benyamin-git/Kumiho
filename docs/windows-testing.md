@@ -602,7 +602,7 @@ guide is [docs/gui.md](gui.md); `<physical>` comes from section 8, and section
 > ([docs/gui-feature-inventory.md](gui-feature-inventory.md), line 515)
 > describes a hidden page that runs the installer when the daemon is
 > unreachable; it is **not** part of v0.3.0 and does not ship (`router.js`
-> registers only the six rails plus `onboarding`). Do not test it. A first-run
+> registers only the five rails plus `onboarding`). Do not test it. A first-run
 > user (`onboarded = false`) is pinned to the wizard, so the Diagnostics
 > service **Start**/**Stop** buttons — the only in-app service recovery — are
 > unreachable until setup completes; recover a stopped `kumiho` service during
@@ -725,7 +725,7 @@ never persisted).
   (`Off`/`Connected`/`Proxy only`/`Connecting`/`Reconnecting`/`Waiting for
   network`/`Not signed in`/`Error`, or `Loading...`/`Daemon unreachable`/
   `Status unavailable`); the rail lists `Dashboard`, `Locations`, `Settings`,
-  `Account`, `Logs`, `Diagnostics`.
+  `Logs`, `Diagnostics`.
 
 - [ ] Connect from the Dashboard.
 
@@ -759,38 +759,46 @@ never persisted).
 
 - [ ] Open `Locations`, and open **Options** on the Dashboard.
 
-  Expect: the Locations screen has pinned **Fastest**, **Favorites** and
-  **Recent** sections above one flat server-only list, with no country or city
-  headers, carets or expand/collapse controls. Empty pinned sections are
-  hidden. **Refresh**, **Ping all** and a **Show/Hide locked locations**
-  action are present. The search box is labelled `Search locations` and its
-  placeholder is `Country, city, server, or protocol`. Rows show a real 4:3
-  country flag, `Country · City` on line 1 and `host:port · protocols` on line
-  2, with latency or the selection check trailing, a star favorite button and
-  a **Locked** badge on locked rows. Quarantined and targetless servers are
-  absent. The Dashboard Location picker is a native select whose options are
-  text-only `Name (CC)`; a real flag beside it follows the chosen country, and
-  `Saved selection` shows a globe.
+  Expect: the Locations screen has a pinned **Fastest** row above one flat
+  server-only list, with no country or city headers, carets or expand/collapse
+  controls. **Refresh**, **Ping all**, a magnifying-glass **Search locations**
+  icon and a **Show/Hide locked locations** action are present. The search
+  field is hidden until the icon is clicked; clicking it expands the field and
+  focuses it, with the label `Search locations` and the placeholder
+  `Country, city, server, or protocol`. Rows show a real 4:3 country flag,
+  `Country · City` on line 1 and `host:port · protocols` on line 2, with
+  latency or the selection check trailing and a **Locked** badge on locked
+  rows. Quarantined and targetless servers are absent. The Dashboard Location
+  picker is a native select whose options are text-only `Name (CC)`; a real
+  flag beside it follows the chosen country, and `Saved selection` shows a
+  globe.
 
 - [ ] Exercise search and Ping all.
 
-  Expect: search matches country name/code, city name/code, hostname,
+  Expect: clicking the magnifying-glass icon reveals the search field and
+  focuses it. Search matches country name/code, city name/code, hostname,
   `host:port` and protocol names; a miss shows `No locations match the
-  filter.` while keeping the action row. Pinned sections stay visible.
+  filter.` while keeping the action row. The Fastest row stays visible.
   **Ping all** probes every visible server even while a search is active,
   streams `42 ms`/`timeout` labels without reordering rows, then switches the
   full list once to speed order when `ping_done` arrives (finite RTTs
   ascending, failures/untested last, Recommended first). A timeout counts as a
   result; a refresh resets the full list to country order and reloads fresh
   cached labels. Clicking a server row saves it (status `Location saved`)
-  **without** connecting; nothing expands. Clicking a star toggles a favorite,
-  **Clear** empties Recent, and Fastest stays disabled with `Run Ping all to
-  enable Fastest` until a fresh result exists.
+  **without** connecting; nothing expands. Fastest stays disabled with
+  `Run Ping all to enable Fastest` until a fresh result exists.
 
 ### 16.5 Settings
 
 The screen has `Kumiho app` (per-user) and `Background service` (daemon) rows
-and a **Refresh** action.
+and a **Refresh** action. Each section is a card with a header band and a
+primary-tinted outline icon.
+
+- [ ] Section chrome — `Account` (person), `Kumiho app` (sliders), `Background
+      service` (server) and `Region` (globe).
+
+  Expect: every section has its outlined icon, a header band above a hairline,
+  and its rows below; the four cards keep their order.
 
 - [ ] `Kumiho app` — appearance. **Theme** offers `Light`/`Dark`/`OLED` and
       **Accent** offers `Blue`/`Teal`/`Green`/`Orange`/`Rose`/`Violet`. Pick
@@ -947,29 +955,26 @@ and a **Refresh** action.
   Expect: no second window; the existing window is restored and focused; the
   second process exits 0.
 
-### 16.9 Account
+### 16.9 Settings → Account
 
-- [ ] Open `Account` (if you signed out earlier, sign in again from a shell
+- [ ] Open `Settings` (if you signed out earlier, sign in again from a shell
       with `kumiho login` — the wizard does not reopen after setup is
       complete).
 
-  Expect: an **Accounts** list with label/email, method, active marker, quota
-  percent and any re-auth warning; **Add account**; the **Account rotation**
-  card with an on/off switch and `Switch below (%)`; and the entitlement rows
-  `Email`, `UID`, `Subscription` (`Yes`/`No`/`Unknown`), `Quota` (e.g.
-  `38.0 GiB remaining of 512.0 GiB`), `Bandwidth` (`Limited`/`Unlimited`),
-  `Token expiry`; a **Refresh** action.
+  Expect: the first section is **Account**, with an **Accounts** list
+  (label/email, method, active marker and any re-auth warning), **Add
+  account** and a session-wide **Sign out**; the page-level **Refresh**
+  reloads the account projection. There is no entitlement card, no quota row
+  and no rotation card.
 
-- [ ] Exercise the list and rotation.
+- [ ] Exercise the list.
 
   Expect: the row menu offers **Use**, **Rename**, **Re-authenticate** and
   **Remove**; **Rename** updates the row and the shell's `kumiho accounts`
   label. **Add account** defaults to browser sign-in and shows the waiting
   card with **Redirect URL** and **Continue**; **Use password** reveals the
-  inline email/password/2FA form. Toggling
-  rotation saves immediately; `Switch below (%)` accepts 1–50 and is disabled
-  while rotation is off. Removing the only account clears the local session
-  and disconnects (without the sign-out revocation); removing one of
+  inline email/password/2FA form. Removing the only account clears the local
+  session and disconnects (without the sign-out revocation); removing one of
   several leaves the others signed in.
 
 - [ ] Sign out.
@@ -978,15 +983,14 @@ and a **Refresh** action.
   *The stored sign-in tokens are cleared and the tunnel disconnects.* /
   *Kumiho will also try to revoke its Mozilla sign-in; local sign-out
   completes offline.* — with **Cancel** focused by default. Confirm; you
-  **stay on the Account screen**:
-  every account and the entitlement card disappear and the status line reads
-  `Not signed in` (the wizard does **not** reopen, since setup is already
-  complete). To restore a session for later steps, sign in again from a shell
-  (the daemon session is shared):
+  **stay on Settings → Account**: every account row disappears and the
+  status line reads `Not signed in` (the wizard does **not** reopen, since
+  setup is already complete). To restore a session for later steps, sign in
+  again from a shell (the daemon session is shared):
 
       kumiho login
 
-  Expect: after **Refresh**, the account list and entitlement card reappear.
+  Expect: after **Refresh**, the account list reappears.
 
 ### 16.10 Uninstall and residue
 
@@ -1176,8 +1180,8 @@ the upgrade-specific lines below are then N/A — record that.
 ### 18.3 Challenge solver on/off
 
 - [ ] With `Solve challenges` on (the default), sign in and refresh the
-      Account and Locations screens. If you are signed out, run `kumiho
-      login` first.
+      Settings → Account section and the Locations screen. If you are signed
+      out, run `kumiho login` first.
 
   Expect: normal sign-in and refresh, with no challenge error. The solver
   logs `[fastly]` lines when a challenge occurred (they are warn-level, so
@@ -1206,7 +1210,7 @@ the upgrade-specific lines below are then N/A — record that.
 - [ ] If no challenge can be provoked on this network, record that explicitly
       in the v0.4.0 notes and do not claim a solver success. Still verify the
       toggle persists (leave Settings, reopen it) and that normal sign-in and
-      Account/Locations refresh work with both values.
+      Settings → Account/Locations refresh work with both values.
 
 ### 18.4 TLS split
 
@@ -1568,9 +1572,9 @@ observed unless it was.
   `quota:`, `exit ip:`, `totals:` or `rates:` lines; `False` for both token
   files (logout clears every account).
 
-- [ ] Check the GUI: `Account` shows `Not signed in` (the card is gone) and
-      `Dashboard` carries no account, quota, exit IP, totals or rates from
-      the old session. The setup wizard does not reopen.
+- [ ] Check the GUI: Settings → Account shows `Not signed in` (the account
+      rows are gone) and `Dashboard` carries no account, quota, exit IP,
+      totals or rates from the old session. The setup wizard does not reopen.
 
   Expect: as described (click **Refresh** if a screen still shows old data).
   Sign in again before the next step:

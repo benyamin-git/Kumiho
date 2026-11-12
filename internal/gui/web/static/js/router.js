@@ -5,7 +5,7 @@
  * hint through to the screen's context, and tolerates unknown hint values
  * (dialog and wizard states bind to them as T2.2–T3.4 land).
  *
- * The six rail destinations are the shell's navigation; the DOM rail in
+ * The five rail destinations are the shell's navigation; the DOM rail in
  * index.html is the single source for their ids and titles. A route to an
  * unregistered screen renders a neutral scaffold empty-state built from the
  * shared primitives, so captures and deep links already work.
@@ -47,12 +47,12 @@
  * error). A screen registered but failing to load falls back to the
  * scaffold.
  *
- * The registry entry's third argument is the screen's stylesheet path
- * (relative to the document, so the shell's per-run token segment stays
- * intact): the router links it when the screen mounts and removes it when
- * the screen unmounts, so screens never manage stylesheet elements
- * themselves and a mounted screen is exactly its own module plus its own
- * stylesheet.
+ * The registry entry's third argument is the screen's stylesheet path (or a
+ * list of them; relative to the document, so the shell's per-run token
+ * segment stays intact): the router links them when the screen mounts and
+ * removes them when the screen unmounts, so screens never manage stylesheet
+ * elements themselves and a mounted screen is exactly its own module plus
+ * its own stylesheets.
  */
 
 import { store } from "./store.js";
@@ -77,20 +77,20 @@ const OFF_RAIL_TITLES = {
   "blocked-region": "nav.blocked_region",
 };
 
-/** id -> { load: () => Promise<module>, css: string }; filled by registerScreen. */
+/** id -> { load: () => Promise<module>, css: string[] }; filled by registerScreen. */
 const loaders = new Map();
 
-/** Register a screen module loader and its stylesheet under a route id. */
+/** Register a screen module loader and its stylesheet(s) under a route id. */
 export function registerScreen(id, load, css) {
   if (!ID_RE.test(id)) throw new Error("kumiho: bad screen id " + JSON.stringify(id));
-  loaders.set(id, { load: load, css: css || "" });
+  loaders.set(id, { load: load, css: css ? [].concat(css) : [] });
 }
 
 // The screen table: one line per screen as its task lands.
 registerScreen("dashboard", () => import("./screens/dashboard.js"), "css/screens/dashboard.css");
 registerScreen("locations", () => import("./screens/locations.js"), "css/screens/locations.css");
-registerScreen("settings", () => import("./screens/settings.js"), "css/screens/settings.css");
-registerScreen("account", () => import("./screens/account.js"), "css/screens/account.css");
+registerScreen("settings", () => import("./screens/settings.js"),
+  ["css/screens/settings.css", "css/account-section.css"]);
 registerScreen("logs", () => import("./screens/logs.js"), "css/screens/logs.css");
 registerScreen("diagnostics", () => import("./screens/diagnostics.js"), "css/screens/diagnostics.css");
 registerScreen("onboarding", () => import("./screens/onboarding.js"), "css/screens/onboarding.css");
@@ -203,7 +203,7 @@ export function initRouter(opts) {
   let generation = 0;
   let current = null;
   let currentCtx = null;
-  let currentCSS = null; // the mounted screen's <link>, linked by the router
+  let currentCSS = null; // the mounted screen's <link> elements, linked by the router
   let currentRoute = null; // the effective route actually shown
 
   /**
@@ -240,18 +240,20 @@ export function initRouter(opts) {
     show(route, moveFocus);
   }
 
-  function linkScreenCSS(id, href) {
-    const link = document.createElement("link");
-    link.id = "kumiho-screen-" + id;
-    link.rel = "stylesheet";
-    link.href = href;
-    document.head.append(link);
-    currentCSS = link;
+  function linkScreenCSS(id, hrefs) {
+    currentCSS = hrefs.map(function (href, index) {
+      const link = document.createElement("link");
+      link.id = "kumiho-screen-" + id + (index ? "-" + index : "");
+      link.rel = "stylesheet";
+      link.href = href;
+      document.head.append(link);
+      return link;
+    });
   }
 
   function unlinkScreenCSS() {
     if (!currentCSS) return;
-    currentCSS.remove();
+    for (const link of currentCSS) link.remove();
     currentCSS = null;
   }
 

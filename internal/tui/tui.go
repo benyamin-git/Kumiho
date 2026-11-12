@@ -262,20 +262,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(fetchStatus(m.client), fetchLocations(m.client, false))
 		}
 		return m, fetchStatus(m.client)
-	case favoriteDoneMsg:
-		if msg.err != nil {
-			m.notice = "favorite failed: " + msg.err.Error()
-		} else {
-			m.notice = "favorite updated"
-		}
-		return m, fetchLocations(m.client, false)
-	case clearRecentsDoneMsg:
-		if msg.err != nil {
-			m.notice = "clear recents failed: " + msg.err.Error()
-			return m, fetchLocations(m.client, false)
-		}
-		m.notice = "recents cleared"
-		return m, nil
 	case lockedDoneMsg:
 		if msg.err != nil {
 			m.notice = "locked locations failed: " + msg.err.Error()

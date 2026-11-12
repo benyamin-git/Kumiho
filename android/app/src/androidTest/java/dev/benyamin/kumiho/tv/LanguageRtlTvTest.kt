@@ -87,7 +87,6 @@ class LanguageRtlTvTest : TvTestBase() {
                             nav = remember { ShellNavigation() },
                             home = {},
                             locations = {},
-                            account = {},
                             settings = {},
                             logs = {},
                             diagnostics = {},

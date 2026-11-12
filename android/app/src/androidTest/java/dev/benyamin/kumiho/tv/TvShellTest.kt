@@ -29,7 +29,7 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The TV shell: the five rail items are reachable, tabs swap the content slot,
+ * The TV shell: the four rail items are reachable, tabs swap the content slot,
  * More opens the TV page rather than a sheet, Logs opens its slot, and Back
  * walks More -> tab. TV only; skipped on a phone emulator.
  */
@@ -45,7 +45,6 @@ class TvShellTest {
                     nav = ShellNavigation(),
                     home = { Screen("home") },
                     locations = { Screen("locations") },
-                    account = { Screen("account") },
                     settings = { Screen("settings") },
                     logs = { Screen("logs") },
                     diagnostics = { Screen("diagnostics") },
@@ -74,8 +73,6 @@ class TvShellTest {
         rule.onNodeWithTag(tvRailTag(Destination.Locations)).performClick()
         rule.onNodeWithTag("locations").assertIsDisplayed()
 
-        rule.onNodeWithTag(tvRailTag(Destination.Account)).performClick()
-        rule.onNodeWithTag("account").assertIsDisplayed()
         rule.onNodeWithTag(tvRailTag(Destination.Settings)).performClick()
         rule.onNodeWithTag("settings").assertIsDisplayed()
         rule.onNodeWithTag(tvRailTag(Destination.Home)).performClick()

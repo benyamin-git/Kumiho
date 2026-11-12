@@ -2,9 +2,14 @@ package dev.benyamin.kumiho.ui
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,13 +25,16 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.benyamin.kumiho.diagnostics.AndroidFacts
 import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.AccountSummary
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.DoctorCheck
 import dev.benyamin.kumiho.engine.DoctorReport
 import dev.benyamin.kumiho.engine.DoctorStatus
 import dev.benyamin.kumiho.engine.LogEntry
 import dev.benyamin.kumiho.engine.LogLevel
 import dev.benyamin.kumiho.ui.account.AccountActions
-import dev.benyamin.kumiho.ui.account.AccountScreen
+import dev.benyamin.kumiho.ui.account.AccountSection
+import dev.benyamin.kumiho.ui.account.AccountSectionDialogs
 import dev.benyamin.kumiho.ui.account.AccountUiState
 import dev.benyamin.kumiho.ui.diagnostics.DiagnosticsActions
 import dev.benyamin.kumiho.ui.diagnostics.DiagnosticsScreen
@@ -36,7 +44,9 @@ import dev.benyamin.kumiho.ui.logs.LogFilterLevel
 import dev.benyamin.kumiho.ui.logs.LogsActions
 import dev.benyamin.kumiho.ui.logs.LogsScreen
 import dev.benyamin.kumiho.ui.logs.LogsUiState
+import dev.benyamin.kumiho.ui.shell.Destination
 import dev.benyamin.kumiho.ui.shell.MoreSheet
+import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
@@ -90,13 +100,15 @@ class T15ScreenshotsTest {
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     when (scene) {
-                        Scene.ACCOUNT_SIGNED_IN -> AccountScreen(
-                            state = AccountUiState(loading = false, account = ACCOUNT),
-                            actions = accountActions(),
+                        Scene.ACCOUNT_SIGNED_IN -> AccountSectionShot(
+                            state = AccountUiState(
+                                loading = false,
+                                account = ACCOUNT,
+                                accounts = ACCOUNTS,
+                            ),
                         )
-                        Scene.ACCOUNT_SIGNED_OUT -> AccountScreen(
+                        Scene.ACCOUNT_SIGNED_OUT -> AccountSectionShot(
                             state = AccountUiState(loading = false, account = null),
-                            actions = accountActions(),
                         )
                         Scene.LOGS -> LogsScreen(
                             state = LogsUiState(
@@ -120,6 +132,8 @@ class T15ScreenshotsTest {
                         Scene.MORE -> MoreSheet(
                             onDismiss = {},
                             onOpen = {},
+                            // The phone sheet always carries Settings first.
+                            overflow = listOf(Destination.Settings),
                         )
                     }
                 }
@@ -205,8 +219,25 @@ class T15ScreenshotsTest {
         Scene.MORE -> "more"
     }
 
+    /**
+     * The Account section now lives inside Settings, so the T15 captures frame
+     * the section itself over the themed background.
+     */
+    @Composable
+    private fun AccountSectionShot(state: AccountUiState) {
+        val actions = accountActions()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(Dimens.Space3),
+        ) {
+            AccountSection(state = state, actions = actions)
+            AccountSectionDialogs(state = state, actions = actions)
+        }
+    }
+
     private fun accountActions() = AccountActions(
-        onRefresh = {},
         onRetry = {},
         onDismissMessage = {},
         onSubmitEmail = {},
@@ -251,6 +282,27 @@ class T15ScreenshotsTest {
             limitedBandwidth = false,
             quotaRemaining = 12L * 1024 * 1024 * 1024,
             tokenExpires = Instant.parse("2026-11-21T12:00:00Z").epochSecond,
+            error = null,
+        )
+
+        val ACCOUNTS = Accounts(
+            accounts = listOf(
+                AccountSummary(
+                    id = "a",
+                    email = "user@example.com",
+                    label = "Home",
+                    method = "browser",
+                    active = true,
+                    reauthRequired = false,
+                    lastUsedAt = 1_761_086_400L,
+                    quota = null,
+                ),
+            ),
+            active = "a",
+            rotation = false,
+            threshold = 10,
+            lastMethod = "browser",
+            notice = null,
             error = null,
         )
 

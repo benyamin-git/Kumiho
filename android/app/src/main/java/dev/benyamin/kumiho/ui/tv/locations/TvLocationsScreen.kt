@@ -18,13 +18,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,8 +83,9 @@ fun TvLocationsRoute(container: AppContainer, modifier: Modifier = Modifier) {
 }
 
 /**
- * The ten-foot location list: a search row, refresh and ping controls, the
- * saved selection and one flat list of focusable server cards.
+ * The ten-foot location list: a toolbar whose magnifying-glass action expands
+ * a search field, refresh and ping controls, the saved selection and one flat
+ * list of focusable server cards.
  */
 @Composable
 fun TvLocationsScreen(
@@ -90,10 +94,20 @@ fun TvLocationsScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val searchLabel = stringResource(R.string.locations_search_label)
     val firstFocus = remember { FocusRequester() }
     val listScroll = rememberScrollState()
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    val searchVisible = searchOpen || state.query.isNotEmpty()
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) searchFocus.requestFocus()
+    }
+    LaunchedEffect(state.query) {
+        if (state.query.isNotEmpty()) searchOpen = true
+    }
     LaunchedEffect(state.rows.firstOrNull()?.key, state.listResetToken) {
-        if (state.rows.isNotEmpty()) {
+        if (state.rows.isNotEmpty() && !searchVisible) {
             runCatching { firstFocus.requestFocus() }
         }
     }
@@ -110,17 +124,40 @@ fun TvLocationsScreen(
         verticalArrangement = Arrangement.spacedBy(TvDimens.Space1),
     ) {
         TvPageHeader(title = stringResource(R.string.tv_locations_title))
-        SearchField(
-            query = state.query,
-            onQueryChange = actions.onQueryChange,
-            onClear = actions.onClearQuery,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (searchVisible) {
+            SearchField(
+                query = state.query,
+                onQueryChange = actions.onQueryChange,
+                onClear = actions.onClearQuery,
+                focusRequester = searchFocus,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (!searchVisible) {
+                TvFocusableSurface(
+                    onClick = { searchOpen = true },
+                    modifier = Modifier
+                        .size(TvDimens.MinTarget)
+                        .testTag(LocationsTags.SEARCH_TOGGLE)
+                        .semantics {
+                            contentDescription = searchLabel
+                        },
+                    shape = MaterialTheme.shapes.small,
+                    containerColor = colors.surfaceVariant,
+                    contentPadding = 0.dp,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = colors.onSurface,
+                    )
+                }
+            }
             TvButton(
                 label = stringResource(R.string.locations_refresh),
                 onClick = actions.onRefresh,
@@ -239,48 +276,6 @@ fun TvLocationsScreen(
                         enabled = state.canSelectFastest,
                         onSelect = actions.onSelectFastest,
                     )
-                    if (sections.favorites.isNotEmpty()) {
-                        TvSectionHeading(stringResource(R.string.locations_favorites))
-                        sections.favorites.forEach { row ->
-                            ServerRow(
-                                row = row,
-                                latency = state.latencyOf(row),
-                                selected = state.isSelected(row.country, row.city, row.server),
-                                saving = state.isSaving(row.server),
-                                favorite = true,
-                                onSelect = actions.onSelect,
-                                onFavorite = { actions.onToggleFavorite(row) },
-                            )
-                        }
-                    }
-                    if (sections.recents.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(TvDimens.Space1),
-                        ) {
-                            TvSectionHeading(
-                                text = stringResource(R.string.locations_recent),
-                                modifier = Modifier.weight(1f),
-                            )
-                            TvButton(
-                                label = stringResource(R.string.locations_clear_recents),
-                                onClick = actions.onClearRecents,
-                                modifier = Modifier.testTag(LocationsTags.CLEAR_RECENTS),
-                            )
-                        }
-                        sections.recents.forEach { row ->
-                            ServerRow(
-                                row = row,
-                                latency = state.latencyOf(row),
-                                selected = state.isSelected(row.country, row.city, row.server),
-                                saving = state.isSaving(row.server),
-                                favorite = state.isFavorite(row),
-                                onSelect = actions.onSelect,
-                                onFavorite = { actions.onToggleFavorite(row) },
-                            )
-                        }
-                    }
                     TvSectionHeading(stringResource(R.string.locations_full_list))
                     sections.rows.forEachIndexed { index, row ->
                         ServerRow(
@@ -288,9 +283,7 @@ fun TvLocationsScreen(
                             latency = state.latencyOf(row),
                             selected = state.isSelected(row.country, row.city, row.server),
                             saving = state.isSaving(row.server),
-                            favorite = state.isFavorite(row),
                             onSelect = actions.onSelect,
-                            onFavorite = { actions.onToggleFavorite(row) },
                             modifier = if (index == 0) {
                                 Modifier.focusRequester(firstFocus)
                             } else {
@@ -321,6 +314,7 @@ private fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val house = LocalKumihoColors.current
@@ -352,6 +346,7 @@ private fun SearchField(
             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
             modifier = modifier
                 .heightIn(min = 64.dp)
+                .focusRequester(focusRequester)
                 .testTag(LocationsTags.SEARCH),
         )
     }
@@ -384,8 +379,8 @@ private fun SelectionSummary(state: LocationsState) {
                 CountryFlags.Flag(
                     code = selection.countryCode,
                     recommended = selection.recommended,
-                    width = 20.dp,
-                    height = 15.dp,
+                    width = 24.dp,
+                    height = 18.dp,
                 )
             }
             Text(
@@ -436,8 +431,8 @@ private fun FastestRow(
                 CountryFlags.Flag(
                     code = fastest.row.country.code,
                     recommended = LocationTree.isRecommended(fastest.row.country),
-                    width = 32.dp,
-                    height = 24.dp,
+                    width = 48.dp,
+                    height = 36.dp,
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -476,10 +471,8 @@ private fun FastestRow(
 }
 
 /**
- * One server in the ten-foot list, drawn as a house card. The row body and the
- * trailing star are two separate focus targets: D-pad right reaches the star
- * without selecting. The body and star share the card's outline so only the
- * focus ring is drawn inside it.
+ * One server in the ten-foot list, drawn as a house card. The whole card is a
+ * single focus target; the focus ring is drawn inside its outline.
  */
 @Composable
 private fun ServerRow(
@@ -487,18 +480,12 @@ private fun ServerRow(
     latency: LatencyState,
     selected: Boolean,
     saving: Boolean,
-    favorite: Boolean,
     onSelect: (dev.benyamin.kumiho.engine.Country, City, Server) -> Unit,
-    onFavorite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     val shape = MaterialTheme.shapes.medium
     val title = locationTitle(row)
-    val favoriteDescription = stringResource(
-        if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
-        title,
-    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -534,8 +521,8 @@ private fun ServerRow(
                 CountryFlags.Flag(
                     code = row.country.code,
                     recommended = LocationTree.isRecommended(row.country),
-                    width = 32.dp,
-                    height = 24.dp,
+                    width = 48.dp,
+                    height = 36.dp,
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -595,28 +582,6 @@ private fun ServerRow(
                     }
                 }
             }
-        }
-        TvFocusableSurface(
-            onClick = onFavorite,
-            enabled = !saving,
-            shape = shape,
-            containerColor = Color.Transparent,
-            restingBorder = false,
-            contentPadding = 0.dp,
-            modifier = Modifier
-                .size(TvDimens.MinTarget)
-                .semantics {
-                    contentDescription = favoriteDescription
-                    this.selected = favorite
-                }
-                .testTag(LocationsTags.favorite(row)),
-        ) {
-            Icon(
-                imageVector = if (favorite) Icons.Filled.Star else Icons.Outlined.Star,
-                contentDescription = null,
-                tint = if (favorite) colors.primary else colors.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
-            )
         }
     }
 }

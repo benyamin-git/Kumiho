@@ -1,8 +1,10 @@
-/* The Settings screen (inventory §Settings): the `Kumiho app` rows (theme,
- * accent, start at login, and the version row's manual update check per
- * D9/A3) above the nineteen `Background service` rows with their
- * immediate-vs-next-connect tooltips, `overridden` marks and Reset buttons,
- * the Refresh action row, and the status line.
+/* The Settings screen (inventory §Settings): the Account section (account
+ * management, Add account and the session-wide sign-out, mounted from
+ * js/account-section.js) first, then the `Kumiho app` rows (theme, accent,
+ * start at login, and the version row's manual update check per D9/A3) above
+ * the nineteen `Background service` rows with their immediate-vs-next-connect
+ * tooltips, `overridden` marks and Reset buttons, the Refresh action row, and
+ * the status line.
  *
  * Everything renders from the store's state envelopes (the controller
  * projection); actions go through the transport and the screen re-renders
@@ -50,13 +52,15 @@
  * draws a scrollbar, the wheel moves it three rows per notch, and Tab moves
  * focus through every row and brings it into view.
  *
- * The router links css/screens/settings.css from the registry entry.
+ * The router links css/screens/settings.css and css/account-section.css from
+ * the registry entry.
  */
 
 // The mutation guard's settle (the dashboard/locations T2.2 pattern): a
 // change whose completion evidence repeats byte-for-byte stops blocking
 // after this long.
 import { t, currentLanguage, setLanguage, formatNumber, noticeText } from "../i18n.js";
+import accountSection from "../account-section.js";
 
 const SETTLE_MS = 3000;
 
@@ -160,8 +164,50 @@ function el(tag, className, text) {
   return node;
 }
 
-function heading(text) {
-  return el("h2", "set__heading", text);
+// Outline section icons: account, app preferences, daemon service, region.
+const ICON_NS = "http://www.w3.org/2000/svg";
+const SECTION_ICONS = {
+  account: [
+    ["circle", { cx: "12", cy: "8", r: "4" }],
+    ["path", { d: "M4 21v-1a8 8 0 0 1 16 0v1" }],
+  ],
+  app: [
+    ["path", { d: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" }],
+  ],
+  service: [
+    ["rect", { x: "3", y: "4", width: "18", height: "7", rx: "2" }],
+    ["rect", { x: "3", y: "13", width: "18", height: "7", rx: "2" }],
+    ["path", { d: "M7 7.5h.01M7 16.5h.01" }],
+  ],
+  region: [
+    ["circle", { cx: "12", cy: "12", r: "9" }],
+    ["path", { d: "M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" }],
+  ],
+};
+
+function sectionIcon(name) {
+  const svg = document.createElementNS(ICON_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.classList.add("set__heading-icon");
+  for (const [tag, attrs] of SECTION_ICONS[name] || []) {
+    const node = document.createElementNS(ICON_NS, tag);
+    for (const key in attrs) node.setAttribute(key, attrs[key]);
+    svg.append(node);
+  }
+  return svg;
+}
+
+function heading(text, icon) {
+  const h = el("h2", "set__heading");
+  h.append(sectionIcon(icon), el("span", "set__heading-text", text));
+  return h;
 }
 
 /** "#rgb"/"#rrggbb"/"rgb(…)" to [r, g, b], or null. */
@@ -451,8 +497,15 @@ function build(host, handlers) {
   const pane = el("div", "set__rows");
   pane.hidden = true;
 
+  const accountGroup = el("div", "set__section set__account");
+  accountGroup.append(heading(t("settings.group.account"), "account"));
+  const accountHost = el("div", "set__account-body set__body");
+  accountGroup.append(accountHost);
+
   const appSection = el("div", "set__section");
-  appSection.append(heading(t("settings.group.app")));
+  appSection.append(heading(t("settings.group.app"), "app"));
+  const appBody = el("div", "set__body");
+  appSection.append(appBody);
 
   // Language row: the same three-option control as onboarding, first in the
   // Kumiho app group.
@@ -463,19 +516,19 @@ function build(host, handlers) {
   const languageControl = el("div", "set__language");
   languageControl.append(language.group, languageNote);
   const languageRow = appRow(t("onboarding.language.label"), t("settings.language.hint"), languageControl);
-  appSection.append(languageRow.row);
+  appBody.append(languageRow.row);
 
   // Theme row.
   const theme = choiceGroup(t("settings.theme.label"),
     THEME_OPTIONS.map(function (option) { return [option[0], t(option[1])]; }), handlers.onTheme);
   const themeRow = appRow(t("settings.theme.label"), t("settings.theme.hint"), theme.group);
-  appSection.append(themeRow.row);
+  appBody.append(themeRow.row);
 
   // Accent row.
   const accent = choiceGroup(t("settings.accent.label"),
     ACCENT_OPTIONS.map(function (option) { return [option[0], t(option[1])]; }), handlers.onAccent);
   const accentRow = appRow(t("settings.accent.label"), t("settings.accent.hint"), accent.group);
-  appSection.append(accentRow.row);
+  appBody.append(accentRow.row);
 
   // Start at login row.
   const autostart = el("button", "button button--tonal set__toggle", t("common.on"));
@@ -486,7 +539,7 @@ function build(host, handlers) {
     t("settings.autostart.hint"),
     autostart
   );
-  appSection.append(autostartRow.row);
+  appBody.append(autostartRow.row);
 
   // Version and the manual update check (D9).
   const version = el("span", "set__version");
@@ -506,11 +559,13 @@ function build(host, handlers) {
     t("settings.version.hint"),
     updateArea
   );
-  appSection.append(versionRow.row);
+  appBody.append(versionRow.row);
 
   // The Background service rows in the inventory's canonical order.
   const serviceSection = el("div", "set__section");
-  serviceSection.append(heading(t("settings.group.service")));
+  serviceSection.append(heading(t("settings.group.service"), "service"));
+  const serviceBody = el("div", "set__body");
+  serviceSection.append(serviceBody);
   const serviceRows = [];
   for (const spec of SERVICE_ROWS) {
     const labelText = t(settingKey(spec.key, "label"));
@@ -559,7 +614,7 @@ function build(host, handlers) {
     entry.mark = mark;
     entry.reset = reset;
     row.append(label, area, mark, reset);
-    serviceSection.append(row);
+    serviceBody.append(row);
     serviceRows.push(entry);
   }
 
@@ -670,10 +725,12 @@ function build(host, handlers) {
   guideRow.append(guideLabel, guideArea);
 
   const regionSection = el("div", "set__section");
-  regionSection.append(heading(t("settings.group.region")));
-  regionSection.append(guideRow, regionRow, relayRow, tokenRow, testRow);
+  regionSection.append(heading(t("settings.group.region"), "region"));
+  const regionBody = el("div", "set__body");
+  regionBody.append(guideRow, regionRow, relayRow, tokenRow, testRow);
+  regionSection.append(regionBody);
 
-  pane.append(appSection, serviceSection, regionSection);
+  pane.append(accountGroup, appSection, serviceSection, regionSection);
 
   const status = el("p", "set__status");
   status.setAttribute("aria-live", "polite");
@@ -689,6 +746,7 @@ function build(host, handlers) {
     root: root,
     refresh: refresh,
     pane: pane,
+    accountHost: accountHost,
     themeButtons: theme.buttons,
     accentButtons: accent.buttons,
     languageButtons: language.buttons,
@@ -1176,6 +1234,10 @@ export default {
 
     const ui = build(host, handlers);
 
+    // The Account section owns its own store subscription, account dialogs and
+    // browser flow; Settings only gives it a slot and its lifecycle.
+    accountSection.mount(ui.accountHost, ctx);
+
     // Refresh restores every row's stored value (the walk screen's rule):
     // re-sync from the last known snapshot immediately, then ask for a fresh
     // one.
@@ -1183,6 +1245,7 @@ export default {
       view.settingsMark = null;
       render();
       run("settings_get", {});
+      accountSection.refresh();
     }
 
     // The rows pane's deliberate scrolling: three rows per notch, small
@@ -1206,6 +1269,7 @@ export default {
 
     cleanup = function () {
       unsubscribe();
+      accountSection.unmount();
       clearTimeout(view.busyTimer);
       clearTimeout(view.updateTimer);
     };

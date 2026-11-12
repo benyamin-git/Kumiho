@@ -232,27 +232,23 @@ Global CLI mechanics (apply to every subcommand):
   must spawn the CLI elevated (UAC) or a new privileged `cleanup` request must
   be added.
 
-## `kumiho locations [--ping] [--refresh] [--json] [--favorites] [--recent]`
+## `kumiho locations [--ping] [--refresh] [--json]`
 - Invocation examples: `kumiho locations`, `kumiho locations --ping --refresh`,
-  `kumiho locations --favorites --recent`, `kumiho locations --json`.
+  `kumiho locations --json`.
 - Daemon required (`locations` request; daemon caches the list for 30 min and
   a failed refresh falls back to the cache).
 - `--refresh`: force re-fetch from Remote Settings. `--json`: prints the full
   `LocationsResult` object (indent 2, not wrapped): `countries`, `favorites`,
   `recents`, `latency` (`{"host:port":{"rtt_ms":N|null,"measured_at":...}}`)
-  and `allow_locked`; omitted empty arrays/maps use `omitempty`.
+  and `allow_locked`; omitted empty arrays/maps use `omitempty`. The engine
+  still reports `favorites` and `recents` for protocol compatibility, but no
+  current client surfaces them.
 - Default summary: an optional first line `fastest: CC CITY host:port · N ms`
   when a fresh finite RTT exists, then one country line
-  `%-4s %-22s %d cities` with a leading `*` for a favorite country or `~` for
-  a recent one. Example: `REC  Recommended Location  3 cities`.
-- `--favorites` and `--recent`: print only those resolved rows, unioned and
-  deduplicated by address, in favorites/country order then recents/newest
-  order. Each row is `marker CC CITY host:port rtt` with `-`, `timeout` or
-  `N ms`. The star/clock markers remain `*` and `~`.
-- `--ping`: pings every usable visible server (or only the selected
-  favorites/recents when those flags are present), sends one `ping` request,
-  then waits for the daemon's `ping_done` event; it does not use a fixed
-  window. Per target it prints `... N ms`, `... unreachable` (nil RTT) or
+  `  %-4s %-22s %d cities`. Example: `  REC  Recommended Location  3 cities`.
+- `--ping`: pings every usable server, sends one `ping` request, then
+  waits for the daemon's `ping_done` event; it does not use a fixed window.
+  Per target it prints `... N ms`, `... unreachable` (nil RTT) or
   `... no result` (no event), in target order. With `--json`, after
   `ping_done` it refetches and prints the updated full object.
 - Exit: 0 success; 1 daemon/list/decode/ping failure or a `ping_done` error;
@@ -407,43 +403,36 @@ the password flow. Steps in the password flow are `email` → `password` → `2f
   new account on completion; only an in-flight flow blocks a second start.
 
 ## Locations screen
-Shows pinned **Fastest**, **Favorites**, **Recent** and the full flat
-server-only list. There are no country or city header rows, carets or
-expansion state. Each row is one line:
+Shows a pinned **Fastest** row and the full flat server-only list. There are no
+country or city header rows, carets or expansion state. Each row is one line:
 `<flag> CC · City · host:port` (Recommended is `★ REC · host:port`; a normal
 row omits the city when it adds nothing), followed by `  <n> ms` in green or
 `  timeout` dimmed when pinged. A locked row also carries the word `locked`.
 There are no protocols on the row. The leading mark is `*` when the row is
-the persisted selection; after the address, `*` also marks a favorite and `~`
-a recent. `Fastest` is
-one pinned row, disabled with `Run Ping all to enable Fastest` until a fresh
-finite RTT exists; its label carries the minimum RTT. Empty Favorites/Recent
-sections are omitted. `no locations loaded` when empty; `loading locations...`
-while fetching; error line on failure. A filter line `filter: <text>_`
-appears while filtering or when a filter is set.
+the persisted selection. `Fastest` is one pinned row, disabled with
+`Run Ping all to enable Fastest` until a fresh finite RTT exists; its label
+carries the minimum RTT. `no locations loaded`
+when empty; `loading locations...` while fetching; error line on failure. A
+filter line `filter: <text>_` appears while filtering or when a filter is set.
 
 Keys:
 - arrows / `k` `j` — move the cursor over visible rows, including the pinned
-  sections.
+  Fastest row.
 - `enter` — persist the current server via `select_location` (country code,
   city code, connect target; Fastest sends `fastest: true` and resolves once)
   — **does not connect**; success notice `location saved`, failure
   `selection failed: <err>` (status refreshed either way). Selecting disabled
   Fastest is a no-op with the run-Ping-all notice.
-- `f` — toggle the cursor row as a favorite (`favorite_location`), optimistic
-  and refetched on error. Fastest and disabled rows cannot be favorited.
-- `c` — clear all recents from the Recent header (no confirmation); hidden
-  when the section is empty.
 - `L` — toggle `allow_locked`; the list refreshes and locked rows appear with
   a `locked` badge. The footer action mirrors Settings → Region.
-- `P` — Ping all: real-edge probes every usable visible server in the loaded
-  list regardless of the filter, deduped by address and skipping
+- `P` — Ping all: real-edge probes every usable server in the loaded list
+  regardless of the filter, deduped by address and skipping
   quarantined/targetless and hidden-locked records. Results stream in and
   update labels without reordering rows. The run ends on the daemon's
   `ping_done` event; with at least one result the **full list** switches once
   to speed order: finite RTTs ascending, failures and untested last,
-  Recommended first; the cursor returns to the top. Pinned sections keep
-  their order. A timeout counts as a result.
+  Recommended first; the cursor returns to the top. Fastest keeps its pinned
+  position. A timeout counts as a result.
 - `/` — filter mode: matches country name/code, city name/code, hostname,
   `host:port` or protocol name, case-insensitively; `backspace` edits, `enter`
   keeps the filter and leaves filter mode, `esc` clears the filter, `ctrl+c`
@@ -451,9 +440,9 @@ Keys:
 - `r` — force server-list refresh (`--refresh`); clears speed order and the
   cursor and returns to country order, then reloads the engine's fresh cached
   latency labels.
-- `esc` — back to Dashboard. Footer: `enter select • f favorite • c clear •
-  L locked • P ping • / filter • r refresh • esc back • ? help` (kept to the
-  100-column capture width; the help overlay lists the full names and `q`).
+- `esc` — back to Dashboard. Footer: `enter select • L locked • P ping • /
+  filter • r refresh • esc back • ? help` (kept to the 100-column capture
+  width; the help overlay lists the full names and `q`).
 - Leaving and re-entering through `o` resets speed order and the cursor.
 
 ## Settings screen
@@ -616,8 +605,8 @@ Full-screen replacement listing:
 - `global       ? help • q / ctrl+c quit`
 - `dashboard    space connect/disconnect • enter blocked-region guide • l login
   • o locations • s settings • a account • g logs • r refresh`
-- `locations    arrows/hjkl move • enter select/Fastest • f favorite • c clear
-  recents • L show/hide locked • P ping all • / filter • r refresh • esc back`
+- `locations    arrows/hjkl move • enter select/Fastest • L show/hide locked •
+  P ping all • / filter • r refresh • esc back`
 - `settings     arrows move • enter change/test relay • d reset/clear • r
   refresh • esc back`
 - `logs         f follow • v level • / search • c clear • e export • esc back`
@@ -880,7 +869,8 @@ default), `edge_address=""` (resolve), `upstream_proxy=""` (direct),
 - Favorites and recents: `{country_code, city_code, server}` refs in
   `state.json`; exact server first, then the first usable server in the city;
   favorites order by country/city name and recents newest first, deduped, max
-  five. Shared by every client; Clear recents empties the list.
+  five. The engine and protocol still support them for older clients, but no
+  current client surfaces them.
 - Selection: `select_location` persists country/city/server without
   connecting; shown as `*` in the TUI and used by the next connect (or
   auto-picked after 3 consecutive connect failures for that server). Sending

@@ -57,8 +57,6 @@ interface AccountGateway {
     suspend fun removeAccount(id: String)
 
     suspend fun renameAccount(id: String, label: String)
-
-    suspend fun setRotation(enabled: Boolean, threshold: Int)
 }
 
 /** The production gateway over the already-bound engine client. */
@@ -96,21 +94,18 @@ class EngineAccountGateway(private val engine: EngineClient) : AccountGateway {
 
     override suspend fun renameAccount(id: String, label: String) =
         engine.accountsUpdate(id, label)
-
-    override suspend fun setRotation(enabled: Boolean, threshold: Int) =
-        engine.accountsSetRotation(enabled, threshold)
 }
 
 /**
- * The Account state machine: the signed-in card, the stored account list, the
- * browser/password sign-in panes, rotation and the account actions.
+ * The Account section state machine: the stored account list, the
+ * browser/password sign-in panes and the account actions.
  *
  * It is a plain JVM state machine over [AccountGateway]; passwords and
  * verification codes live only in the composable for one submit and never
  * enter [state]. The browser redirect URL is retained only for retry prefill
- * and is cleared on success or cancel. Account-list and
- * entitlement loads run independently, so a failed entitlement lookup never
- * hides the list and a failed list read never hides the active card.
+ * and is cleared on success or cancel. The entitlement and account-list loads
+ * run independently, so a failed entitlement lookup never hides the list and a
+ * failed list read never hides the local signed-in signal.
  */
 class AccountViewModel(
     private val gateway: AccountGateway,
@@ -118,19 +113,18 @@ class AccountViewModel(
     private val openExternalBrowser: (String) -> Boolean = { false },
     private val pollIntervalMillis: Long = DEFAULT_POLL_INTERVAL_MS,
     private val browserPollIntervalMillis: Long = DEFAULT_BROWSER_POLL_INTERVAL_MS,
-    private val thresholdDebounceMillis: Long = DEFAULT_THRESHOLD_DEBOUNCE_MS,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(AccountUiState())
 
-    /** The whole screen state; the UI only reads it. */
+    /** The whole section state; the UI only reads it. */
     val state: StateFlow<AccountUiState> = mutableState.asStateFlow()
 
     private var loadJob: Job? = null
     private var pollJob: Job? = null
     private var browserJob: Job? = null
     private var actionJob: Job? = null
-    private var thresholdJob: Job? = null
-    private var resumed = true
+    private var resumed = false
+    private var firstResume = true
     private var browserAdoptionAttempted = false
 
     init {
@@ -140,7 +134,7 @@ class AccountViewModel(
 
     // ---- account ---------------------------------------------------------
 
-    /** A user-requested refresh; the last local fields stay visible on failure. */
+    /** A fresh read; Settings calls it on every resume and after each action. */
     fun refresh() {
         loadAll(refresh = true)
     }
@@ -1052,74 +1046,6 @@ class AccountViewModel(
         }
     }
 
-    // ---- rotation --------------------------------------------------------
-
-    fun setRotation(enabled: Boolean) {
-        val current = mutableState.value.accounts ?: return
-        if (mutableState.value.rotationSaving) return
-        val threshold = current.threshold.coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
-        thresholdJob?.cancel()
-        mutableState.update {
-            it.copy(
-                accounts = it.accounts?.copy(rotation = enabled),
-                rotationSaving = true,
-                message = null,
-                error = null,
-            )
-        }
-        viewModelScope.launch {
-            try {
-                gateway.setRotation(enabled, threshold)
-                reloadAccountsAfterWrite()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                mutableState.update {
-                    it.copy(
-                        rotationSaving = false,
-                        message = AccountMessage.ROTATION_FAILED,
-                        error = messageOf(error),
-                    )
-                }
-                reloadAccountsAfterWrite()
-            }
-        }
-    }
-
-    /**
-     * The UI calls this for every keystroke; only the last value in a burst is
-     * sent. The value is clamped before it reaches the engine.
-     */
-    fun setThreshold(value: Int) {
-        val current = mutableState.value.accounts ?: return
-        val clamped = value.coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
-        mutableState.update {
-            it.copy(accounts = it.accounts?.copy(threshold = clamped))
-        }
-        if (current.threshold == clamped) return
-        thresholdJob?.cancel()
-        thresholdJob = viewModelScope.launch {
-            delay(thresholdDebounceMillis)
-            val enabled = mutableState.value.accounts?.rotation ?: false
-            mutableState.update { it.copy(rotationSaving = true, message = null, error = null) }
-            try {
-                gateway.setRotation(enabled, clamped)
-                reloadAccountsAfterWrite()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                mutableState.update {
-                    it.copy(
-                        rotationSaving = false,
-                        message = AccountMessage.ROTATION_FAILED,
-                        error = messageOf(error),
-                    )
-                }
-                reloadAccountsAfterWrite()
-            }
-        }
-    }
-
     private suspend fun reloadAccountsAfterWrite() {
         try {
             val accounts = withTimeout(ACCOUNT_LIST_TIMEOUT_MS) { gateway.accountsList() }
@@ -1127,7 +1053,6 @@ class AccountViewModel(
                 it.copy(
                     accounts = accounts,
                     selectedID = accounts.active,
-                    rotationSaving = false,
                 )
             }
         } catch (cancelled: CancellationException) {
@@ -1135,7 +1060,6 @@ class AccountViewModel(
         } catch (error: Exception) {
             mutableState.update {
                 it.copy(
-                    rotationSaving = false,
                     message = AccountMessage.REFRESH_FAILED,
                     error = messageOf(error),
                 )
@@ -1215,6 +1139,13 @@ class AccountViewModel(
                 adoptBrowser()
             }
             if (shouldPollEmail()) restartEmailPolling(immediate = false)
+            // Settings reads on every resume, so a stalled view is fresh when
+            // the user comes back. The first resume follows init's own load.
+            if (firstResume) {
+                firstResume = false
+            } else {
+                refresh()
+            }
         } else {
             stopEmailPolling()
             stopBrowserPolling()
@@ -1275,9 +1206,6 @@ class AccountViewModel(
         const val BROWSER_TIMEOUT_MS = 10_000L
         const val DEFAULT_POLL_INTERVAL_MS = 3_000L
         const val DEFAULT_BROWSER_POLL_INTERVAL_MS = 1_000L
-        const val DEFAULT_THRESHOLD_DEBOUNCE_MS = 600L
-        const val MIN_THRESHOLD = 1
-        const val MAX_THRESHOLD = 50
         const val STEP_EMAIL = "email"
         const val STEP_PASSWORD = "password"
         const val STEP_2FA = "2fa"

@@ -18,6 +18,8 @@ import androidx.compose.ui.test.performTextReplacement
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.engine.Settings
+import dev.benyamin.kumiho.ui.account.AccountTags
+import dev.benyamin.kumiho.ui.shell.Destination
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.PaletteMapping
@@ -512,6 +514,21 @@ class SettingsScreenTest {
         scrollTo(SettingsTags.BYPASS_ROW)
         rule.onNodeWithTag(SettingsTags.BYPASS_ROW).assertExists()
         rule.onNodeWithTag(SettingsTags.GROUP_CONNECTION).assertDoesNotExist()
+    }
+
+    // ---- account section -------------------------------------------------
+
+    @Test
+    fun theAccountSectionLeadsSettingsAndIsNotAJourneyOfItsOwn() {
+        show()
+
+        rule.onNodeWithTag(SettingsTags.GROUP_ACCOUNT).assertExists()
+        rule.onNodeWithTag(AccountTags.SECTION).assertExists()
+        rule.onNodeWithTag(AccountTags.LOADING).assertExists()
+        assertTrue(
+            "Account is a Settings group, not a shell destination",
+            Destination.tabs.none { it.route == "account" },
+        )
     }
 
     // ---- notices and content states -------------------------------------

@@ -41,7 +41,7 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: pinned Fastest, Favorites and Recent sections above flagged server rows with search and real-edge ping times](screenshots/windows-gui/locations.png) |
+| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: a pinned Fastest row above flagged server rows with search and real-edge ping times](screenshots/windows-gui/locations.png) |
 
 ![Windows GUI settings: the Region relay controls and the background service rows](screenshots/windows-gui/settings.png)
 
@@ -51,7 +51,7 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: Fastest, Favorites and Recent sections above flagged rows, a locked badge and ping times](screenshots/linux-tui/locations.png) |
+| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: a Fastest row above flagged rows, a locked badge and ping times](screenshots/linux-tui/locations.png) |
 
 ![Linux TUI settings: the Region relay rows with their region-only hint](screenshots/linux-tui/settings.png)
 
@@ -133,7 +133,7 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 ## Features
 
 - **Your Firefox account** — password or browser sign-in, 2FA, up to five
-  accounts with labels, quota rotation and a session-wide sign-out.
+  accounts with labels and a session-wide sign-out.
 - **Mozilla's edge challenge handled** — solves the Fastly challenge and
   retries a blocked auth host; if the challenge still blocks the password
   API, the same sign-in continues in the browser instead of dead-ending.
@@ -146,8 +146,8 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
   Android; optional kill switch, split tunneling on Android, and a local SOCKS5
   proxy on every platform.
 - **Locations that make sense** — one flat server list with real country flags,
-  search, real-edge Ping all, Fastest, favorites and recents; locked rows stay
-  hidden until you reveal them.
+  search, real-edge Ping all and Fastest; locked rows stay hidden until you
+  reveal them.
 - **Strict DNS** — DNS over HTTPS inside the tunnel, with Cloudflare and Quad9
   failover; no plaintext fallback.
 - **Desktop comfort** — systemd or Windows service, a Bubble Tea TUI and CLI,

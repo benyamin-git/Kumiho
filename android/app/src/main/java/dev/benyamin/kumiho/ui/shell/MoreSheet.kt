@@ -22,9 +22,9 @@ import dev.benyamin.kumiho.ui.components.moreRouteIcon
 import dev.benyamin.kumiho.ui.theme.Dimens
 
 /**
- * The More sheet. Pages the bottom bar did not have room for sit here first, so
- * nothing becomes unreachable on a narrow phone; Logs and Diagnostics follow as
- * routes. Picking anything closes the sheet.
+ * The More sheet. Pages outside the bottom bar sit here first, so Settings is
+ * always reachable on a phone; Logs and Diagnostics follow as routes. Picking
+ * anything closes the sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

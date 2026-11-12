@@ -98,8 +98,8 @@ One APK serves phones and televisions. On a TV, Kumiho uses the same engine,
 `VpnService`, accounts, settings and split tunneling with a ten-foot Compose
 for TV shell: a left rail, a large focus ring and remote-only navigation. The
 first run is the same four steps; browser sign-in uses the same in-app WebView
-with the paste and password fallbacks, and every Settings row opens a TV-sized
-dialog.
+with the paste and password fallbacks, Settings opens on the same **Account**
+group as the phone, and every Settings row opens a TV-sized dialog.
 
 The TV launcher shows the Kumiho banner from `android:banner`, and Google TV
 can show a **Kumiho** channel with **Open Kumiho** and **Connect** cards. The
@@ -156,14 +156,15 @@ with an inline error and does not connect.
 
 ## The shell
 
-Five tabs — **Home**, **Locations**, **Account**, **Settings** and **More** —
-with a bottom bar on a phone and a navigation rail from 600 dp wide. The bottom
-bar drops **Settings**, then **Account**, into **More** when the width cannot
-show all five labels unwrapped, and marks **More** while one of those pages is
-open; the rail always shows all five. **More** is a sheet with those pages,
-then **Logs** and **Diagnostics**, which open as pages with a back arrow. Light,
-Dark and OLED themes and six accents are in Settings; the first run follows the
-system's light/dark preference, and OLED is opt-in.
+A phone has a bottom bar with **Home**, **Locations** and **More**; a
+navigation rail takes over from 600 dp wide and shows **Settings** as its own
+tab. On the phone, **Settings** always lives in the **More** sheet — at every
+width, not only when space runs out — and **More** stays marked while Settings
+is open. **More** is a sheet with **Settings**, then **Logs** and
+**Diagnostics**, which open as pages with a back arrow. Light, Dark and OLED
+themes and six accents are in Settings; the first run follows the system's
+light/dark preference, and OLED is opt-in. Account management is not a
+destination: it is the first group of Settings.
 
 ## Language and RTL
 
@@ -255,56 +256,55 @@ system dialog; a denial closes the sheet and shows the reason.
 
 ### Locations
 
-**Locations** has pinned **Fastest**, **Favorites** and **Recent** sections
-above one flat server-only list. There are no country or city header rows,
-carets or expand/collapse controls; empty Favorites/Recent sections are
-hidden. The full list puts the engine's recommended entry first, then
-countries A–Z, cities A–Z and hostnames A–Z. Every server is its own card: a
+**Locations** has a pinned **Fastest** row above one flat server-only list.
+There are no country or city header rows, carets or expand/collapse controls.
+The full list puts the engine's recommended entry first, then countries A–Z,
+cities A–Z and hostnames A–Z. Every server is its own card: a
 surface-container fill, a 1 dp hairline outline, a 12 dp radius and 8 dp
 between rows. The selected card keeps the primary tint and gains a matching
 outline plus a check; the pinned Fastest row uses the same card. The toolbar
-puts Refresh on the left and an outlined **Ping all** on the right, and each
-section heading uses the Settings group-header scale. Every row carries a real
-4:3 country flag (a red star for Recommended and a globe for an unknown code),
-the full `Country · City` on the first line and `hostname:port · protocols` on
-the second; the latency or selection check trails the row, and a separate
-48 dp star button toggles the favorite. A locked row carries a text **Locked**
-badge. A quarantined or targetless server is never listed. Refresh keeps the
-previous list on failure and offers one Retry.
+starts with a magnifying-glass **Search locations** action, then Refresh, and
+an outlined **Ping all** on the right; each section heading uses the Settings
+group-header scale. The search field stays hidden until that action is tapped;
+it then appears above the toolbar, takes focus and stays open for the visit.
+Every row carries a real 4:3 country flag (a red star for Recommended and a
+globe for an unknown code), the full `Country · City` on the first line and
+`hostname:port · protocols` on the second; the latency or selection check
+trails the row. A locked row carries a text **Locked** badge. A quarantined or
+targetless server is never listed. Refresh keeps the previous list on failure
+and offers one Retry.
 
 **Fastest** is one pinned row. Until a fresh finite cached RTT exists it says
 **Run Ping all to enable Fastest** and is disabled; afterwards it shows the
 lowest RTT. Selecting it resolves once, persists the actual server and never
-sends a placeholder address. **Favorites** are ordered by country/city;
-**Recent** is newest first, capped at five, with a **Clear** action in its
-heading. Both use the same engine state and semantics as the desktop clients,
-inside the app's own private state.
+sends a placeholder address.
 
-The toolbar is Refresh and **Ping all**; a footer action reads **Show locked
-locations** or **Hide locked locations** and writes `allow_locked`. Ping all
-opens a temporary real-edge session per visible server regardless of the
-search, deduped by address, skipping quarantined, targetless and hidden-locked
-entries; its button reads **Pinging N…** and stays disabled until the engine's
-`ping_done` event arrives (there is no timer). A measured round trip shows
-milliseconds, an unanswered probe shows **timeout**, and an untested host
-shows **—**; nothing pings on load, typing, refreshing or resuming. Results
-are cached by the engine for 30 minutes, so a fresh visit can show labels
-without a new run.
+The toolbar starts with the search action, then Refresh and **Ping all**; a
+footer action reads **Show locked locations** or **Hide locked locations** and
+writes `allow_locked`. Ping all opens a temporary real-edge session per visible
+server regardless of the search, deduped by address, skipping quarantined,
+targetless and hidden-locked entries; its button reads **Pinging N…** and stays
+disabled until the engine's `ping_done` event arrives (there is no timer). A
+measured round trip shows milliseconds, an unanswered probe shows **timeout**,
+and an untested host shows **—**; nothing pings on load, typing, refreshing or
+resuming. Results are cached by the engine for 30 minutes, so a fresh visit can
+show labels without a new run.
 
 Only a completed run with at least one result switches the **full list** to
 speed order: finite RTTs ascending, failures and untested servers last, and
-Recommended always first. Pinned sections keep their order. The order lasts
+Recommended always first. Fastest keeps its pinned position. The order lasts
 for the current visit and Refresh restores country order. A timeout counts as
 a result; a transport failure or a run with no results leaves the current
 order alone.
 
 Search matches country name/code, city name/code, server hostname,
-`host:port` and protocol names, case-insensitively. The placeholder is
-**Country, city, server, or protocol**, and the no-match card names that
-scope. The current-selection summary keeps the flag and shows
-`Country · City · host:port · protocols`, including when its server is no
-longer in the loaded list. There is no connected-location hint; the summary
-is the only current-selection display.
+`host:port` and protocol names, case-insensitively. The field starts hidden;
+the toolbar's magnifying-glass action reveals it, focuses it and leaves it open
+for the visit. The placeholder is **Country, city, server, or protocol**, and
+the no-match card names that scope. The current-selection summary keeps the
+flag and shows `Country · City · host:port · protocols`, including when its
+server is no longer in the loaded list. There is no connected-location hint;
+the summary is the only current-selection display.
 
 Selecting a row saves it for the **next** connection — the current session
 keeps its server and exit IP — so the screen says to disconnect on Home and
@@ -336,15 +336,26 @@ exactly.
 
 ## Settings
 
-Settings has five groups: **Kumiho app**, **Connection**, **Region**,
-**Android VPN** and **Advanced** (collapsed by default). The catalog is the
-desktop engine's settings, one row per key, plus two Android-owned read-only
-rows and the Region **Test relay** action; there are **25 catalog rows** (23
-engine rows, of which 22 write a setting, and the 2 Android-owned
-Always-on/lockdown rows). The Region group also links to the **Blocked
-region** guide; that link is a screen action, not a catalog row. The Kumiho
-app group also has the Split tunneling shortcut and the app-owned Keep
+Settings has six groups: **Account**, **Kumiho app**, **Connection**,
+**Region**, **Android VPN** and **Advanced** (collapsed by default). Every
+group header carries a primary-tinted icon — person, settings, power, globe,
+shield and build — beside the on-surface title. The catalog is the desktop
+engine's settings, one row per key, plus two
+Android-owned read-only rows and the Region **Test relay** action; there are
+**25 catalog rows** (23 engine rows, of which 22 write a setting, and the 2
+Android-owned Always-on/lockdown rows). The Region group also links to the
+**Blocked region** guide; that link is a screen action, not a catalog row. The
+Kumiho app group also has the Split tunneling shortcut and the app-owned Keep
 connections outside the tunnel setting.
+
+### Account
+
+The first group and the only account surface on the phone and on TV: status
+and notices, the account list with **Add**, the row overflow actions, the
+signed-out browser/password sign-in pane and **Sign out** with its
+confirmation. It shows no entitlement, quota or token facts — those stay on
+the dashboard, the widget and the Quick Settings tile. See [Account](#account)
+below.
 
 ### Kumiho app
 
@@ -624,13 +635,13 @@ proxies start and stop with the session.
 
 ## Account
 
-**Account** shows up to five accounts and the live Guardian entitlement for
-the active one. Each row carries the label/email, method, active marker,
-quota percent and a re-authentication warning. Run actions from the row
-overflow menu: **Use**, **Re-authenticate** (browser), **Rename** and
-**Remove**. **Add** offers browser sign-in (the default) or the password
-pane. When the browser opens, the waiting card offers **Open again**, an
-expandable **Paste redirect URL instead** section with a **Redirect URL**
+The **Account** group sits first in Settings, on phones and on TV; there is no
+separate Account page. It shows up to five accounts. Each row carries the
+label/email, method, active marker and a re-authentication warning. Run
+actions from the row overflow menu: **Use**, **Re-authenticate** (browser),
+**Rename** and **Remove**. **Add** offers browser sign-in (the default) or the
+password pane. When the browser opens, the waiting card offers **Open again**,
+an expandable **Paste redirect URL instead** section with a **Redirect URL**
 field and **Continue**, **Use password**, and **Cancel**; completing the flow
 updates the list automatically. The in-app WebView intercepts the redirect
 itself. If it cannot be created, the app opens the same URL in a Custom Tab
@@ -639,30 +650,31 @@ account leaves the others signed in; removing the active one selects the most
 recently used remaining account. Removing the last account clears the local
 session and disconnects without calling **Sign out**: it does not ask Firefox
 Accounts to revoke the tokens and does not clear the WebView cookies. Use
-**Sign out** when you want that revocation.
+**Sign out** when you want that revocation. The section re-reads the account
+state whenever Settings resumes and after every action, with a 35-second
+timeout; a failure keeps the last known rows and shows a notice instead.
 
 On the first start after upgrading from v0.6.0, accounts created by the old
-opaque browser sign-in are removed and the Account screen shows **“Old browser
+opaque browser sign-in are removed and the Account group shows **“Old browser
 sign-in removed. Add your Firefox account again.”** Password accounts and
 settings are untouched.
 
-The **Account rotation** card controls the same `account_rotation` and
-`rotation_threshold` settings mirrored in Settings → Connection. Rotation is
-off by default, runs before the next connect and never mid-session; the
-threshold is 1–50% (default 10) and is disabled while rotation is off.
-Threshold edits are debounced and saved through `accounts_set_rotation`.
+The group carries no entitlement or quota card; the dashboard, the widget and
+the Quick Settings tile keep their quota display, and the remaining engine
+fields stay available to the CLI and TUI. `account_rotation` and
+`rotation_threshold` are engine settings and live in Settings → Connection.
+Rotation is off by default, runs before the next connect and never
+mid-session; the threshold is 1–50% (default 10) and is disabled while
+rotation is off.
 
-The entitlement card shows email, UID, subscription, quota remaining and
-limit, bandwidth (limited or unlimited) and token expiry. **Refresh** re-reads
-it with a 35-second timeout; on failure the last known fields stay visible
-with a notice. **Sign out** asks for confirmation, clears every account and
-the token files, asks Firefox Accounts to revoke the stored refresh tokens
-(best effort, with a short timeout), disconnects the tunnel and leaves you on
-Account in the signed-out state, where the browser/password sign-in pane lets
-you sign back in. An offline or failed revocation never blocks the local
-sign-out, and the app also clears the in-app WebView's Firefox Accounts
-cookies. Sign-out does not delete your Firefox Account; you can sign in again
-at any time. Removing one account leaves the others signed in.
+**Sign out** asks for confirmation, clears every account and the token files,
+asks Firefox Accounts to revoke the stored refresh tokens (best effort, with a
+short timeout) and disconnects the tunnel. An offline or failed revocation
+never blocks the local sign-out, and the app also clears the in-app WebView's
+Firefox Accounts cookies. Sign-out does not delete your Firefox Account; the
+group stays in place in its signed-out state, where the browser/password
+sign-in pane lets you sign back in at any time. Removing one account leaves
+the others signed in.
 
 ## Logs
 
@@ -862,7 +874,7 @@ path when you expect a captcha.
 
 `adb uninstall dev.benyamin.kumiho` (or Settings → Apps → Kumiho → Uninstall)
 removes the app and all of its private state — tokens, relay token, settings,
-logs, cached server list, favorites/recents and split selection. A debug build
+logs, cached server list and split selection. A debug build
 is
 `dev.benyamin.kumiho.debug` and is removed separately. If you used Always-on
 or lockdown, turn them off in Android's VPN settings first: an uninstalled VPN
@@ -910,16 +922,16 @@ sign-off has happened.
 |---|---|
 | Setup wizard | Four-step setup: consent, sign-in, permissions, Always-on |
 | FxA browser sign-in (captcha/TOTP/unblock) and password fallback | Full-screen in-app **Mozilla account** WebView with redirect interception, plus paste and native Compose password/2FA over the same engine |
-| Multiple accounts, labels, rotation and quota | Account list/add/rename/remove/re-auth plus the rotation card and Settings mirror |
-| Logout | Account confirmation, `logout`, clears every account and stays on Account |
+| Multiple accounts and labels | Settings → Account list/add/rename/remove/re-auth; rotation stays in Settings → Connection |
+| Logout | Settings → Account confirmation, `logout`, clears every account; the signed-out group offers browser and password sign-in |
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
 | Status rows | Power hero, four data cards and Details |
-| Locations flat server list, refresh, search and Ping all | Fastest/Favorites/Recent pinned sections, card rows with rounded selection, real flags, live search, real-edge ping with `ping_done` completion, deferred speed order, locked footer |
+| Locations flat server list, refresh, search and Ping all | Fastest pinned row, card rows with rounded selection, real flags, live search, real-edge ping with `ping_done` completion, deferred speed order, locked footer |
 | Control-plane relay, HTTP 451 handling and `allow_locked` | Region settings (URL, write-only token, Test relay) and the Locations locked footer |
 | Desktop runtime settings, overrides/reset | Settings groups with 23 engine rows (22 writes and the Test relay action) and the 2 Android-owned rows, override chips and Reset |
 | Theme/accent/update check | App settings and a manual GitHub release check |
-| Account entitlement and sign-out | Account screen |
+| Account sign-in and sign-out | Settings → Account group (phone and TV) |
 | Logs: 2000 lines, filter/follow/search/clear/export | Logs screen, share sheet and a log file |
 | Diagnostics: doctor, copy, cleanup | Diagnostics with Android facts, Copy all and Reset local state |
 | Tray/lifecycle/window | Foreground service, notification, Quick Settings tile, Always-on |

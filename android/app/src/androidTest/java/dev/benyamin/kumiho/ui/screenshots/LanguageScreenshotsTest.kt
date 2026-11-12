@@ -23,6 +23,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.diagnostics.AndroidFacts
 import dev.benyamin.kumiho.engine.Account
+import dev.benyamin.kumiho.engine.AccountSummary
+import dev.benyamin.kumiho.engine.Accounts
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.engine.City
@@ -39,7 +41,7 @@ import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.engine.Settings
 import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.ui.account.AccountActions
-import dev.benyamin.kumiho.ui.account.AccountScreen
+import dev.benyamin.kumiho.ui.account.AccountSectionUi
 import dev.benyamin.kumiho.ui.account.AccountUiState
 import dev.benyamin.kumiho.ui.dashboard.DashboardActions
 import dev.benyamin.kumiho.ui.dashboard.DashboardPhase
@@ -96,7 +98,6 @@ class LanguageScreenshotsTest {
         DASHBOARD,
         LOCATIONS,
         SETTINGS,
-        ACCOUNT,
         LOGS,
         DIAGNOSTICS,
     }
@@ -146,15 +147,7 @@ class LanguageScreenshotsTest {
                                 state = settingsState(),
                                 appState = appState(),
                                 actions = settingsActions(),
-                            )
-                        },
-                    )
-                    Scene.ACCOUNT -> Shell(
-                        state = ShellNavState(tab = Destination.Account),
-                        content = {
-                            AccountScreen(
-                                state = AccountUiState(loading = false, account = ACCOUNT),
-                                actions = accountActions(),
+                                account = accountSection(),
                             )
                         },
                     )
@@ -205,7 +198,6 @@ class LanguageScreenshotsTest {
             onBack = { false },
             home = content,
             locations = content,
-            account = content,
             settings = content,
             logs = content,
             diagnostics = content,
@@ -368,8 +360,12 @@ class LanguageScreenshotsTest {
         onOpenSplitTunneling = {},
     )
 
+    private fun accountSection() = AccountSectionUi(
+        state = AccountUiState(loading = false, account = ACCOUNT, accounts = ACCOUNTS),
+        actions = accountActions(),
+    )
+
     private fun accountActions() = AccountActions(
-        onRefresh = {},
         onRetry = {},
         onDismissMessage = {},
         onSubmitEmail = {},
@@ -444,6 +440,27 @@ class LanguageScreenshotsTest {
             limitedBandwidth = false,
             quotaRemaining = 12L * 1024 * 1024 * 1024,
             tokenExpires = Instant.parse("2026-11-21T12:00:00Z").epochSecond,
+            error = null,
+        )
+
+        val ACCOUNTS = Accounts(
+            accounts = listOf(
+                AccountSummary(
+                    id = "a",
+                    email = "user@example.com",
+                    label = "Home",
+                    method = "browser",
+                    active = true,
+                    reauthRequired = false,
+                    lastUsedAt = 1_761_086_400L,
+                    quota = null,
+                ),
+            ),
+            active = "a",
+            rotation = false,
+            threshold = 10,
+            lastMethod = "browser",
+            notice = null,
             error = null,
         )
 

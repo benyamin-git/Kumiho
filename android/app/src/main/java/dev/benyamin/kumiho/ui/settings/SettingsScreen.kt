@@ -67,10 +67,15 @@ import dev.benyamin.kumiho.data.BypassError
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.go.mobile.Mobile
 import dev.benyamin.kumiho.permissions.PermissionController
+import dev.benyamin.kumiho.ui.account.AccountSection
+import dev.benyamin.kumiho.ui.account.AccountSectionDialogs
+import dev.benyamin.kumiho.ui.account.AccountSectionUi
+import dev.benyamin.kumiho.ui.account.rememberAccountSection
 import dev.benyamin.kumiho.ui.components.KumihoErrorState
 import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.components.KumihoLoadingState
 import dev.benyamin.kumiho.ui.components.StatusTone
+import dev.benyamin.kumiho.ui.components.settingsGroupIcon
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.KumihoAccent
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
@@ -94,8 +99,19 @@ import kotlinx.coroutines.withContext
 fun SettingsRoute(
     container: AppContainer,
     modifier: Modifier = Modifier,
-    content: @Composable (SettingsState, SettingsAppState, SettingsActions) -> Unit = { state, appState, actions ->
-        SettingsScreen(state = state, appState = appState, actions = actions, modifier = modifier)
+    content: @Composable (
+        SettingsState,
+        SettingsAppState,
+        SettingsActions,
+        AccountSectionUi,
+    ) -> Unit = { state, appState, actions, account ->
+        SettingsScreen(
+            state = state,
+            appState = appState,
+            actions = actions,
+            account = account,
+            modifier = modifier,
+        )
     },
     splitContent: @Composable (onBack: () -> Unit) -> Unit = { onBack ->
         SplitTunnelRoute(container = container, onBack = onBack, modifier = modifier)
@@ -247,7 +263,8 @@ fun SettingsRoute(
         onOpenSplitTunneling = { splitOpen = true },
         onOpenGuide = container.guide::open,
     )
-    content(state, appState, actions)
+    val account = rememberAccountSection(container)
+    content(state, appState, actions, account)
 }
 
 /**
@@ -275,20 +292,22 @@ private fun Context.batteryOptimization(): BatteryOptimization {
 
 /**
  * The stateless Settings screen: notices, a compact engine status when there is
- * no snapshot, then one grouped list. All nineteen engine keys are reachable
- * exactly once, Advanced starts collapsed, and the kill-switch/autoconnect rows
- * show Android's own state.
+ * no snapshot, then one grouped list. The Account group comes first and stays
+ * usable without an engine snapshot; every engine key is reachable exactly
+ * once, Advanced starts collapsed, and the kill-switch/autoconnect rows show
+ * Android's own state.
  *
- * The app section and those Android-owned rows do not read the engine snapshot,
- * so they stay usable while the engine settings load or fail; only the engine
- * groups wait for a snapshot. A Compose test renders it from fake state and
- * asserts callbacks instead.
+ * The app section, the Account group and those Android-owned rows do not read
+ * the engine snapshot, so they stay usable while the engine settings load or
+ * fail; only the engine groups wait for a snapshot. A Compose test renders it
+ * from fake state and asserts callbacks instead.
  */
 @Composable
 fun SettingsScreen(
     state: SettingsState,
     appState: SettingsAppState,
     actions: SettingsActions,
+    account: AccountSectionUi = AccountSectionUi(),
     modifier: Modifier = Modifier,
 ) {
     var editing by remember { mutableStateOf<SettingSpec?>(null) }
@@ -335,6 +354,7 @@ fun SettingsScreen(
                 state = state,
                 appState = appState,
                 actions = actions,
+                account = account,
                 onEdit = { spec ->
                     actions.onClearError(spec.key)
                     editing = spec
@@ -342,6 +362,8 @@ fun SettingsScreen(
             )
         }
     }
+
+    AccountSectionDialogs(state = account.state, actions = account.actions)
 
     editing?.let { spec ->
         SettingEditorDialog(
@@ -365,6 +387,7 @@ private fun SettingsList(
     state: SettingsState,
     appState: SettingsAppState,
     actions: SettingsActions,
+    account: AccountSectionUi,
     onEdit: (SettingSpec) -> Unit,
 ) {
     LazyColumn(
@@ -373,6 +396,16 @@ private fun SettingsList(
             .testTag(SettingsTags.LIST),
         contentPadding = PaddingValues(bottom = Dimens.Space6),
     ) {
+        item(key = "header_account") {
+            GroupHeader(R.string.settings_group_account, SettingsTags.GROUP_ACCOUNT)
+        }
+        item(key = "account_section") {
+            AccountSection(
+                state = account.state,
+                actions = account.actions,
+                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
+            )
+        }
         item(key = "header_app") {
             GroupHeader(R.string.settings_group_app, SettingsTags.GROUP_APP)
         }
@@ -692,21 +725,34 @@ private fun BypassNotice(
 
 @Composable
 private fun GroupHeader(titleRes: Int, tag: String) {
-    Text(
-        text = stringResource(titleRes),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
                 start = Dimens.ScreenPadding,
                 end = Dimens.ScreenPadding,
                 top = Dimens.Space5,
-                bottom = Dimens.Space1,
-            )
-            .semantics { heading() }
-            .testTag(tag),
-    )
+                bottom = Dimens.Space2,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
+    ) {
+        Icon(
+            painter = settingsGroupIcon(tag),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = stringResource(titleRes),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() }
+                .testTag(tag),
+        )
+    }
 }
 
 /** The one collapsible group: the whole header is the 48dp target. */
@@ -728,6 +774,12 @@ private fun AdvancedHeader(expanded: Boolean, onToggle: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
         ) {
+            Icon(
+                painter = settingsGroupIcon(SettingsTags.GROUP_ADVANCED),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.settings_group_advanced),

@@ -6,8 +6,6 @@ import dev.benyamin.kumiho.engine.LoginState
 import dev.benyamin.kumiho.test.MainDispatcherRule
 import dev.benyamin.kumiho.ui.setup.SignInPhase
 import java.time.Instant
-import java.time.ZoneId
-import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -55,28 +53,6 @@ class AccountStateTest {
         assertEquals(null, AccountFormat.onlineError(account(error = "not signed in")))
         assertEquals(null, AccountFormat.onlineError(account(error = "  ")))
         assertEquals("guardian refused", AccountFormat.onlineError(account(error = "guardian refused")))
-    }
-
-    @Test
-    fun `quota and expiry render only what the engine reported`() {
-        val missing = account(maxBytes = null, quotaRemaining = null, tokenExpires = 0L)
-
-        assertNull(AccountFormat.quota(missing))
-        assertNull(AccountFormat.tokenExpiry(missing))
-        assertEquals(
-            "1.0 GiB remaining of 2.0 GiB",
-            AccountFormat.quota(account(maxBytes = 2L * 1024 * 1024 * 1024, quotaRemaining = 1024L * 1024 * 1024)),
-        )
-        assertEquals(
-            "21 Nov 2026",
-            AccountFormat.tokenExpiry(
-                account(tokenExpires = TOKEN_EXPIRY),
-                ZoneId.of("UTC"),
-                Locale.UK,
-            ),
-        )
-        assertTrue(AccountFormat.bandwidthLimited(account(limitedBandwidth = true)))
-        assertFalse(AccountFormat.bandwidthLimited(missing))
     }
 
     // ---- initial load ----------------------------------------------------
@@ -372,8 +348,6 @@ class AccountStateTest {
         override suspend fun removeAccount(id: String) = Unit
 
         override suspend fun renameAccount(id: String, label: String) = Unit
-
-        override suspend fun setRotation(enabled: Boolean, threshold: Int) = Unit
     }
 
     private companion object {

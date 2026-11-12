@@ -151,7 +151,8 @@ object SettingsCatalog {
             kind = SettingKind.BOOLEAN,
             labelRes = R.string.settings_label_account_rotation,
             hintRes = R.string.settings_hint_account_rotation,
-            // The Account screen is the primary surface; this is the mirror.
+            // Rotation is configured only here; the Account section shows no
+            // rotation controls (the Android app has no quota card).
             applyTiming = ApplyTiming.NEXT_CONNECT,
         ),
         SettingSpec(

@@ -381,12 +381,12 @@ func TestLocationsFooterAndHelp(t *testing.T) {
 	if !strings.Contains(view, "pinging 35 servers...") {
 		t.Fatalf("ping count footer missing:\n%s", view)
 	}
-	if !strings.Contains(view, "enter select • f favorite • c clear • L locked • P ping • / filter • r refresh • esc back • ? help") {
+	if !strings.Contains(view, "enter select • L locked • P ping • / filter • r refresh • esc back • ? help") {
 		t.Fatalf("locations footer missing:\n%s", view)
 	}
 	help := &strings.Builder{}
 	m.renderHelp(help)
-	if !strings.Contains(help.String(), "locations    arrows/hjkl move • enter select/Fastest • f favorite • c clear recents • L show/hide locked • P ping all • / filter • r refresh • esc back") {
+	if !strings.Contains(help.String(), "locations    arrows/hjkl move • enter select/Fastest • L show/hide locked • P ping all • / filter • r refresh • esc back") {
 		t.Fatalf("locations help line missing:\n%s", help.String())
 	}
 	for _, gone := range []string{"expand/select", "ping shown", "expand/collapse"} {

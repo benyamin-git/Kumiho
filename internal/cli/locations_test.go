@@ -46,7 +46,7 @@ func cliLocationsResult() api.LocationsResult {
 	}
 }
 
-func TestLocationsSummaryMarkersAndFastest(t *testing.T) {
+func TestLocationsSummaryAndFastest(t *testing.T) {
 	var out bytes.Buffer
 	writeCountrySummary(&out, cliLocationsResult())
 	text := out.String()
@@ -54,42 +54,16 @@ func TestLocationsSummaryMarkersAndFastest(t *testing.T) {
 		t.Fatalf("fastest line missing:\n%s", text)
 	}
 	for _, want := range []string{
-		"~ REC",
-		"* DE",
-		"* AR",
+		"  REC",
+		"  DE",
+		"  AR",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("summary missing %q:\n%s", want, text)
 		}
 	}
-}
-
-func TestLocationsSelectedRowsUnionAndRTT(t *testing.T) {
-	res := cliLocationsResult()
-	rows := selectedRows(res, true, true)
-	var out bytes.Buffer
-	writeLocationRows(&out, rows, res.Latency)
-	text := out.String()
-	want := []string{
-		"* DE   FRA    fra1.example.net:2499                         12 ms",
-		"* AR   EZE    eze.example.net:2499                          4 ms",
-		"~ DE   FRA    fra2.example.net:2499                         timeout",
-		"~ REC  p      p.example.net:2499                            -",
-	}
-	for _, line := range want {
-		if !strings.Contains(text, line) {
-			t.Fatalf("rows missing %q:\n%s", line, text)
-		}
-	}
-	if strings.Count(text, "fra1.example.net:2499") != 1 || strings.Count(text, "eze.example.net:2499") != 1 {
-		t.Fatalf("union was not deduped:\n%s", text)
-	}
-
-	out.Reset()
-	rows = selectedRows(res, false, true)
-	writeLocationRows(&out, rows, res.Latency)
-	if strings.Contains(out.String(), "* DE") || !strings.Contains(out.String(), "~ DE") {
-		t.Fatalf("recent-only markers:\n%s", out.String())
+	if strings.ContainsAny(text, "*~") {
+		t.Fatalf("summary still carries location markers:\n%s", text)
 	}
 }
 
@@ -120,7 +94,7 @@ func TestLocationsJSONEncodesWholeResult(t *testing.T) {
 	}
 }
 
-func TestLocationsPingUsesSelectedHostsAndOrdersResults(t *testing.T) {
+func TestLocationsPingUsesAllHostsAndOrdersResults(t *testing.T) {
 	var pingHosts []string
 	client := startFakeCLI(t, func(conn *ipc.Conn, env *ipc.Envelope) error {
 		switch env.Type {
@@ -143,18 +117,18 @@ func TestLocationsPingUsesSelectedHostsAndOrdersResults(t *testing.T) {
 		return nil
 	})
 	var out, errOut bytes.Buffer
-	code := locationsWithClient(context.Background(), client, locationsOptions{ping: true, favorites: true}, &out, &errOut)
+	code := locationsWithClient(context.Background(), client, locationsOptions{ping: true}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, errOut.String())
 	}
-	if strings.Join(pingHosts, ",") != "fra1.example.net:2499,eze.example.net:2499" {
+	if strings.Join(pingHosts, ",") != "p.example.net:2499,fra1.example.net:2499,fra2.example.net:2499,eze.example.net:2499" {
 		t.Fatalf("ping hosts = %v", pingHosts)
 	}
 	text := out.String()
 	if strings.Index(text, "fra1.example.net:2499") > strings.Index(text, "eze.example.net:2499") {
 		t.Fatalf("results not in target order:\n%s", text)
 	}
-	if !strings.Contains(text, "unreachable") || !strings.Contains(text, "9 ms") {
+	if !strings.Contains(text, "unreachable") || !strings.Contains(text, "9 ms") || !strings.Contains(text, "no result") {
 		t.Fatalf("ping rows:\n%s", text)
 	}
 }

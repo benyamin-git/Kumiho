@@ -1,10 +1,10 @@
-/* Account screen (T3.1). Consumes the shell's primitives (button, card,
- * dialog) and the injected colour roles; geometry, type and spacing come
- * from tokens.css. No literal colours (ban 9), logical properties only
- * (ban 10), no shadows (ban 7). The card follows the dashboard's data column
- * and 36px row metric with the inventory's 140-unit label column; the dialog
- * is the app.css house pattern (16px radius, actions grouped, destructive
- * confirm in the loss colour). */
+/* Account section of Settings (formerly the Account screen). Consumes the
+ * shell's primitives (button, card, dialog) and the injected colour roles;
+ * geometry, type and spacing come from tokens.css. No literal colours (ban
+ * 9), logical properties only (ban 10), no shadows (ban 7). The dialog is the
+ * app.css house pattern (16px radius, actions grouped, destructive confirm in
+ * the loss colour). Firefox removed the quota, so the entitlement and rotation
+ * cards are gone; account management and sign-out remain. */
 
 .acct {
   display: flex;
@@ -14,8 +14,23 @@
   max-inline-size: 720px;
 }
 
+/* Inside the Settings section the section itself is the surface: flatten the
+ * old screen's nested cards. */
+.set__account-body .acct {
+  max-inline-size: none;
+}
+
+.set__account-body .acct__list,
+.set__account-body .acct__waiting,
+.set__account-body .acct__addform {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 /* The hidden attribute must beat every author display rule inside the
- * screen (.button is inline-flex, .acct__card is grid, the card cells are
+ * screen (.button is inline-flex, .acct__list is flex, the card cells are
  * flex). */
 .acct [hidden] {
   display: none;
@@ -27,52 +42,6 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.acct__refresh {
-  min-inline-size: 110px;
-}
-
-/* ------------------------------------------------------------ status card */
-
-.acct__card {
-  display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
-}
-
-.acct__card dt {
-  display: flex;
-  align-items: center;
-  min-block-size: var(--row-h);
-  color: var(--text-muted);
-}
-
-.acct__card dd {
-  display: flex;
-  align-items: center;
-  min-block-size: var(--row-h);
-  min-inline-size: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-/* Tone is enhancement only; the value text carries the meaning. */
-.acct__value[data-tone="good"] {
-  color: var(--profit);
-}
-
-.acct__value[data-tone="warn"] {
-  color: var(--warning);
-}
-
-.acct__value[data-tone="bad"] {
-  color: var(--loss);
-}
-
-/* Plan names, dates and the quota sentence may mix Latin identifiers with
- * Persian copy; isolate the value without changing its row alignment. */
-.acct__value {
-  unicode-bidi: isolate;
 }
 
 /* ---------------------------------------------------------------- sign out */
@@ -214,11 +183,6 @@
   text-align: end;
 }
 
-.acct__quota {
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
 .acct__method {
   color: var(--text-muted);
   font-size: var(--text-xs);
@@ -343,38 +307,6 @@
 .acct__form-status {
   color: var(--loss);
   font-size: var(--text-sm);
-}
-
-/* --------------------------------------------------------- rotation */
-
-.acct__rotation {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.acct__rotation-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.acct__rotation-title {
-  font-size: var(--text-md);
-}
-
-.acct__rotation-body {
-  max-inline-size: var(--content-measure);
-  color: var(--text-muted);
-}
-
-.acct__rotation .field {
-  max-inline-size: 180px;
-}
-
-.acct__toggle {
-  min-inline-size: 72px;
 }
 
 /* --------------------------------------------------------- add dialog */

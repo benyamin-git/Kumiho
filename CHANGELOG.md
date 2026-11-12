@@ -8,6 +8,40 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Account management lives in Settings.** The Windows GUI and the Android
+  phone/TV app drop the separate Account destination; the account list
+  (label/email, method, active marker, re-authentication warning), Add account,
+  Use, Rename, Re-authenticate, Remove and the session-wide Sign out now sit at
+  the top of Settings. Signing out keeps its confirmation dialog, and a
+  signed-out session can still add an account through browser or password
+  sign-in.
+- **Quota UI removed.** Firefox no longer caps the VPN at 50 GB, so the
+  entitlement card (email, UID, subscription, quota, bandwidth, token expiry),
+  the per-row quota and the quota-rotation card are gone from the GUI and
+  Android account surfaces. The engine and protocol still expose those fields
+  to the CLI and TUI.
+- **Locations simplified.** The Windows GUI, Android phone/TV, TUI and CLI
+  drop favorite stars, the Favorites and Recent sections, Clear recents, the
+  `--favorites`/`--recent` flags and the `*`/`~` markers. Locations keeps
+  search, Refresh, Ping all, Fastest, the locked-row controls and real flags.
+  The engine and protocol still expose favorites and recents for older
+  clients.
+- **Compact Locations search.** The Windows GUI and Android phone/TV replace
+  the always-visible search box with a magnifying-glass action that expands
+  and focuses the field. The TUI keeps its keyboard-only `/` filter.
+- **Sectioned Settings headers.** The Windows GUI gives each of its four
+  Settings groups a distinct header band, a hairline and a primary-tinted
+  outline icon, and more space between the cards. Android phone and TV group
+  headers gain matching primary-tinted icons.
+- **Larger country flags.** Locations flags grow to 40×30 on the Windows GUI
+  and Android phone and 48×36 on Android TV, with 24×18 flags in the summary
+  and phone picker rows, so the leading flag fills more of each location card.
+  The Android WebP assets are regenerated at their true 4:3 canvas, removing
+  the transparent top and bottom bands that left a gap inside each flag
+  border.
+
 ## [0.12.1] - 2026-11-12
 
 ### Fixed

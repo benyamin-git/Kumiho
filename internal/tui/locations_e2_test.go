@@ -20,8 +20,6 @@ type fakeTuiDaemon struct {
 	locations api.LocationsResult
 	settings  api.SettingsView
 	relay     api.RelayTestResult
-	favorites []api.FavoriteLocationPayload
-	clears    int
 	locked    []api.SettingsSetPayload
 	selected  []api.SelectLocationPayload
 	ping      []string
@@ -34,8 +32,6 @@ func (d *fakeTuiDaemon) snapshot() fakeTuiDaemon {
 		locations: d.locations,
 		settings:  d.settings,
 		relay:     d.relay,
-		favorites: append([]api.FavoriteLocationPayload(nil), d.favorites...),
-		clears:    d.clears,
 		locked:    append([]api.SettingsSetPayload(nil), d.locked...),
 		selected:  append([]api.SelectLocationPayload(nil), d.selected...),
 		ping:      append([]string(nil), d.ping...),
@@ -107,34 +103,6 @@ func startFakeTuiDaemon(t *testing.T) (*ipc.Client, *fakeTuiDaemon) {
 				}
 				daemon.mu.Unlock()
 				_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
-			case ipc.TypeFavoriteLocation:
-				var p api.FavoriteLocationPayload
-				if err := env.DecodePayload(&p); err != nil {
-					_ = conn.Reply(env.ID, ipc.TypeError, api.RemoteError{Code: api.CodeBadRequest, Message: err.Error()})
-					continue
-				}
-				daemon.mu.Lock()
-				daemon.favorites = append(daemon.favorites, p)
-				ref := api.LocationRef{CountryCode: p.CountryCode, CityCode: p.CityCode, Server: p.Server}
-				if p.Favorite {
-					daemon.locations.Favorites = append(daemon.locations.Favorites, ref)
-				} else {
-					out := daemon.locations.Favorites[:0]
-					for _, existing := range daemon.locations.Favorites {
-						if existing.Server != p.Server {
-							out = append(out, existing)
-						}
-					}
-					daemon.locations.Favorites = out
-				}
-				daemon.mu.Unlock()
-				_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
-			case ipc.TypeClearRecents:
-				daemon.mu.Lock()
-				daemon.clears++
-				daemon.locations.Recents = nil
-				daemon.mu.Unlock()
-				_ = conn.Reply(env.ID, ipc.TypeResult, api.Result{OK: true})
 			case ipc.TypeSelectLocation:
 				var p api.SelectLocationPayload
 				if err := env.DecodePayload(&p); err != nil {
@@ -189,21 +157,8 @@ func tuiLocationsResult() api.LocationsResult {
 	}
 }
 
-func addFavoriteRefs(t *testing.T, m *Model) {
-	t.Helper()
-	m.loc.favorites = []api.LocationRef{
-		{CountryCode: "DE", CityCode: "FRA", Server: "fra1.example.net:443"},
-		{CountryCode: "REC", CityCode: "rec", Server: "p.m1.fastly-masque.net:2499"},
-	}
-	m.loc.recents = []api.LocationRef{
-		{CountryCode: "US", CityCode: "NYC", Server: "a.example.net:2499"},
-		{CountryCode: "DE", CityCode: "FRA", Server: "fra1.example.net:443"},
-	}
-}
-
-func TestLocationsSectionsOrderPinnedRowsAndSharedState(t *testing.T) {
+func TestLocationsSectionsOrderFastestThenFullList(t *testing.T) {
 	m := testLocationsModel()
-	addFavoriteRefs(t, m)
 	m.loc.rtts = map[string]*float64{
 		"p.m1.fastly-masque.net:2499": floatPtr(20),
 		"fra1.example.net:443":        floatPtr(5),
@@ -219,7 +174,7 @@ func TestLocationsSectionsOrderPinnedRowsAndSharedState(t *testing.T) {
 			sections = append(sections, row.section)
 		}
 	}
-	wantSections := []locSection{sectionFastest, sectionFavorites, sectionRecent, sectionLocations}
+	wantSections := []locSection{sectionFastest, sectionLocations}
 	if len(sections) != len(wantSections) {
 		t.Fatalf("sections = %v, want %v", sections, wantSections)
 	}
@@ -228,13 +183,8 @@ func TestLocationsSectionsOrderPinnedRowsAndSharedState(t *testing.T) {
 			t.Fatalf("sections = %v, want %v", sections, wantSections)
 		}
 	}
-	for _, row := range rows {
-		if row.address == "fra1.example.net:443" && (!row.favorite || !row.recent) {
-			t.Fatalf("shared fra1 state = favorite %v recent %v", row.favorite, row.recent)
-		}
-	}
 	view := m.View()
-	for _, want := range []string{"Fastest", "Favorites", "Recent  c clear", "Locations"} {
+	for _, want := range []string{"Fastest", "Locations"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing section %q:\n%s", want, view)
 		}
@@ -244,8 +194,8 @@ func TestLocationsSectionsOrderPinnedRowsAndSharedState(t *testing.T) {
 func TestLocationsEmptySectionsAreOmitted(t *testing.T) {
 	m := testLocationsModel()
 	view := m.View()
-	if strings.Contains(view, "Favorites") || strings.Contains(view, "Recent  c clear") {
-		t.Fatalf("empty pinned sections rendered:\n%s", view)
+	if strings.Contains(view, "Favorites") || strings.Contains(view, "Recent") {
+		t.Fatalf("removed sections rendered:\n%s", view)
 	}
 	if !strings.Contains(view, "Fastest") || !strings.Contains(view, "Run Ping all to enable Fastest") {
 		t.Fatalf("disabled Fastest missing:\n%s", view)
@@ -261,18 +211,14 @@ func TestLocationsFastestDisabledIsANoop(t *testing.T) {
 	if !strings.Contains(m.notice, "Run Ping all to enable Fastest") {
 		t.Fatalf("notice = %q", m.notice)
 	}
-	if _, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")}); cmd != nil {
-		t.Fatal("Fastest must not be favorited")
-	}
 }
 
-func TestLocationsFilterOnlyFullListAndLockedRows(t *testing.T) {
+func TestLocationsFilterAndLockedRows(t *testing.T) {
 	m := testLocationsModel()
-	addFavoriteRefs(t, m)
 	m.loc.filter = "zzz"
 	view := m.View()
-	if !strings.Contains(view, "fra1.example.net:443") {
-		t.Fatalf("favorite was filtered out:\n%s", view)
+	if strings.Contains(view, "fra1.example.net:443") {
+		t.Fatalf("filtered row still rendered:\n%s", view)
 	}
 	if !strings.Contains(view, "no locations match the filter") {
 		t.Fatalf("no-match copy missing:\n%s", view)
@@ -296,9 +242,8 @@ func TestLocationsFilterOnlyFullListAndLockedRows(t *testing.T) {
 	}
 }
 
-func TestLocationsSpeedOrderOnlyReordersFullList(t *testing.T) {
+func TestLocationsSpeedOrderReordersFullList(t *testing.T) {
 	m := testLocationsModel()
-	addFavoriteRefs(t, m)
 	m.loc.rtts = map[string]*float64{
 		"p.m1.fastly-masque.net:2499": floatPtr(100),
 		"fra1.example.net:443":        floatPtr(5),
@@ -307,16 +252,6 @@ func TestLocationsSpeedOrderOnlyReordersFullList(t *testing.T) {
 	}
 	m.loc.sortSpeed = true
 	m.loc.speedOrderRTTs = m.loc.rtts
-	rows := m.locationRows()
-	var favoriteAddresses []string
-	for _, row := range rows {
-		if row.section == sectionFavorites {
-			favoriteAddresses = append(favoriteAddresses, row.address)
-		}
-	}
-	if strings.Join(favoriteAddresses, ",") != "fra1.example.net:443,p.m1.fastly-masque.net:2499" {
-		t.Fatalf("favorites reordered by speed: %v", favoriteAddresses)
-	}
 	if got := locationAddresses(m); len(got) < 2 || got[0] != "p.m1.fastly-masque.net:2499" || got[1] != "fra1.example.net:443" {
 		t.Fatalf("full list not speed ordered after REC: %v", got)
 	}
@@ -348,46 +283,13 @@ func TestLocationsPingAllWithoutCandidatesShowsNotice(t *testing.T) {
 	}
 }
 
-func TestLocationsFavoriteOptimisticAndRefetch(t *testing.T) {
+func TestLocationsLockedInverse(t *testing.T) {
 	client, daemon := startFakeTuiDaemon(t)
 	m := &Model{client: client, screen: screenLocations, loc: locationsState{countries: tuiLocationsResult().Countries}}
 	m.handleLocationsMsg(locationsMsg{result: tuiLocationsResult()})
-	m.loc.cursor = 1 // first full row: REC
-	before := len(m.loc.favorites)
-	_, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
-	if len(m.loc.favorites) != before+1 {
-		t.Fatalf("optimistic favorite count = %d, want %d", len(m.loc.favorites), before+1)
-	}
-	if cmd == nil {
-		t.Fatal("favorite should send a command")
-	}
-	runCmds(m, cmd)
-	snap := daemon.snapshot()
-	if len(snap.favorites) != 1 || !snap.favorites[0].Favorite || snap.favorites[0].Server != "p.m1.fastly-masque.net:2499" {
-		t.Fatalf("favorite payloads = %+v", snap.favorites)
-	}
-	if len(m.loc.favorites) != 1 {
-		t.Fatalf("favorites after refetch = %+v", m.loc.favorites)
-	}
-}
-
-func TestLocationsClearRecentsAndLockedInverse(t *testing.T) {
-	client, daemon := startFakeTuiDaemon(t)
-	m := &Model{client: client, screen: screenLocations, loc: locationsState{countries: tuiLocationsResult().Countries}}
-	result := tuiLocationsResult()
-	result.Recents = []api.LocationRef{{CountryCode: "US", CityCode: "NYC", Server: "a.example.net:2499"}}
-	m.handleLocationsMsg(locationsMsg{result: result})
-	_, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
-	if len(m.loc.recents) != 0 {
-		t.Fatalf("recents were not cleared locally: %+v", m.loc.recents)
-	}
-	runCmds(m, cmd)
-	if snap := daemon.snapshot(); snap.clears != 1 {
-		t.Fatalf("clear payload count = %d", snap.clears)
-	}
 
 	m.loc.allowLocked = false
-	_, cmd = m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	_, cmd := m.handleLocationsKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
 	if cmd == nil {
 		t.Fatal("L should send settings_set")
 	}

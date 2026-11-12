@@ -156,16 +156,11 @@ restores country order and reloads the engine's fresh cached labels. `kumiho
 locations --ping` is the CLI equivalent; it waits for the daemon's `ping_done`
 event rather than a fixed timeout.
 
-## A favorite or old recent location is missing
+## A location is missing
 
-Favorites and recents are refs, not copied server records. Each resolves to
-the exact server first, then to the first usable server in the same city. A
-missing row usually means Mozilla removed or quarantined that server, the city
-is gone, or a version filter now marks it locked. Turn on **Show locked
-locations** / `allow_locked` to check whether the record is only locked; clear
-recents if an old city keeps rotating in. Favorites and recents are shared
-engine state in `state.json`, so they survive restarts and appear in every
-client, but not on another device.
+A hidden row usually means Mozilla removed or quarantined that server, the
+city is gone, or a version filter now marks it locked. Turn on **Show locked
+locations** / `allow_locked` to check whether the record is only locked.
 
 ## HTTP proxy does not work
 

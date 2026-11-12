@@ -97,14 +97,6 @@ func captureLocations() locationsState {
 				}},
 			},
 		},
-		favorites: []api.LocationRef{
-			{CountryCode: "DE", CityCode: "BER", Server: "de1.edge.example:443"},
-			{CountryCode: "JP", CityCode: "TYO", Server: "jp1.edge.example:443"},
-		},
-		recents: []api.LocationRef{
-			{CountryCode: "US", CityCode: "NYC", Server: "us1.edge.example:443"},
-			{CountryCode: "DE", CityCode: "FRA", Server: "fra1.edge.example:443"},
-		},
 		allowLocked: true,
 		cursor:      0,
 		rtts: map[string]*float64{

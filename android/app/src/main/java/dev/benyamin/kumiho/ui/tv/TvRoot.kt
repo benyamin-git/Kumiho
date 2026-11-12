@@ -22,7 +22,6 @@ import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.shell.ShellNavigation
 import dev.benyamin.kumiho.ui.tv.dashboard.TvDashboardRoute
-import dev.benyamin.kumiho.ui.tv.account.TvAccountRoute
 import dev.benyamin.kumiho.ui.tv.locations.TvLocationsRoute
 import dev.benyamin.kumiho.ui.tv.settings.TvSettingsRoute
 import dev.benyamin.kumiho.ui.tv.logs.TvLogsRoute
@@ -64,7 +63,6 @@ fun TvRoot(
                 )
             },
             locations = { TvLocationsRoute(container = container) },
-            account = { TvAccountRoute(container = container) },
             settings = { TvSettingsRoute(container = container) },
             logs = { TvLogsRoute(container = container) },
             diagnostics = { TvDiagnosticsRoute(container = container) },

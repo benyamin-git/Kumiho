@@ -38,7 +38,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
   min-block-size: 0;
   overflow-y: auto;
   /* The inventory's deliberate treatment: no scrollbar look in any theme. */
@@ -50,19 +50,53 @@
 }
 
 .set__section {
+  /* The header band is the section's background, so the card's border radius
+   * clips it without overflow: hidden (which would clip the Account menus). */
+  --set-heading-block: calc(var(--text-lg) * 1.4 + var(--space-3) * 2);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background-color: var(--surface-container-1);
+  background-image: linear-gradient(
+    var(--surface-container-2),
+    var(--surface-container-2)
+  );
+  background-repeat: no-repeat;
+  background-position: top;
+  background-size: 100% var(--set-heading-block);
+}
+
+/* The header band separates the section title from its rows; the next
+ * container step gives each card a clear top edge without a shadow (ban 7). */
+.set__heading {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--set-heading-block);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--hairline);
+  /* The inventory's heading-size, bold section rows. */
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.set__heading-icon {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  color: var(--primary);
+}
+
+.set__body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-card);
-  background: var(--surface-container-1);
-}
-
-.set__heading {
-  /* The inventory's heading-size, bold section rows. */
-  font-size: var(--text-lg);
-  font-weight: 600;
 }
 
 .set__row {

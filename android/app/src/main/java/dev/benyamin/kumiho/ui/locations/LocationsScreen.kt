@@ -27,9 +27,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalFocusManager
@@ -55,7 +55,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
@@ -132,8 +131,6 @@ fun LocationsRoute(
         onDismissNotice = locationsViewModel::dismissNotice,
         onRetryNotice = locationsViewModel::retryNotice,
         onSelectFastest = locationsViewModel::selectFastest,
-        onToggleFavorite = locationsViewModel::toggleFavorite,
-        onClearRecents = locationsViewModel::clearRecents,
         onToggleLocked = locationsViewModel::toggleLocked,
     )
     content(state, actions)
@@ -150,15 +147,13 @@ data class LocationsActions(
     val onDismissNotice: () -> Unit,
     val onRetryNotice: () -> Unit,
     val onSelectFastest: () -> Unit = {},
-    val onToggleFavorite: (LocationRow) -> Unit = {},
-    val onClearRecents: () -> Unit = {},
     val onToggleLocked: () -> Unit = {},
 )
 
 /**
- * The stateless Locations screen: a pinned search field and toolbar, the
- * current selection, the notice banner and one flat server list of house
- * cards.
+ * The stateless Locations screen: a pinned toolbar that expands into a search
+ * field, the current selection, the notice banner and one flat server list of
+ * house cards.
  *
  * It makes no engine, service or Android call, so a Compose test renders it
  * from fake state. A row tap is a request, and the check mark only follows the
@@ -171,6 +166,15 @@ fun LocationsScreen(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    val searchVisible = searchOpen || state.query.isNotEmpty()
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) searchFocus.requestFocus()
+    }
+    LaunchedEffect(state.query) {
+        if (state.query.isNotEmpty()) searchOpen = true
+    }
     LaunchedEffect(state.listResetToken) {
         if (state.rows.isNotEmpty()) {
             listState.scrollToItem(0)
@@ -183,17 +187,25 @@ fun LocationsScreen(
             .imePadding()
             .testTag(LocationsTags.SCREEN),
     ) {
-        SearchField(
-            query = state.query,
-            onQueryChange = actions.onQueryChange,
-            onClear = actions.onClearQuery,
-            modifier = Modifier.padding(
-                start = Dimens.ScreenPadding,
-                end = Dimens.ScreenPadding,
-                top = Dimens.Space4,
-            ),
+        if (searchVisible) {
+            SearchField(
+                query = state.query,
+                onQueryChange = actions.onQueryChange,
+                onClear = actions.onClearQuery,
+                focusRequester = searchFocus,
+                modifier = Modifier.padding(
+                    start = Dimens.ScreenPadding,
+                    end = Dimens.ScreenPadding,
+                    top = Dimens.Space4,
+                ),
+            )
+        }
+        Toolbar(
+            state = state,
+            actions = actions,
+            showSearch = !searchVisible,
+            onSearch = { searchOpen = true },
         )
-        Toolbar(state = state, actions = actions)
         SelectionSummary(
             selection = state.selection,
             modifier = Modifier.padding(
@@ -238,6 +250,7 @@ private fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -246,6 +259,7 @@ private fun SearchField(
         onValueChange = onQueryChange,
         modifier = modifier
             .fillMaxWidth()
+            .focusRequester(focusRequester)
             .testTag(LocationsTags.SEARCH),
         label = { Text(stringResource(R.string.locations_search_label)) },
         placeholder = { Text(stringResource(R.string.locations_search_placeholder)) },
@@ -269,14 +283,38 @@ private fun SearchField(
 }
 
 @Composable
-private fun Toolbar(state: LocationsState, actions: LocationsActions) {
+private fun Toolbar(
+    state: LocationsState,
+    actions: LocationsActions,
+    showSearch: Boolean,
+    onSearch: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space1),
+            .padding(
+                start = Dimens.ScreenPadding,
+                end = Dimens.ScreenPadding,
+                top = if (showSearch) Dimens.Space4 else Dimens.Space1,
+                bottom = Dimens.Space1,
+            ),
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (showSearch) {
+            IconButton(
+                onClick = onSearch,
+                modifier = Modifier
+                    .size(Dimens.TouchTarget)
+                    .testTag(LocationsTags.SEARCH_TOGGLE),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = stringResource(R.string.locations_search_label),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         IconButton(
             onClick = actions.onRefresh,
             enabled = !state.refreshing,
@@ -358,8 +396,8 @@ private fun SelectionSummary(
                     CountryFlags.Flag(
                         code = selection.countryCode,
                         recommended = selection.recommended,
-                        width = 20.dp,
-                        height = 15.dp,
+                        width = 24.dp,
+                        height = 18.dp,
                     )
                 }
                 Text(
@@ -427,41 +465,6 @@ private fun ServerList(
                 onSelect = actions.onSelectFastest,
             )
         }
-        if (sections.favorites.isNotEmpty()) {
-            item(key = "favorites_heading") {
-                SectionHeading(
-                    text = stringResource(R.string.locations_favorites),
-                    tag = LocationsTags.FAVORITES_HEADING,
-                )
-            }
-            items(items = sections.favorites, key = { "favorite_${it.key}" }) { row ->
-                ServerRow(
-                    row = row,
-                    latency = state.latencyOf(row),
-                    selected = state.isSelected(row.country, row.city, row.server),
-                    saved = state.isSaving(row.server),
-                    favorite = true,
-                    onSelect = actions.onSelect,
-                    onFavorite = { actions.onToggleFavorite(row) },
-                )
-            }
-        }
-        if (sections.recents.isNotEmpty()) {
-            item(key = "recent_heading") {
-                RecentHeading(onClear = actions.onClearRecents)
-            }
-            items(items = sections.recents, key = { "recent_${it.key}" }) { row ->
-                ServerRow(
-                    row = row,
-                    latency = state.latencyOf(row),
-                    selected = state.isSelected(row.country, row.city, row.server),
-                    saved = state.isSaving(row.server),
-                    favorite = state.isFavorite(row),
-                    onSelect = actions.onSelect,
-                    onFavorite = { actions.onToggleFavorite(row) },
-                )
-            }
-        }
         item(key = "locations_heading") {
             SectionHeading(
                 text = stringResource(R.string.locations_full_list),
@@ -474,9 +477,7 @@ private fun ServerList(
                 latency = state.latencyOf(row),
                 selected = state.isSelected(row.country, row.city, row.server),
                 saved = state.isSaving(row.server),
-                favorite = state.isFavorite(row),
                 onSelect = actions.onSelect,
-                onFavorite = { actions.onToggleFavorite(row) },
             )
         }
         item(key = "locked_footer") {
@@ -501,34 +502,6 @@ private fun SectionHeading(text: String, tag: String? = null) {
             .semantics { heading() }
             .then(if (tag != null) Modifier.testTag(tag) else Modifier),
     )
-}
-
-@Composable
-private fun RecentHeading(onClear: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = Dimens.Space4, bottom = Dimens.Space1),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.locations_recent),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .weight(1f)
-                .semantics { heading() }
-                .testTag(LocationsTags.RECENT_HEADING),
-        )
-        TextButton(
-            onClick = onClear,
-            modifier = Modifier
-                .heightIn(min = Dimens.TouchTarget)
-                .testTag(LocationsTags.CLEAR_RECENTS),
-        ) {
-            Text(stringResource(R.string.locations_clear_recents))
-        }
-    }
 }
 
 /**
@@ -577,7 +550,7 @@ private fun FastestRow(
                     recommended = LocationTree.isRecommended(fastest.row.country),
                 )
             } else {
-                Spacer(modifier = Modifier.size(24.dp, 18.dp))
+                Spacer(modifier = Modifier.size(40.dp, 30.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -656,8 +629,8 @@ private fun LockedFooter(
 
 /**
  * One server card: the flag, the full `Country · City`, the second line
- * `hostname:port · protocols`, the locked badge, the latency/check trailing,
- * and the separate 48 dp favorite star. The row body remains single-tap.
+ * `hostname:port · protocols`, the locked badge and the latency/check trailing.
+ * The whole card is a single tap target.
  */
 @Composable
 private fun ServerRow(
@@ -665,16 +638,10 @@ private fun ServerRow(
     latency: LatencyState,
     selected: Boolean,
     saved: Boolean,
-    favorite: Boolean,
     onSelect: (Country, City, Server) -> Unit,
-    onFavorite: () -> Unit,
 ) {
     val server = row.server
     val title = locationTitle(row)
-    val favoriteDescription = stringResource(
-        if (favorite) R.string.locations_remove_favorite else R.string.locations_favorite,
-        title,
-    )
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = if (selected) {
@@ -693,113 +660,87 @@ private fun ServerRow(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = Dimens.RowHeight)
-                    .semantics(mergeDescendants = true) { this.selected = selected }
-                    .then(
-                        if (!saved) {
-                            Modifier.clickable(role = Role.Button) {
-                                onSelect(row.country, row.city, server)
-                            }
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .testTag(serverRowTag(row.country.code, row.city.code, row.address))
-                    .padding(
-                        start = Dimens.Space4,
-                        end = Dimens.Space1,
-                        top = Dimens.Space2,
-                        bottom = Dimens.Space2,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
-            ) {
-                CountryFlags.Flag(
-                    code = row.country.code,
-                    recommended = LocationTree.isRecommended(row.country),
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = row.detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (row.country.locked) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Text(
-                                text = stringResource(R.string.locations_locked),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = Dimens.RowHeight)
+                .semantics(mergeDescendants = true) { this.selected = selected }
+                .then(
+                    if (!saved) {
+                        Modifier.clickable(role = Role.Button) {
+                            onSelect(row.country, row.city, server)
                         }
-                    }
-                }
-                if (saved) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                } else {
-                    Text(
-                        text = latencyText(latency),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (selected) {
+                    } else {
+                        Modifier
+                    },
+                )
+                .testTag(serverRowTag(row.country.code, row.city.code, row.address))
+                .padding(
+                    start = Dimens.Space4,
+                    end = Dimens.Space4,
+                    top = Dimens.Space2,
+                    bottom = Dimens.Space2,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space3),
+        ) {
+            CountryFlags.Flag(
+                code = row.country.code,
+                recommended = LocationTree.isRecommended(row.country),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = row.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (row.country.locked) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Space1),
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.Check,
+                            imageVector = Icons.Filled.Lock,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.locations_locked),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             }
-            IconButton(
-                onClick = onFavorite,
-                enabled = !saved,
-                modifier = Modifier
-                    .size(Dimens.TouchTarget)
-                    .semantics {
-                        contentDescription = favoriteDescription
-                        this.selected = favorite
-                    }
-                    .testTag(LocationsTags.favorite(row)),
-            ) {
-                Icon(
-                    imageVector = if (favorite) Icons.Filled.Star else Icons.Outlined.Star,
-                    contentDescription = null,
-                    tint = if (favorite) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+            if (saved) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
                 )
+            } else {
+                Text(
+                    text = latencyText(latency),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }

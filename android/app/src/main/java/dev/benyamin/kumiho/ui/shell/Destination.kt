@@ -7,13 +7,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * The five shell destinations. Everything but More maps to a route; More opens
+ * The four shell destinations. Everything but More maps to a route; More opens
  * a sheet and has no route of its own, so its route is the empty sentinel.
  */
 enum class Destination(val route: String, @StringRes val labelRes: Int) {
     Home("home", R.string.nav_home),
     Locations("locations", R.string.nav_locations),
-    Account("account", R.string.nav_account),
     Settings("settings", R.string.nav_settings),
 
     /** A sheet trigger, never a tab and never a route: the sentinel is empty. */
@@ -21,8 +20,14 @@ enum class Destination(val route: String, @StringRes val labelRes: Int) {
     ;
 
     companion object {
-        /** The five items, in shell order. */
+        /** The four items, in shell order. */
         val tabs: List<Destination> = entries.toList()
+
+        /**
+         * The phone bottom bar. Settings always lives in the More sheet on a
+         * phone; the rail keeps it as a tab.
+         */
+        val phoneTabs: List<Destination> = listOf(Home, Locations, More)
     }
 }
 
@@ -38,27 +43,6 @@ enum class NavMode { BottomBar, Rail }
 /** The 600dp breakpoint house rule: bottom bar under it, rail at or above. */
 fun navMode(widthDp: Float): NavMode =
     if (widthDp >= 600f) NavMode.Rail else NavMode.BottomBar
-
-/** The 8dp the Material navigation bar leaves between its items. */
-private const val BarItemGapDp = 8f
-
-/** The margin a label keeps from its item's edge so it never touches. */
-private const val BarLabelMarginDp = 4f
-
-/**
- * The bottom-bar items for [widthDp] when [labelWidthDp] is the widest label and
- * every item gets an equal share of the bar: Home and Locations always stay,
- * Settings and then Account move to the More sheet as the width runs out, and
- * More is always last.
- */
-fun bottomBarTabs(widthDp: Float, labelWidthDp: Float): List<Destination> {
-    val pages = Destination.tabs - Destination.More
-    // The kept pages plus More must fit, with one gap between each pair.
-    val keep = (2..pages.size).lastOrNull { kept ->
-        (kept + 1) * (labelWidthDp + BarLabelMarginDp) + BarItemGapDp * kept <= widthDp
-    } ?: 2
-    return pages.take(keep) + Destination.More
-}
 
 /**
  * One navigation state: the selected tab plus an optional More route stacked on

@@ -66,9 +66,13 @@ rm -f "$out_dir"/flag_*.webp
 for name in "${sources[@]}"; do
 	code="${name%.svg}"
 	out="$tmp_dir/flag_$code.webp"
-	ffmpeg -nostdin -loglevel error -y -i "$source_dir/$name" \
+	# librsvg's default surface is square, so a 4:3 viewBox otherwise gets
+	# transparent top and bottom bands. Size the decoder to the final 4:3
+	# bitmap instead of scaling a letterboxed square afterwards.
+	ffmpeg -nostdin -loglevel error -y -width 192 -height 144 \
+		-i "$source_dir/$name" \
 		-map_metadata -1 -fflags +bitexact \
-		-vf 'scale=192:144:flags=lanczos' -frames:v 1 \
+		-frames:v 1 \
 		-c:v libwebp -lossless 1 -compression_level 6 "$out"
 	probe="$(ffprobe -v error -select_streams v:0 \
 		-show_entries stream=width,height,codec_name -of csv=p=0 "$out")"

@@ -26,16 +26,12 @@ type locSection int
 
 const (
 	sectionFastest locSection = iota
-	sectionFavorites
-	sectionRecent
 	sectionLocations
 )
 
 // locationsState is the Locations screen state (PLAN.md §6).
 type locationsState struct {
 	countries   []serverlist.Country
-	favorites   []api.LocationRef
-	recents     []api.LocationRef
 	allowLocked bool
 	sortSpeed   bool
 	cursor      int
@@ -64,10 +60,6 @@ type selectDoneMsg struct {
 }
 type pingFailedMsg struct{ err error }
 type pingDoneMsg struct{ done api.PingDone }
-type favoriteDoneMsg struct {
-	err error
-}
-type clearRecentsDoneMsg struct{ err error }
 type lockedDoneMsg struct {
 	on  bool
 	err error
@@ -117,29 +109,6 @@ func selectLocation(c *ipc.Client, countryCode, cityCode, server string, fastest
 	}
 }
 
-func favoriteLocation(c *ipc.Client, ref api.LocationRef, favorite bool) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_, err := c.Call(ctx, ipc.TypeFavoriteLocation, api.FavoriteLocationPayload{
-			CountryCode: ref.CountryCode,
-			CityCode:    ref.CityCode,
-			Server:      ref.Server,
-			Favorite:    favorite,
-		})
-		return favoriteDoneMsg{err: err}
-	}
-}
-
-func clearRecents(c *ipc.Client) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_, err := c.Call(ctx, ipc.TypeClearRecents, nil)
-		return clearRecentsDoneMsg{err: err}
-	}
-}
-
 func setLockedLocations(c *ipc.Client, on bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -157,9 +126,6 @@ func setLockedLocations(c *ipc.Client, on bool) tea.Cmd {
 // parent rows, so the country/city fields are only labels and search keys.
 type locRow struct {
 	section     locSection
-	ref         api.LocationRef
-	favorite    bool
-	recent      bool
 	locked      bool
 	disabled    bool
 	fastest     bool
@@ -175,7 +141,7 @@ type locRow struct {
 	search      string
 }
 
-// locationAddressKey is the shared star/clock key for duplicate records.
+// locationAddressKey is the shared duplicate-record key.
 func locationAddressKey(address string) string {
 	return strings.ToLower(strings.TrimSpace(address))
 }
@@ -184,19 +150,6 @@ func locationAddressKey(address string) string {
 // applying the filter. ConnectTarget owns the address, so a quarantined or
 // targetless record can never be listed, selected or pinged.
 func (m *Model) allLocationRows() []locRow {
-	favorites := make(map[string]bool)
-	for _, ref := range m.loc.favorites {
-		if cand, ok := resolveLocationRef(m.loc.countries, ref); ok {
-			favorites[locationAddressKey(cand.Address())] = true
-		}
-	}
-	recents := make(map[string]bool)
-	for _, ref := range m.loc.recents {
-		if cand, ok := resolveLocationRef(m.loc.countries, ref); ok {
-			recents[locationAddressKey(cand.Address())] = true
-		}
-	}
-
 	var rows []locRow
 	for _, c := range m.loc.countries {
 		if c.Locked && !m.loc.allowLocked {
@@ -224,7 +177,6 @@ func (m *Model) allLocationRows() []locRow {
 					continue
 				}
 				address := fmt.Sprintf("%s:%d", host, port)
-				key := locationAddressKey(address)
 				protocols := make([]string, 0, len(s.Protocols))
 				for _, protocol := range s.Protocols {
 					if name := strings.TrimSpace(protocol.Name); name != "" {
@@ -244,9 +196,6 @@ func (m *Model) allLocationRows() []locRow {
 				}, " ")
 				rows = append(rows, locRow{
 					section:     sectionLocations,
-					ref:         api.LocationRef{CountryCode: countryCode, CityCode: cityCode, Server: address},
-					favorite:    favorites[key],
-					recent:      recents[key],
 					locked:      c.Locked,
 					countryCode: countryCode,
 					countryName: countryName,
@@ -265,21 +214,7 @@ func (m *Model) allLocationRows() []locRow {
 	return rows
 }
 
-func resolveLocationRef(countries []serverlist.Country, ref api.LocationRef) (serverlist.Candidate, bool) {
-	candidates := serverlist.Candidates(countries, ref.CountryCode, ref.CityCode)
-	for _, cand := range candidates {
-		if cand.Address() == ref.Server || cand.Host == ref.Server {
-			return cand, true
-		}
-	}
-	if len(candidates) > 0 {
-		return candidates[0], true
-	}
-	return serverlist.Candidate{}, false
-}
-
-// fullLocationRows applies the search filter and speed order to the full tree
-// only. Pinned sections never depend on either.
+// fullLocationRows applies the search filter and speed order to the full tree.
 func (m *Model) fullLocationRows() []locRow {
 	filter := strings.ToLower(strings.TrimSpace(m.loc.filter))
 	rows := m.allLocationRows()
@@ -325,70 +260,14 @@ func (m *Model) fastestVisibleRow() (locRow, bool) {
 	return best, true
 }
 
-func (m *Model) refRows(refs []api.LocationRef, section locSection, favorite, recent bool) []locRow {
-	byAddress := make(map[string]locRow)
-	for _, row := range m.allLocationRows() {
-		key := locationAddressKey(row.address)
-		if _, ok := byAddress[key]; !ok {
-			byAddress[key] = row
-		}
-	}
-	seen := make(map[string]bool)
-	var out []locRow
-	for _, ref := range refs {
-		cand, ok := resolveLocationRef(m.loc.countries, ref)
-		if !ok {
-			continue
-		}
-		key := locationAddressKey(cand.Address())
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		row, ok := byAddress[key]
-		if !ok {
-			row = locRow{
-				countryCode: strings.ToUpper(cand.CountryCode),
-				cityCode:    strings.ToUpper(cand.CityCode),
-				host:        cand.Host,
-				port:        cand.Port,
-				address:     cand.Address(),
-			}
-		}
-		row.section = section
-		row.ref = api.LocationRef{CountryCode: cand.CountryCode, CityCode: cand.CityCode, Server: cand.Address()}
-		row.favorite = favorite || m.addressInFavorites(cand.Address())
-		row.recent = recent || m.addressInRecents(cand.Address())
-		out = append(out, row)
-	}
-	if section == sectionFavorites {
-		sort.SliceStable(out, func(i, j int) bool {
-			if out[i].countryCode != out[j].countryCode {
-				return out[i].countryCode < out[j].countryCode
-			}
-			if out[i].cityCode != out[j].cityCode {
-				return out[i].cityCode < out[j].cityCode
-			}
-			return out[i].address < out[j].address
-		})
-	}
-	return out
-}
-
 // locationRows returns the selectable rows in section order: Fastest (always
-// one row), Favorites, Recent, then the filtered/sorted full tree.
+// one row), then the filtered/sorted full tree.
 func (m *Model) locationRows() []locRow {
-	rows := make([]locRow, 0, 1+len(m.loc.favorites)+len(m.loc.recents)+len(m.loc.countries))
+	rows := make([]locRow, 0, 1+len(m.loc.countries))
 	if fastest, ok := m.fastestVisibleRow(); ok {
 		rows = append(rows, fastest)
 	} else {
 		rows = append(rows, locRow{section: sectionFastest, fastest: true, disabled: true})
-	}
-	if len(m.loc.favorites) > 0 {
-		rows = append(rows, m.refRows(m.loc.favorites, sectionFavorites, true, false)...)
-	}
-	if len(m.loc.recents) > 0 {
-		rows = append(rows, m.refRows(m.loc.recents, sectionRecent, false, true)...)
 	}
 	rows = append(rows, m.fullLocationRows()...)
 	return rows
@@ -515,51 +394,6 @@ func (m *Model) finishPing(done api.PingDone) {
 	}
 }
 
-func (m *Model) addressInFavorites(address string) bool {
-	for _, ref := range m.loc.favorites {
-		if strings.EqualFold(ref.Server, address) {
-			return true
-		}
-		if cand, ok := resolveLocationRef(m.loc.countries, ref); ok && strings.EqualFold(cand.Address(), address) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Model) addressInRecents(address string) bool {
-	for _, ref := range m.loc.recents {
-		if strings.EqualFold(ref.Server, address) {
-			return true
-		}
-		if cand, ok := resolveLocationRef(m.loc.countries, ref); ok && strings.EqualFold(cand.Address(), address) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Model) toggleLocalFavorite(row locRow, favorite bool) {
-	if favorite {
-		ref := api.LocationRef{CountryCode: row.countryCode, CityCode: row.cityCode, Server: row.address}
-		for _, existing := range m.loc.favorites {
-			if strings.EqualFold(existing.Server, row.address) {
-				return
-			}
-		}
-		m.loc.favorites = append(m.loc.favorites, ref)
-		return
-	}
-	out := m.loc.favorites[:0]
-	for _, existing := range m.loc.favorites {
-		if strings.EqualFold(existing.Server, row.address) {
-			continue
-		}
-		out = append(out, existing)
-	}
-	m.loc.favorites = out
-}
-
 func (m *Model) handleLocationsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.loc.filtering {
 		switch k.String() {
@@ -617,28 +451,6 @@ func (m *Model) handleLocationsKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.startPing(hosts)
-	case "f":
-		if len(rows) == 0 {
-			return m, nil
-		}
-		row := rows[m.loc.cursor]
-		if row.disabled {
-			m.notice = "Run Ping all to enable Fastest"
-			return m, nil
-		}
-		if row.fastest {
-			m.notice = "Fastest is not a server; select one below"
-			return m, nil
-		}
-		favorite := !row.favorite
-		m.toggleLocalFavorite(row, favorite)
-		return m, favoriteLocation(m.client, row.ref, favorite)
-	case "c":
-		if len(m.loc.recents) == 0 {
-			return m, nil
-		}
-		m.loc.recents = nil
-		return m, clearRecents(m.client)
 	case "L":
 		return m, setLockedLocations(m.client, !m.loc.allowLocked)
 	case "up", "k":
@@ -692,8 +504,6 @@ func (m *Model) handleLocationsMsg(msg locationsMsg) (tea.Model, tea.Cmd) {
 		res.Countries = msg.countries
 	}
 	m.loc.countries = res.Countries
-	m.loc.favorites = res.Favorites
-	m.loc.recents = res.Recents
 	m.loc.allowLocked = res.AllowLocked
 	m.loc.rtts = map[string]*float64{}
 	m.seedLatency(res.Latency)
@@ -707,16 +517,10 @@ func (m *Model) handleLocationsMsg(msg locationsMsg) (tea.Model, tea.Cmd) {
 }
 
 func sectionTitle(section locSection) string {
-	switch section {
-	case sectionFastest:
+	if section == sectionFastest {
 		return "Fastest"
-	case sectionFavorites:
-		return "Favorites"
-	case sectionRecent:
-		return "Recent  c clear"
-	default:
-		return "Locations"
 	}
+	return "Locations"
 }
 
 func (m *Model) renderLocations(b *strings.Builder) {
@@ -778,12 +582,6 @@ func (m *Model) renderLocations(b *strings.Builder) {
 		if row.locked {
 			suffix += dimStyle.Render("  locked")
 		}
-		if row.favorite {
-			suffix += okStyle.Render("  *")
-		}
-		if row.recent {
-			suffix += dimStyle.Render("  ~")
-		}
 		if rtt, ok := rttAt(m.loc.rtts, row.address); ok {
 			if rtt == nil {
 				suffix += dimStyle.Render("  timeout")
@@ -819,5 +617,5 @@ func (m *Model) renderLocations(b *strings.Builder) {
 	if run := m.loc.ping; run != nil {
 		fmt.Fprintln(b, dimStyle.Render(fmt.Sprintf("pinging %d servers...", run.total)))
 	}
-	fmt.Fprintln(b, dimStyle.Render("enter select • f favorite • c clear • L locked • P ping • / filter • r refresh • esc back • ? help"))
+	fmt.Fprintln(b, dimStyle.Render("enter select • L locked • P ping • / filter • r refresh • esc back • ? help"))
 }

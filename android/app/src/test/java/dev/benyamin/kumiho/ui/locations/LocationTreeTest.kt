@@ -2,7 +2,6 @@ package dev.benyamin.kumiho.ui.locations
 
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
-import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.Protocol
 import dev.benyamin.kumiho.engine.Server
 import org.junit.Assert.assertEquals
@@ -376,15 +375,7 @@ class LocationTreeTest {
     }
 
     @Test
-    fun `sections expose fastest favorites recent and the full list in order`() {
-        val favorites = listOf(
-            LocationRef("us", "sfo", WEST_ADDRESS),
-            LocationRef("us", "nyc", EDGE_ADDRESS),
-        )
-        val recents = listOf(
-            LocationRef("de", "ber", BER_ADDRESS),
-            LocationRef("us", "nyc", EDGE_ADDRESS),
-        )
+    fun `sections expose fastest and the full list in order`() {
         val latency = mapOf(
             LocationTree.addressKey(EDGE_ADDRESS) to 40.0,
             LocationTree.addressKey(SHARE_ADDRESS) to 10.0,
@@ -393,52 +384,12 @@ class LocationTreeTest {
 
         val sections = LocationTree.sections(
             countries = listOf(US, DE),
-            favorites = favorites,
-            recents = recents,
             latency = latency,
         )
 
         assertEquals(SHARE_ADDRESS, sections.fastest?.row?.address)
         assertEquals(10L, sections.fastest?.milliseconds)
-        assertEquals(
-            listOf("us/nyc/edge.example.net:2499", "us/sfo/west.example.net:443"),
-            sections.favorites.map { it.key },
-        )
-        assertEquals(
-            listOf("de/ber/ber.example.net:443", "us/nyc/edge.example.net:2499"),
-            sections.recents.map { it.key },
-        )
         assertEquals(4, sections.rows.size)
-    }
-
-    @Test
-    fun `favorite refs fall back to the first server in the city and drop when gone`() {
-        val favorite = LocationRef("US", "nyc", "gone.example.net:443")
-        val recent = LocationRef("us", "sfo", "")
-        val missing = LocationRef("xx", "gone", "gone.example.net:443")
-
-        val resolved = LocationTree.sections(
-            countries = listOf(US, DE),
-            favorites = listOf(favorite, recent, missing),
-            recents = listOf(missing),
-        )
-
-        assertEquals(
-            listOf("us/nyc/edge.example.net:2499", "us/sfo/west.example.net:443"),
-            resolved.favorites.map { it.key },
-        )
-        assertTrue(resolved.recents.isEmpty())
-        assertTrue(
-            LocationTree.isFavorite(
-                favorites = listOf(favorite),
-                row = LocationTree.rows(listOf(US)).first(),
-                countries = listOf(US),
-            ),
-        )
-        assertEquals(
-            LocationRef("us", "nyc", EDGE_ADDRESS),
-            LocationTree.refOf(LocationTree.rows(listOf(US)).first()),
-        )
     }
 
     @Test

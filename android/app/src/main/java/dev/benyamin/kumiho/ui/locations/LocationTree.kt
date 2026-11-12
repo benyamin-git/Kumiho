@@ -2,7 +2,6 @@ package dev.benyamin.kumiho.ui.locations
 
 import dev.benyamin.kumiho.engine.City
 import dev.benyamin.kumiho.engine.Country
-import dev.benyamin.kumiho.engine.LocationRef
 import dev.benyamin.kumiho.engine.Server
 import dev.benyamin.kumiho.ui.dashboard.DashboardFormat
 
@@ -135,32 +134,17 @@ object LocationTree {
     }
 
     /**
-     * The four locations sections in display order: Fastest, Favorites, Recent,
-     * then the full searchable list. Empty pinned sections stay empty; the
-     * screen omits them. Speed order applies only to the full list.
+     * The two locations sections in display order: Fastest, then the full
+     * searchable list. Speed order applies only to the full list.
      */
     fun sections(
         countries: List<Country>,
-        favorites: List<LocationRef> = emptyList(),
-        recents: List<LocationRef> = emptyList(),
         query: String = "",
         latency: Map<String, Double?> = emptyMap(),
         sortMode: LocationSortMode = LocationSortMode.COUNTRY,
         allowLocked: Boolean = false,
     ): LocationSections = LocationSections(
         fastest = fastest(countries, latency, allowLocked),
-        favorites = resolveRefs(
-            countries = countries,
-            refs = favorites,
-            allowLocked = allowLocked,
-            sorted = true,
-        ),
-        recents = resolveRefs(
-            countries = countries,
-            refs = recents,
-            allowLocked = allowLocked,
-            sorted = false,
-        ),
         rows = rows(
             countries = countries,
             query = query,
@@ -189,100 +173,6 @@ object LocationTree {
                 { addressKey(it.row.address) },
             ),
         )
-    }
-
-    /**
-     * Resolves persisted favorite/recent refs against the current visible list.
-     * The exact server wins; otherwise the city's first usable server keeps the
-     * location alive through a rotated hostname. Unresolved refs are omitted.
-     */
-    fun resolveRef(
-        countries: List<Country>,
-        ref: LocationRef,
-        allowLocked: Boolean = false,
-    ): LocationRow? {
-        val visible = countries.filter { allowLocked || !it.locked }
-        val countryCode = ref.countryCode.trim()
-        val cityCode = ref.cityCode?.trim().orEmpty()
-        val server = ref.server.trim()
-
-        val country = visible.firstOrNull { it.code.equals(countryCode, ignoreCase = true) }
-        if (server.isNotEmpty()) {
-            val exactScope = if (country != null) listOf(country) else visible
-            for (candidateCountry in exactScope) {
-                for (city in candidateCountry.cities) {
-                    for (entry in city.servers) {
-                        if (!isUsable(entry)) continue
-                        val address = connectTarget(entry) ?: continue
-                        if (address.equals(server, ignoreCase = true)) {
-                            return LocationRow(candidateCountry, city, entry, address)
-                        }
-                    }
-                }
-            }
-        }
-        if (country == null) return null
-        val cities = if (cityCode.isEmpty()) {
-            country.cities
-        } else {
-            country.cities.filter { it.code.equals(cityCode, ignoreCase = true) }
-        }
-        for (city in cities) {
-            for (entry in city.servers) {
-                if (!isUsable(entry)) continue
-                val address = connectTarget(entry) ?: continue
-                return LocationRow(country, city, entry, address)
-            }
-        }
-        return null
-    }
-
-    /** The ref a row toggles; `city_code` is absent when the city code is blank. */
-    fun refOf(row: LocationRow): LocationRef = LocationRef(
-        countryCode = row.country.code,
-        cityCode = row.city.code.trim().ifEmpty { null },
-        server = row.address,
-    )
-
-    /** Case-insensitive identity used by the optimistic star. */
-    fun sameRef(a: LocationRef, b: LocationRef): Boolean =
-        a.countryCode.equals(b.countryCode, ignoreCase = true) &&
-            a.cityCode.orEmpty().equals(b.cityCode.orEmpty(), ignoreCase = true) &&
-            a.server.equals(b.server, ignoreCase = true)
-
-    fun isFavorite(
-        favorites: List<LocationRef>,
-        row: LocationRow,
-        countries: List<Country> = emptyList(),
-        allowLocked: Boolean = false,
-    ): Boolean {
-        if (favorites.any { sameRef(it, refOf(row)) }) return true
-        if (countries.isEmpty()) return false
-        return favorites.any { ref ->
-            resolveRef(countries, ref, allowLocked)?.key == row.key
-        }
-    }
-
-    private fun resolveRefs(
-        countries: List<Country>,
-        refs: List<LocationRef>,
-        allowLocked: Boolean,
-        sorted: Boolean,
-    ): List<LocationRow> {
-        val resolved = refs.mapNotNull { resolveRef(countries, it, allowLocked) }
-        val unique = resolved.distinctBy { it.key }
-        return if (!sorted) {
-            unique
-        } else {
-            unique.sortedWith(
-                compareBy<LocationRow>(
-                    { it.countryName.lowercase() },
-                    { it.cityName.orEmpty().lowercase() },
-                    { it.server.hostname.lowercase() },
-                    { addressKey(it.address) },
-                ),
-            )
-        }
     }
 
     private fun allRows(
@@ -456,11 +346,9 @@ data class FastestLocation(
     val milliseconds: Long,
 )
 
-/** The page's pinned sections and the full list, in display order. */
+/** The page's pinned Fastest row and the full list, in display order. */
 data class LocationSections(
     val fastest: FastestLocation?,
-    val favorites: List<LocationRow>,
-    val recents: List<LocationRow>,
     val rows: List<LocationRow>,
 )
 
@@ -541,17 +429,11 @@ object LocationsTags {
     const val NO_MATCH = "locations_no_match"
     const val NO_MATCH_CLEAR = "locations_no_match_clear"
     const val FASTEST = "locations_fastest"
-    const val FAVORITES_HEADING = "locations_favorites_heading"
-    const val RECENT_HEADING = "locations_recent_heading"
-    const val CLEAR_RECENTS = "locations_clear_recents"
+    const val SEARCH_TOGGLE = "locations_search_toggle"
     const val LOCKED_TOGGLE = "locations_locked_toggle"
     const val LIST_HEADING = "locations_list_heading"
 
     const val SERVER_PREFIX = "locations_server_"
-
-    fun favorite(row: LocationRow): String =
-        "locations_favorite_" + row.countryCode + "_" + row.city.code.trim().lowercase() +
-            "_" + LocationTree.addressKey(row.address)
 }
 
 /** The tag for one server row; the address keeps its punctuation. */
