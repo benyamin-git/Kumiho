@@ -8,6 +8,22 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-12
+
+### Fixed
+
+- **Persian terminology is consistent across the GUI and Android.** Dashboard
+  rates and totals use آپلود/دانلود, the session card says اتصال, and the theme
+  and accent rows use تم/رنگ اصلی. The Persian sign-out copy now refers to a
+  browser sign-in (ورود) instead of a session (نشست).
+- **Persian popups stay localized.** Android account overflow menus and the
+  connection options and More sheets re-provide the localized context, so their
+  labels remain Persian when opened.
+- **Android settings redraw after a language switch.** The theme and language
+  segmented rows remount when the layout direction changes, so switching
+  between Persian and English no longer leaves stale corners on the theme
+  selector.
+
 ## [0.12.0] - 2026-11-11
 
 The first published build of the language and RTL release.
