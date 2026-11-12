@@ -23,14 +23,14 @@ the nearest server, and keeps the tunnel alive with an optional kill switch.
 
 | Platform | Download |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Linux-arm64.zip) |
-| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Linux-arm64.zip) |
+| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-universal.apk) |
 
 Every file is listed in
-[SHA256SUMS](https://github.com/benyamin-git/Kumiho/releases/latest/download/SHA256SUMS).
-Android is sideload-only: there is no Play Store or F-Droid build. These links
-follow the latest full release; v0.7.2 and earlier prereleases remain on the
+[SHA256SUMS-v0.12.1](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/SHA256SUMS-v0.12.1).
+Android is sideload-only: there is no Play Store or F-Droid build. v0.7.2 and
+earlier prereleases remain on the
 [releases page](https://github.com/benyamin-git/Kumiho/releases).
 
 ## Screenshots
@@ -69,13 +69,14 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v0.12.0
+## What's new in v0.12.1
 
-- **English and Persian, with a full RTL layout** — the Windows GUI and the
-  Android phone/TV app now ship in both languages, with a first-run choice,
-  Persian typography and Jalali dates. See [README.fa.md](README.fa.md).
-- **Android starts reliably** — the app no longer closes right after
-  “Starting the local engine…”.
+- **Persian UI polish** — dashboard rates and totals use آپلود/دانلود, Settings
+  uses تم and رنگ اصلی, and Persian menus and pop-up panels keep their
+  localized labels. See [README.fa.md](README.fa.md).
+- **Android settings redraw after a language switch** — the theme and language
+  segmented rows no longer keep stale corners when switching between Persian
+  and English.
 
 See the [changelog](CHANGELOG.md) for details.
 

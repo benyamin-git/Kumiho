@@ -131,9 +131,8 @@ them locally for any change under `android/`, `mobile/` or
   `README.fa.md`, release notes and handoffs) use the versioned primary names,
   never the stable aliases or an ad-hoc file share. The release description is
   built from the matching `CHANGELOG.md` section plus a download table. The
-  v0.12.0 README still uses the stable aliases and is intentionally unchanged;
-  update it with the next release. The manual checklist (including the
-  repository About panel) is [docs/releasing.md](docs/releasing.md).
+  manual checklist (including the repository About panel) is
+  [docs/releasing.md](docs/releasing.md).
 - The Android CI job and release steps are implemented and were exercised by
   the `v0.5.0` release on 2026-10-22, the `v0.5.1` release on 2026-10-23, the
   `v0.5.2` release on 2026-10-23, the `v0.6.0` release on 2026-10-24, the

@@ -6,11 +6,10 @@ builds a **draft** release. Test the draft's Android phone and TV APKs, then
 publish it manually. The workflow never publishes a release itself.
 
 From v0.12.0 onward every downloadable primary asset carries the exact release
-tag. Stable aliases stay attached for `/releases/latest` compatibility. From
-the next release onward, user-facing download links (README, `README.fa.md`,
-release notes and handoffs) use the versioned primary names, never the aliases
-or an ad-hoc file share. The v0.12.0 README still uses the stable aliases and
-is intentionally unchanged; update it with the next release.
+tag. Stable aliases stay attached for `/releases/latest` compatibility. Since
+v0.12.1, user-facing download links (README, `README.fa.md`, release notes and
+handoffs) use the versioned primary names, never the aliases or an ad-hoc file
+share.
 
 ## Before tagging
 

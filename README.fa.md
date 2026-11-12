@@ -26,15 +26,14 @@ HTTP/2 CONNECT عبور می‌دهد. Android همان موتور Go را در 
 
 | پلتفرم | دانلود |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Linux-arm64.zip) |
-| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/latest/download/Kumiho-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Linux-arm64.zip) |
+| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/Kumiho-v0.12.1-Android-universal.apk) |
 
 همهٔ فایل‌ها در
-[SHA256SUMS](https://github.com/benyamin-git/Kumiho/releases/latest/download/SHA256SUMS)
+[SHA256SUMS-v0.12.1](https://github.com/benyamin-git/Kumiho/releases/download/v0.12.1/SHA256SUMS-v0.12.1)
 فهرست شده‌اند. Android فقط به‌صورت نصب دستی (sideload) عرضه می‌شود؛ نسخه‌ای در
-Play Store یا F-Droid وجود ندارد. این پیوندها آخرین انتشار کامل را دنبال
-می‌کنند؛ نسخه‌های پیش‌انتشار v0.7.2 و پیش‌تر در
+Play Store یا F-Droid وجود ندارد. نسخه‌های پیش‌انتشار v0.7.2 و پیش‌تر در
 [صفحهٔ انتشارها](https://github.com/benyamin-git/Kumiho/releases) باقی می‌مانند.
 
 ## تصاویر
@@ -71,22 +70,14 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 | --- |
 | <img src="screenshots/fa/android-tv/home.png" width="420" alt="خانهٔ فارسی Android TV: داشبورد ده‌فوتی با فوکوس کنترل"> |
 
-## تازه‌های نسخهٔ 0.12.0
+## تازه‌های نسخهٔ 0.12.1
 
-- **فارسی و راست‌به‌چپ در Windows GUI و Android** — انتخاب زبان در نخستین
-  گام راه‌اندازی و در تنظیمات، با اعمال فوری. گزینهٔ **سیستم** فقط وقتی به
-  فارسی می‌رسد که زبان رابط سیستم‌عامل فارسی باشد.
-- **رابط کامل راست‌به‌چپ** — ریل سمت راست، ترتیب ناوبری، آیکن‌های جهت‌دار،
-  نمودارها و نوارهای پیشرفت آینه می‌شوند؛ پرچم‌ها، لوگو و دکمهٔ توان نه.
-- **تایپوگرافی و اعداد فارسی** — قلم Vazirmatn همراه برنامه است و فقط در فارسی
-  استفاده می‌شود؛ اعداد فارسی و تاریخ جلالی در مقادیر کاربری، و IP، پورت،
-  نسخه، میزبان، ایمیل، گزارش‌ها و عیب‌یابی به لاتین می‌مانند.
-- **سطوح سیستمی فارسی** — اعلان‌ها، کاشی تنظیمات سریع، ویجت‌های صفحهٔ خانه،
-  کانال Google TV و منوی tray ویندوز از زبان برنامه پیروی می‌کنند.
-- **`README.fa.md` و تصاویر فارسی** — همین فایل، با پیوند به انگلیسی به‌عنوان
-  منبع اصلی.
-- **رفع بسته‌شدن Android در آغاز راه‌اندازی** — برنامه پس از
-  «Starting the local engine…» دیگر بسته نمی‌شود.
+- **اصلاح واژه‌ها و منوهای فارسی** — نرخ‌ها و مجموع‌های داشبورد از
+  «آپلود/دانلود» استفاده می‌کنند، تنظیمات از «تم» و «رنگ اصلی»، و منوها و
+  پنجره‌های بازشو برچسب‌های فارسی خود را حفظ می‌کنند.
+- **رفع نمایش دکمه‌های تنظیمات Android پس از تغییر زبان** — ردیف‌های تم و
+  زبان هنگام جابه‌جایی بین فارسی و انگلیسی دیگر گوشه‌های قدیمی را نگه
+  نمی‌دارند.
 
 تغییرات کامل در [تاریخچهٔ تغییرات](CHANGELOG.md) آمده است.
 

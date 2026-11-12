@@ -120,8 +120,7 @@ Android TV, Windows GUI and the TUI.
   - Full releases start at v0.8.0 so `/releases/latest/download/...` works;
     v0.7.2 and earlier remain prereleases.
   - Superseded 2026-11-11: user-facing README links use the tagged primary
-    names from the next release onward (D3); stable aliases are
-    compatibility-only.
+    names from v0.12.1 onward (D3); stable aliases are compatibility-only.
 
 - [x] **C5 — Add repository badges**
   - Done: latest release, total downloads and licence badges, linked to the
@@ -178,7 +177,7 @@ Android TV, Windows GUI and the TUI.
     `scripts/android-setup.sh` now drops the cached archive and retries the
     install up to three times; the third failure still fails the job.
 
-- [ ] **D3 — Use tagged asset names in the README download tables**
+- [x] **D3 — Use tagged asset names in the README download tables**
   - Problem: the v0.12.0 `README.md` and `README.fa.md` use
     `/releases/latest/download/...` stable aliases, so a downloaded APK is
     named `Kumiho-Android-arm64-v8a.apk` without the tag. The generated release
@@ -189,6 +188,8 @@ Android TV, Windows GUI and the TUI.
     compatibility; do not advertise them or use an ad-hoc file share for the
     handoff.
   - The v0.12.0 README is intentionally unchanged per the user's request.
+  - Done 2026-11-12: both READMEs link the v0.12.1 versioned primaries and
+    `SHA256SUMS-v0.12.1`.
 
 ## Decisions captured on 2026-10-29
 
@@ -208,8 +209,7 @@ Android TV, Windows GUI and the TUI.
 
 ## Decisions captured on 2026-11-11
 
-- From the next release onward, user-facing download links use the tagged
-  asset name; stable aliases are compatibility-only and are not advertised.
+- From v0.12.1 onward, user-facing download links use the tagged asset name;
+  stable aliases are compatibility-only and are not advertised.
 - Handoffs use the tagged GitHub asset, not an ad-hoc file share.
-- The v0.12.0 README is intentionally unchanged; D3 updates it with the next
-  release.
+- The v0.12.0 README was intentionally unchanged; D3 updated it with v0.12.1.
