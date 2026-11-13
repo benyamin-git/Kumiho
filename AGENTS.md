@@ -98,7 +98,8 @@ them locally for any change under `android/`, `mobile/` or
   the connected suite; also the emulator action entry point.
 - `scripts/screenshots/capture.sh` — regenerate the README's GUI and TUI
   screenshots; builds the web harness with a release version label (default
-  `v0.9.0`), restarts it on `0.0.0.0:7407` per GUI screen, and renders the
+  `v1.0.0`, override with `KUMIHO_CAPTURE_VERSION`), restarts it on
+  `0.0.0.0:7407` per GUI screen, and renders the
   TUI captures. Noto Color Emoji is required for the flag captures. See
   `scripts/screenshots/README.md`.
 
@@ -143,10 +144,11 @@ them locally for any change under `android/`, `mobile/` or
   `v0.9.1` release on 2026-11-01, the `v0.9.2` release on 2026-11-02, the
   `v0.9.3` release on 2026-11-03, the `v0.10.0` and `v0.10.1` releases on
   2026-11-05, the `v0.10.2` release on 2026-11-06, the `v0.10.3` release on
-  2026-11-09, the `v0.11.0` and `v0.11.1` releases on 2026-11-10 and the
-  `v0.12.0` language and RTL release on 2026-11-11; each release workflow
-  uploaded the desktop and Android assets. See
-  [docs/android-testing.md](docs/android-testing.md).
+  2026-11-09, the `v0.11.0` and `v0.11.1` releases on 2026-11-10, the
+  `v0.12.0` language and RTL release on 2026-11-11, the `v0.12.1` release on
+  2026-11-12, the `v0.13.0` release on 2026-11-12 and the `v1.0.0` release on
+  2026-11-13; each release workflow uploaded the desktop and Android assets.
+  See [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
 

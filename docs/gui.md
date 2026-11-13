@@ -15,7 +15,7 @@ installing, the first-run wizard, each screen, the tray, diagnostics and
 uninstalling.
 
 > **Reading the current UI.** This guide describes the app shipping with
-> v0.13.0. The older walk-era inventory in
+> v1.0.0. The older walk-era inventory in
 > [gui-feature-inventory.md](gui-feature-inventory.md) describes an earlier
 > native build and differs in places; where they disagree, the running app is
 > authoritative.
@@ -77,7 +77,7 @@ configured even though only the GUI renders Persian.
 
 ## Installing
 
-Download `Kumiho-Windows-amd64.zip`, extract it, and run the
+Download `Kumiho-v1.0.0-Windows-amd64.zip`, extract it, and run the
 installer. For a double-click install use `install.cmd`; it self-elevates and
 passes your account to the installer. From an already-administrator PowerShell,
 run:

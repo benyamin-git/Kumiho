@@ -26,12 +26,12 @@ HTTP/2 CONNECT عبور می‌دهد. Android همان موتور Go را در 
 
 | پلتفرم | دانلود |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Linux-arm64.zip) |
-| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/Kumiho-v0.13.0-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Linux-arm64.zip) |
+| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Android-universal.apk) |
 
 همهٔ فایل‌ها در
-[SHA256SUMS-v0.13.0](https://github.com/benyamin-git/Kumiho/releases/download/v0.13.0/SHA256SUMS-v0.13.0)
+[SHA256SUMS-v1.0.0](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/SHA256SUMS-v1.0.0)
 فهرست شده‌اند. Android فقط به‌صورت نصب دستی (sideload) عرضه می‌شود؛ نسخه‌ای در
 Play Store یا F-Droid وجود ندارد. نسخه‌های پیش‌انتشار v0.7.2 و پیش‌تر در
 [صفحهٔ انتشارها](https://github.com/benyamin-git/Kumiho/releases) باقی می‌مانند.
@@ -62,7 +62,7 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 
 | داشبورد | تنظیمات |
 | --- | --- |
-| <img src="screenshots/fa/android-phone/dashboard.png" width="260" alt="داشبورد فارسی Android: تونل متصل با مکان، IP خروجی و مجموع اتصال"> | <img src="screenshots/fa/android-phone/settings.png" width="260" alt="تنظیمات فارسی Android: ردیف زبان و کارت‌های برنامه و سیستم"> |
+| <img src="screenshots/fa/android-phone/dashboard.png" width="260" alt="داشبورد فارسی Android: تونل متصل با مکان، IP خروجی و مجموع اتصال"> | <img src="screenshots/fa/android-phone/settings.png" width="260" alt="تنظیمات فارسی Android: کارت حساب، ردیف زبان و کارت برنامه"> |
 
 ### Android TV
 
@@ -70,14 +70,18 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 | --- |
 | <img src="screenshots/fa/android-tv/home.png" width="420" alt="خانهٔ فارسی Android TV: داشبورد ده‌فوتی با فوکوس کنترل"> |
 
-## تازه‌های نسخهٔ 0.13.0
+## تازه‌های نسخهٔ 1.0.0
 
-- **حساب‌ها در تنظیمات** — رابط گرافیکی Windows و برنامهٔ Android (گوشی و TV)
-  اکنون فهرست حساب‌ها، افزودن حساب، ورود دوباره و خروج سراسری را در بالای
-  تنظیمات مدیریت می‌کنند؛ صفحهٔ جداگانهٔ حساب حذف شده است.
-- **مکان‌ها و تنظیمات ساده‌تر** — فهرست تخت سرورها با جستجوی فشرده، پرچم‌های
-  واقعی بزرگ‌تر و سرصفحه‌ها و نمادهای گروه‌های تنظیمات؛ کارت سهمیه و بخش‌های
-  موارد دلخواه و اخیر حذف شده‌اند.
+- **به‌روزرسانی خودکار Android** — برنامهٔ گوشی و TV هنگام اجرا (حداکثر یک بار
+  در هر ۲۴ ساعت) یا از تنظیمات، انتشارها را در GitHub بررسی می‌کند؛ APK
+  متناسب با ABI را فقط پس از تأیید شما دانلود می‌کند، SHA-256 انتشار و بسته و
+  نسخهٔ APK را بررسی می‌کند و سپس آن را به نصب‌کنندهٔ Android می‌سپارد. حساب‌ها
+  و تنظیمات حفظ می‌شوند.
+- **حذف رابط سهمیه و عنوان‌های داخل کارت‌ها** — داشبورد گوشی و TV، رابط
+  گرافیکی Windows، ویجت Android، CLI و TUI دیگر سهمیه را نشان نمی‌دهند و
+  تنظیم بررسی دوره‌ای سهمیه حذف شده است؛ در تنظیمات گوشی Android، عنوان هر
+  بخش اکنون داخل کارت همان بخش است. فیلدهای سهمیهٔ موتور و پروتکل v1 برای
+  سازگاری بدون تغییر می‌مانند.
 
 تغییرات کامل در [تاریخچهٔ تغییرات](CHANGELOG.md) آمده است.
 
@@ -105,7 +109,7 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 
 ### Windows 11
 
-1. فایل `Kumiho-Windows-amd64.zip` را دانلود و استخراج کنید.
+1. فایل `Kumiho-v1.0.0-Windows-amd64.zip` را دانلود و استخراج کنید.
 2. در **PowerShell با دسترسی Administrator**، `.\install.ps1` را اجرا کنید (یا
    روی `install.cmd` دوبار کلیک کنید).
 3. **Kumiho** را از منوی Start اجرا کنید.
@@ -122,9 +126,9 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 APK مناسب دستگاه خود را دانلود و باز کنید. وقتی Android پرسید، نصب از
 فایل‌منیجر یا مرورگر را مجاز کنید؛ Kumiho فقط به‌صورت sideload عرضه می‌شود.
 
-- **بیشتر گوشی‌ها و Android TV:** `Kumiho-Android-arm64-v8a.apk`
-- **گوشی‌های ۳۲بیتی قدیمی‌تر:** `Kumiho-Android-armeabi-v7a.apk`
-- **اگر مطمئن نیستید:** `Kumiho-Android-universal.apk`
+- **بیشتر گوشی‌ها و Android TV:** `Kumiho-v1.0.0-Android-arm64-v8a.apk`
+- **گوشی‌های ۳۲بیتی قدیمی‌تر:** `Kumiho-v1.0.0-Android-armeabi-v7a.apk`
+- **اگر مطمئن نیستید:** `Kumiho-v1.0.0-Android-universal.apk`
 
 اجرای نخست، ورود به حساب Firefox، مجوز VPN و راهنمای باتری/Always-on را طی
 می‌کند. روی Android TV همان APK پوستهٔ TV را باز می‌کند. [راهنمای Android](docs/android.md)

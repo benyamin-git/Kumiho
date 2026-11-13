@@ -20,7 +20,7 @@ Run from the repository root:
 
     scripts/screenshots/capture.sh
 
-The script rebuilds the web harness with the v0.12.0 UI target label (override
+The script rebuilds the web harness with the v1.0.0 UI target label (override
 with `KUMIHO_CAPTURE_VERSION`), starts it on `0.0.0.0:7407`, and restarts it
 before each screen so a notice from one state cannot leak into the next. It
 stops the harness when done. The label is a screenshot target, not an app
@@ -151,7 +151,12 @@ bottom bar (phone), the rail and the overscan frame (TV) are the ones the app
 draws. The Persian suites set `LayoutDirection.Rtl` and a Persian localized
 context, so the saved images show the same rail side and mirrored order as the
 running app. The version rows read `BuildConfig.VERSION_NAME` with the debug
-suffix stripped, so a regenerated capture never shows a stale release.
+suffix stripped, so a regenerated capture never shows a stale release. The
+English TV rail uses the debug `app_name`; for a release-like capture,
+temporarily set it to `Kumiho` in
+`android/app/src/debug/res/values/strings.xml`, rebuild the debug APK, then
+restore the file after the test. The Persian TV capture uses `values-fa` and
+already reads `Kumiho`.
 
 The script leaves `dist/kumiho-gui-web-linux-amd64` built with the release
 version label. Run `make build-web` to restore the normal git-describe build.

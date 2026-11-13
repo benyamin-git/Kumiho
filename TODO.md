@@ -192,15 +192,18 @@ Android TV, Windows GUI and the TUI.
     `SHA256SUMS-v0.12.1`.
   - Done 2026-11-12 (v0.13.0): both READMEs link the v0.13.0 versioned
     primaries and `SHA256SUMS-v0.13.0`.
+  - Done 2026-11-13 (v1.0.0): both READMEs link the v1.0.0 versioned
+    primaries and `SHA256SUMS-v1.0.0`.
 
 ## Release follow-ups
 
-- [ ] **C8 — Regenerate the Android screenshots for v0.13.0**
-  - Problem: the phone and TV captures still show the pre-0.13 Settings and
-    Locations layout; the Windows GUI and TUI captures are current.
-  - Next: run the connected screenshot tests on an API 36 phone and TV
-    emulator, then update `screenshots/android-phone/`,
-    `screenshots/android-tv/` and the Persian phone/TV captures.
+- [x] **C8 — Regenerate the Android screenshots for v1.0.0**
+  - Problem: the phone and TV captures still showed the pre-1.0 Settings and
+    Locations layout; the Windows GUI and TUI captures were current.
+  - Done 2026-11-13 (v1.0.0): regenerated the English and Persian phone/TV
+    captures through the API 36 emulators and refreshed
+    `screenshots/android-phone/`, `screenshots/android-tv/` and the Persian
+    README subset.
 
 - [ ] **C9 — Harden the netmon coalescing test**
   - Problem: `TestCoalesceCollapsesBurst` failed once in the v0.13.0 CI race

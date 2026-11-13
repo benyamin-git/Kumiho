@@ -6,7 +6,7 @@
 # port) and is restarted before each screen so no notice leaks between
 # captures. The script stops it when done.
 #
-# The GUI binary is rebuilt with the v0.12.0 UI target label (override with
+# The GUI binary is rebuilt with the v1.0.0 UI target label (override with
 # KUMIHO_CAPTURE_VERSION) so the Settings screenshot shows the release label,
 # not the git-describe development label. This does not bump the app version.
 #
@@ -89,7 +89,7 @@ else
   captures=/tmp/opencode/captures
 fi
 tui_tmp="${KUMIHO_TUI_CAPTURE_DIR:-/tmp/opencode/kumiho-tui-capture}"
-version="${KUMIHO_CAPTURE_VERSION:-v0.12.0}"
+version="${KUMIHO_CAPTURE_VERSION:-v1.0.0}"
 commit="$(git rev-parse --short HEAD)"
 date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
