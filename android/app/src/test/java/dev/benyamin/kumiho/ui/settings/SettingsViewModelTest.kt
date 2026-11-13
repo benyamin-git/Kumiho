@@ -16,8 +16,8 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The Settings state machine on the JVM: a fake gateway and update checker,
- * virtual time, no Android or Compose.
+ * The Settings state machine on the JVM: a fake gateway, virtual time, no
+ * Android or Compose. The update manager is tested separately.
  *
  * It pins the whole write protocol: one change at a time, client validation
  * before any engine call, the fresh `settings_get` after a successful set, the
@@ -31,11 +31,9 @@ class SettingsViewModelTest {
     val mainRule = MainDispatcherRule(StandardTestDispatcher())
 
     private val gateway = FakeGateway()
-    private val checker = FakeChecker()
 
     private fun viewModel() = SettingsViewModel(
         gateway = gateway,
-        updateChecker = checker,
         appVersion = "0.5.0-debug",
         engineVersion = "0.5.0",
     )
@@ -376,7 +374,7 @@ class SettingsViewModelTest {
             assertTrue(viewModel.state.value.hasSnapshot)
         }
 
-    // ---- groups and updates ---------------------------------------------
+    // ---- groups ----------------------------------------------------------
 
     @Test
     fun `Advanced toggles open and closed`() =
@@ -390,63 +388,6 @@ class SettingsViewModelTest {
 
             viewModel.toggleAdvanced()
             assertFalse(viewModel.state.value.advancedExpanded)
-        }
-
-    @Test
-    fun `loading never starts an update check`() =
-        runTest(mainRule.testDispatcher) {
-            viewModel()
-            runCurrent()
-            assertEquals(0, checker.calls)
-        }
-
-    @Test
-    fun `a manual check reports a newer release and one check runs at a time`() =
-        runTest(mainRule.testDispatcher) {
-            val viewModel = viewModel()
-            runCurrent()
-            checker.gate = CompletableDeferred()
-            checker.result = UpdateResult.Available("0.6.0", "https://example.test/release")
-
-            viewModel.checkForUpdates()
-            runCurrent()
-            assertTrue(viewModel.state.value.update is UpdateState.Checking)
-
-            viewModel.checkForUpdates()
-            runCurrent()
-            assertEquals("a second tap while checking is ignored", 1, checker.calls)
-
-            checker.gate?.complete(Unit)
-            runCurrent()
-
-            assertEquals(
-                UpdateState.Available("0.6.0", "https://example.test/release"),
-                viewModel.state.value.update,
-            )
-            assertEquals("0.5.0-debug", checker.lastVersion)
-        }
-
-    @Test
-    fun `a failed check is a visible failure that can be retried`() =
-        runTest(mainRule.testDispatcher) {
-            val viewModel = viewModel()
-            runCurrent()
-            checker.result = UpdateResult.Failed(UpdateFailure.Network("no route to host"))
-
-            viewModel.checkForUpdates()
-            runCurrent()
-
-            assertEquals(
-                UpdateState.Failed(UpdateFailure.Network("no route to host")),
-                viewModel.state.value.update,
-            )
-
-            checker.result = UpdateResult.UpToDate
-            viewModel.checkForUpdates()
-            runCurrent()
-
-            assertEquals(UpdateState.UpToDate, viewModel.state.value.update)
-            assertEquals(2, checker.calls)
         }
 
     // ---- relay test ------------------------------------------------------
@@ -545,20 +486,6 @@ class SettingsViewModelTest {
             relayCalls += 1
             relayError?.let { throw it }
             return relayResult
-        }
-    }
-
-    private class FakeChecker : UpdateChecker {
-        var result: UpdateResult = UpdateResult.UpToDate
-        var gate: CompletableDeferred<Unit>? = null
-        var calls = 0
-        var lastVersion: String? = null
-
-        override suspend fun check(currentVersion: String): UpdateResult {
-            calls += 1
-            lastVersion = currentVersion
-            gate?.await()
-            return result
         }
     }
 

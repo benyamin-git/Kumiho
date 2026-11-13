@@ -167,8 +167,6 @@
     <string name="dashboard_location_default_hint">نزدیک‌ترین سرور برای شما انتخاب شد</string>
     <string name="dashboard_location_change">تغییر</string>
     <string name="dashboard_exit_title">IP خروجی</string>
-    <string name="dashboard_quota_title">سهمیه</string>
-    <string name="dashboard_quota_resets">بازنشانی در %1$s</string>
     <string name="dashboard_session_title">اتصال</string>
     <string name="dashboard_session_uptime">متصل به مدت %1$s</string>
     <string name="dashboard_details_title">جزئیات</string>
@@ -328,11 +326,18 @@
     <string name="settings_version_engine">موتور %1$s</string>
     <string name="settings_update_title">به‌روزرسانی‌های نرم‌افزار</string>
     <string name="settings_update_check">بررسی به‌روزرسانی</string>
-    <string name="settings_update_hint">فقط وقتی ضربه می‌زنید، انتشارهای GitHub را بررسی می‌کند؛ چیزی دانلود نمی‌شود</string>
+    <string name="settings_update_hint">نسخه‌های انتشار هنگام اجرا و با ضربه GitHub را بررسی می‌کنند؛ فقط پس از تأیید شما دانلود می‌شود</string>
     <string name="settings_update_checking">در حال بررسی…</string>
     <string name="settings_update_up_to_date">Kumiho به‌روز است</string>
     <string name="settings_update_available">Kumiho %1$s در دسترس است</string>
     <string name="settings_update_open">باز کردن صفحه انتشار</string>
+    <string name="settings_update_release">صفحه انتشار</string>
+    <string name="settings_update_install">اکنون به‌روزرسانی کن</string>
+    <string name="settings_update_downloading">در حال دانلود… %1$d%%</string>
+    <string name="settings_update_ready">به‌روزرسانی دانلود و بررسی شد.</string>
+    <string name="settings_update_install_ready">نصب به‌روزرسانی</string>
+    <string name="settings_update_installing">در حال نصب… تأیید اندروید را کامل کنید.</string>
+    <string name="settings_update_installed">Kumiho %1$s نصب شد.</string>
     <string name="settings_update_retry">تلاش دوباره</string>
     <string name="settings_update_failed">بررسی به‌روزرسانی ناموفق بود.</string>
     <string name="settings_notifications_title">اعلان‌ها</string>
@@ -407,7 +412,6 @@
     <string name="settings_label_doh_provider">ارائه‌دهنده DoH</string>
     <string name="settings_label_dns_upstream">بالادست DNS</string>
     <string name="settings_label_allow_lan">اجازه به LAN</string>
-    <string name="settings_label_quota_poll_minutes">بررسی دوره‌ای سهمیه</string>
     <string name="settings_label_account_rotation">چرخش حساب‌ها</string>
     <string name="settings_label_rotation_threshold">آستانه چرخش</string>
     <string name="settings_label_edge_address">نشانی لبه</string>
@@ -428,7 +432,6 @@
     <string name="settings_hint_doh_provider">حل‌کننده DNS-over-HTTPS درون تونل. در اتصال بعدی اعمال می‌شود.</string>
     <string name="settings_hint_dns_upstream">IP حل‌کننده برای DoH؛ خالی یعنی پیش‌فرض ارائه‌دهنده. در اتصال بعدی اعمال می‌شود.</string>
     <string name="settings_hint_allow_lan">وقتی روشن باشد، بازه‌های خصوصی RFC1918، پیوند محلی و چندپخشی از تونل خارج می‌شوند. DNS تونل، 10.8.0.2، همیشه درون تونل می‌ماند. در اتصال بعدی اعمال می‌شود.</string>
-    <string name="settings_hint_quota_poll_minutes">فاصله دقیقه‌ای میان تازه‌سازی‌های سهمیه در حالت اتصال. در اتصال بعدی اعمال می‌شود.</string>
     <string name="settings_hint_account_rotation">پیش از اتصال، اگر سهمیه حساب فعال کم باشد، حساب عوض می‌شود. در اتصال بعدی اعمال می‌شود.</string>
     <string name="settings_hint_rotation_threshold">وقتی سهمیه باقی‌مانده حساب فعال به این درصد یا کمتر برسد، حساب عوض می‌شود. در اتصال بعدی اعمال می‌شود.</string>
     <string name="settings_hint_edge_address">IP لبه Fastly را ثابت می‌کند؛ خالی یعنی حل عادی. در اتصال بعدی اعمال می‌شود.</string>
@@ -606,8 +609,6 @@
     <string name="account_add_password_title">افزودن با رمز عبور</string>
     <string name="account_method_browser">مرورگر</string>
     <string name="account_method_password">رمز عبور</string>
-    <string name="account_row_quota_left">%1$s%% باقی‌مانده</string>
-    <string name="account_row_quota_unknown">سهمیه نامشخص</string>
     <string name="account_reauth_required">ورود منقضی شده است</string>
     <string name="account_actions">اقدام‌های حساب</string>
     <string name="tv_account_manage">مدیریت</string>
@@ -738,4 +739,28 @@
     <string name="settings_update_failure_no_release">GitHub هیچ انتشار منتشرشده‌ای ندارد.</string>
     <string name="settings_update_failure_missing_tag">آخرین انتشار GitHub برچسب نسخه ندارد.</string>
     <string name="settings_update_failure_invalid_tag">برچسب آخرین انتشار GitHub شمارهٔ نسخه نیست.</string>
+    <string name="settings_update_failure_download">به‌روزرسانی دانلود نشد.</string>
+    <string name="settings_update_failure_checksum">به‌روزرسانی دانلودشده بررسی SHA-256 را نگذراند.</string>
+    <string name="settings_update_failure_apk">فایل دانلودشده به‌روزرسانی معتبر Kumiho نیست.</string>
+    <string name="settings_update_failure_install">اندروید نصب‌کننده را باز نکرد.</string>
+
+    <string name="update_prompt_title">Kumiho %1$s در دسترس است</string>
+    <string name="update_prompt_body">به‌روزرسانی را از GitHub دانلود و نصب کنید؟ حساب‌ها و تنظیمات شما حفظ می‌شوند.</string>
+    <string name="update_prompt_release_body">این انتشار فایل APK ندارد. برای دانلود، صفحه انتشار را باز کنید.</string>
+    <string name="update_prompt_update">به‌روزرسانی</string>
+    <string name="update_prompt_later">بعداً</string>
+    <string name="update_prompt_open">باز کردن صفحه انتشار</string>
+    <string name="update_prompt_downloading">در حال دانلود… %1$d%%</string>
+    <string name="update_prompt_ready_title">آماده نصب</string>
+    <string name="update_prompt_ready_body">اندروید تأیید نصب را از شما می‌پرسد. Kumiho حساب‌ها و تنظیمات شما را حفظ می‌کند.</string>
+    <string name="update_prompt_allow_body">اندروید برای نصب برنامه‌ها از Kumiho اجازه می‌خواهد. در صفحهٔ بعد اجازه دهید و به اینجا برگردید.</string>
+    <string name="update_prompt_install">نصب</string>
+    <string name="update_prompt_allow">اجازه نصب</string>
+    <string name="update_prompt_installing_title">در حال نصب…</string>
+    <string name="update_prompt_installing_body">تأیید نصب اندروید را کامل کنید.</string>
+    <string name="update_prompt_installed_title">به‌روزرسانی نصب شد</string>
+    <string name="update_prompt_installed_body">Kumiho %1$s نصب شد. برنامه را ببندید و دوباره باز کنید.</string>
+    <string name="update_prompt_close">بستن</string>
+    <string name="update_prompt_cancel">لغو</string>
+    <string name="update_prompt_launch_failed">اندروید نصب‌کننده را باز نکرد.</string>
 </resources>

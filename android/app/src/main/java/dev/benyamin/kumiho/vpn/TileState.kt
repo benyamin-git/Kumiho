@@ -1,6 +1,5 @@
 package dev.benyamin.kumiho.vpn
 
-import dev.benyamin.kumiho.engine.Quota
 import java.util.Locale
 
 /**
@@ -13,7 +12,6 @@ data class TileSnapshot(
     val location: String? = null,
     val proxyOnly: Boolean = false,
     val connectInFlight: Boolean = false,
-    val quota: Quota? = null,
 )
 
 /** The subtitle the tile shows; the service resolves it to copy. */

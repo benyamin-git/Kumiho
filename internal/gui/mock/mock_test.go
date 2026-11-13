@@ -860,14 +860,8 @@ func TestControllerProjectsScenarios(t *testing.T) {
 			if snap.Status.Connected != tc.connected {
 				t.Fatalf("connected = %v, want %v", snap.Status.Connected, tc.connected)
 			}
-			if snap.Status.QuotaRemaining == nil || snap.Status.QuotaLimit == nil {
-				t.Fatalf("quota not projected: %+v", snap.Status)
-			}
 			if tc.connected && (snap.Status.Uptime == "" || snap.Status.ExitIP != demoExitIP) {
 				t.Fatalf("connected facts missing: %+v", snap.Status)
-			}
-			if tc.scenario == ScenarioError && *snap.Status.QuotaRemaining != 0 {
-				t.Fatalf("error quota remaining = %d, want 0", *snap.Status.QuotaRemaining)
 			}
 			waitFor(t, "account and locations", func() bool {
 				s := ctrl.Snapshot()

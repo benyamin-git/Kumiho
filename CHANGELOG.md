@@ -8,6 +8,31 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Android self-update.** The phone/TV app checks GitHub at launch (at most
+  once every 24 hours) and on demand in Settings, then offers a consented
+  download of the ABI-matched APK. It verifies the release SHA-256 and the
+  APK package/version before handing it to Android's installer; accounts and
+  settings are kept. **Later** remembers the version, and debug builds keep
+  the release-page fallback.
+
+### Changed
+
+- **Settings headers sit inside their section cards.** The Android phone
+  Settings groups draw the primary-tinted icon and title at the top of the
+  card, above a hairline, instead of floating above it, matching the Windows
+  GUI. The account group is now a card too.
+
+### Removed
+
+- **Quota info removed from every client.** The phone and TV dashboards, the
+  Windows GUI dashboard, the Android home-screen widget, the CLI
+  `status`/`accounts` output and the TUI dashboard and account screens no
+  longer show quota. The quota-poll setting is gone from the GUI, TUI and
+  Android settings. Engine quota fields and protocol v1 stay unchanged for
+  compatibility.
+
 ## [0.13.0] - 2026-11-12
 
 ### Changed

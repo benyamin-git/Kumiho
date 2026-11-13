@@ -16,4 +16,8 @@ fun updateFailureText(failure: UpdateFailure): String = when (failure) {
     UpdateFailure.NoRelease -> stringResource(R.string.settings_update_failure_no_release)
     UpdateFailure.MissingTag -> stringResource(R.string.settings_update_failure_missing_tag)
     UpdateFailure.InvalidTag -> stringResource(R.string.settings_update_failure_invalid_tag)
+    is UpdateFailure.Download -> stringResource(R.string.settings_update_failure_download)
+    UpdateFailure.Checksum -> stringResource(R.string.settings_update_failure_checksum)
+    UpdateFailure.InvalidApk -> stringResource(R.string.settings_update_failure_apk)
+    is UpdateFailure.Install -> stringResource(R.string.settings_update_failure_install)
 }

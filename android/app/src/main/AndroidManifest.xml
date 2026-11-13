@@ -5,6 +5,8 @@
     <!-- Tunnel transport and link state. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Self-update: hand a verified APK to Android's installer after consent. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Connection status notification (T9). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -124,8 +126,9 @@
             android:exported="false"
             android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <!-- Shares one exported log file from cacheDir/exports as a content
-             URI; the provider is not exported and grants read per URI. -->
+        <!-- Shares the log export and the verified update APK from cache as
+             content URIs; the provider is not exported and grants read per
+             URI. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -138,21 +138,13 @@ object SettingsCatalog {
             hintRes = R.string.settings_hint_allow_lan,
         ),
         SettingSpec(
-            key = "quota_poll_minutes",
-            group = SettingsGroup.CONNECTION,
-            kind = SettingKind.INTEGER,
-            labelRes = R.string.settings_label_quota_poll_minutes,
-            hintRes = R.string.settings_hint_quota_poll_minutes,
-            range = SettingRange(1, 1440),
-        ),
-        SettingSpec(
             key = "account_rotation",
             group = SettingsGroup.CONNECTION,
             kind = SettingKind.BOOLEAN,
             labelRes = R.string.settings_label_account_rotation,
             hintRes = R.string.settings_hint_account_rotation,
             // Rotation is configured only here; the Account section shows no
-            // rotation controls (the Android app has no quota card).
+            // rotation controls.
             applyTiming = ApplyTiming.NEXT_CONNECT,
         ),
         SettingSpec(
@@ -394,7 +386,7 @@ object SettingsMapper {
         SettingKind.INTEGER -> when (spec.key) {
             "mtu" -> settings.mtu.toString()
             "socks_port" -> settings.socksPort.toString()
-            "quota_poll_minutes" -> settings.quotaPollMinutes.toString()
+            "account_rotation" -> onOff(settings.accountRotation)
             "rotation_threshold" -> settings.rotationThreshold.toString()
             "http_proxy_port" -> settings.httpProxyPort.toString()
             else -> ""

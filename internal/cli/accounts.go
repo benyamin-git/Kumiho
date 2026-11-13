@@ -410,7 +410,7 @@ func formatAccounts(view api.AccountsView) string {
 		if method == "" {
 			method = "unknown"
 		}
-		fmt.Fprintf(&b, "%s %s  %s  %s", marker, name, method, formatQuota(account.Quota))
+		fmt.Fprintf(&b, "%s %s  %s", marker, name, method)
 		if account.ReauthRequired {
 			b.WriteString("  re-auth required")
 		}
@@ -424,23 +424,6 @@ func formatAccounts(view api.AccountsView) string {
 		fmt.Fprintf(&b, "Error: %s\n", view.Error)
 	}
 	return b.String()
-}
-
-func formatQuota(q *api.Quota) string {
-	if q == nil || q.Remaining == nil {
-		return "quota unknown"
-	}
-	if *q.Remaining <= 0 {
-		return "quota exhausted"
-	}
-	if q.Limit == nil || *q.Limit <= 0 {
-		return "quota unknown"
-	}
-	percent := *q.Remaining * 100 / *q.Limit
-	if percent > 100 {
-		percent = 100
-	}
-	return fmt.Sprintf("quota %d%%", percent)
 }
 
 func parseThreshold(raw string) (int, error) {

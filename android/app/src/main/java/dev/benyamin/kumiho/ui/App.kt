@@ -51,6 +51,7 @@ import dev.benyamin.kumiho.ui.theme.KumihoTheme
 import dev.benyamin.kumiho.ui.theme.kumihoTypography
 import dev.benyamin.kumiho.ui.tv.TvRoot
 import dev.benyamin.kumiho.ui.tv.theme.TvKumihoTheme
+import dev.benyamin.kumiho.ui.update.UpdatePromptHost
 
 /**
  * The app root. It renders nothing themed until the stored palette has loaded,
@@ -136,6 +137,17 @@ fun KumihoApp(
                                 container = container,
                                 onClose = container.guide::close,
                             )
+                        }
+                    }
+                    if (setupComplete == true) {
+                        if (isTv) {
+                            TvKumihoTheme(colors = state.colors, language = language) {
+                                UpdatePromptHost(container)
+                            }
+                        } else {
+                            KumihoTheme(colors = state.colors, language = language) {
+                                UpdatePromptHost(container)
+                            }
                         }
                     }
                 }

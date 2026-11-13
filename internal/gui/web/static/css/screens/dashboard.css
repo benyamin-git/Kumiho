@@ -157,7 +157,7 @@
 /* The `hidden` attribute must beat the author display rules on the elements
    that carry one (.button is inline-flex; the card cells are flex), so each
    gets its explicit [hidden] twin. Elements without a display rule
-   (.dash__notice, .dash__bar) keep the user-agent rule. */
+   (.dash__notice) keep the user-agent rule. */
 .dash__card dt[hidden],
 .dash__card dd[hidden],
 .dash__retry[hidden] {
@@ -195,22 +195,6 @@
  * the RTL row. The value itself stays aligned at the row's inline start. */
 .dash__value {
   unicode-bidi: isolate;
-}
-
-.dash__bar {
-  block-size: 8px;
-  border-radius: var(--radius-full);
-  background: var(--surface-container-4);
-  overflow: hidden;
-}
-
-/* The fill starts at the track's inline-start edge: left in LTR, right in
- * RTL. The auto end margin anchors the sized block without a physical offset. */
-.dash__bar-fill {
-  block-size: 100%;
-  margin-inline-end: auto;
-  border-radius: var(--radius-full);
-  background: var(--primary);
 }
 
 /* ---------------------------------------------------------- notice row */

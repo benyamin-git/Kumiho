@@ -3,7 +3,6 @@ package dev.benyamin.kumiho.ui.dashboard
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
 import dev.benyamin.kumiho.data.AppLanguage
-import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -11,9 +10,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Byte, quota and date formatting with the desktop's wording
+ * Byte, rate and date formatting with the desktop's wording
  * (`internal/gui/controller.go`): binary units, `%.1f %ciB`, and the same
- * quota/rates/totals sentences. A missing value is null, never a fake zero;
+ * rates/totals sentences. A missing value is null, never a fake zero;
  * callers hide the row or card instead of inventing data.
  *
  * The file is pure: no Android, no Compose, and its date output takes the zone
@@ -43,41 +42,6 @@ object DashboardFormat {
         val scaled = bytes.toDouble() / divisor.toDouble()
         val suffix = "KMGTPE"[exponent]
         return String.format(Locale.ROOT, "%.1f %ciB", scaled, suffix)
-    }
-
-    /**
-     * The quota sentence: `12.3 GiB remaining of 50.0 GiB` when both sides are
-     * known, a half sentence for one side, and null when there is nothing.
-     * Zero remaining is a real, exhausted quota and stays visible.
-     */
-    fun quotaLabel(quota: Quota?, language: AppLanguage = AppLanguage.ENGLISH): String? {
-        if (quota == null) return null
-        val remaining = quota.remaining
-        val limit = quota.limit
-        return when {
-            remaining != null && limit != null ->
-                if (language == AppLanguage.PERSIAN) {
-                    "${humanBytes(remaining, language)} باقی‌مانده از ${humanBytes(limit, language)}"
-                } else {
-                    "${humanBytes(remaining, language)} remaining of ${humanBytes(limit, language)}"
-                }
-            remaining != null ->
-                if (language == AppLanguage.PERSIAN) {
-                    "${humanBytes(remaining, language)} باقی‌مانده"
-                } else {
-                    "${humanBytes(remaining, language)} remaining"
-                }
-            limit != null -> humanBytes(limit, language)
-            else -> null
-        }
-    }
-
-    /** The bar fraction, or null when either side is missing or nonsensical. */
-    fun quotaFraction(quota: Quota?): Float? {
-        val remaining = quota?.remaining ?: return null
-        val limit = quota.limit ?: return null
-        if (limit <= 0L) return null
-        return (remaining.toDouble() / limit.toDouble()).toFloat().coerceIn(0f, 1f)
     }
 
     /**

@@ -41,7 +41,7 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Windows GUI dashboard: connected tunnel, quota and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: a pinned Fastest row above flagged server rows with search and real-edge ping times](screenshots/windows-gui/locations.png) |
+| ![Windows GUI dashboard: connected tunnel and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: a pinned Fastest row above flagged server rows with search and real-edge ping times](screenshots/windows-gui/locations.png) |
 
 ![Windows GUI settings: the Region relay controls and the background service rows](screenshots/windows-gui/settings.png)
 
@@ -51,7 +51,7 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations |
 | --- | --- |
-| ![Linux TUI dashboard: connected state, quota bar and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: a Fastest row above flagged rows, a locked badge and ping times](screenshots/linux-tui/locations.png) |
+| ![Linux TUI dashboard: connected state and session totals](screenshots/linux-tui/dashboard.png) | ![Linux TUI locations: a Fastest row above flagged rows, a locked badge and ping times](screenshots/linux-tui/locations.png) |
 
 ![Linux TUI settings: the Region relay rows with their region-only hint](screenshots/linux-tui/settings.png)
 
@@ -61,7 +61,7 @@ Captured in the Dark theme with sample data.
 
 | Dashboard | Locations | Settings |
 | --- | --- | --- |
-| <img src="screenshots/android-phone/dashboard.png" width="260" alt="Android dashboard: connected tunnel with quota and session totals"> | <img src="screenshots/android-phone/locations.png" width="260" alt="Android locations: search, Ping all and server list"> | <img src="screenshots/android-phone/settings.png" width="260" alt="Android settings: app and system cards"> |
+| <img src="screenshots/android-phone/dashboard.png" width="260" alt="Android dashboard: connected tunnel with location, exit IP and session totals"> | <img src="screenshots/android-phone/locations.png" width="260" alt="Android locations: search, Ping all and server list"> | <img src="screenshots/android-phone/settings.png" width="260" alt="Android settings: app and system cards"> |
 
 ### Android TV
 
@@ -174,8 +174,9 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 - The password flow cannot solve an interactive captcha. Use browser sign-in
   when Mozilla asks for one.
 - The Windows binary is unsigned, so SmartScreen warns on first run.
-- Android captures and blackholes IPv6 instead of tunneling it, and there is
-  no in-app APK installer or auto-update.
+- Android captures and blackholes IPv6 instead of tunneling it. Android
+  self-updates only after you confirm in the system installer; there is no
+  store update channel.
 - Using an unofficial client is a ToS gray area. Account rotation is opt-in and
   off by default.
 

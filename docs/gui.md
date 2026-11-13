@@ -188,15 +188,12 @@ The action row holds:
   - its own **Connect** button, which applies the choices to one connect.
 - **Refresh** — ask the daemon for a fresh status.
 
-Below the actions is the **status card**, whose eleven rows appear as data
+Below the actions is the **status card**, whose nine rows appear as data
 becomes available and stay hidden until then:
 
 `Uptime`, `Location` (`CC` or `CC (server)`), `Exit IP` (`IP` or
 `IP (country)`), `Rates`, `Totals`, `Kill switch` (`On`/`Off`), `Autoconnect`
-(`On`/`Off`), `Token expiry`, `Pass expiry`, `Quota`, `Quota resets`.
-
-The `Quota` row shows a progress bar of remaining quota when both the
-remaining and limit values are known.
+(`On`/`Off`), `Token expiry`, `Pass expiry`.
 
 A **notice row** appears under the card for the latest daemon message (for
 example a connect failure), with a **Retry** button when the failure was a
@@ -322,7 +319,6 @@ row returns to the admin `config.toml` (or built-in) default. The rows are:
 | Allow LAN | keep the local subnet outside the tunnel; next connect |
 | MTU | tun device MTU; next connect |
 | SOCKS port | loopback SOCKS5 listener; next connect |
-| Quota poll | minutes between quota refreshes while connected; next connect |
 | TLS split | `off`, `first-byte`, `sni`; splits the TLS ClientHello across writes within one record; next connect |
 | HTTP proxy | on/off; loopback HTTP/CONNECT proxy through the tunnel; next connect |
 | HTTP proxy port | loopback HTTP proxy listener; next connect |

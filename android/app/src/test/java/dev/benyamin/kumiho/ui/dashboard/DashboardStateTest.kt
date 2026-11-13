@@ -241,33 +241,11 @@ class DashboardStateTest {
         val off = DashboardState.fromService(snapshot(state = STATE_IDLE))
         assertTrue("a status always names a location (Recommended)", off.showLocationCard)
         assertFalse(off.showExitCard)
-        assertFalse(off.showQuotaCard)
         assertFalse(off.showSessionCard)
 
         val connected = connected()
         assertTrue(connected.showExitCard)
-        assertTrue(connected.showQuotaCard)
         assertTrue(connected.showSessionCard)
-    }
-
-    @Test
-    fun aQuotaOfZeroRemainingStaysVisible() {
-        val exhausted = DashboardState.fromService(
-            snapshot(
-                state = STATE_CONNECTED,
-                quota = Quota(limit = 50L * GIB, remaining = 0L, reset = null),
-            ),
-        )
-        assertTrue("an exhausted quota is real data", exhausted.showQuotaCard)
-    }
-
-    @Test
-    fun aMissingSideOfTheQuotaIsNotAFakeZero() {
-        val partial = DashboardState.fromService(
-            snapshot(state = STATE_CONNECTED, quota = Quota(limit = null, remaining = 5L * GIB, reset = null)),
-        )
-        assertTrue(partial.showQuotaCard)
-        assertNull(partial.status?.quota?.limit)
     }
 
     @Test

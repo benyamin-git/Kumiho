@@ -480,8 +480,8 @@ func assertViewport(t *testing.T, m *Model) {
 }
 
 func TestSettingsShortHeightShowsCues(t *testing.T) {
-	if len(settingItems) != 24 {
-		t.Fatalf("settingItems = %d rows, want 24", len(settingItems))
+	if len(settingItems) != 23 {
+		t.Fatalf("settingItems = %d rows, want 23", len(settingItems))
 	}
 	m := testSettingsModel()
 	m.screen = screenSettings
@@ -1036,14 +1036,13 @@ func TestLogsScrollDisablesFollow(t *testing.T) {
 }
 
 func TestAccountView(t *testing.T) {
-	quota := int64(30 << 30)
 	m := &Model{
 		screen: screenAccount,
 		ac: accountState{
 			loaded: true,
 			info: api.AccountInfo{
 				Email: "user@example.com", UID: "uid-1", Subscribed: true,
-				MaxBytes: &quota, TokenExpires: 1790000000,
+				TokenExpires: 1790000000,
 			},
 		},
 	}
@@ -1117,30 +1116,14 @@ func TestHelpDoesNotHijackTextInput(t *testing.T) {
 	}
 }
 
-func TestQuotaBar(t *testing.T) {
-	if got := quotaBar(50, 100, 10); got != "[█████░░░░░]" {
-		t.Fatalf("quotaBar = %q", got)
-	}
-	if got := quotaBar(0, 0, 10); got != "" {
-		t.Fatalf("quotaBar(no limit) = %q", got)
-	}
-	if got := quotaBar(200, 100, 4); got != "[████]" {
-		t.Fatalf("quotaBar(clamped) = %q", got)
-	}
-}
-
-func TestDashboardShowsUptimeAndQuotaReset(t *testing.T) {
-	limit, remaining, reset := int64(100<<30), int64(50<<30), int64(1794000000)
+func TestDashboardShowsUptime(t *testing.T) {
 	m := &Model{screen: screenDashboard, haveStat: true, status: api.Status{
 		State: "CONNECTED", Authenticated: true,
 		Since: time.Now().Add(-90 * time.Second).Unix(),
-		Quota: &api.Quota{Limit: &limit, Remaining: &remaining, Reset: &reset},
 	}}
 	view := m.View()
-	for _, want := range []string{"uptime:", "quota reset:", "["} {
-		if !strings.Contains(view, want) {
-			t.Errorf("dashboard missing %q:\n%s", want, view)
-		}
+	if !strings.Contains(view, "uptime:") {
+		t.Errorf("dashboard missing uptime:\n%s", view)
 	}
 }
 

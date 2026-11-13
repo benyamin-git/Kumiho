@@ -518,28 +518,11 @@ func accountRow(account api.AccountSummary, selected bool) string {
 	if method == "" {
 		method = "unknown"
 	}
-	line := fmt.Sprintf("%s%s %s  %s  %s", prefix, active, name, method, accountQuota(account.Quota))
+	line := fmt.Sprintf("%s%s %s  %s", prefix, active, name, method)
 	if account.ReauthRequired {
 		line += "  " + warnStyle.Render("needs sign-in")
 	}
 	return line
-}
-
-func accountQuota(q *api.Quota) string {
-	if q == nil || q.Remaining == nil {
-		return "quota unknown"
-	}
-	if *q.Remaining <= 0 {
-		return "quota exhausted"
-	}
-	if q.Limit == nil || *q.Limit <= 0 {
-		return "quota unknown"
-	}
-	percent := *q.Remaining * 100 / *q.Limit
-	if percent > 100 {
-		percent = 100
-	}
-	return fmt.Sprintf("%d%% left", percent)
 }
 
 func renderEntitlementCard(b *strings.Builder, info api.AccountInfo) {
@@ -557,14 +540,6 @@ func renderEntitlementCard(b *strings.Builder, info api.AccountInfo) {
 		fmt.Fprintf(b, "subscribed:    %s\n", warnStyle.Render("unknown ("+info.Error+")"))
 	} else {
 		fmt.Fprintf(b, "subscribed:    %s\n", yesNo(info.Subscribed))
-	}
-	switch {
-	case info.QuotaRemaining != nil && info.MaxBytes != nil:
-		fmt.Fprintf(b, "quota:         %s remaining of %s\n", humanBytes(*info.QuotaRemaining), humanBytes(*info.MaxBytes))
-	case info.QuotaRemaining != nil:
-		fmt.Fprintf(b, "quota:         %s remaining\n", humanBytes(*info.QuotaRemaining))
-	case info.MaxBytes != nil:
-		fmt.Fprintf(b, "quota:         %s per period\n", humanBytes(*info.MaxBytes))
 	}
 	if info.LimitedBandwidth {
 		fmt.Fprintf(b, "bandwidth:     %s\n", warnStyle.Render("limited"))

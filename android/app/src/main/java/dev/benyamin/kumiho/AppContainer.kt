@@ -2,8 +2,9 @@ package dev.benyamin.kumiho
 
 import android.content.ComponentName
 import android.content.Context
-import android.service.quicksettings.TileService
 import android.content.res.Configuration
+import android.os.Build
+import android.service.quicksettings.TileService
 import dev.benyamin.kumiho.data.AllowBypassRepository
 import dev.benyamin.kumiho.data.AppPrefs
 import dev.benyamin.kumiho.data.InstalledAppsRepository
@@ -13,12 +14,17 @@ import dev.benyamin.kumiho.data.SplitTunnelRepository
 import dev.benyamin.kumiho.data.ThemeRepository
 import dev.benyamin.kumiho.tv.TvChannelPublisher
 import dev.benyamin.kumiho.ui.guide.GuideController
+import dev.benyamin.kumiho.ui.settings.GitHubUpdateChecker
 import dev.benyamin.kumiho.ui.theme.ThemeId
+import dev.benyamin.kumiho.update.AndroidApkInspector
+import dev.benyamin.kumiho.update.HttpUpdateDownloader
+import dev.benyamin.kumiho.update.UpdateManager
 import dev.benyamin.kumiho.vpn.BypassSettingsProvider
 import dev.benyamin.kumiho.vpn.QuickConnectTileService
 import dev.benyamin.kumiho.vpn.SplitSettingsProvider
 import dev.benyamin.kumiho.vpn.VpnServiceCoordinator
 import dev.benyamin.kumiho.widget.WidgetRefresh
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +45,24 @@ class AppContainer(context: Context) {
 
     /** The app preferences DataStore. */
     val appPrefs = AppPrefs(appContext)
+
+    /**
+     * The launch check, consented download and installer hand-off. Debug
+     * builds cannot install the release APK, so they only keep the manual
+     * release-page check.
+     */
+    val updateManager = UpdateManager(
+        checker = GitHubUpdateChecker(supportedAbis = Build.SUPPORTED_ABIS.toList()),
+        downloader = HttpUpdateDownloader(),
+        inspector = AndroidApkInspector(appContext),
+        preferences = appPrefs,
+        cacheDir = File(appContext.cacheDir, "updates"),
+        currentVersion = BuildConfig.VERSION_NAME,
+        currentVersionCode = BuildConfig.VERSION_CODE.toLong(),
+        packageName = appContext.packageName,
+        selfUpdateAllowed = !BuildConfig.DEBUG,
+        scope = scope,
+    )
 
     /** Cached language, QS/notification locale and the engine preference. */
     val languageRepository = LanguageRepository(
@@ -96,6 +120,7 @@ class AppContainer(context: Context) {
 
     /** Starts app-scoped work. Idempotent. */
     fun start() {
+        updateManager.checkOnLaunch()
         languageRepository.start()
         themeRepository.start()
         splitTunnelRepository.start()

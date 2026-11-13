@@ -3,7 +3,6 @@ package dev.benyamin.kumiho.ui.dashboard
 import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.engine.ByteCounters
 import dev.benyamin.kumiho.engine.ByteRates
-import dev.benyamin.kumiho.engine.Quota
 import java.time.ZoneId
 import java.util.Locale
 import org.junit.Assert.assertEquals
@@ -11,11 +10,11 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Byte, quota, rate, uptime and date formatting against the desktop's wording
+ * Byte, rate, uptime and date formatting against the desktop's wording
  * (`internal/gui/controller.go`): binary units, `%.1f %ciB`, and one decimal.
  *
  * Missing data is null, never a fake zero: the UI hides the row instead of
- * claiming a quota or an exit IP the engine never reported.
+ * claiming an exit IP the engine never reported.
  */
 class DashboardFormatTest {
 
@@ -34,62 +33,6 @@ class DashboardFormatTest {
         assertEquals("12.3 GiB", DashboardFormat.humanBytes(13_207_024_436L))
         assertEquals("50.0 GiB", DashboardFormat.humanBytes(50L * 1024L * 1024L * 1024L))
         assertEquals("1.0 TiB", DashboardFormat.humanBytes(1024L * 1024L * 1024L * 1024L))
-    }
-
-    // ---- quota -----------------------------------------------------------
-
-    @Test
-    fun theQuotaSentenceMatchesTheDesktop() {
-        assertEquals(
-            "12.3 GiB remaining of 50.0 GiB",
-            DashboardFormat.quotaLabel(Quota(limit = 50L * GIB, remaining = 13_207_024_436L, reset = null)),
-        )
-    }
-
-    @Test
-    fun aHalfKnownQuotaSaysOnlyWhatItKnows() {
-        assertEquals(
-            "5.0 GiB remaining",
-            DashboardFormat.quotaLabel(Quota(limit = null, remaining = 5L * GIB, reset = null)),
-        )
-        assertEquals(
-            "50.0 GiB",
-            DashboardFormat.quotaLabel(Quota(limit = 50L * GIB, remaining = null, reset = null)),
-        )
-        assertNull("no quota is not zero remaining", DashboardFormat.quotaLabel(null))
-        assertNull(DashboardFormat.quotaLabel(Quota(limit = null, remaining = null, reset = 1L)))
-    }
-
-    @Test
-    fun anExhaustedQuotaIsARealZero() {
-        assertEquals(
-            "0 B remaining of 50.0 GiB",
-            DashboardFormat.quotaLabel(Quota(limit = 50L * GIB, remaining = 0L, reset = null)),
-        )
-    }
-
-    @Test
-    fun theQuotaBarNeedsBothSides() {
-        assertEquals(
-            0.5f,
-            DashboardFormat.quotaFraction(Quota(limit = 100L, remaining = 50L, reset = null))!!,
-            0.0001f,
-        )
-        assertEquals(
-            "an over-reported remainder is clamped",
-            1f,
-            DashboardFormat.quotaFraction(Quota(limit = 100L, remaining = 150L, reset = null))!!,
-            0.0001f,
-        )
-        assertEquals(
-            0f,
-            DashboardFormat.quotaFraction(Quota(limit = 100L, remaining = 0L, reset = null))!!,
-            0.0001f,
-        )
-        assertNull(DashboardFormat.quotaFraction(Quota(limit = null, remaining = 1L, reset = null)))
-        assertNull(DashboardFormat.quotaFraction(Quota(limit = 1L, remaining = null, reset = null)))
-        assertNull("a zero limit cannot be a fraction", DashboardFormat.quotaFraction(Quota(limit = 0L, remaining = 0L, reset = null)))
-        assertNull(DashboardFormat.quotaFraction(null))
     }
 
     // ---- rates and totals ------------------------------------------------
@@ -201,20 +144,6 @@ class DashboardFormatTest {
     fun persianUsesPersianDigitsUnitsAndJalaliDates() {
         assertEquals("۱٫۵ کیلوبایت", DashboardFormat.humanBytes(1536, AppLanguage.PERSIAN))
         assertEquals(
-            "۱٫۵ کیلوبایت باقی‌مانده از ۲ کیلوبایت",
-            DashboardFormat.quotaLabel(
-                Quota(limit = 2048L, remaining = 1536L, reset = null),
-                AppLanguage.PERSIAN,
-            ),
-        )
-        assertEquals(
-            "۱۲ گیگابایت باقی‌مانده از ۵۰ گیگابایت",
-            DashboardFormat.quotaLabel(
-                Quota(limit = 50L * GIB, remaining = 12L * GIB, reset = null),
-                AppLanguage.PERSIAN,
-            ),
-        )
-        assertEquals(
             "آپلود ۱٫۲ مگابایت/ث · دانلود ۳٫۴ مگابایت/ث",
             DashboardFormat.ratesLabel(
                 ByteRates(up = 1.2 * MIB, down = 3.4 * MIB),
@@ -241,7 +170,6 @@ class DashboardFormatTest {
     }
 
     private companion object {
-        const val GIB = 1024L * 1024L * 1024L
         const val MIB = 1024.0 * 1024.0
     }
 }

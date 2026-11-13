@@ -30,7 +30,6 @@ var cliSettingKeys = []string{
 	"allow_lan",
 	"mtu",
 	"socks_port",
-	"quota_poll_minutes",
 	"tls_split",
 	"http_proxy",
 	"http_proxy_port",
@@ -284,8 +283,6 @@ func settingTextValue(view api.SettingsView, key string) string {
 		return strconv.Itoa(view.MTU)
 	case "socks_port":
 		return strconv.Itoa(view.SocksPort)
-	case "quota_poll_minutes":
-		return strconv.Itoa(view.QuotaPollMinutes)
 	case "tls_split":
 		return view.TLSSplit
 	case "http_proxy":

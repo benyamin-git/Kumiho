@@ -1,11 +1,13 @@
 package dev.benyamin.kumiho.ui.settings
 
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
+import org.json.JSONObject
 
 /** One HTTP response; the seam exists so tests never touch the network. */
 data class UpdateHttpResponse(val code: Int, val body: String)
@@ -18,7 +20,7 @@ interface UpdateFetcher {
     fun get(url: String, userAgent: String): UpdateHttpResponse
 }
 
-/** The structured reason a manual update check failed. */
+/** The structured reason an update check or install step failed. */
 sealed interface UpdateFailure {
     data object InstalledVersionInvalid : UpdateFailure
 
@@ -33,22 +35,38 @@ sealed interface UpdateFailure {
     data object MissingTag : UpdateFailure
 
     data object InvalidTag : UpdateFailure
+
+    data class Download(val detail: String?) : UpdateFailure
+
+    data object Checksum : UpdateFailure
+
+    data object InvalidApk : UpdateFailure
+
+    data class Install(val detail: String?) : UpdateFailure
 }
 
-/** The result of one manual check. Only [Available] carries a release to open. */
+/** One downloadable release asset; the URL is checked before it is offered. */
+data class UpdateAsset(val name: String, val url: String)
+
+/** The result of one check. [Available] carries the page and, when published, the assets. */
 sealed interface UpdateResult {
     data object UpToDate : UpdateResult
 
-    data class Available(val version: String, val url: String) : UpdateResult
+    data class Available(
+        val version: String,
+        val url: String,
+        val apk: UpdateAsset? = null,
+        val checksum: UpdateAsset? = null,
+    ) : UpdateResult
 
     data class Failed(val failure: UpdateFailure) : UpdateResult
 }
 
 /**
- * The update check. It is called only from the Settings tap: there is no
- * background job, no periodic poll and no download. Prereleases are included:
- * every v0.x release is published as a GitHub prerelease, so the latest-release
- * endpoint answered 404 for the whole series.
+ * The release feed. The app-scoped `UpdateManager` calls it on launch (throttled
+ * to once every 24 hours) and from Settings; this interface downloads nothing.
+ * Prereleases are included: every v0.x release is published as a GitHub
+ * prerelease, so the latest-release endpoint answered 404 for the whole series.
  */
 interface UpdateChecker {
     suspend fun check(currentVersion: String): UpdateResult
@@ -57,11 +75,12 @@ interface UpdateChecker {
 /**
  * Reads GitHub's release list for `benyamin-git/Kumiho`, takes the newest
  * published release, compares its `tag_name` to the installed app version with
- * a numeric semver comparison and returns the release page URL. Nothing is
- * downloaded or installed.
+ * a numeric semver comparison and returns the release page plus the matching
+ * ABI APK and checksum asset. Nothing is downloaded or installed here.
  */
 class GitHubUpdateChecker(
     private val fetcher: UpdateFetcher = HttpUrlConnectionFetcher(),
+    private val supportedAbis: List<String> = emptyList(),
 ) : UpdateChecker {
 
     override suspend fun check(currentVersion: String): UpdateResult = withContext(Dispatchers.IO) {
@@ -96,7 +115,56 @@ class GitHubUpdateChecker(
             ?: return@withContext UpdateResult.Failed(UpdateFailure.InvalidTag)
         if (latest <= current) return@withContext UpdateResult.UpToDate
         val url = release.optString("html_url").trim().ifEmpty { "$RELEASES_PAGE/tag/$tag" }
-        UpdateResult.Available(version = normalized, url = url)
+        val assets = parseAssets(release)
+        UpdateResult.Available(
+            version = normalized,
+            url = url,
+            apk = selectApk(assets, normalized),
+            checksum = selectChecksum(assets, normalized),
+        )
+    }
+
+    /** Keeps only assets whose URL is an HTTPS Kumiho release download. */
+    private fun parseAssets(release: JSONObject): List<UpdateAsset> {
+        val assets = release.optJSONArray("assets") ?: return emptyList()
+        return (0 until assets.length()).mapNotNull { index ->
+            val item = assets.optJSONObject(index) ?: return@mapNotNull null
+            val name = item.optString("name").trim()
+            val url = item.optString("browser_download_url").trim()
+            if (name.isEmpty() || !validAssetURL(url)) null else UpdateAsset(name, url)
+        }
+    }
+
+    /**
+     * The versioned asset wins over the stable alias, and the phone's preferred
+     * ABI wins over the next supported one. The universal APK is the fallback.
+     */
+    private fun selectApk(assets: List<UpdateAsset>, version: String): UpdateAsset? {
+        for (abi in supportedAbis) {
+            assets.firstOrNull { it.name == "Kumiho-v$version-Android-$abi.apk" }
+                ?.let { return it }
+            assets.firstOrNull { it.name == "Kumiho-Android-$abi.apk" }
+                ?.let { return it }
+        }
+        return assets.firstOrNull { it.name == "Kumiho-v$version-Android-universal.apk" }
+            ?: assets.firstOrNull { it.name == "Kumiho-Android-universal.apk" }
+    }
+
+    private fun selectChecksum(assets: List<UpdateAsset>, version: String): UpdateAsset? =
+        assets.firstOrNull { it.name == "SHA256SUMS-v$version" }
+            ?: assets.firstOrNull { it.name == "SHA256SUMS" }
+
+    /** Only HTTPS assets on this project's release download path are accepted. */
+    private fun validAssetURL(raw: String): Boolean = try {
+        val uri = URI(raw)
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals("github.com", ignoreCase = true) &&
+            uri.path?.startsWith(
+                "/benyamin-git/Kumiho/releases/download/",
+                ignoreCase = true,
+            ) == true
+    } catch (_: Exception) {
+        false
     }
 
     /** `0.10.0` is newer than `0.9.0`; leading `v` and build suffixes are tolerated. */
@@ -135,8 +203,9 @@ class GitHubUpdateChecker(
 }
 
 /**
- * The production HTTP client. It performs one GET, sends the required
- * User-Agent, and reads a bounded body; there is no asset or APK request.
+ * The production release-feed client. It performs one GET, sends the required
+ * User-Agent, and reads a bounded body; asset and APK downloads use
+ * `HttpUpdateDownloader`.
  */
 class HttpUrlConnectionFetcher : UpdateFetcher {
     override fun get(url: String, userAgent: String): UpdateHttpResponse {

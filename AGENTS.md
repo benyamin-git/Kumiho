@@ -298,15 +298,19 @@ them locally for any change under `android/`, `mobile/` or
   `tv/TvChannelPublisher` publishes the best-effort Google TV channel. There
   is no Account destination on the phone or TV: account management, Add
   account and the session-wide sign-out are the first Settings group, and the
-  entitlement/quota cards are gone. Settings has 25 catalog rows (23 engine
-  rows, 22 writes plus the Test relay
+  entitlement/quota cards are gone. Settings has 24 catalog rows (22 engine
+  rows, 21 writes plus the Test relay
   action, and 2 Android-owned read-only rows); the Region group owns
   `allow_locked`, `relay_url`, the write-only `relay_token` and `relay_test`,
   and a **Blocked region** guide action outside the catalog. The app-scoped
   `GuideController`/`AppContainer.guide` overlay is shared by phone and TV and
   is opened from setup consent, Settings → Region and the dashboard notice.
   Fastest and locked are shared engine state rendered by
-  `LocationTree.sections`.
+  `LocationTree.sections`. The app-scoped `update/UpdateManager` owns the
+  launch check (24 h throttle), the consented ABI APK download, SHA-256 and
+  package/version verification and the system-installer hand-off;
+  `ui/update/UpdatePromptHost` is the shared phone/TV consent dialog. Debug
+  builds keep the release-page check.
   `res/xml/network_security_config.xml` permits cleartext only for
   `127.0.0.1`/`localhost`, while app-wide cleartext stays off. The Android
   provider adopts the detached

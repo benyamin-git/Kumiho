@@ -1732,7 +1732,7 @@ func TestPollProjectsStatusEvents(t *testing.T) {
 		return s != nil && s.Label == "Reconnecting"
 	})
 
-	limit, remaining, reset := int64(50<<30), int64(4<<30), time.Now().Add(72*time.Hour).Unix()
+	limit, remaining := int64(50<<30), int64(4<<30)
 	f.emit(t, ipc.TypeStatus, api.Status{
 		State:         "CONNECTED",
 		Authenticated: true,
@@ -1740,7 +1740,7 @@ func TestPollProjectsStatusEvents(t *testing.T) {
 		Since:         time.Now().Add(-2*time.Minute - 500*time.Millisecond).Unix(),
 		Location:      "DE",
 		Server:        "de1.example:443",
-		Quota:         &api.Quota{Limit: &limit, Remaining: &remaining, Reset: &reset},
+		Quota:         &api.Quota{Limit: &limit, Remaining: &remaining},
 		Totals:        &api.ByteCounters{Up: 12 << 20, Down: 80 << 20},
 		Rates:         &api.ByteRates{Up: 1536, Down: 3072},
 	})
@@ -1751,9 +1751,6 @@ func TestPollProjectsStatusEvents(t *testing.T) {
 	s := ctrl.Snapshot().Status
 	if !strings.HasPrefix(s.Uptime, "2m") {
 		t.Fatalf("uptime = %q, want a 2m duration", s.Uptime)
-	}
-	if s.QuotaText != "4.0 GiB remaining of 50.0 GiB" {
-		t.Fatalf("quota = %q", s.QuotaText)
 	}
 	if s.Rates != "up 1.5 KiB/s / down 3.0 KiB/s" {
 		t.Fatalf("rates = %q", s.Rates)
@@ -2068,10 +2065,6 @@ func TestProjectionHelpers(t *testing.T) {
 	}
 	if got := humanBytes(4 << 30); got != "4.0 GiB" {
 		t.Errorf("humanBytes(4GiB) = %q", got)
-	}
-	limit, remaining := int64(100), int64(40)
-	if text, rem, lim := quotaView(&api.Quota{Limit: &limit, Remaining: &remaining}); text != "40 B remaining of 100 B" || rem != &remaining || lim != &limit {
-		t.Errorf("quotaView = %q", text)
 	}
 	if got := rttLabel(nil); got != "timeout" {
 		t.Errorf("rttLabel(nil) = %q", got)
@@ -3077,12 +3070,10 @@ func requireNotice(t *testing.T, n *Notice, code, message string) {
 func TestStatusViewRawFields(t *testing.T) {
 	f := newFakeDaemon()
 	since := time.Now().Add(-time.Minute).Unix()
-	reset := int64(1700000000)
 	f.status = api.Status{
 		State:        "CONNECTED",
 		Since:        since,
 		TokenExpires: 1800000000,
-		Quota:        &api.Quota{Reset: &reset},
 		Rates:        &api.ByteRates{Up: 1.5, Down: 2.5},
 		Totals:       &api.ByteCounters{Up: 10, Down: 20},
 	}
@@ -3094,13 +3085,13 @@ func TestStatusViewRawFields(t *testing.T) {
 	if v == nil {
 		t.Fatal("status = nil")
 	}
-	if v.State != "CONNECTED" || v.Since != since || v.TokenExpires != 1800000000 || v.QuotaResetUnix != reset {
+	if v.State != "CONNECTED" || v.Since != since || v.TokenExpires != 1800000000 {
 		t.Fatalf("raw status = %+v", v)
 	}
 	if v.RatesUp != 1.5 || v.RatesDown != 2.5 || v.TotalsUp != 10 || v.TotalsDown != 20 {
 		t.Fatalf("raw rates/totals = %+v", v)
 	}
-	if v.Label != "Connected" || v.TokenExpiry == "" || v.QuotaReset != "2023-11-14" || v.Rates == "" || v.Totals == "" {
+	if v.Label != "Connected" || v.TokenExpiry == "" || v.Rates == "" || v.Totals == "" {
 		t.Fatalf("formatted fallbacks changed: %+v", v)
 	}
 }

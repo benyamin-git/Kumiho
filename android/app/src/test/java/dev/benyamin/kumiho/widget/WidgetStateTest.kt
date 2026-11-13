@@ -1,19 +1,16 @@
 package dev.benyamin.kumiho.widget
 
-import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.vpn.TileAction
 import dev.benyamin.kumiho.vpn.TileSnapshot
 import dev.benyamin.kumiho.vpn.VpnUiState
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The widget presentation is the tile reducer plus the two facts only a wide
- * widget shows: the country and the remaining quota. These tests pin every
- * service state so a new state cannot silently render as a lie.
+ * The widget presentation is the tile reducer plus the one fact only a wide
+ * widget shows: the country. These tests pin every service state so a new
+ * state cannot silently render as a lie.
  */
 class WidgetStateTest {
 
@@ -57,7 +54,6 @@ class WidgetStateTest {
         assertEquals(WidgetLabel.UNAVAILABLE, view.label)
         assertEquals(TileAction.OPEN_APP, view.action)
         assertNull(view.location)
-        assertEquals(WidgetQuota.Hidden, view.quota)
     }
 
     @Test
@@ -72,12 +68,8 @@ class WidgetStateTest {
     @Test
     fun `location stays visible while reconnecting waiting and error`() {
         for (state in listOf(VpnUiState.RECONNECTING, VpnUiState.WAITING, VpnUiState.ERROR)) {
-            val view = WidgetState.reduce(
-                TileSnapshot(state, location = "jp", quota = Quota(100, 40, null)),
-                consentGranted = true,
-            )
+            val view = WidgetState.reduce(TileSnapshot(state, location = "jp"), consentGranted = true)
             assertEquals("$state location", "JP", view.location)
-            assertEquals("$state quota", WidgetQuota.Percent(40), view.quota)
         }
 
         val connecting = WidgetState.reduce(TileSnapshot(VpnUiState.CONNECTING, location = "jp"), true)
@@ -86,66 +78,8 @@ class WidgetStateTest {
 
     @Test
     fun `proxy-only never shows a location`() {
-        val view = WidgetState.reduce(
-            TileSnapshot(VpnUiState.PROXY_ONLY, location = "DE", quota = Quota(100, 25, null)),
-            true,
-        )
+        val view = WidgetState.reduce(TileSnapshot(VpnUiState.PROXY_ONLY, location = "DE"), true)
 
         assertNull(view.location)
-        assertEquals(WidgetQuota.Percent(25), view.quota)
-    }
-
-    @Test
-    fun `quota is a percentage only when both facts are reported`() {
-        fun connected(quota: Quota?) = WidgetState.reduce(
-            TileSnapshot(VpnUiState.CONNECTED, location = "DE", quota = quota),
-            true,
-        )
-
-        assertEquals(WidgetQuota.Percent(25), connected(Quota(100, 25, null)).quota)
-        assertEquals(WidgetQuota.Unknown, connected(Quota(null, 25, null)).quota)
-        assertEquals(WidgetQuota.Unknown, connected(Quota(100, null, null)).quota)
-        assertEquals(WidgetQuota.Unknown, connected(Quota(0, 10, null)).quota)
-        assertEquals(WidgetQuota.Percent(0), connected(Quota(100, 0, null)).quota)
-        assertEquals(WidgetQuota.Percent(100), connected(Quota(100, 250, null)).quota)
-    }
-
-    @Test
-    fun `quota is hidden while a connect is in flight and when the tunnel is off`() {
-        val connecting = WidgetState.reduce(
-            TileSnapshot(VpnUiState.CONNECTED, quota = Quota(100, 25, null), connectInFlight = true),
-            true,
-        )
-        assertEquals(WidgetLabel.CONNECTING, connecting.label)
-        assertEquals(TileAction.NONE, connecting.action)
-        assertEquals(WidgetQuota.Hidden, connecting.quota)
-
-        val off = WidgetState.reduce(TileSnapshot(VpnUiState.OFF, quota = Quota(100, 25, null)), true)
-        assertEquals(WidgetQuota.Hidden, off.quota)
-    }
-
-    @Test
-    fun `quota is visible in every state that reports a session`() {
-        for (state in listOf(
-            VpnUiState.CONNECTED,
-            VpnUiState.RECONNECTING,
-            VpnUiState.WAITING,
-            VpnUiState.PROXY_ONLY,
-            VpnUiState.ERROR,
-        )) {
-            val view = WidgetState.reduce(
-                TileSnapshot(state, quota = Quota(100, 30, null)),
-                consentGranted = true,
-            )
-            assertEquals("$state quota", WidgetQuota.Percent(30), view.quota)
-        }
-
-        val signedOut = WidgetState.reduce(
-            TileSnapshot(VpnUiState.NOT_SIGNED_IN, quota = Quota(100, 30, null)),
-            true,
-        )
-        assertEquals(WidgetQuota.Hidden, signedOut.quota)
-        assertFalse(signedOut.active)
-        assertTrue(signedOut.action == TileAction.OPEN_APP)
     }
 }

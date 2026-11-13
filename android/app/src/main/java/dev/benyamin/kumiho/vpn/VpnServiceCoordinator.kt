@@ -76,19 +76,11 @@ class VpnServiceCoordinator(context: Context) : ServiceConnection {
         if (collectorJob?.isActive == true) return
         collectorJob = scope.launch {
             var last: TileSnapshot? = null
-            var lastWidget: TileSnapshot? = null
             state.collect { snapshot ->
-                val tile = VpnStatusCache.update(snapshot)
-                // Widgets show the country and quota the tile omits, so their
-                // comparison includes the quota; the tile's stays quota-free.
-                val widgetState = tile.copy(connectInFlight = false)
-                if (widgetState != lastWidget) {
-                    lastWidget = widgetState
-                    WidgetRefresh.request(appContext)
-                }
-                val presentation = tile.copy(connectInFlight = false, quota = null)
+                val presentation = VpnStatusCache.update(snapshot).copy(connectInFlight = false)
                 if (presentation != last) {
                     last = presentation
+                    WidgetRefresh.request(appContext)
                     requestTileRefresh()
                 }
             }

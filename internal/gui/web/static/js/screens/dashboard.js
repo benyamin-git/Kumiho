@@ -1,7 +1,6 @@
 /* The Dashboard screen (inventory §Dashboard, D13): the Connect/Disconnect +
- * Options + Refresh action row, the Connect options popover, the eleven-row
- * status card with its quota bar, and the persistent notice row with its
- * conditional Retry.
+ * Options + Refresh action row, the Connect options popover, the nine-row
+ * status card, and the persistent notice row with its conditional Retry.
  *
  * Everything renders from the store's state envelopes (the controller
  * projection); actions go through the transport and the screen re-renders
@@ -48,8 +47,6 @@ const ROWS = [
   ["autoconnect", "dashboard.row.autoconnect"],
   ["token_expiry", "dashboard.row.token_expiry"],
   ["pass_expiry", "dashboard.row.pass_expiry"],
-  ["quota", "dashboard.row.quota"],
-  ["quota_reset", "dashboard.row.quota_reset"],
 ];
 
 // The raw controller states whose primary label is `Disconnect` (inventory
@@ -162,22 +159,11 @@ function build(host) {
     const dd = document.createElement("dd");
     const value = el("span", "dash__value");
     dd.append(value);
-    let bar = null;
-    let fill = null;
-    if (key === "quota") {
-      bar = el("div", "dash__bar");
-      bar.setAttribute("role", "progressbar");
-      bar.setAttribute("aria-label", t("dashboard.quota_aria"));
-      fill = el("div", "dash__bar-fill");
-      bar.append(fill);
-      bar.hidden = true;
-      dd.append(bar);
-    }
     // Rows are always present in canonical order and hidden while empty.
     dt.hidden = true;
     dd.hidden = true;
     card.append(dt, dd);
-    rows.set(key, { dt: dt, dd: dd, value: value, bar: bar, fill: fill });
+    rows.set(key, { dt: dt, dd: dd, value: value });
   }
 
   const notice = el("p", "dash__notice");
@@ -429,30 +415,6 @@ export default {
       return typeof seconds === "number" && seconds > 0 ? formatDateTime(seconds) : "";
     }
 
-    function quotaText(status) {
-      if (!status) return "";
-      const remaining = status.quota_remaining;
-      const limit = status.quota_limit;
-      if (typeof remaining === "number" && typeof limit === "number") {
-        return t("dashboard.quota_remaining_of", {
-          remaining: formatBytes(remaining),
-          limit: formatBytes(limit),
-        });
-      }
-      if (typeof remaining === "number") {
-        return t("dashboard.quota_remaining", { remaining: formatBytes(remaining) });
-      }
-      if (typeof limit === "number") {
-        return t("dashboard.quota_limit", { limit: formatBytes(limit) });
-      }
-      return "";
-    }
-
-    function quotaResetText(status) {
-      if (!status || typeof status.quota_reset_unix !== "number" || status.quota_reset_unix <= 0) return "";
-      return formatDate(status.quota_reset_unix);
-    }
-
     function renderRows(status) {
       setRow(ui.rows.get("uptime"), uptimeText(status));
       setRow(ui.rows.get("location"), status ? bdi(locationText(status)) : "");
@@ -465,23 +427,6 @@ export default {
       setRow(ui.rows.get("autoconnect"), status ? (status.autoconnect ? t("common.on") : t("common.off")) : "");
       setRow(ui.rows.get("token_expiry"), expiryText(status && status.token_expires));
       setRow(ui.rows.get("pass_expiry"), expiryText(status && status.pass_expires));
-      setRow(ui.rows.get("quota"), quotaText(status));
-      setRow(ui.rows.get("quota_reset"), quotaResetText(status));
-
-      // The quota bar: only when both numbers are known and the limit is
-      // positive; the fill is remaining/limit clamped to 0..1.
-      const quota = ui.rows.get("quota");
-      const remaining = status ? status.quota_remaining : undefined;
-      const limit = status ? status.quota_limit : undefined;
-      const known = typeof remaining === "number" && typeof limit === "number" && limit > 0;
-      quota.bar.hidden = !known;
-      if (known) {
-        const ratio = Math.min(1, Math.max(0, remaining / limit));
-        quota.fill.style.setProperty("inline-size", (ratio * 100).toFixed(1) + "%");
-        quota.bar.setAttribute("aria-valuemin", "0");
-        quota.bar.setAttribute("aria-valuemax", String(limit));
-        quota.bar.setAttribute("aria-valuenow", String(remaining));
-      }
     }
 
     function renderNotice(snapshot) {

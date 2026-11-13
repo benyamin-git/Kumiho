@@ -65,7 +65,6 @@ class DashboardScreenTest {
 
         rule.onNodeWithTag(DashboardTags.CARD_LOCATION).assertExists()
         rule.onNodeWithTag(DashboardTags.CARD_EXIT).assertExists()
-        rule.onNodeWithTag(DashboardTags.CARD_QUOTA).assertExists()
         rule.onNodeWithTag(DashboardTags.CARD_SESSION).assertExists()
         rule.onNodeWithTag(DashboardTags.DETAILS).assertExists()
 
@@ -74,7 +73,6 @@ class DashboardScreenTest {
         rule.onNodeWithText("edge.example.net").assertExists()
         rule.onNodeWithText("Netherlands").assertExists()
         rule.onNodeWithText("203.0.113.7").assertExists()
-        rule.onNodeWithText("12.3 GiB remaining of 50.0 GiB").assertExists()
         rule.onNodeWithText("up 12.3 MiB / down 45.6 MiB").assertExists()
         rule.onNodeWithText("up 1.2 MiB/s / down 3.4 MiB/s").assertExists()
     }
@@ -97,7 +95,6 @@ class DashboardScreenTest {
 
         rule.onNodeWithTag(DashboardTags.CARD_LOCATION).assertExists()
         rule.onNodeWithTag(DashboardTags.CARD_EXIT).assertDoesNotExist()
-        rule.onNodeWithTag(DashboardTags.CARD_QUOTA).assertDoesNotExist()
         rule.onNodeWithTag(DashboardTags.CARD_SESSION).assertDoesNotExist()
         rule.onNodeWithText(text(R.string.dashboard_location_recommended)).assertExists()
     }
@@ -109,7 +106,6 @@ class DashboardScreenTest {
         rule.onNodeWithText(text(R.string.dashboard_state_loading)).assertExists()
         rule.onNodeWithTag(DashboardTags.CARD_LOCATION).assertDoesNotExist()
         rule.onNodeWithTag(DashboardTags.CARD_EXIT).assertDoesNotExist()
-        rule.onNodeWithTag(DashboardTags.CARD_QUOTA).assertDoesNotExist()
         rule.onNodeWithTag(DashboardTags.CARD_SESSION).assertDoesNotExist()
     }
 

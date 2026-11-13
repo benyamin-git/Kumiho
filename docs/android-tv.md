@@ -119,8 +119,11 @@ default `system`) and the same DataStore mirror.
   foreground `VpnService` as on a phone. The TV app has no daemon.
 - Split tunneling works exactly as on the phone, including the
   Kumiho-always-outside rule.
-- The update check opens the release page in an in-app WebView, so a TV
-  without a browser still shows the release notes and download link.
+- Software updates work on the TV too: the launch check can download and
+  verify the ABI APK, then Android's installer asks for confirmation. When
+  there is no APK asset, or on a debug build, the Settings check opens the
+  release page in an in-app WebView so a TV without a browser still shows the
+  release notes and download link.
 - Logs can be viewed, copied line by line and shared with Android's share
   sheet. Diagnostics can be copied and re-run.
 - The Locations tab has a pinned **Fastest** row above one flat server list.
@@ -205,8 +208,9 @@ TV's own launcher or Wi-Fi behaviour.
       last); toggle the locked footer and confirm there are no carets or
       expand/collapse controls.
 - [ ] Settings → Account: add, rename, remove and sign out.
-- [ ] Settings: theme, accent, update check, split tunneling, bypass, every
-      engine row/dialog, and the Region URL/token/Test relay controls.
+- [ ] Settings: theme, accent, update check and the consented install flow,
+      split tunneling, bypass, every engine row/dialog, and the Region
+      URL/token/Test relay controls.
 - [ ] Logs: filter, search, follow and copy/share.
 - [ ] Diagnostics: re-run, copy, shortcuts and reset.
 - [ ] Sleep/wake and a Wi-Fi drop keep the service and the watchdog healthy

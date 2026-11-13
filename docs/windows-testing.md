@@ -198,7 +198,7 @@ and
       kumiho accounts rotation off
       kumiho accounts rename <id|email> "Test account"
 
-  Expect: one `*` row with email, method, quota, and
+  Expect: one `*` row with email, method, and
   `Rotation: on (threshold 20%)`; turning rotation off keeps the 20% value.
   `rename` prints the new label and a second `kumiho accounts` shows it. The
   daemon writes `%ProgramData%\kumiho\accounts.json` (ACL protected) and
@@ -741,7 +741,7 @@ never persisted).
   Expect: rows appear as data arrives, in order `Uptime`, `Location` (`CC` or
   `CC (server)`), `Exit IP` (`IP` or `IP (country)`), `Rates`, `Totals`,
   `Kill switch` (`On`/`Off`), `Autoconnect` (`On`/`Off`), `Token expiry`,
-  `Pass expiry`, `Quota` (with a remaining-quota bar), `Quota resets`. Re-run
+  `Pass expiry`. Re-run
   the section 8 egress check to confirm the GUI agrees:
 
       curl.exe -4 -s https://www.cloudflare.com/cdn-cgi/trace
@@ -831,7 +831,7 @@ primary-tinted outline icon.
   `DoH provider` (`automatic`/`cloudflare`/`google`/`quad9`/`off`),
   `DNS upstream` (cue `(provider default)`), `Edge address` (cue `(resolve)`),
   `Upstream proxy` (cue `(direct)`), `Exclude CIDRs` (cue `(none)`),
-  `Allow LAN`, `MTU`, `SOCKS port`, `Quota poll`. Set `Kill switch` to `off`
+  `Allow LAN`, `MTU`, `SOCKS port`. Set `Kill switch` to `off`
   and confirm the Dashboard `Kill switch` row follows immediately, then set it
   back to `on`; cycle `Log level` once (applies immediately); edit one text row
   and **Apply** — a changed row shows an `overridden` mark and a **Reset**
@@ -1150,7 +1150,7 @@ the upgrade-specific lines below are then N/A — record that.
 
 - [ ] Open the GUI `Settings` screen (and optionally the TUI `s` screen) and
       find the `Background service` rows. The five v0.4.0 rows follow
-      `Quota poll`.
+      `SOCKS port`.
 
   Expect (GUI labels): `TLS split` (`off`/`first-byte`/`sni`), `HTTP proxy`
   (`on`/`off`), `HTTP proxy port` (number, default `8080`), `Solve
@@ -1569,7 +1569,7 @@ observed unless it was.
 
   Expect: `Signed out.`; the tunnel is disconnected; `state:` is
   `UNAUTHENTICATED`; no `account:`, `token expires:`, `pass expires:`,
-  `quota:`, `exit ip:`, `totals:` or `rates:` lines; `False` for both token
+  `exit ip:`, `totals:` or `rates:` lines; `False` for both token
   files (logout clears every account).
 
 - [ ] Check the GUI: Settings → Account shows `Not signed in` (the account
@@ -1627,7 +1627,7 @@ Plain `kumiho disconnect` is not sign-out: it may keep the last session's
 | 7. DNS-only UDP ASSOCIATE: port 53/0, DoH chain, SERVFAIL when off, both modes | 18.7 (one transport mode; both modes in gate tests) |
 | 8. Keepalive profile: `standard` 10 s / `slow` 25 s, next connect | 18.8 (profile applies; timeout values in unit tests) |
 | 9. Settings surface complete: config, overrides, TUI scrolling, GUI rows, defaults, reset | 16.5, 18.2; validation and defaults in the gate |
-| 10. Clean sign-out: quota, exit, rates, totals and pass expiry wiped | 18.9 |
+| 10. Clean sign-out: exit, rates, totals and pass expiry wiped | 18.9 |
 | 11. Documentation is true: CHANGELOG, README, PLAN, docs, inventories, NOTICE, AGENTS | docs review (this file); not a Windows step |
 | 13. GUI proof: new rows in the dev harness under Light/Dark/OLED; accessibility floor | harness/Playwright (not a Windows step); 18.2 on Windows |
 

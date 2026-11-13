@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,6 +63,115 @@ class UpdateCheckerTest {
     fun `a debug version suffix is ignored when comparing`() = runBlocking {
         fetcher.response = UpdateHttpResponse(200, releases(release("v0.5.0")))
         assertEquals(UpdateResult.UpToDate, checker().check("0.5.0-debug"))
+    }
+
+    @Test
+    fun `the preferred abi apk and versioned checksum are selected`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(
+            200,
+            releases(releaseWithAssets("v0.6.0", "0.6.0")),
+        )
+
+        assertEquals(
+            UpdateResult.Available(
+                version = "0.6.0",
+                url = DEFAULT_URL,
+                apk = UpdateAsset(
+                    "Kumiho-v0.6.0-Android-arm64-v8a.apk",
+                    "$ASSET_BASE/Kumiho-v0.6.0-Android-arm64-v8a.apk",
+                ),
+                checksum = UpdateAsset(
+                    "SHA256SUMS-v0.6.0",
+                    "$ASSET_BASE/SHA256SUMS-v0.6.0",
+                ),
+            ),
+            GitHubUpdateChecker(fetcher, listOf("arm64-v8a", "armeabi-v7a"))
+                .check("0.5.0"),
+        )
+    }
+
+    @Test
+    fun `the universal apk is the fallback when no abi matches`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(
+            200,
+            releases(releaseWithAssets("v0.6.0", "0.6.0")),
+        )
+
+        val result = GitHubUpdateChecker(fetcher, listOf("x86_64")).check("0.5.0")
+        assertEquals(
+            "Kumiho-v0.6.0-Android-universal.apk",
+            (result as UpdateResult.Available).apk?.name,
+        )
+    }
+
+    @Test
+    fun `stable asset aliases are accepted when versioned ones are absent`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(
+            200,
+            releases(
+                release("v0.6.0").put(
+                    "assets",
+                    JSONArray()
+                        .put(asset("Kumiho-Android-armeabi-v7a.apk", "$ASSET_BASE/armv7"))
+                        .put(asset("SHA256SUMS", "$ASSET_BASE/SHA256SUMS")),
+                ),
+            ),
+        )
+
+        val result = GitHubUpdateChecker(fetcher, listOf("armeabi-v7a")).check("0.5.0")
+            as UpdateResult.Available
+        assertEquals("Kumiho-Android-armeabi-v7a.apk", result.apk?.name)
+        assertEquals("SHA256SUMS", result.checksum?.name)
+    }
+
+    @Test
+    fun `an asset outside the release download path is ignored`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(
+            200,
+            releases(
+                release("v0.6.0").put(
+                    "assets",
+                    JSONArray()
+                        .put(asset("Kumiho-v0.6.0-Android-arm64-v8a.apk", "https://evil.test/a.apk"))
+                        .put(asset("SHA256SUMS-v0.6.0", "https://evil.test/SHA256SUMS")),
+                ),
+            ),
+        )
+
+        val result = GitHubUpdateChecker(fetcher, listOf("arm64-v8a")).check("0.5.0")
+            as UpdateResult.Available
+        assertNull(result.apk)
+        assertNull(result.checksum)
+    }
+
+    @Test
+    fun `an asset from another repository is ignored`() = runBlocking {
+        fetcher.response = UpdateHttpResponse(
+            200,
+            releases(
+                release("v0.6.0").put(
+                    "assets",
+                    JSONArray()
+                        .put(
+                            asset(
+                                "Kumiho-v0.6.0-Android-arm64-v8a.apk",
+                                "https://github.com/other/repo/releases/download/v0.6.0/a.apk",
+                            ),
+                        )
+                        .put(
+                            asset(
+                                "SHA256SUMS-v0.6.0",
+                                "https://github.com/other/repo/releases/download/v0.6.0/SHA256SUMS",
+                            ),
+                        ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            UpdateResult.Available(version = "0.6.0", url = DEFAULT_URL),
+            checker().check("0.5.0"),
+        )
     }
 
     @Test
@@ -179,6 +289,35 @@ class UpdateCheckerTest {
         return release
     }
 
+    private fun releaseWithAssets(tag: String, version: String): JSONObject = release(tag)
+        .put(
+            "assets",
+            JSONArray()
+                .put(
+                    asset(
+                        "Kumiho-v$version-Android-arm64-v8a.apk",
+                        "$ASSET_BASE/Kumiho-v$version-Android-arm64-v8a.apk",
+                    ),
+                )
+                .put(
+                    asset(
+                        "Kumiho-v$version-Android-armeabi-v7a.apk",
+                        "$ASSET_BASE/Kumiho-v$version-Android-armeabi-v7a.apk",
+                    ),
+                )
+                .put(
+                    asset(
+                        "Kumiho-v$version-Android-universal.apk",
+                        "$ASSET_BASE/Kumiho-v$version-Android-universal.apk",
+                    ),
+                )
+                .put(asset("SHA256SUMS-v$version", "$ASSET_BASE/SHA256SUMS-v$version"))
+                .put(asset("SHA256SUMS", "$ASSET_BASE/SHA256SUMS")),
+        )
+
+    private fun asset(name: String, url: String): JSONObject =
+        JSONObject().put("name", name).put("browser_download_url", url)
+
     private fun releases(vararg releases: JSONObject): String {
         val array = JSONArray()
         releases.forEach { array.put(it) }
@@ -200,5 +339,7 @@ class UpdateCheckerTest {
     private companion object {
         const val RELEASE_URL = "https://github.com/benyamin-git/Kumiho/releases/tag/v0.6.0"
         const val DEFAULT_URL = RELEASE_URL
+        const val ASSET_BASE =
+            "https://github.com/benyamin-git/Kumiho/releases/download/v0.6.0"
     }
 }

@@ -1,11 +1,9 @@
 package dev.benyamin.kumiho.widget
 
-import dev.benyamin.kumiho.ui.account.AccountFormat
 import dev.benyamin.kumiho.vpn.TileAction
 import dev.benyamin.kumiho.vpn.TileSnapshot
 import dev.benyamin.kumiho.vpn.TileState
 import dev.benyamin.kumiho.vpn.TileSubtitle
-import dev.benyamin.kumiho.vpn.VpnUiState
 
 /** The two home-screen widget shapes. */
 enum class WidgetSize { TOGGLE_1X1, STATUS_2X1 }
@@ -24,24 +22,14 @@ enum class WidgetLabel {
     ERROR,
 }
 
-/** The quota line: hidden when the tunnel is off, unknown when not reported. */
-sealed interface WidgetQuota {
-    data object Hidden : WidgetQuota
-
-    data object Unknown : WidgetQuota
-
-    data class Percent(val value: Int) : WidgetQuota
-}
-
 /**
  * What a widget renders. It reuses the tile reducer for truth, actions and
- * consent, then adds the country and quota the 2x1 surface shows.
+ * consent, then adds the country the 2x1 surface shows.
  */
 data class WidgetPresentation(
     val active: Boolean,
     val label: WidgetLabel,
     val location: String?,
-    val quota: WidgetQuota,
     val action: TileAction,
 )
 
@@ -53,7 +41,6 @@ object WidgetState {
             active = tile.active,
             label = label,
             location = if (label in LOCATION_STATES) TileState.location(snapshot?.location) else null,
-            quota = quota(snapshot),
             action = tile.action,
         )
     }
@@ -79,19 +66,4 @@ object WidgetState {
         TileSubtitle.Error -> WidgetLabel.ERROR
     }
 
-    private fun quota(snapshot: TileSnapshot?): WidgetQuota {
-        if (snapshot == null || snapshot.connectInFlight) return WidgetQuota.Hidden
-        val visible = when (snapshot.state) {
-            VpnUiState.CONNECTED,
-            VpnUiState.RECONNECTING,
-            VpnUiState.WAITING,
-            VpnUiState.PROXY_ONLY,
-            VpnUiState.ERROR,
-            -> true
-            else -> false
-        }
-        if (!visible) return WidgetQuota.Hidden
-        val percent = AccountFormat.quotaPercent(snapshot.quota) ?: return WidgetQuota.Unknown
-        return WidgetQuota.Percent(percent)
-    }
 }

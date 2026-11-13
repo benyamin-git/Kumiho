@@ -920,21 +920,6 @@ func (m *Model) renderDashboard(b *strings.Builder) {
 			}
 			fmt.Fprintln(b, line)
 		}
-		if q := m.status.Quota; q != nil && (q.Remaining != nil || q.Limit != nil) {
-			line := "quota:        "
-			switch {
-			case q.Remaining != nil && q.Limit != nil:
-				line += fmt.Sprintf("%s %s of %s", quotaBar(*q.Remaining, *q.Limit, 20), humanBytes(*q.Remaining), humanBytes(*q.Limit))
-			case q.Remaining != nil:
-				line += fmt.Sprintf("%s remaining", humanBytes(*q.Remaining))
-			default:
-				line += humanBytes(*q.Limit)
-			}
-			fmt.Fprintln(b, line)
-			if q.Reset != nil {
-				fmt.Fprintf(b, "quota reset:  %s\n", time.Unix(*q.Reset, 0).UTC().Format("2006-01-02"))
-			}
-		}
 		if m.status.ExitIP != "" {
 			exit := m.status.ExitIP
 			if m.status.ExitCountry != "" {
@@ -976,22 +961,6 @@ func (m *Model) renderDashboard(b *strings.Builder) {
 	} else {
 		fmt.Fprintln(b, dimStyle.Render("l login • o locations • r refresh • ? help • q quit"))
 	}
-}
-
-// quotaBar renders a fixed-width progress bar for the remaining quota.
-func quotaBar(remaining, limit int64, width int) string {
-	if limit <= 0 || width <= 0 {
-		return ""
-	}
-	frac := float64(remaining) / float64(limit)
-	if frac < 0 {
-		frac = 0
-	}
-	if frac > 1 {
-		frac = 1
-	}
-	filled := int(frac*float64(width) + 0.5)
-	return "[" + strings.Repeat("█", filled) + strings.Repeat("░", width-filled) + "]"
 }
 
 // humanBytes formats a byte count with binary units.

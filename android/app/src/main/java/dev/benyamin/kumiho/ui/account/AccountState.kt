@@ -3,7 +3,6 @@ package dev.benyamin.kumiho.ui.account
 import dev.benyamin.kumiho.engine.Account
 import dev.benyamin.kumiho.engine.AccountSummary
 import dev.benyamin.kumiho.engine.Accounts
-import dev.benyamin.kumiho.engine.Quota
 import dev.benyamin.kumiho.ui.setup.SignInPaneState
 
 /** Copy the account section generates itself, resolved by the UI. */
@@ -115,14 +114,6 @@ object AccountFormat {
     fun onlineError(account: Account?): String? = account?.error
         ?.trim()
         ?.takeIf { it.isNotEmpty() && !isNotSignedIn(account) }
-
-    /** The remaining percentage, or null when the engine did not report it. */
-    fun quotaPercent(quota: Quota?): Int? {
-        val limit = quota?.limit ?: return null
-        val remaining = quota.remaining ?: return null
-        if (limit <= 0L) return null
-        return ((remaining.coerceAtLeast(0L) * 100L) / limit).toInt().coerceIn(0, 100)
-    }
 
     /** The account that becomes active after removing the active one. */
     fun nextActive(accounts: Accounts?, target: AccountSummary?): AccountSummary? {

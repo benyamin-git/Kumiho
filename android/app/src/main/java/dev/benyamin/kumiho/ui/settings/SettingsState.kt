@@ -66,7 +66,7 @@ sealed interface RelayTestState {
     data class Unreachable(val detail: String) : RelayTestState
 }
 
-/** The manual update check's visible state. Nothing runs until the user taps. */
+/** The shared update state: launch prompt, manual check, download and install. */
 sealed interface UpdateState {
     data object Idle : UpdateState
 
@@ -74,14 +74,28 @@ sealed interface UpdateState {
 
     data object UpToDate : UpdateState
 
-    data class Available(val version: String, val url: String) : UpdateState
+    data class Available(
+        val version: String,
+        val url: String,
+        val installable: Boolean = false,
+        val installError: UpdateFailure? = null,
+    ) : UpdateState
+
+    data class Downloading(val version: String, val progress: Int) : UpdateState
+
+    data class ReadyToInstall(val version: String) : UpdateState
+
+    data class Installing(val version: String) : UpdateState
+
+    data class Installed(val version: String) : UpdateState
 
     data class Failed(val failure: UpdateFailure) : UpdateState
 }
 
 /**
- * The whole Settings screen state. The view model is its only producer; the
- * screen reads it and never writes engine state itself.
+ * The whole Settings screen state. The view model produces the engine
+ * snapshot; the route overlays the app-scoped update state. The screen reads
+ * it and never writes engine state itself.
  */
 data class SettingsState(
     /** The first load is running and there is no snapshot yet. */
@@ -100,6 +114,7 @@ data class SettingsState(
     val rowError: SettingsRowError? = null,
     /** A refresh failure that retained the snapshot, with a retry. */
     val notice: SettingsNotice? = null,
+    /** Projected from the app-scoped update manager while Settings is open. */
     val update: UpdateState = UpdateState.Idle,
     val appVersion: String = "",
     val engineVersion: String = "",
@@ -196,6 +211,8 @@ data class SettingsActions(
     val onRetryLanguage: () -> Unit = {},
     /** Opens the app-scoped Blocked region guide (v0.11.0). */
     val onOpenGuide: () -> Unit = {},
+    /** Downloads, verifies and opens the installer for an available update. */
+    val onInstallUpdate: () -> Unit = {},
 )
 
 /** Stable test tags for the Compose tests; all live under `settings_`. */
@@ -238,6 +255,7 @@ object SettingsTags {
     const val UPDATE_CHECK = "settings_update_check"
     const val UPDATE_STATUS = "settings_update_status"
     const val UPDATE_OPEN = "settings_update_open"
+    const val UPDATE_INSTALL = "settings_update_install"
     const val UPDATE_RETRY = "settings_update_retry"
 
     const val NOTIFICATIONS_STATE = "settings_notifications_state"

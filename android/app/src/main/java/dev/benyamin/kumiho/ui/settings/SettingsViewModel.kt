@@ -50,7 +50,8 @@ class CoordinatorSettingsGateway(
 /**
  * The Settings state machine: load/retry, the collapsed group, one engine
  * change at a time, the reload after a write (`settings_set` only pushes
- * status), the override marks and the manual update check.
+ * status) and the override marks. The update state is owned by the
+ * app-scoped [dev.benyamin.kumiho.update.UpdateManager].
  *
  * A mutation never guesses: the visible values come from the engine snapshot,
  * so a failed change leaves the old snapshot and a successful one is only
@@ -59,7 +60,6 @@ class CoordinatorSettingsGateway(
  */
 class SettingsViewModel(
     private val gateway: SettingsGateway,
-    private val updateChecker: UpdateChecker,
     val appVersion: String,
     val engineVersion: String,
 ) : ViewModel() {
@@ -72,7 +72,6 @@ class SettingsViewModel(
     val state: StateFlow<SettingsState> = mutableState.asStateFlow()
 
     private var loadJob: Job? = null
-    private var updateJob: Job? = null
 
     init {
         load()
@@ -298,38 +297,6 @@ class SettingsViewModel(
             result.error?.takeIf { it.isNotBlank() }
                 ?: if (result.status != 0) "HTTP ${result.status}" else "",
         )
-    }
-
-    // ---- update check ----------------------------------------------------
-
-    /**
-     * The one and only trigger for an update check: an explicit tap. There is
-     * no job at startup and no periodic call. A check already running ignores
-     * a second tap; every result (including failure) can be retried here.
-     */
-    fun checkForUpdates() {
-        if (mutableState.value.update is UpdateState.Checking) return
-        if (updateJob?.isActive == true) return
-        mutableState.update { it.copy(update = UpdateState.Checking) }
-        updateJob = viewModelScope.launch {
-            val result = try {
-                updateChecker.check(appVersion)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                UpdateResult.Failed(UpdateFailure.Network(messageOf(error)))
-            }
-            mutableState.update { current ->
-                current.copy(
-                    update = when (result) {
-                        UpdateResult.UpToDate -> UpdateState.UpToDate
-                        is UpdateResult.Available ->
-                            UpdateState.Available(result.version, result.url)
-                        is UpdateResult.Failed -> UpdateState.Failed(result.failure)
-                    },
-                )
-            }
-        }
     }
 
     private fun messageOf(error: Throwable): String =

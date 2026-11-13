@@ -2,11 +2,9 @@ package dev.benyamin.kumiho.ui.tv.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,12 +14,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.benyamin.kumiho.R
@@ -31,7 +27,6 @@ import dev.benyamin.kumiho.ui.dashboard.DashboardTags
 import dev.benyamin.kumiho.ui.tv.components.TvFocusableSurface
 import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
 import dev.benyamin.kumiho.ui.tv.theme.TvDimens
-import java.time.ZoneId
 
 /**
  * The right column of the TV dashboard: only the cards whose facts are real
@@ -65,9 +60,6 @@ fun TvDashboardCards(
         }
         if (state.showExitCard) {
             ExitCard(state = state)
-        }
-        if (state.showQuotaCard) {
-            QuotaCard(state = state)
         }
         if (state.showSessionCard) {
             SessionCard(state = state)
@@ -157,59 +149,6 @@ private fun ExitCard(state: DashboardState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun QuotaCard(state: DashboardState) {
-    val quota = state.status?.quota
-    val label = DashboardFormat.quotaLabel(quota, LocalAppLanguage.current)
-    val fraction = DashboardFormat.quotaFraction(quota)
-    val reset = DashboardFormat.dateLabel(
-        epochSeconds = quota?.reset ?: 0L,
-        zone = ZoneId.systemDefault(),
-        locale = LocalConfiguration.current.locales[0],
-        language = LocalAppLanguage.current,
-    )
-    Panel(modifier = Modifier.testTag(DashboardTags.CARD_QUOTA)) {
-        CardTitle(stringResource(R.string.dashboard_quota_title))
-        if (label != null) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        if (fraction != null) {
-            QuotaBar(fraction = fraction)
-        }
-        if (reset != null) {
-            Text(
-                text = stringResource(R.string.dashboard_quota_resets, reset),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuotaBar(fraction: Float) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(8.dp)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(colors.surfaceVariant),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                .height(8.dp)
-                .clip(MaterialTheme.shapes.extraSmall)
-                .background(colors.primary),
-        )
     }
 }
 

@@ -17,21 +17,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.ui.components.KumihoCard
-import dev.benyamin.kumiho.ui.components.KumihoQuotaBar
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalAppLanguage
-import java.time.ZoneId
 
 /**
- * The four dashboard cards. A card exists only when its data does: Exit IP,
- * Quota and Session are hidden while disconnected, empty or stale. The Location
+ * The three dashboard cards. A card exists only when its data does: Exit IP
+ * and Session are hidden while disconnected, empty or stale. The Location
  * card is the one honest exception: with no persisted selection it says
  * "Recommended", which is the engine's real default, not a placeholder.
  *
@@ -51,9 +48,6 @@ fun SummaryCards(
         }
         if (state.showExitCard) {
             add { slot -> ExitCard(state, slot) }
-        }
-        if (state.showQuotaCard) {
-            add { slot -> QuotaCard(state, slot) }
         }
         if (state.showSessionCard) {
             add { slot -> SessionCard(state, slot) }
@@ -158,43 +152,6 @@ private fun ExitCard(state: DashboardState, modifier: Modifier = Modifier) {
                 text = country,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuotaCard(state: DashboardState, modifier: Modifier = Modifier) {
-    val quota = state.status?.quota
-    val label = DashboardFormat.quotaLabel(quota, LocalAppLanguage.current)
-    val fraction = DashboardFormat.quotaFraction(quota)
-    val reset = DashboardFormat.dateLabel(
-        epochSeconds = quota?.reset ?: 0L,
-        zone = ZoneId.systemDefault(),
-        locale = LocalConfiguration.current.locales[0],
-        language = LocalAppLanguage.current,
-    )
-    KumihoCard(modifier = modifier.testTag(DashboardTags.CARD_QUOTA)) {
-        CardTitle(stringResource(R.string.dashboard_quota_title))
-        if (label != null) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        if (fraction != null) {
-            KumihoQuotaBar(
-                fraction = fraction,
-                modifier = Modifier.padding(top = Dimens.Space2),
-            )
-        }
-        if (reset != null) {
-            Text(
-                text = stringResource(R.string.dashboard_quota_resets, reset),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Dimens.Space1),
             )
         }
     }

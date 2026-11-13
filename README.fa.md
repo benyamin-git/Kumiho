@@ -46,13 +46,13 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 
 | داشبورد | تنظیمات |
 | --- | --- |
-| ![داشبورد فارسی Windows GUI: تونل متصل، سهمیه و مجموع اتصال](screenshots/fa/windows-gui/dashboard.png) | ![تنظیمات فارسی Windows GUI: بخش منطقه، رله و راهنمای منطقهٔ مسدود](screenshots/fa/windows-gui/settings.png) |
+| ![داشبورد فارسی Windows GUI: تونل متصل و مجموع اتصال](screenshots/fa/windows-gui/dashboard.png) | ![تنظیمات فارسی Windows GUI: بخش منطقه، رله و راهنمای منطقهٔ مسدود](screenshots/fa/windows-gui/settings.png) |
 
 ### Linux TUI
 
 | داشبورد | مکان‌ها |
 | --- | --- |
-| ![داشبورد TUI لینوکس: وضعیت اتصال، نوار سهمیه و مجموع اتصال](screenshots/linux-tui/dashboard.png) | ![مکان‌های TUI لینوکس: ردیف سریع‌ترین بالای ردیف‌ها، نشان قفل و زمان پینگ](screenshots/linux-tui/locations.png) |
+| ![داشبورد TUI لینوکس: وضعیت اتصال و مجموع اتصال](screenshots/linux-tui/dashboard.png) | ![مکان‌های TUI لینوکس: ردیف سریع‌ترین بالای ردیف‌ها، نشان قفل و زمان پینگ](screenshots/linux-tui/locations.png) |
 
 ![تنظیمات TUI لینوکس: ردیف‌های رله و راهنمای منطقه](screenshots/linux-tui/settings.png)
 
@@ -62,7 +62,7 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 
 | داشبورد | تنظیمات |
 | --- | --- |
-| <img src="screenshots/fa/android-phone/dashboard.png" width="260" alt="داشبورد فارسی Android: تونل متصل با سهمیه و مجموع اتصال"> | <img src="screenshots/fa/android-phone/settings.png" width="260" alt="تنظیمات فارسی Android: ردیف زبان و کارت‌های برنامه و سیستم"> |
+| <img src="screenshots/fa/android-phone/dashboard.png" width="260" alt="داشبورد فارسی Android: تونل متصل با مکان، IP خروجی و مجموع اتصال"> | <img src="screenshots/fa/android-phone/settings.png" width="260" alt="تنظیمات فارسی Android: ردیف زبان و کارت‌های برنامه و سیستم"> |
 
 ### Android TV
 
@@ -175,8 +175,9 @@ APK مناسب دستگاه خود را دانلود و باز کنید. وقت�
   ورود مرورگری استفاده کنید.
 - فایل اجرایی Windows امضا نشده است، بنابراین SmartScreen در اجرای نخست
   هشدار می‌دهد.
-- Android IPv6 را می‌گیرد و blackhole می‌کند، نه تونل؛ نصب‌کنندهٔ APK در
-  برنامه و به‌روزرسانی خودکار وجود ندارد.
+- Android IPv6 را می‌گیرد و blackhole می‌کند، نه تونل. به‌روزرسانی Android
+  فقط پس از تأیید شما در نصب‌کنندهٔ سیستم انجام می‌شود و کانال فروشگاهی برای
+  به‌روزرسانی وجود ندارد.
 - استفاده از یک کلاینت غیررسمی طبق شرایط سرویس Mozilla در منطقهٔ خاکستری است.
   چرخش حساب اختیاری است و به‌طور پیش‌فرض خاموش می‌ماند.
 

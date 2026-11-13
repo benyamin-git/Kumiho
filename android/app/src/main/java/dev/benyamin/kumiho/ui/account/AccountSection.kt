@@ -51,7 +51,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benyamin.kumiho.AppContainer
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.engine.AccountSummary
-import dev.benyamin.kumiho.ui.components.KumihoCard
 import dev.benyamin.kumiho.ui.setup.SignInPane
 import dev.benyamin.kumiho.ui.theme.Dimens
 import dev.benyamin.kumiho.ui.theme.LocalKumihoColors
@@ -364,7 +363,7 @@ private fun AccountStatus(state: AccountUiState, actions: AccountActions) {
 
 @Composable
 private fun AccountsSection(state: AccountUiState, actions: AccountActions) {
-    KumihoCard(modifier = Modifier.fillMaxWidth().testTag(AccountTags.ACCOUNTS)) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(AccountTags.ACCOUNTS)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

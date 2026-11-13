@@ -140,8 +140,7 @@ Global CLI mechanics (apply to every subcommand):
 
 ## `kumiho accounts` — list and manage stored accounts
 - Invocation: `kumiho accounts [list]`.
-- Prints one line per account: active marker `*`, email plus label, method,
-  quota percent (`quota 42%`, `quota exhausted`, or `quota unknown`) and
+- Prints one line per account: active marker `*`, email plus label, method and
   `re-auth required` when set. Ends with
   `Rotation: on|off (threshold N%)` and, when present, `Notice: <text>` and
   `Error: <text>`.
@@ -310,10 +309,9 @@ Global CLI mechanics (apply to every subcommand):
 - Daemon required (`status` request). `--json` prints the full `api.Status`
   JSON (indent 2). Human output prints only present fields, in this order:
   `state`, `account`, `token expires` (RFC3339), `location` (`CODE (server)`),
-  `pass expires`, `quota` (`<remaining> remaining of <limit>` + `(resets ...)`),
-  `exit ip` (`ip (country)`), `totals` (`up X / down Y`, binary units),
-  `rates` (`up X/s / down Y/s`, sampled every 2 s), `kill switch: on|off`,
-  `autoconnect: on|off`, `state since`.
+  `pass expires`, `exit ip` (`ip (country)`), `totals` (`up X / down Y`, binary
+  units), `rates` (`up X/s / down Y/s`, sampled every 2 s), `kill switch:
+  on|off`, `autoconnect: on|off`, `state since`.
 - Exit: 0 / 1 (daemon error) / 2 (flag parse).
 
 Command not present: there is no `kumiho shutdown`, no service
@@ -349,8 +347,7 @@ Shows (when a status snapshot has arrived; otherwise `loading status...`):
   `FATAL`, yellow otherwise; `uptime:` (`time.Since`, rounded to seconds) only
   while `CONNECTED`/`PROXY_ONLY`; `account:`; `token expiry:` (UTC RFC3339)
 - `location:` (`CODE (server)`), `pass expiry:` (UTC RFC3339)
-- `quota:` with a 20-cell bar `[████░░░░]`, `remaining of limit`, and
-  `quota reset:` date; `exit ip` (`ip (country)`); `totals` up/down;
+- `exit ip` (`ip (country)`); `totals` up/down;
   `rates` up/down per second; `dns:` and `ipv6:` badges (from status);
   `kill switch: on|off`; `autoconnect: on|off`
 - notice line (green) after actions: `connected`, `disconnected`,
@@ -476,7 +473,6 @@ line shown under the list for the focused row, verbatim):
 | `allow_lan` | allow LAN | bool toggle | on/off | keep the local subnet outside the tunnel; next connect |
 | `mtu` | MTU | inline number edit | 576–65535 | tun device MTU; next connect |
 | `socks_port` | SOCKS port | inline number edit | 1–65535 | loopback SOCKS5 listener; next connect |
-| `quota_poll_minutes` | quota poll | inline number edit | 1–1440 | minutes between quota refreshes while connected; next connect |
 | `tls_split` | TLS split | enum cycles off→first-byte→sni | off/first-byte/sni | split the TLS ClientHello across writes; next connect |
 | `http_proxy` | HTTP proxy | bool toggle | on/off | loopback HTTP/CONNECT proxy through the tunnel; next connect |
 | `http_proxy_port` | HTTP proxy port | inline number edit | 1–65535 | loopback HTTP proxy listener; next connect |
@@ -560,14 +556,13 @@ Keys:
 ## Account screen
 Shows (after load; `loading accounts...` before):
 - the account list, one row per stored account: selection marker, `*` for the
-  active account, email (plus label when it differs), method, `N% left`,
-  `quota exhausted` or `quota unknown`, and `needs sign-in` for a browser
-  account requiring re-authentication. Empty: `No accounts on this device.`
+  active account, email (plus label when it differs), method, and
+  `needs sign-in` for a browser account requiring re-authentication. Empty:
+  `No accounts on this device.`
 - the live Guardian entitlement below the list: `email:`, `uid:` (if
   present), `subscribed: yes/no`, or `subscribed: unknown (<error>)` when the
-  online lookup failed (local fields remain valid), `quota:` (`<remaining>
-  remaining of <max>` / `<remaining> remaining` / `<max> per period`),
-  `bandwidth: limited` when flagged, `token expiry:` (UTC RFC3339).
+  online lookup failed (local fields remain valid), `bandwidth: limited` when
+  flagged, `token expiry:` (UTC RFC3339).
 - pending confirmations: `remove <email>? (y/N)` (or the active/only-account
   wording) and `Sign out of every account? (y/N)` / `sign out and clear the
   stored tokens? (y/N)`.

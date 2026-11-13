@@ -154,14 +154,7 @@ onboarding is done); rail item `Dashboard`.
    - `Autoconnect` — `On` / `Off`. Hidden until the first status.
    - `Token expiry` — RFC3339 UTC, e.g. `2026-11-01T12:00:00Z`.
    - `Pass expiry` — same format.
-   - `Quota` — `X remaining of Y` (binary units, e.g. `4.2 GiB remaining of
-     50.0 GiB`); `X remaining` if only remaining is known; `Y` if only the
-     limit is known.
-   - Below the Quota row, a slim (**8-unit**) rounded quota bar, filled
-     proportionally to `remaining / limit` (fill = remaining, clamped 0..1),
-     visible only when both numbers are known and the limit is positive.
-   - `Quota resets` — date `YYYY-MM-DD` (quota reset date).
-4. **Notice row** (bottom): a small single-line notice and, right-aligned,
+3. **Notice row** (bottom): a small single-line notice and, right-aligned,
    a tonal `Retry` button (110 wide) shown only in a specific case.
    - The notice shows the view-model's last action message: success
      (`Connected`, `Disconnected`, `Location saved`, `Kill switch on` …) or
@@ -330,21 +323,20 @@ Order and controls (the row tooltips are tabulated after the list):
 11. `Allow LAN` — on/off toggle; next connect.
 12. `MTU` — number input + `Apply`; next connect.
 13. `SOCKS port` — number input + `Apply`; next connect.
-14. `Quota poll` — number input + `Apply`; next connect.
-15. `TLS split` — cycling button; `off → first-byte → sni → off`; next
+14. `TLS split` — cycling button; `off → first-byte → sni → off`; next
     connect.
-16. `HTTP proxy` — on/off toggle; next connect.
-17. `HTTP proxy port` — number input + `Apply`; next connect.
-18. `Solve challenges` — on/off toggle; applies immediately.
-19. `Keepalive profile` — cycling button; `standard → slow → standard`; next
+15. `HTTP proxy` — on/off toggle; next connect.
+16. `HTTP proxy port` — number input + `Apply`; next connect.
+17. `Solve challenges` — on/off toggle; applies immediately.
+18. `Keepalive profile` — cycling button; `standard → slow → standard`; next
     connect.
-20. `Allow locked locations` — on/off toggle; applies immediately and reloads
+19. `Allow locked locations` — on/off toggle; applies immediately and reloads
     Locations.
-21. `Control-plane relay` — HTTPS-origin text input + `Apply`; applies
+20. `Control-plane relay` — HTTPS-origin text input + `Apply`; applies
     immediately; empty means no relay.
-22. `Relay token` — write-only row; shows `set`/`not set`, `Set` opens a
+21. `Relay token` — write-only row; shows `set`/`not set`, `Set` opens a
     masked field and `Clear` deletes it; never reveals the value.
-23. `Test relay` — action button; runs one probe and reports the result
+22. `Test relay` — action button; runs one probe and reports the result
     without writing a setting.
 
 Tooltips (every row's hover text, verbatim; each states the row's effect and
@@ -365,7 +357,6 @@ when it applies):
 | `Allow LAN` | `Keep the local subnet outside the tunnel; next connect` |
 | `MTU` | `Tun device MTU; next connect` |
 | `SOCKS port` | `Loopback SOCKS5 listener; next connect` |
-| `Quota poll` | `Minutes between quota refreshes while connected; next connect` |
 | `TLS split` | `Split the TLS ClientHello across writes; next connect` |
 | `HTTP proxy` | `Loopback HTTP/CONNECT proxy through the tunnel; next connect` |
 | `HTTP proxy port` | `Loopback HTTP proxy listener; next connect` |
@@ -424,7 +415,7 @@ controls; `Enter`/`Space` activate buttons; `Enter` in an edit field applies.
 rows from the daemon snapshot (`kill_switch`, `autoconnect`, `log_level`,
 `redact_targets`, `exit_check`, `doh_provider`, `dns_upstream`,
 `edge_address`, `upstream_proxy`, `exclude_cidrs`, `allow_lan`, `mtu`,
-`socks_port`, `quota_poll_minutes`, `tls_split`, `http_proxy`,
+`socks_port`, `tls_split`, `http_proxy`,
 `http_proxy_port`, `solve_challenges`, `keepalive_profile`, `allow_locked`,
 `relay_url`, `relay_token_set`).
 
@@ -872,7 +863,7 @@ caches.
   height 40; card radius 12 (static cards are square-cornered with a 1-unit
   outline ring; list/table cards keep the 12-unit rounded corners); button
   radius 8; nav rail 200 wide with 40-high items; state chips 170×28,
-  radius 6; quota bar 8 high, radius 4.
+  radius 6.
 - **Bans carried over:** no gradients, no drop shadows, no emoji, no
   literal colours outside the theme package, no status-by-colour-alone.
 - **Accessibility floor:** every state word is present in text; focus rings
@@ -1026,7 +1017,7 @@ covering a missing/stopped service.
 - Immediate-apply rows: kill switch, log level, redact targets, solve
   challenges. Next-connect rows: exit check, DoH provider, DNS upstream,
   edge address, upstream proxy, exclude CIDRs, allow LAN, MTU, SOCKS port,
-  quota poll, TLS split, HTTP proxy, HTTP proxy port, keepalive profile.
+  TLS split, HTTP proxy, HTTP proxy port, keepalive profile.
   Autoconnect is saved daemon-side and takes effect on the next daemon
   start / autoconnect decision. (Tooltips state this per row.)
 - Mutation success triggers a model status refresh **and** a settings

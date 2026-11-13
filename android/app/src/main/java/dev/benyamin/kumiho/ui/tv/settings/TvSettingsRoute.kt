@@ -105,7 +105,7 @@ fun TvSettingsRoute(container: AppContainer, modifier: Modifier = Modifier) {
 }
 
 /**
- * The ten-foot settings page: the same twenty-one-row catalog, the app-level
+ * The ten-foot settings page: the same engine catalog, the app-level
  * theme/accent/update controls, the Android-owned rows and the split/bypass
  * seams. Boolean rows toggle in place; every other editable row opens a TV
  * dialog, so the whole page is remote-only.
@@ -601,11 +601,69 @@ private fun UpdateBlock(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
             )
+            update.installError?.let { failure ->
+                Text(
+                    text = updateFailureText(failure),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalKumihoColors.current.loss,
+                )
+            }
+            if (update.installable) {
+                TvButton(
+                    label = stringResource(R.string.settings_update_install),
+                    onClick = actions.onInstallUpdate,
+                    modifier = Modifier.testTag(SettingsTags.UPDATE_INSTALL),
+                    primary = true,
+                )
+            }
             TvButton(
-                label = stringResource(R.string.settings_update_open),
+                label = stringResource(
+                    if (update.installable) {
+                        R.string.settings_update_release
+                    } else {
+                        R.string.settings_update_open
+                    },
+                ),
                 onClick = { onOpenRelease(update.url) },
                 modifier = Modifier.testTag(SettingsTags.UPDATE_OPEN),
+            )
+        }
+        is UpdateState.Downloading -> {
+            Text(
+                text = stringResource(R.string.settings_update_downloading, update.progress),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
+        }
+        is UpdateState.ReadyToInstall -> {
+            Text(
+                text = stringResource(R.string.settings_update_ready),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
+            TvButton(
+                label = stringResource(R.string.settings_update_install_ready),
+                onClick = actions.onInstallUpdate,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_INSTALL),
                 primary = true,
+            )
+        }
+        is UpdateState.Installing -> {
+            Text(
+                text = stringResource(R.string.settings_update_installing),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
+        }
+        is UpdateState.Installed -> {
+            Text(
+                text = stringResource(R.string.settings_update_installed, update.version),
+                style = MaterialTheme.typography.bodyMedium,
+                color = LocalKumihoColors.current.profit,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
             )
         }
         is UpdateState.Failed -> {

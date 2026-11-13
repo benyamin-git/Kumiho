@@ -73,21 +73,6 @@ func printStatus(w io.Writer, st api.Status) {
 	if st.PassExpires > 0 {
 		fmt.Fprintf(w, "pass expires:  %s\n", time.Unix(st.PassExpires, 0).Format(time.RFC3339))
 	}
-	if q := st.Quota; q != nil && (q.Remaining != nil || q.Limit != nil) {
-		line := "quota:         "
-		switch {
-		case q.Remaining != nil && q.Limit != nil:
-			line += fmt.Sprintf("%s remaining of %s", humanBytes(*q.Remaining), humanBytes(*q.Limit))
-		case q.Remaining != nil:
-			line += fmt.Sprintf("%s remaining", humanBytes(*q.Remaining))
-		default:
-			line += humanBytes(*q.Limit)
-		}
-		if q.Reset != nil {
-			line += fmt.Sprintf(" (resets %s)", time.Unix(*q.Reset, 0).Format(time.RFC3339))
-		}
-		fmt.Fprintln(w, line)
-	}
 	if st.ExitIP != "" {
 		exit := st.ExitIP
 		if st.ExitCountry != "" {

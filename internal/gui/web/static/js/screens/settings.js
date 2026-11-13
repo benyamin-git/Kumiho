@@ -122,8 +122,6 @@ const SERVICE_ROWS = [
     hint: "Tun device MTU; next connect" },
   { key: "socks_port", label: "SOCKS port", kind: "number",
     hint: "Loopback SOCKS5 listener; next connect" },
-  { key: "quota_poll_minutes", label: "Quota poll", kind: "number",
-    hint: "Minutes between quota refreshes while connected; next connect" },
   { key: "tls_split", label: "TLS split", kind: "cycle",
     options: ["off", "first-byte", "sni"],
     hint: "Split the TLS ClientHello across writes; next connect" },
@@ -357,8 +355,6 @@ function settingValue(settings, key) {
       return String(settings.mtu);
     case "socks_port":
       return String(settings.socks_port);
-    case "quota_poll_minutes":
-      return String(settings.quota_poll_minutes);
     case "tls_split":
       return settings.tls_split || "";
     case "http_proxy":

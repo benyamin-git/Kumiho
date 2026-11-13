@@ -50,7 +50,6 @@ func TestFormatAccounts(t *testing.T) {
 		Accounts: []api.AccountSummary{
 			{
 				ID: "id-1", Email: "user@example.com", Method: "browser", Active: true,
-				Quota: &api.Quota{Limit: int64Ptr(100), Remaining: int64Ptr(80)},
 			},
 			{
 				ID: "id-2", Email: "other@example.com", Label: "Work", Method: "password",
@@ -65,38 +64,13 @@ func TestFormatAccounts(t *testing.T) {
 	for _, want := range []string{
 		"* user@example.com",
 		"browser",
-		"quota 80%",
 		"password",
 		"re-auth required",
-		"quota unknown",
 		"Rotation: off (threshold 10%)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("formatted accounts missing %q:\n%s", want, got)
 		}
-	}
-}
-
-func TestFormatQuota(t *testing.T) {
-	limit := int64Ptr(100)
-	tests := []struct {
-		name string
-		q    *api.Quota
-		want string
-	}{
-		{name: "nil", q: nil, want: "quota unknown"},
-		{name: "missing limit", q: &api.Quota{Remaining: int64Ptr(10)}, want: "quota unknown"},
-		{name: "exhausted", q: &api.Quota{Limit: limit, Remaining: int64Ptr(0)}, want: "quota exhausted"},
-		{name: "exhausted without limit", q: &api.Quota{Remaining: int64Ptr(0)}, want: "quota exhausted"},
-		{name: "over limit", q: &api.Quota{Limit: limit, Remaining: int64Ptr(120)}, want: "quota 100%"},
-		{name: "normal", q: &api.Quota{Limit: limit, Remaining: int64Ptr(42)}, want: "quota 42%"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := formatQuota(tt.q); got != tt.want {
-				t.Fatalf("formatQuota() = %q, want %q", got, tt.want)
-			}
-		})
 	}
 }
 

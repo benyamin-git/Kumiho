@@ -48,7 +48,7 @@ enum class StatusTone { Profit, Loss, Warning, Neutral }
 
 /**
  * A status chip: a tinted pill with an icon and text, so meaning survives
- * without colour. Used for quota, connectivity and diagnostics results.
+ * without colour. Used for connectivity and diagnostics results.
  */
 @Composable
 fun KumihoStatusChip(

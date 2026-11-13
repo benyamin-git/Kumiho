@@ -5,12 +5,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.benyamin.kumiho.update.UpdatePreferences
 import dev.benyamin.kumiho.vpn.SplitMode
 import dev.benyamin.kumiho.vpn.SplitSettings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -52,7 +55,8 @@ class AppPrefs(context: Context) :
     ThemePreferences,
     LanguagePreferences,
     SplitTunnelStore,
-    BypassSettingsStore {
+    BypassSettingsStore,
+    UpdatePreferences {
     private val store = context.applicationContext.kumihoDataStore
 
     /** The stored theme id, or null when the user has not chosen one. */
@@ -112,11 +116,29 @@ class AppPrefs(context: Context) :
         store.edit { it[KEY_SETUP_COMPLETE] = value }
     }
 
+    override suspend fun lastUpdateCheck(): Long =
+        store.data.first()[KEY_UPDATE_LAST_CHECK] ?: 0L
+
+    override suspend fun setLastUpdateCheck(value: Long) {
+        store.edit { it[KEY_UPDATE_LAST_CHECK] = value }
+    }
+
+    override suspend fun dismissedUpdateVersion(): String =
+        store.data.first()[KEY_UPDATE_DISMISSED].orEmpty()
+
+    override suspend fun setDismissedUpdateVersion(value: String) {
+        store.edit {
+            if (value.isEmpty()) it.remove(KEY_UPDATE_DISMISSED) else it[KEY_UPDATE_DISMISSED] = value
+        }
+    }
+
     private companion object {
         val KEY_THEME = stringPreferencesKey("theme")
         val KEY_ACCENT = stringPreferencesKey("accent")
         val KEY_LANGUAGE = stringPreferencesKey("language")
         val KEY_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
+        val KEY_UPDATE_LAST_CHECK = longPreferencesKey("update_last_check")
+        val KEY_UPDATE_DISMISSED = stringPreferencesKey("update_dismissed_version")
         val KEY_SPLIT_MODE = stringPreferencesKey("split_mode")
         val KEY_SPLIT_PACKAGES = stringSetPreferencesKey("split_packages")
         val KEY_ALLOW_BYPASS = booleanPreferencesKey("allow_bypass")

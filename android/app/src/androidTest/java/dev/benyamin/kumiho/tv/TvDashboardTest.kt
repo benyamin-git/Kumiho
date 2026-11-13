@@ -120,7 +120,6 @@ class TvDashboardTest {
         rule.onNodeWithTag(DashboardTags.STATE_WORD).assertIsDisplayed()
         rule.onNodeWithTag(DashboardTags.CARD_LOCATION).assertExists()
         rule.onNodeWithTag(DashboardTags.CARD_EXIT).assertExists()
-        rule.onNodeWithTag(DashboardTags.CARD_QUOTA).assertExists()
         rule.onNodeWithTag(DashboardTags.CARD_SESSION).assertExists()
     }
 
@@ -191,7 +190,6 @@ class TvDashboardTest {
         rule.onNodeWithTag(DashboardTags.STATE_WORD).assertIsDisplayed()
         rule.onNodeWithTag(DashboardTags.CARD_LOCATION).assertDoesNotExist()
         rule.onNodeWithTag(DashboardTags.CARD_EXIT).assertDoesNotExist()
-        rule.onNodeWithTag(DashboardTags.CARD_QUOTA).assertDoesNotExist()
         rule.onNodeWithTag(DashboardTags.CARD_SESSION).assertDoesNotExist()
     }
 

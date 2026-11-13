@@ -522,7 +522,7 @@ remain open.
       from an app other than the browser.
 - [ ] `test-ipv6.com` (or an equivalent IPv6 check) shows no IPv6 path and no
       leak; an IPv6-only target fails rather than bypassing the tunnel.
-- [ ] The **Quota** and **Session** cards populate with real numbers.
+- [ ] The **Session** card populates with real numbers.
 - [ ] Disconnect, confirm the notification disappears, then reconnect and
       confirm a fresh session and a fresh exit IP where expected.
 - [ ] While connected, toggle Wi-Fi/mobile data: the watchdog redials the
@@ -675,7 +675,7 @@ details are recorded.
 
 ### Account, logs, diagnostics and lifecycle
 
-- [ ] Account shows email, UID, subscription, quota, bandwidth and token
+- [ ] Account shows email, UID, subscription, bandwidth and token
       expiry; **Refresh** works; a failed refresh keeps the last fields.
 - [ ] Sign out confirms, clears the session, stays on Account and lets you
       sign back in.
@@ -697,6 +697,20 @@ details are recorded.
       from the bound service rather than restarting the tunnel.
 - [ ] Force a crash once (debug build) and confirm `crash.log` is replayed
       into the engine log on the next start and then removed.
+
+### Software updates
+
+- [ ] With a newer release available and no check in the last 24 hours (fresh
+      install or cleared app data), relaunch the app: the consent dialog
+      appears once. **Later** suppresses that version on the next launch,
+      while Settings → Software updates still offers **Update now**.
+- [ ] **Update now** downloads to 100%, Android's installer opens, and
+      granting **Install unknown apps** lets the install complete over the
+      same signing key. Accounts, settings and split selection survive.
+- [ ] Cancel Android's installer once: the app returns to **Install update**
+      and retrying does not download the APK again.
+- [ ] A debug build shows no launch prompt, and its Settings check opens the
+      release page instead of installing.
 
 ### 16 KB page size
 

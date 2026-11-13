@@ -13,7 +13,6 @@ import dev.benyamin.kumiho.MainActivity
 import dev.benyamin.kumiho.R
 import dev.benyamin.kumiho.data.PaletteState
 import dev.benyamin.kumiho.permissions.PermissionController
-import dev.benyamin.kumiho.ui.i18n.PersianFormat
 import dev.benyamin.kumiho.ui.theme.KumihoColors
 import dev.benyamin.kumiho.ui.theme.ThemeId
 import dev.benyamin.kumiho.vpn.VpnStatusCache
@@ -153,20 +152,7 @@ object WidgetRefresh {
         }
 
     private fun detailLine(context: Context, view: WidgetPresentation): String {
-        val parts = mutableListOf<String>()
-        view.location?.let(parts::add)
-        when (val quota = view.quota) {
-            is WidgetQuota.Percent -> {
-                val percent = if (context.resources.configuration.locales[0].language == "fa") {
-                    PersianFormat.formatNumber(quota.value.toLong())
-                } else {
-                    quota.value.toString()
-                }
-                parts.add(context.getString(R.string.account_row_quota_left, percent))
-            }
-            WidgetQuota.Unknown -> parts.add(context.getString(R.string.account_row_quota_unknown))
-            WidgetQuota.Hidden -> Unit
-        }
-        return parts.joinToString(" · ")
+        view.location?.let { return it }
+        return ""
     }
 }

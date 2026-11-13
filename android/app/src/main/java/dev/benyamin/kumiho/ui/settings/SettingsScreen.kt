@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -143,18 +144,17 @@ fun SettingsRoute(
     }
 
     val gateway = remember(coordinator) { CoordinatorSettingsGateway(coordinator) }
-    val checker = remember { GitHubUpdateChecker() }
     val engineVersion = remember(client) { Mobile.version() }
     val key = remember(client) { "settings-${System.identityHashCode(client)}" }
     val settingsViewModel: SettingsViewModel = viewModel(key = key) {
         SettingsViewModel(
             gateway = gateway,
-            updateChecker = checker,
             appVersion = BuildConfig.VERSION_NAME,
             engineVersion = engineVersion,
         )
     }
     val state by settingsViewModel.state.collectAsStateWithLifecycle()
+    val updateState by container.updateManager.state.collectAsStateWithLifecycle()
     val languagePreference by container.languageRepository.preference.collectAsStateWithLifecycle()
     val effectiveLanguage by container.languageRepository.effective.collectAsStateWithLifecycle()
     val splitState by container.splitTunnelRepository.state.collectAsStateWithLifecycle()
@@ -237,7 +237,7 @@ fun SettingsRoute(
         onDismissNotice = settingsViewModel::dismissNotice,
         onThemeSelected = container.themeRepository::setTheme,
         onAccentSelected = container.themeRepository::setAccent,
-        onCheckForUpdates = settingsViewModel::checkForUpdates,
+        onCheckForUpdates = container.updateManager::check,
         onTestRelay = settingsViewModel::testRelay,
         onLanguageSelected = { value ->
             // The UI switches immediately; the engine write is confirmed by a
@@ -262,9 +262,10 @@ fun SettingsRoute(
         onToggleBypass = container.allowBypassRepository::setEnabled,
         onOpenSplitTunneling = { splitOpen = true },
         onOpenGuide = container.guide::open,
+        onInstallUpdate = container.updateManager::install,
     )
     val account = rememberAccountSection(container)
-    content(state, appState, actions, account)
+    content(state.copy(update = updateState), appState, actions, account)
 }
 
 /**
@@ -396,21 +397,26 @@ private fun SettingsList(
             .testTag(SettingsTags.LIST),
         contentPadding = PaddingValues(bottom = Dimens.Space6),
     ) {
-        item(key = "header_account") {
-            GroupHeader(R.string.settings_group_account, SettingsTags.GROUP_ACCOUNT)
-        }
-        item(key = "account_section") {
-            AccountSection(
-                state = account.state,
-                actions = account.actions,
-                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
-            )
-        }
-        item(key = "header_app") {
-            GroupHeader(R.string.settings_group_app, SettingsTags.GROUP_APP)
+        item(key = "account_card") {
+            SettingsCard(
+                header = {
+                    GroupHeader(
+                        R.string.settings_group_account,
+                        SettingsTags.GROUP_ACCOUNT,
+                    )
+                },
+            ) {
+                AccountSection(
+                    state = account.state,
+                    actions = account.actions,
+                    modifier = Modifier.padding(Dimens.Space4),
+                )
+            }
         }
         item(key = "app_card") {
-            SettingsCard {
+            SettingsCard(
+                header = { GroupHeader(R.string.settings_group_app, SettingsTags.GROUP_APP) },
+            ) {
                 LanguageSetting(
                     preference = appState.languagePreference,
                     effective = appState.effectiveLanguage,
@@ -457,22 +463,30 @@ private fun SettingsList(
         }
 
         if (state.hasSnapshot) {
-            item(key = "header_connection") {
-                GroupHeader(R.string.settings_group_connection, SettingsTags.GROUP_CONNECTION)
-            }
             item(key = "connection_card") {
-                SettingsCard {
+                SettingsCard(
+                    header = {
+                        GroupHeader(
+                            R.string.settings_group_connection,
+                            SettingsTags.GROUP_CONNECTION,
+                        )
+                    },
+                ) {
                     SettingsCatalog.specsIn(SettingsGroup.CONNECTION).forEach { spec ->
                         EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
                     }
                 }
             }
 
-            item(key = "header_region") {
-                GroupHeader(R.string.settings_group_region, SettingsTags.GROUP_REGION)
-            }
             item(key = "region_card") {
-                SettingsCard {
+                SettingsCard(
+                    header = {
+                        GroupHeader(
+                            R.string.settings_group_region,
+                            SettingsTags.GROUP_REGION,
+                        )
+                    },
+                ) {
                     GuideActionRow(onOpen = actions.onOpenGuide)
                     SettingsCatalog.specsIn(SettingsGroup.REGION).forEach { spec ->
                         RegionRow(
@@ -491,11 +505,15 @@ private fun SettingsList(
             }
         }
 
-        item(key = "header_android") {
-            GroupHeader(R.string.settings_group_android_vpn, SettingsTags.GROUP_ANDROID_VPN)
-        }
         item(key = "android_card") {
-            SettingsCard {
+            SettingsCard(
+                header = {
+                    GroupHeader(
+                        R.string.settings_group_android_vpn,
+                        SettingsTags.GROUP_ANDROID_VPN,
+                    )
+                },
+            ) {
                 Text(
                     text = stringResource(R.string.settings_android_vpn_explanation),
                     style = MaterialTheme.typography.bodySmall,
@@ -512,15 +530,17 @@ private fun SettingsList(
         }
 
         if (state.hasSnapshot) {
-            item(key = "advanced_header") {
-                AdvancedHeader(
-                    expanded = state.advancedExpanded,
-                    onToggle = actions.onToggleAdvanced,
-                )
-            }
-            if (state.advancedExpanded) {
-                item(key = "advanced_card") {
-                    SettingsCard {
+            item(key = "advanced_card") {
+                SettingsCard(
+                    header = {
+                        AdvancedHeader(
+                            expanded = state.advancedExpanded,
+                            onToggle = actions.onToggleAdvanced,
+                        )
+                    },
+                    divider = state.advancedExpanded,
+                ) {
+                    if (state.advancedExpanded) {
                         SettingsCatalog.specsIn(SettingsGroup.ADVANCED).forEach { spec ->
                             EngineRow(spec = spec, state = state, actions = actions, onEdit = onEdit)
                         }
@@ -531,16 +551,33 @@ private fun SettingsList(
     }
 }
 
-/** One Settings section card; rows keep their own screen padding. */
+/**
+ * One Settings section card: the group header (icon pair) is the card's first
+ * row, above a hairline, and the rows keep their own screen padding. Cards are
+ * separated by the top space rather than a floating heading.
+ */
 @Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsCard(
+    header: (@Composable () -> Unit)? = null,
+    divider: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     KumihoCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Dimens.ScreenPadding),
+            .padding(
+                start = Dimens.ScreenPadding,
+                end = Dimens.ScreenPadding,
+                top = Dimens.Space5,
+            ),
         contentPadding = PaddingValues(0.dp),
-        content = content,
-    )
+    ) {
+        header?.invoke()
+        if (header != null && divider) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        content()
+    }
 }
 
 /**
@@ -728,12 +765,7 @@ private fun GroupHeader(titleRes: Int, tag: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                start = Dimens.ScreenPadding,
-                end = Dimens.ScreenPadding,
-                top = Dimens.Space5,
-                bottom = Dimens.Space2,
-            ),
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space3),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
@@ -755,59 +787,52 @@ private fun GroupHeader(titleRes: Int, tag: String) {
     }
 }
 
-/** The one collapsible group: the whole header is the 48dp target. */
+/** The one collapsible group: the header row inside the card is the 48dp target. */
 @Composable
 private fun AdvancedHeader(expanded: Boolean, onToggle: () -> Unit) {
-    Surface(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = Dimens.Space5),
-        color = Color.Transparent,
+            .defaultMinSize(minHeight = Dimens.TouchTarget)
+            .clickable(role = Role.Button, onClick = onToggle)
+            .testTag(SettingsTags.ADVANCED_TOGGLE)
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = Dimens.TouchTarget)
-                .clickable(role = Role.Button, onClick = onToggle)
-                .testTag(SettingsTags.ADVANCED_TOGGLE)
-                .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.Space2),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2),
-        ) {
-            Icon(
-                painter = settingsGroupIcon(SettingsTags.GROUP_ADVANCED),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+        Icon(
+            painter = settingsGroupIcon(SettingsTags.GROUP_ADVANCED),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.settings_group_advanced),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .semantics { heading() }
+                    .testTag(SettingsTags.GROUP_ADVANCED),
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.settings_group_advanced),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .semantics { heading() }
-                        .testTag(SettingsTags.GROUP_ADVANCED),
-                )
-                Text(
-                    text = stringResource(R.string.settings_advanced_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                imageVector = if (expanded) {
-                    Icons.Filled.KeyboardArrowDown
-                } else {
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight
-                },
-                contentDescription = stringResource(
-                    if (expanded) R.string.settings_collapse else R.string.settings_expand,
-                ),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
+            Text(
+                text = stringResource(R.string.settings_advanced_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Icon(
+            imageVector = if (expanded) {
+                Icons.Filled.KeyboardArrowDown
+            } else {
+                Icons.AutoMirrored.Filled.KeyboardArrowRight
+            },
+            contentDescription = stringResource(
+                if (expanded) R.string.settings_collapse else R.string.settings_expand,
+            ),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(24.dp),
+        )
     }
 }
 
@@ -1149,9 +1174,9 @@ private fun VersionBlock(state: SettingsState) {
 }
 
 /**
- * The manual update check. The only trigger is the tap; there is no startup or
- * periodic call, no download and no install. A release is opened in the
- * browser and nothing else.
+ * The shared update state. The launch prompt lives at the app root; this block
+ * starts a manual check, offers a consented install and keeps the release page
+ * as the fallback when no APK asset is published.
  */
 @Composable
 private fun UpdateBlock(state: SettingsState, actions: SettingsActions) {
@@ -1232,15 +1257,76 @@ private fun UpdateBlock(state: SettingsState, actions: SettingsActions) {
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
                 )
+                update.installError?.let { failure ->
+                    Text(
+                        text = updateFailureText(failure),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LocalKumihoColors.current.loss,
+                    )
+                }
+                if (update.installable) {
+                    TextButton(
+                        onClick = actions.onInstallUpdate,
+                        modifier = Modifier
+                            .heightIn(min = Dimens.TouchTarget)
+                            .testTag(SettingsTags.UPDATE_INSTALL),
+                    ) {
+                        Text(stringResource(R.string.settings_update_install))
+                    }
+                }
                 TextButton(
                     onClick = { actions.onOpenRelease(update.url) },
                     modifier = Modifier
                         .heightIn(min = Dimens.TouchTarget)
                         .testTag(SettingsTags.UPDATE_OPEN),
                 ) {
-                    Text(stringResource(R.string.settings_update_open))
+                    Text(
+                        stringResource(
+                            if (update.installable) {
+                                R.string.settings_update_release
+                            } else {
+                                R.string.settings_update_open
+                            },
+                        ),
+                    )
                 }
             }
+            is UpdateState.Downloading -> Text(
+                text = stringResource(R.string.settings_update_downloading, update.progress),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
+            is UpdateState.ReadyToInstall -> Column(
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_update_ready),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+                )
+                TextButton(
+                    onClick = actions.onInstallUpdate,
+                    modifier = Modifier
+                        .heightIn(min = Dimens.TouchTarget)
+                        .testTag(SettingsTags.UPDATE_INSTALL),
+                ) {
+                    Text(stringResource(R.string.settings_update_install_ready))
+                }
+            }
+            is UpdateState.Installing -> Text(
+                text = stringResource(R.string.settings_update_installing),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
+            is UpdateState.Installed -> Text(
+                text = stringResource(R.string.settings_update_installed, update.version),
+                style = MaterialTheme.typography.bodyMedium,
+                color = LocalKumihoColors.current.profit,
+                modifier = Modifier.testTag(SettingsTags.UPDATE_STATUS),
+            )
             is UpdateState.Failed -> Column(
                 verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
             ) {

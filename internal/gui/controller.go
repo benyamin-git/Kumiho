@@ -127,35 +127,30 @@ type Notice struct {
 // StatusView is the controller's projection of api.Status: the state word
 // and the derived labels the Dashboard card renders (inventory §Dashboard).
 type StatusView struct {
-	Label          string  `json:"label"` // Off, Connected, Proxy only, ...
-	State          string  `json:"state,omitempty"`
-	Since          int64   `json:"since,omitempty"`
-	TokenExpires   int64   `json:"token_expires,omitempty"`
-	QuotaResetUnix int64   `json:"quota_reset_unix,omitempty"`
-	RatesUp        float64 `json:"rates_up,omitempty"`
-	RatesDown      float64 `json:"rates_down,omitempty"`
-	TotalsUp       int64   `json:"totals_up,omitempty"`
-	TotalsDown     int64   `json:"totals_down,omitempty"`
-	Connected      bool    `json:"connected,omitempty"`
-	ProxyOnly      bool    `json:"proxy_only,omitempty"`
-	Authenticated  bool    `json:"authenticated,omitempty"`
-	Email          string  `json:"email,omitempty"`
-	Uptime         string  `json:"uptime,omitempty"` // only while connected
-	Location       string  `json:"location,omitempty"`
-	Server         string  `json:"server,omitempty"`
-	KillSwitch     bool    `json:"kill_switch,omitempty"`
-	Autoconnect    bool    `json:"autoconnect,omitempty"`
-	ExitIP         string  `json:"exit_ip,omitempty"`
-	ExitCountry    string  `json:"exit_country,omitempty"`
-	Rates          string  `json:"rates,omitempty"`
-	Totals         string  `json:"totals,omitempty"`
-	TokenExpiry    string  `json:"token_expiry,omitempty"`
-	PassExpiry     string  `json:"pass_expiry,omitempty"`
-	PassExpires    int64   `json:"pass_expires,omitempty"`
-	QuotaText      string  `json:"quota_text,omitempty"`
-	QuotaRemaining *int64  `json:"quota_remaining,omitempty"`
-	QuotaLimit     *int64  `json:"quota_limit,omitempty"`
-	QuotaReset     string  `json:"quota_reset,omitempty"`
+	Label         string  `json:"label"` // Off, Connected, Proxy only, ...
+	State         string  `json:"state,omitempty"`
+	Since         int64   `json:"since,omitempty"`
+	TokenExpires  int64   `json:"token_expires,omitempty"`
+	RatesUp       float64 `json:"rates_up,omitempty"`
+	RatesDown     float64 `json:"rates_down,omitempty"`
+	TotalsUp      int64   `json:"totals_up,omitempty"`
+	TotalsDown    int64   `json:"totals_down,omitempty"`
+	Connected     bool    `json:"connected,omitempty"`
+	ProxyOnly     bool    `json:"proxy_only,omitempty"`
+	Authenticated bool    `json:"authenticated,omitempty"`
+	Email         string  `json:"email,omitempty"`
+	Uptime        string  `json:"uptime,omitempty"` // only while connected
+	Location      string  `json:"location,omitempty"`
+	Server        string  `json:"server,omitempty"`
+	KillSwitch    bool    `json:"kill_switch,omitempty"`
+	Autoconnect   bool    `json:"autoconnect,omitempty"`
+	ExitIP        string  `json:"exit_ip,omitempty"`
+	ExitCountry   string  `json:"exit_country,omitempty"`
+	Rates         string  `json:"rates,omitempty"`
+	Totals        string  `json:"totals,omitempty"`
+	TokenExpiry   string  `json:"token_expiry,omitempty"`
+	PassExpiry    string  `json:"pass_expiry,omitempty"`
+	PassExpires   int64   `json:"pass_expires,omitempty"`
 }
 
 // LoginView is the daemon-driven sign-in projection (inventory §Onboarding).
@@ -1072,7 +1067,7 @@ func (c *Controller) dispatchLogin(act Action) error {
 		// a fresh authenticated snapshot clears the stale "already signed
 		// in" error so the wizard can show the live session instead of
 		// dead-ending (inventory §behavioral), and the account list learns
-		// the new account, active selection and quota.
+		// the new account and active selection.
 		c.refreshStatus(ctx)
 		c.ensureAccount(ctx)
 		_ = c.loadAccounts(ctx)
@@ -2184,11 +2179,6 @@ func (c *Controller) statusViewLocked(now time.Time) *StatusView {
 		v.PassExpiry = time.Unix(st.PassExpires, 0).UTC().Format(time.RFC3339)
 		v.PassExpires = st.PassExpires
 	}
-	v.QuotaText, v.QuotaRemaining, v.QuotaLimit = quotaView(st.Quota)
-	if st.Quota != nil && st.Quota.Reset != nil {
-		v.QuotaReset = time.Unix(*st.Quota.Reset, 0).UTC().Format("2006-01-02")
-		v.QuotaResetUnix = *st.Quota.Reset
-	}
 	if st.Rates != nil {
 		v.RatesUp = st.Rates.Up
 		v.RatesDown = st.Rates.Down
@@ -2330,29 +2320,28 @@ func decodePayload[T any](act Action) (T, error) {
 
 // settingLabels maps the daemon setting keys to the inventory's row labels.
 var settingLabels = map[string]string{
-	"language":           "Language",
-	"allow_locked":       "Allow locked locations",
-	"relay_url":          "Relay URL",
-	"relay_token":        "Relay token",
-	"kill_switch":        "Kill switch",
-	"autoconnect":        "Autoconnect",
-	"log_level":          "Log level",
-	"redact_targets":     "Redact targets",
-	"exit_check":         "Exit check",
-	"doh_provider":       "DoH provider",
-	"dns_upstream":       "DNS upstream",
-	"edge_address":       "Edge address",
-	"upstream_proxy":     "Upstream proxy",
-	"exclude_cidrs":      "Exclude CIDRs",
-	"allow_lan":          "Allow LAN",
-	"mtu":                "MTU",
-	"socks_port":         "SOCKS port",
-	"quota_poll_minutes": "Quota poll",
-	"tls_split":          "TLS split",
-	"http_proxy":         "HTTP proxy",
-	"http_proxy_port":    "HTTP proxy port",
-	"solve_challenges":   "Solve challenges",
-	"keepalive_profile":  "Keepalive profile",
+	"language":          "Language",
+	"allow_locked":      "Allow locked locations",
+	"relay_url":         "Relay URL",
+	"relay_token":       "Relay token",
+	"kill_switch":       "Kill switch",
+	"autoconnect":       "Autoconnect",
+	"log_level":         "Log level",
+	"redact_targets":    "Redact targets",
+	"exit_check":        "Exit check",
+	"doh_provider":      "DoH provider",
+	"dns_upstream":      "DNS upstream",
+	"edge_address":      "Edge address",
+	"upstream_proxy":    "Upstream proxy",
+	"exclude_cidrs":     "Exclude CIDRs",
+	"allow_lan":         "Allow LAN",
+	"mtu":               "MTU",
+	"socks_port":        "SOCKS port",
+	"tls_split":         "TLS split",
+	"http_proxy":        "HTTP proxy",
+	"http_proxy_port":   "HTTP proxy port",
+	"solve_challenges":  "Solve challenges",
+	"keepalive_profile": "Keepalive profile",
 }
 
 func settingLabel(key string) string {
@@ -2455,24 +2444,7 @@ func relayTestNotice(res api.RelayTestResult) string {
 	return "Relay unreachable"
 }
 
-// quotaView renders the quota label and passes the raw numbers through for
-// the progress bar.
-func quotaView(q *api.Quota) (string, *int64, *int64) {
-	if q == nil {
-		return "", nil, nil
-	}
-	var text string
-	switch {
-	case q.Remaining != nil && q.Limit != nil:
-		text = fmt.Sprintf("%s remaining of %s", humanBytes(*q.Remaining), humanBytes(*q.Limit))
-	case q.Remaining != nil:
-		text = fmt.Sprintf("%s remaining", humanBytes(*q.Remaining))
-	case q.Limit != nil:
-		text = humanBytes(*q.Limit)
-	}
-	return text, q.Remaining, q.Limit
-}
-
+// ratesLabel renders the live rates sentence.
 func ratesLabel(r *api.ByteRates) string {
 	if r == nil || (r.Up == 0 && r.Down == 0) {
 		return ""

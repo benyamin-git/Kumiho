@@ -27,7 +27,7 @@ app process. Its guide is [android.md](android.md).
     kumiho logout               # clear every account; disconnects
     kumiho connect [--to CODE|CITY|HOST | --fastest] [--proxy-only] [--kill-switch=on|off|last]
     kumiho disconnect
-    kumiho status [--json]      # state, location, quota, exit IP, rates
+    kumiho status [--json]      # state, location, exit IP, rates
     kumiho locations [--ping] [--json] [--refresh]
     kumiho settings get [key] [--json]
     kumiho settings set <key> [value]
@@ -82,7 +82,7 @@ pass countdown when a pass is stored.
   country).
 - **Settings** — every runtime setting: kill switch, autoconnect, log level,
   redaction, exit check, DoH provider, custom DNS, pinned edge, upstream
-  proxy, excluded CIDRs, allow-LAN, MTU, SOCKS port, quota poll, TLS split,
+  proxy, excluded CIDRs, allow-LAN, MTU, SOCKS port, TLS split,
   HTTP proxy and its port, challenge solving, keepalive profile, and the
   Region block (`allow_locked`, `relay_url`, write-only `relay_token`, Test
   relay, and the reusable Blocked region guide). `d` resets a row to the
@@ -108,7 +108,7 @@ pass countdown when a pass is stored.
   level filter, `/` searches, `c` clears, `f` toggles follow, `e` exports the
   visible entries to `~/.local/state/kumiho/kumiho-logs-<timestamp>.log`
   (`%LOCALAPPDATA%\kumiho\logs` on Windows).
-- **Account** — the five-account list (active marker, method, quota, re-auth
+- **Account** — the five-account list (active marker, method, re-auth
   warning) above the live Guardian entitlement. `↑/↓` select, `u` use, `d`
   remove, `a` add through the browser, `p` add with a password, `R` sign the
   selected account in again (browser), `n` rename, `t` toggle rotation,
@@ -151,8 +151,8 @@ is never stored. Email-link 2FA and TOTP/unblock codes are supported. A real
 interactive captcha cannot be solved by this flow, so use browser sign-in if
 Firefox Accounts presents one.
 
-`kumiho accounts` prints a table with the active marker, label, email, method,
-quota and re-authentication state. `accounts add` uses the same browser or
+`kumiho accounts` prints a table with the active marker, label, email, method
+and re-authentication state. `accounts add` uses the same browser or
 password flow (without `--browser`/`--password`, a terminal asks; a script
 uses the password flow). `--account <id|email>` re-authenticates an existing
 account and, for browser, replaces its stored FxA tokens. Re-authentication

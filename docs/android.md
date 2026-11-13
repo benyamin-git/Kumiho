@@ -81,10 +81,26 @@ APK from an untrusted mirror.
 
 ### Updating
 
-There is **no auto-update and no in-app APK installer**. Settings → Software
-updates → **Check for updates** makes one request to GitHub's release list
-when you tap it, compares versions and offers **Open release page**. It
-downloads nothing.
+The phone and TV app can update itself, but never silently:
+
+- On launch it checks GitHub's release list at most once every 24 hours. When
+  a newer release exists, a dialog offers **Update** or **Later**. **Later**
+  remembers that version and does not ask again for it; Settings → Software
+  updates still offers **Update now** and **Release page**.
+- **Update now** downloads the ABI-matched APK and the release `SHA256SUMS`
+  over HTTPS, verifies the SHA-256, and reads the APK's package name, version
+  name and `versionCode` before offering it to Android. The app downloads only
+  after you agree.
+- Android then shows its own installer confirmation. On first use, grant
+  Kumiho **Install unknown apps**; the app opens that settings page for you.
+  Android enforces the same signing key, and app data (sign-in, settings,
+  split selection) is kept.
+- If the release has no APK asset, or this is a debug build, the Settings
+  check offers the release page instead. Debug builds use a different package
+  name and cannot replace a release install.
+
+The manual path is Settings → Software updates → **Check for updates**. It
+bypasses the 24-hour launch interval and never downloads by itself.
 
 To update manually, install the newer APK over the old one with the same
 signing key; app data (sign-in, settings, split selection) is kept. Android
@@ -216,12 +232,11 @@ state word under it is the service's own state:
   service. A proxy-only session also carries a **No VPN tunnel** badge.
 
 While connected the hero shows the real location and server and the session
-uptime. Four cards appear only when their data exists:
+uptime. Three cards appear only when their data exists:
 
 - **Location** — the country flag, country and city when the engine's server
   is known, with the `host:port` beneath it;
 - **Exit IP** — the public address the engine observed;
-- **Quota** — remaining and limit, with the reset date when reported;
 - **Session** — uptime and up/down totals.
 
 **Details** shows Always-on, lockdown, autoconnect, a shortcut to Android's
@@ -318,7 +333,7 @@ widgets. Add them from the launcher's widget picker under **Kumiho**:
 | Widget | Size | Shows | Taps |
 |---|---|---|---|
 | **Kumiho toggle** | 1×1 | A solid grid while the service has a session (including connecting) and an outlined, slashed grid while it is off; the icon carries the state and its content description is the state word | Toggles: connect the saved selection, or disconnect an active session |
-| **Kumiho status** | 2×1 | The state word on line 1, and `Country · N% left` or `Country · Quota unknown` on line 2 when the tunnel reports those facts; the quota is hidden while off and while a connect is in flight | The icon toggles; the text area opens the app |
+| **Kumiho status** | 2×1 | The state word on line 1, and the country on line 2 when the tunnel reports one; the country is hidden while off and while a connect is in flight | The icon toggles; the text area opens the app |
 
 Both widgets share the tile's snapshot, so they never invent a state the
 service did not report. A tap that needs VPN consent opens Android's system
@@ -331,31 +346,30 @@ change, and when the stored Light/Dark/OLED palette or accent resolves. They
 paint only after the palette is ready, so they never flash a guessed theme.
 After Android kills the app process, the launcher keeps the last painted frame
 until the app runs and the service reports again; open the app once to restore
-it. The state words, quota and consent behavior match the Quick Settings tile
+it. The state words and consent behavior match the Quick Settings tile
 exactly.
 
 ## Settings
 
 Settings has six groups: **Account**, **Kumiho app**, **Connection**,
-**Region**, **Android VPN** and **Advanced** (collapsed by default). Every
-group header carries a primary-tinted icon — person, settings, power, globe,
-shield and build — beside the on-surface title. The catalog is the desktop
-engine's settings, one row per key, plus two
-Android-owned read-only rows and the Region **Test relay** action; there are
-**25 catalog rows** (23 engine rows, of which 22 write a setting, and the 2
-Android-owned Always-on/lockdown rows). The Region group also links to the
-**Blocked region** guide; that link is a screen action, not a catalog row. The
-Kumiho app group also has the Split tunneling shortcut and the app-owned Keep
-connections outside the tunnel setting.
+**Region**, **Android VPN** and **Advanced** (collapsed by default). Each group
+is one card whose header sits inside it: a primary-tinted icon — person,
+settings, power, globe, shield and build — beside the on-surface title, above a
+hairline that separates it from the rows. The catalog is the desktop engine's
+settings, one row per key, plus two Android-owned read-only rows and the Region
+**Test relay** action; there are **24 catalog rows** (22 engine rows, of which
+21 write a setting, and the 2 Android-owned Always-on/lockdown rows). The
+Region group also links to the **Blocked region** guide; that link is a screen
+action, not a catalog row. The Kumiho app group also has the Split tunneling
+shortcut and the app-owned Keep connections outside the tunnel setting.
 
 ### Account
 
 The first group and the only account surface on the phone and on TV: status
 and notices, the account list with **Add**, the row overflow actions, the
 signed-out browser/password sign-in pane and **Sign out** with its
-confirmation. It shows no entitlement, quota or token facts — those stay on
-the dashboard, the widget and the Quick Settings tile. See [Account](#account)
-below.
+confirmation. It shows no entitlement, quota or token facts. See
+[Account](#account) below.
 
 ### Kumiho app
 
@@ -365,8 +379,9 @@ below.
 - **Theme** — Light, Dark or OLED; applies immediately.
 - **Accent** — Blue (default), Teal, Green, Orange, Rose, Violet.
 - **Version** — the app version and the embedded engine version.
-- **Software updates** — **Check for updates** only on tap, as described
-  above.
+- **Software updates** — the current app version, a manual **Check for
+  updates**, **Update now** when a release can install, and the release-page
+  fallback. The launch check and consent flow are described above.
 - **Notifications** and **Battery optimization** — the real OS state, with
   **Open notification settings** and **Open battery settings**. Both re-read
   on resume, and a system page that cannot be opened shows an inline error.
@@ -390,7 +405,6 @@ below.
 | `doh_provider` | automatic, cloudflare, google, quad9, off | automatic | next connect |
 | `dns_upstream` | resolver IP | empty (provider default) | next connect |
 | `allow_lan` | on/off | on | next connect |
-| `quota_poll_minutes` | 1–1440 | 15 | next connect |
 | `account_rotation` | on/off | off | next connect |
 | `rotation_threshold` | 1–50 | 10 | next connect; disabled while rotation is off |
 
@@ -467,7 +481,7 @@ the real state.
 
 Every row opens a modal editor: a radio list for enums, an outlined field for
 text and numbers, and a multi-line field for `exclude_cidrs`. Client
-validation mirrors the engine ranges (MTU, SOCKS/HTTP ports, quota), enum
+validation mirrors the engine ranges (MTU, SOCKS/HTTP ports), enum
 membership and IPv4-only CIDRs, so a rejected value stays in the editor with
 the reason instead of reaching the engine. A row changed away from
 `config.toml` shows an **Overridden** chip and a **Reset** action; engine
@@ -659,10 +673,9 @@ opaque browser sign-in are removed and the Account group shows **“Old browser
 sign-in removed. Add your Firefox account again.”** Password accounts and
 settings are untouched.
 
-The group carries no entitlement or quota card; the dashboard, the widget and
-the Quick Settings tile keep their quota display, and the remaining engine
-fields stay available to the CLI and TUI. `account_rotation` and
-`rotation_threshold` are engine settings and live in Settings → Connection.
+The group carries no entitlement or quota card; the remaining engine fields
+stay available to the CLI and TUI. `account_rotation` and `rotation_threshold`
+are engine settings and live in Settings → Connection.
 Rotation is off by default, runs before the next connect and never
 mid-session; the threshold is 1–50% (default 10) and is disabled while
 rotation is off.
@@ -719,8 +732,9 @@ the shortcuts are the only writes, and they open the system page for you.
 
 - **No telemetry, analytics or crash reporting.** The app sends nothing to the
   Kumiho developers. The only network calls are the engine's Firefox
-  Accounts/Guardian/server-list/DoH traffic and the one GitHub update check you
-  trigger.
+  Accounts/Guardian/server-list/DoH traffic, the automatic GitHub release
+  check (at most once every 24 hours), and the manual update check. An APK is
+  downloaded only after you accept an update.
 - **Account state and tokens** are written to the app's no-backup storage
   (`noBackupFilesDir/accounts.json`, plus `tokens.json` as the synchronized
   rollback copy), and Android backup and device transfer are disabled for the
@@ -740,8 +754,13 @@ the shortcuts are the only writes, and they open the system page for you.
 - **Crashes** are written to `filesDir/crash.log` (capped at 64 KiB, no tokens
   read) and replayed once into the engine log on the next engine start; the
   file is deleted only after a successful append. There is no crash upload.
-- **The FileProvider** exposes only `cacheDir/exports/`, is not exported, and
-  grants read access per URI. It cannot serve arbitrary app files.
+- **The FileProvider** exposes only `cacheDir/exports/` and
+  `cacheDir/updates/`, is not exported, and grants read access per URI. It
+  cannot serve arbitrary app files.
+- **`REQUEST_INSTALL_PACKAGES`** lets Kumiho hand a verified APK to Android's
+  installer. Android still requires the per-app **Install unknown apps**
+  grant and shows the final install confirmation; Kumiho never installs
+  silently.
 - **`QUERY_ALL_PACKAGES`** is required to list every installed app for the
   split-tunnel picker, including packages with no intent filters. It is
   acceptable for this sideload-only app; it is not a Play/F-Droid build. The
@@ -893,8 +912,10 @@ daemon or your Firefox Account.
   English; no other language ships in v0.13.0.
 - **No launcher long-press shortcuts**; the home-screen widgets and Quick
   Settings tile are the fast paths.
-- **No auto-update and no in-app APK install.** The update check only opens
-  the release page.
+- **No silent or store-delivered updates.** Kumiho checks GitHub at launch and
+  can download and hand an APK to Android, but Android always asks for the
+  final install confirmation. Debug builds and releases without an APK asset
+  fall back to the release page.
 - **Sideload only** — no Play/F-Droid distribution, so no store update
   channel.
 - **The Quick Settings tile's first consent needs one extra step** (the
@@ -926,11 +947,11 @@ sign-off has happened.
 | Logout | Settings → Account confirmation, `logout`, clears every account; the signed-out group offers browser and password sign-in |
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |
 | Per-connect location, proxy-only, kill-switch choice | Location picker, proxy-only toggle, OS lockdown shortcut |
-| Status rows | Power hero, four data cards and Details |
+| Status rows | Power hero, three data cards and Details |
 | Locations flat server list, refresh, search and Ping all | Fastest pinned row, card rows with rounded selection, real flags, live search, real-edge ping with `ping_done` completion, deferred speed order, locked footer |
 | Control-plane relay, HTTP 451 handling and `allow_locked` | Region settings (URL, write-only token, Test relay) and the Locations locked footer |
-| Desktop runtime settings, overrides/reset | Settings groups with 23 engine rows (22 writes and the Test relay action) and the 2 Android-owned rows, override chips and Reset |
-| Theme/accent/update check | App settings and a manual GitHub release check |
+| Desktop runtime settings, overrides/reset | Settings groups with 22 engine rows (21 writes and the Test relay action) and the 2 Android-owned rows, override chips and Reset |
+| Theme/accent/update check | App settings, a launch/manual GitHub check and a consented in-app update when an APK asset exists |
 | Account sign-in and sign-out | Settings → Account group (phone and TV) |
 | Logs: 2000 lines, filter/follow/search/clear/export | Logs screen, share sheet and a log file |
 | Diagnostics: doctor, copy, cleanup | Diagnostics with Android facts, Copy all and Reset local state |
@@ -939,7 +960,7 @@ sign-off has happened.
 | Split tunneling | Off / Exclude / Include with a per-app picker |
 | IPv6 | Captured and blackholed; DNS answers `AAAA` empty |
 | Local SOCKS/HTTP proxies | Engine settings rows with a device-wide warning |
-| Version/update | App and engine version, manual update check |
+| Version/update | App and engine version, launch/manual check, consented APK install |
 | Crash/diagnostics | Local `crash.log` replayed into the engine log |
 | No telemetry/backups | No telemetry, no backup, no-backup token storage |
 | Protocol v1 / desktop untouched | No IPC change; the mobile facade and Android provider are additive |

@@ -339,13 +339,6 @@ data class DashboardState(
 
     val showExitCard: Boolean get() = phase.active && !status?.exitIp.isNullOrBlank()
 
-    val showQuotaCard: Boolean
-        get() {
-            val quota = status?.quota ?: return false
-            if (!phase.active) return false
-            return quota.limit != null || quota.remaining != null
-        }
-
     val showSessionCard: Boolean get() = phase.active && status?.totals != null
 
     // ---- location -------------------------------------------------------
@@ -447,7 +440,6 @@ object DashboardTags {
 
     const val CARD_LOCATION = "dashboard_card_location"
     const val CARD_EXIT = "dashboard_card_exit"
-    const val CARD_QUOTA = "dashboard_card_quota"
     const val CARD_SESSION = "dashboard_card_session"
 
     const val DETAILS = "dashboard_details"

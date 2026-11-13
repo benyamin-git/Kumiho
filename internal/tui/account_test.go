@@ -96,7 +96,6 @@ func accountTestView() api.AccountsView {
 		Accounts: []api.AccountSummary{
 			{
 				ID: "id-1", Email: "user@example.com", Method: "browser", Active: true,
-				Quota: &api.Quota{Limit: accountTestI64(100), Remaining: accountTestI64(80)},
 			},
 			{
 				ID: "id-2", Email: "other@example.com", Label: "Work", Method: "password",
@@ -107,40 +106,16 @@ func accountTestView() api.AccountsView {
 	}
 }
 
-func accountTestI64(v int64) *int64 { return &v }
-
 func TestAccountScreenListsAndMarksActive(t *testing.T) {
 	m := &Model{
 		screen: screenAccount,
 		ac:     accountState{loaded: true, view: accountTestView()},
 	}
 	view := m.View()
-	for _, want := range []string{"user@example.com", "other@example.com", "* user@example.com", "needs sign-in", "80% left"} {
+	for _, want := range []string{"user@example.com", "other@example.com", "* user@example.com", "needs sign-in"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("account view missing %q:\n%s", want, view)
 		}
-	}
-}
-
-func TestAccountQuota(t *testing.T) {
-	limit := accountTestI64(100)
-	tests := []struct {
-		name string
-		q    *api.Quota
-		want string
-	}{
-		{name: "nil", q: nil, want: "quota unknown"},
-		{name: "exhausted", q: &api.Quota{Limit: limit, Remaining: accountTestI64(0)}, want: "quota exhausted"},
-		{name: "exhausted without limit", q: &api.Quota{Remaining: accountTestI64(0)}, want: "quota exhausted"},
-		{name: "over limit", q: &api.Quota{Limit: limit, Remaining: accountTestI64(120)}, want: "100% left"},
-		{name: "normal", q: &api.Quota{Limit: limit, Remaining: accountTestI64(80)}, want: "80% left"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := accountQuota(tt.q); got != tt.want {
-				t.Fatalf("accountQuota() = %q, want %q", got, tt.want)
-			}
-		})
 	}
 }
 

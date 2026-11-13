@@ -309,6 +309,28 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun anInstallableUpdateOffersInstallAndTheReleasePage() {
+        show(
+            state(
+                update = UpdateState.Available(
+                    "0.6.0",
+                    "https://example.test/release",
+                    installable = true,
+                ),
+            ),
+        )
+
+        scrollTo(SettingsTags.UPDATE_INSTALL)
+        rule.onNodeWithTag(SettingsTags.UPDATE_INSTALL).performClick()
+        rule.onNodeWithTag(SettingsTags.UPDATE_OPEN).performClick()
+
+        assertEquals(
+            listOf("install-update", "open-release-https://example.test/release"),
+            calls,
+        )
+    }
+
+    @Test
     fun aCheckingUpdateCannotBeTappedTwice() {
         show(state(update = UpdateState.Checking))
 
@@ -660,6 +682,7 @@ class SettingsScreenTest {
         onAccentSelected = { calls += "accent-${it.id}" },
         onCheckForUpdates = { calls += "check-updates" },
         onOpenRelease = { calls += "open-release-$it" },
+        onInstallUpdate = { calls += "install-update" },
         onOpenNotificationSettings = { calls += "notification-settings" },
         onOpenBatterySettings = { calls += "battery-settings" },
         onOpenVpnSettings = { calls += "vpn-settings" },

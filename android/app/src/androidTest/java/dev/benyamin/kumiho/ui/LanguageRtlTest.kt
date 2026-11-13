@@ -25,8 +25,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.benyamin.kumiho.data.AppLanguage
 import dev.benyamin.kumiho.go.mobile.Mobile
-import dev.benyamin.kumiho.ui.components.KumihoQuotaBar
-import dev.benyamin.kumiho.ui.components.QuotaBarTags
 import dev.benyamin.kumiho.ui.shell.AppShell
 import dev.benyamin.kumiho.ui.shell.ShellNavState
 import dev.benyamin.kumiho.ui.shell.ShellTags
@@ -152,45 +150,5 @@ class LanguageRtlTest {
         val home = bounds(ShellTags.tab("home"))
         val locations = bounds(ShellTags.tab("locations"))
         assertTrue(home.center.x < locations.center.x)
-    }
-
-    @Test
-    fun persianQuotaFillStartsAtTheRightEdge() {
-        showQuotaBar(LayoutDirection.Rtl)
-
-        val track = bounds(QuotaBarTags.TRACK)
-        val fill = bounds(QuotaBarTags.FILL)
-        assertEquals(track.right, fill.right, 1f)
-        assertTrue("The fill must start at the inline start", fill.left > track.left)
-    }
-
-    @Test
-    fun englishQuotaFillStartsAtTheLeftEdge() {
-        showQuotaBar(LayoutDirection.Ltr)
-
-        val track = bounds(QuotaBarTags.TRACK)
-        val fill = bounds(QuotaBarTags.FILL)
-        assertEquals(track.left, fill.left, 1f)
-        assertTrue(fill.right < track.right)
-    }
-
-    private fun showQuotaBar(layoutDirection: LayoutDirection) {
-        rule.setContent {
-            CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                KumihoTheme(
-                    colors = PaletteMapping.fromJson(
-                        Mobile.palette(ThemeId.LIGHT.id, KumihoAccent.BLUE.id),
-                        ThemeId.LIGHT,
-                        KumihoAccent.BLUE,
-                    ),
-                    language = AppLanguage.PERSIAN,
-                ) {
-                    Box(modifier = Modifier.requiredWidth(300.dp)) {
-                        KumihoQuotaBar(fraction = 0.25f)
-                    }
-                }
-            }
-        }
-        rule.waitForIdle()
     }
 }

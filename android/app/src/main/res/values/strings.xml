@@ -191,8 +191,6 @@
     <string name="dashboard_location_default_hint">Closest server chosen for you</string>
     <string name="dashboard_location_change">Change</string>
     <string name="dashboard_exit_title">Exit IP</string>
-    <string name="dashboard_quota_title">Quota</string>
-    <string name="dashboard_quota_resets">Resets %1$s</string>
     <string name="dashboard_session_title">Session</string>
     <string name="dashboard_session_uptime">Up for %1$s</string>
 
@@ -369,11 +367,18 @@
     <string name="settings_version_engine">Engine %1$s</string>
     <string name="settings_update_title">Software updates</string>
     <string name="settings_update_check">Check for updates</string>
-    <string name="settings_update_hint">Checks GitHub releases only when you tap; nothing is downloaded</string>
+    <string name="settings_update_hint">Release builds check GitHub at launch and on tap; downloads only after you agree</string>
     <string name="settings_update_checking">Checking…</string>
     <string name="settings_update_up_to_date">Kumiho is up to date</string>
     <string name="settings_update_available">Kumiho %1$s is available</string>
     <string name="settings_update_open">Open release page</string>
+    <string name="settings_update_release">Release page</string>
+    <string name="settings_update_install">Update now</string>
+    <string name="settings_update_downloading">Downloading… %1$d%%</string>
+    <string name="settings_update_ready">The update is downloaded and verified.</string>
+    <string name="settings_update_install_ready">Install update</string>
+    <string name="settings_update_installing">Installing… finish the Android prompt.</string>
+    <string name="settings_update_installed">Kumiho %1$s is installed.</string>
     <string name="settings_update_retry">Retry</string>
     <string name="settings_update_failed">The update check failed.</string>
 
@@ -454,7 +459,6 @@
     <string name="settings_label_doh_provider">DoH provider</string>
     <string name="settings_label_dns_upstream">DNS upstream</string>
     <string name="settings_label_allow_lan">Allow LAN</string>
-    <string name="settings_label_quota_poll_minutes">Quota poll</string>
     <string name="settings_label_account_rotation">Rotate accounts</string>
     <string name="settings_label_rotation_threshold">Rotation threshold</string>
     <string name="settings_label_edge_address">Edge address</string>
@@ -476,7 +480,6 @@
     <string name="settings_hint_doh_provider">In-tunnel DNS-over-HTTPS resolver. Applies on the next connect.</string>
     <string name="settings_hint_dns_upstream">Resolver IP for DoH; empty uses the provider default. Applies on the next connect.</string>
     <string name="settings_hint_allow_lan">When on, RFC1918 private, link-local and multicast ranges bypass the tunnel. The tunnel DNS 10.8.0.2 always stays inside. Applies on the next connect.</string>
-    <string name="settings_hint_quota_poll_minutes">Minutes between quota refreshes while connected. Applies on the next connect.</string>
     <string name="settings_hint_account_rotation">Switch accounts before connecting when the active account is low on quota. Applies on the next connect.</string>
     <string name="settings_hint_rotation_threshold">Switch when the active account has this percentage of quota left or less. Applies on the next connect.</string>
     <string name="settings_hint_edge_address">Pins the Fastly edge IP; empty resolves normally. Applies on the next connect.</string>
@@ -668,8 +671,6 @@
     <string name="account_add_password_title">Add with password</string>
     <string name="account_method_browser">Browser</string>
     <string name="account_method_password">Password</string>
-    <string name="account_row_quota_left">%1$s%% left</string>
-    <string name="account_row_quota_unknown">Quota unknown</string>
     <string name="account_reauth_required">Sign-in expired</string>
     <string name="account_actions">Account actions</string>
     <string name="tv_account_manage">Manage</string>
@@ -817,4 +818,28 @@
     <string name="settings_update_failure_no_release">GitHub has no published release.</string>
     <string name="settings_update_failure_missing_tag">GitHub\'s latest release has no version tag.</string>
     <string name="settings_update_failure_invalid_tag">GitHub\'s latest release tag is not a version number.</string>
+    <string name="settings_update_failure_download">The update could not be downloaded.</string>
+    <string name="settings_update_failure_checksum">The downloaded update failed its SHA-256 check.</string>
+    <string name="settings_update_failure_apk">The downloaded file is not a valid Kumiho update.</string>
+    <string name="settings_update_failure_install">Android could not open its installer.</string>
+
+    <string name="update_prompt_title">Kumiho %1$s is available</string>
+    <string name="update_prompt_body">Download and install the update from GitHub? Your accounts and settings stay.</string>
+    <string name="update_prompt_release_body">This release has no APK asset. Open the release page to download it.</string>
+    <string name="update_prompt_update">Update</string>
+    <string name="update_prompt_later">Later</string>
+    <string name="update_prompt_open">Open release page</string>
+    <string name="update_prompt_downloading">Downloading… %1$d%%</string>
+    <string name="update_prompt_ready_title">Ready to install</string>
+    <string name="update_prompt_ready_body">Android will ask you to confirm the install. Kumiho keeps your accounts and settings.</string>
+    <string name="update_prompt_allow_body">Android needs permission to install apps from Kumiho. Allow it in the next screen, then return here.</string>
+    <string name="update_prompt_install">Install</string>
+    <string name="update_prompt_allow">Allow installs</string>
+    <string name="update_prompt_installing_title">Installing…</string>
+    <string name="update_prompt_installing_body">Finish the Android install prompt.</string>
+    <string name="update_prompt_installed_title">Update installed</string>
+    <string name="update_prompt_installed_body">Kumiho %1$s is installed. Close the app and open it again.</string>
+    <string name="update_prompt_close">Close</string>
+    <string name="update_prompt_cancel">Cancel</string>
+    <string name="update_prompt_launch_failed">Android could not open the installer.</string>
 </resources>

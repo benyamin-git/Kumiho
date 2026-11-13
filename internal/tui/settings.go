@@ -63,8 +63,6 @@ var settingItems = []settingItem{
 		hint: "tun device MTU; next connect"},
 	{key: "socks_port", label: "SOCKS port", kind: settingInt,
 		hint: "loopback SOCKS5 listener; next connect"},
-	{key: "quota_poll_minutes", label: "quota poll", kind: settingInt,
-		hint: "minutes between quota refreshes while connected; next connect"},
 	{key: "tls_split", label: "TLS split", kind: settingEnum,
 		options: []string{"off", "first-byte", "sni"},
 		hint:    "split the TLS ClientHello across writes; next connect"},
@@ -448,8 +446,6 @@ func (s *settingsState) currentValue(key string) string {
 		return strconv.Itoa(s.view.SocksPort)
 	case "http_proxy_port":
 		return strconv.Itoa(s.view.HTTPProxyPort)
-	case "quota_poll_minutes":
-		return strconv.Itoa(s.view.QuotaPollMinutes)
 	case "relay_url":
 		return s.view.RelayURL
 	}

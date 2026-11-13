@@ -25,15 +25,15 @@ class SettingsMapperTest {
             "socks_port", "mtu", "exit_check", "doh_provider", "dns_upstream",
             "edge_address", "upstream_proxy", "exclude_cidrs", "allow_lan",
             "log_level", "redact_targets", "kill_switch", "autoconnect",
-            "quota_poll_minutes", "account_rotation", "rotation_threshold",
+            "account_rotation", "rotation_threshold",
             "tls_split", "http_proxy", "http_proxy_port",
             "solve_challenges", "keepalive_profile",
             "allow_locked", "relay_url", "relay_token", "relay_test",
         )
-        assertEquals(25, SettingsCatalog.specs.size)
+        assertEquals(24, SettingsCatalog.specs.size)
         assertEquals(expected, SettingsCatalog.engineKeys.toSet())
-        assertEquals(25, SettingsCatalog.engineKeys.size)
-        assertEquals(22, SettingsCatalog.settableKeys.size)
+        assertEquals(24, SettingsCatalog.engineKeys.size)
+        assertEquals(21, SettingsCatalog.settableKeys.size)
         assertEquals(setOf("kill_switch", "autoconnect"), SettingsCatalog.readOnlyKeys.toSet())
     }
 
@@ -42,8 +42,7 @@ class SettingsMapperTest {
         assertEquals(
             listOf(
                 "mtu", "socks_port", "exit_check", "doh_provider", "dns_upstream",
-                "allow_lan", "quota_poll_minutes", "account_rotation",
-                "rotation_threshold",
+                "allow_lan", "account_rotation", "rotation_threshold",
             ),
             SettingsCatalog.specsIn(SettingsGroup.CONNECTION).map { it.key },
         )
@@ -71,7 +70,6 @@ class SettingsMapperTest {
         val kinds = SettingsCatalog.specs.associate { it.key to it.kind }
         assertEquals(SettingKind.INTEGER, kinds["mtu"])
         assertEquals(SettingKind.INTEGER, kinds["socks_port"])
-        assertEquals(SettingKind.INTEGER, kinds["quota_poll_minutes"])
         assertEquals(SettingKind.INTEGER, kinds["http_proxy_port"])
         assertEquals(SettingKind.INTEGER, kinds["rotation_threshold"])
         assertEquals(SettingKind.BOOLEAN, kinds["exit_check"])
@@ -129,7 +127,6 @@ class SettingsMapperTest {
             "doh_provider" to "quad9",
             "dns_upstream" to "9.9.9.9",
             "allow_lan" to "off",
-            "quota_poll_minutes" to "15",
             "account_rotation" to "on",
             "rotation_threshold" to "20",
             "edge_address" to "203.0.113.7",
@@ -229,11 +226,6 @@ class SettingsMapperTest {
         assertValid("mtu", "65535")
         assertOutOfRange("mtu", "575", 576, 65535)
         assertOutOfRange("mtu", "65536", 576, 65535)
-
-        assertValid("quota_poll_minutes", "1")
-        assertValid("quota_poll_minutes", "1440")
-        assertOutOfRange("quota_poll_minutes", "0", 1, 1440)
-        assertOutOfRange("quota_poll_minutes", "1441", 1, 1440)
 
         assertValid("rotation_threshold", "1")
         assertValid("rotation_threshold", "50")
