@@ -115,6 +115,8 @@
     <string name="sign_in_code_label">Verification code</string>
     <string name="sign_in_code_note">Enter the code Firefox Accounts sent you, then tap Verify. The field clears after each attempt.</string>
     <string name="sign_in_code_submit">Verify</string>
+    <string name="sign_in_code_resend">Send a new code</string>
+    <string name="sign_in_code_sent">A new code was sent. Check your inbox.</string>
     <string name="sign_in_captcha_title">Confirm you are human</string>
     <string name="sign_in_captcha_note">Mozilla asked for this check before it accepts the password. Type the characters in the image, then tap Verify. A wrong answer shows a new image.</string>
     <string name="sign_in_captcha_label">Characters in the image</string>

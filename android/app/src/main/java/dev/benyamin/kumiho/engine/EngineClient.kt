@@ -269,9 +269,14 @@ class EngineClient(
     suspend fun loginPassword(password: String): LoginState =
         EngineJson.loginState(command("login_password", JSONObject().put("password", password)))
 
-    /** Supplies the emailed code; an empty code re-checks the email link. */
-    suspend fun login2fa(code: String): LoginState =
-        EngineJson.loginState(command("login_2fa", JSONObject().put("code", code)))
+    /**
+     * Supplies the emailed code; an empty code re-checks the email link.
+     * Resend asks Firefox Accounts for a fresh code without submitting one.
+     */
+    suspend fun login2fa(code: String, resend: Boolean = false): LoginState =
+        EngineJson.loginState(
+            command("login_2fa", JSONObject().put("code", code).put("resend", resend)),
+        )
 
     /**
      * Answers the image CAPTCHA a password sign-in is waiting on. An empty

@@ -99,6 +99,8 @@
     <string name="sign_in_code_label">کد تأیید</string>
     <string name="sign_in_code_note">کدی را که Firefox Accounts برایتان فرستاده وارد کنید، سپس «تأیید» را بزنید. این فیلد پس از هر تلاش پاک می‌شود.</string>
     <string name="sign_in_code_submit">تأیید</string>
+    <string name="sign_in_code_resend">ارسال کد جدید</string>
+    <string name="sign_in_code_sent">کد جدیدی ارسال شد. صندوق ایمیل را بررسی کنید.</string>
     <string name="sign_in_captcha_title">تأیید کنید که ربات نیستید</string>
     <string name="sign_in_captcha_note">Mozilla پیش از پذیرش رمز عبور این بررسی را خواسته است. نویسه‌های تصویر را وارد کنید و سپس «تأیید» را بزنید. پاسخ نادرست یک تصویر تازه نشان می‌دهد.</string>
     <string name="sign_in_captcha_label">نویسه‌های تصویر</string>

@@ -365,7 +365,7 @@ class EngineClientTest {
             client.doctor(JSONObject().put("sdk", 36))
             client.loginEmail("user@example.com")
             client.loginPassword("secret")
-            client.login2fa("123456")
+            client.login2fa("123456", resend = true)
             client.logsSnapshot()
 
             val byType = transport.requests.groupBy { it.getString("type") }
@@ -433,10 +433,9 @@ class EngineClientTest {
                 byType.getValue("login_password").single().getJSONObject("payload")
                     .getString("password"),
             )
-            assertEquals(
-                "123456",
-                byType.getValue("login_2fa").single().getJSONObject("payload").getString("code"),
-            )
+            val twofa = byType.getValue("login_2fa").single().getJSONObject("payload")
+            assertEquals("123456", twofa.getString("code"))
+            assertTrue(twofa.getBoolean("resend"))
             assertFalse(
                 byType.getValue("logs_snapshot").single().has("payload"),
             )

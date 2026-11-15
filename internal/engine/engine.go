@@ -75,9 +75,9 @@ func parseFirefoxVersion(ua string) string {
 	return m[1]
 }
 
-// passwordLoginTimeout bounds one password sign-in, including an image
-// CAPTCHA answered by a person.
-const passwordLoginTimeout = 10 * time.Minute
+// loginStepTimeout bounds one sign-in step, including an image CAPTCHA
+// answered by a person.
+const loginStepTimeout = 10 * time.Minute
 
 type pendingLogin struct {
 	email              string
@@ -88,21 +88,40 @@ type pendingLogin struct {
 	method             string
 	step               string
 	targetID           string
+	// sessionVerified records that the email code or authenticator code was
+	// accepted. A failed token exchange can then be retried without asking
+	// for a code the server has already consumed.
+	sessionVerified bool
 	// run owns the in-flight FxA call. A challenged login blocks inside the
 	// Fastly solver until a client submits the captcha answer.
-	run          *passwordRun
+	run          *loginRun
 	captcha      *captchaChallenge
 	captchaImage string
 	captchaTried bool
 }
 
-// passwordRun is one in-flight password sign-in. result carries the state the
+// loginRun is one in-flight sign-in step. result carries the state the
 // goroutine reached; captcha carries one image the solver needs a person to
 // read. cancel stops both waits.
-type passwordRun struct {
+type loginRun struct {
 	result  chan api.LoginState
 	captcha chan *captchaChallenge
 	cancel  context.CancelFunc
+}
+
+// login2faRequest is the pending flow's state at the moment a code submit or
+// resend starts. The worker reads only this snapshot, never the mutable
+// pending struct.
+type login2faRequest struct {
+	email              string
+	sessionToken       string
+	authPW             string
+	verificationMethod string
+	verificationReason string
+	method             string
+	code               string
+	sessionVerified    bool
+	resend             bool
 }
 
 // captchaChallenge is one image waiting for a person's answer.
@@ -1047,34 +1066,64 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 		pending.captchaImage = ""
 		pending.captchaTried = false
 	}
-	// The run outlives the client call that starts it: its context drops the
-	// request's cancellation but keeps its values, and LoginCaptcha or
-	// LoginCancel (or the deadline) ends the wait.
-	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), passwordLoginTimeout)
-	run := &passwordRun{
+	email := pending.email
+	run := startLoginRunLocked(ctx, pending, "password", func(runCtx context.Context, run *loginRun) api.LoginState {
+		return c.runPasswordLogin(runCtx, pending, run, gen, password)
+	})
+	c.mu.Unlock()
+	return c.awaitLoginRun(ctx, pending, run, email)
+}
+
+// startLoginRunLocked installs the daemon-owned run for one sign-in step.
+// Callers hold c.mu, have checked the pending flow and cleared any prior run.
+// The run outlives the client call that starts it: its context drops the
+// request's cancellation but keeps its values, and LoginCaptcha, LoginCancel
+// or the deadline ends the wait.
+func startLoginRunLocked(ctx context.Context, pending *pendingLogin, step string, fn func(context.Context, *loginRun) api.LoginState) *loginRun {
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loginStepTimeout)
+	run := &loginRun{
 		result:  make(chan api.LoginState, 1),
 		captcha: make(chan *captchaChallenge),
 		cancel:  cancel,
 	}
 	pending.run = run
-	pending.step = "password"
+	pending.step = step
 	pending.captcha = nil
 	pending.captchaImage = ""
 	pending.captchaTried = false
-	email := pending.email
-	c.mu.Unlock()
-
 	go func() {
-		state := c.runPasswordLogin(runCtx, pending, run, gen, password)
+		state := fn(runCtx, run)
 		cancel()
 		run.result <- state
 	}()
-	return c.awaitPasswordRun(ctx, pending, run, email)
+	return run
 }
 
-// LoginCaptcha answers the image CAPTCHA a password sign-in is waiting on.
-// An empty answer asks for the browser flow instead, so a terminal client
-// that cannot show an image still has a way forward.
+// withPersonCaptcha bridges Fastly's image solver to one run. The solver
+// blocks until LoginCaptcha delivers an answer or the run is canceled.
+func withPersonCaptcha(ctx context.Context, run *loginRun) context.Context {
+	return fastly.WithCaptchaSolver(ctx, func(ctx context.Context, image string) (string, error) {
+		request := &captchaChallenge{image: image, answer: make(chan string, 1)}
+		select {
+		case run.captcha <- request:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		select {
+		case answer := <-request.answer:
+			if strings.TrimSpace(answer) == "" {
+				return "", context.Canceled
+			}
+			return answer, nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	})
+}
+
+// LoginCaptcha answers the image CAPTCHA a sign-in is waiting on. An empty
+// answer asks for the browser flow instead, so a terminal client that cannot
+// show an image still has a way forward.
 func (c *Controller) LoginCaptcha(ctx context.Context, answer string) api.LoginState {
 	answer = strings.TrimSpace(answer)
 	c.mu.Lock()
@@ -1092,7 +1141,7 @@ func (c *Controller) LoginCaptcha(ctx context.Context, answer string) api.LoginS
 		pending.captchaImage = ""
 		pending.captchaTried = false
 		c.mu.Unlock()
-		c.log.Logf(logging.Warn, "auth", "password sign-in for %s needs a captcha; switching to the browser", email)
+		c.log.Logf(logging.Warn, "auth", "sign-in for %s needs a captcha; switching to the browser", email)
 		state, _ := c.startBrowserFallback(pending)
 		return state
 	}
@@ -1101,13 +1150,13 @@ func (c *Controller) LoginCaptcha(ctx context.Context, answer string) api.LoginS
 	c.mu.Unlock()
 
 	request.answer <- answer
-	return c.awaitPasswordRun(ctx, pending, run, email)
+	return c.awaitLoginRun(ctx, pending, run, email)
 }
 
-// awaitPasswordRun waits for the run's final state or its next CAPTCHA. It
+// awaitLoginRun waits for the run's final state or its next CAPTCHA. It
 // publishes a waiting CAPTCHA on the pending state so status polls can render
 // the same image.
-func (c *Controller) awaitPasswordRun(ctx context.Context, pending *pendingLogin, run *passwordRun, email string) api.LoginState {
+func (c *Controller) awaitLoginRun(ctx context.Context, pending *pendingLogin, run *loginRun, email string) api.LoginState {
 	for {
 		select {
 		case state := <-run.result:
@@ -1116,6 +1165,12 @@ func (c *Controller) awaitPasswordRun(ctx context.Context, pending *pendingLogin
 				pending.run = nil
 				pending.captcha = nil
 				pending.captchaImage = ""
+				// A failed step must not leave the status view stuck on the
+				// captcha page it just left.
+				switch state.Step {
+				case "password", "2fa":
+					pending.step = state.Step
+				}
 			}
 			c.mu.Unlock()
 			return state
@@ -1133,48 +1188,54 @@ func (c *Controller) awaitPasswordRun(ctx context.Context, pending *pendingLogin
 			pending.captchaImage = request.image
 			pending.captchaTried = true
 			email = pending.email
+			method := pending.method
+			if method == "" {
+				method = "email"
+			}
+			verificationMethod, verificationReason := pending.verificationMethod, pending.verificationReason
 			c.mu.Unlock()
-			state := api.LoginState{Step: "captcha", Email: email, Method: "email", CaptchaImage: request.image}
+			state := api.LoginState{
+				Step:               "captcha",
+				Email:              email,
+				Method:             method,
+				VerificationMethod: verificationMethod,
+				VerificationReason: verificationReason,
+				CaptchaImage:       request.image,
+			}
 			if !first {
 				state.Error = "that captcha answer was not accepted; try again"
 			}
-			c.log.Logf(logging.Warn, "auth", "password sign-in for %s needs an image captcha", email)
+			c.log.Logf(logging.Warn, "auth", "sign-in for %s needs an image captcha", email)
 			c.notify()
 			return state
 		case <-ctx.Done():
 			c.mu.Lock()
+			email = pending.email
+			method := pending.method
+			if method == "" {
+				method = "email"
+			}
+			step := "password"
+			if pending.verificationMethod != "" {
+				step = "2fa"
+			}
 			if c.pending == pending && pending.run == run {
 				pending.run = nil
 				pending.captcha = nil
 				pending.captchaImage = ""
+				pending.step = step
 			}
 			c.mu.Unlock()
 			run.cancel()
-			return api.LoginState{Step: "password", Email: email, Method: "email", Error: "sign-in timed out; try again"}
+			return api.LoginState{Step: step, Email: email, Method: method, Error: "sign-in timed out; try again"}
 		}
 	}
 }
 
 // runPasswordLogin is the daemon-owned FxA call. It runs off the request
 // goroutine so a CAPTCHA can pause it without blocking the control socket.
-func (c *Controller) runPasswordLogin(ctx context.Context, pending *pendingLogin, run *passwordRun, gen uint64, password string) api.LoginState {
-	ctx = fastly.WithCaptchaSolver(ctx, func(ctx context.Context, image string) (string, error) {
-		request := &captchaChallenge{image: image, answer: make(chan string, 1)}
-		select {
-		case run.captcha <- request:
-		case <-ctx.Done():
-			return "", ctx.Err()
-		}
-		select {
-		case answer := <-request.answer:
-			if strings.TrimSpace(answer) == "" {
-				return "", context.Canceled
-			}
-			return answer, nil
-		case <-ctx.Done():
-			return "", ctx.Err()
-		}
-	})
+func (c *Controller) runPasswordLogin(ctx context.Context, pending *pendingLogin, run *loginRun, gen uint64, password string) api.LoginState {
+	ctx = withPersonCaptcha(ctx, run)
 
 	email := pending.email
 	authPW := fxa.AuthPW(email, password)
@@ -1191,7 +1252,7 @@ func (c *Controller) runPasswordLogin(ctx context.Context, pending *pendingLogin
 		// A challenge is the one failure the browser can always clear. The
 		// password form is a fast path, not the only door: continue in the
 		// background-owned browser flow instead of dead-ending on Fastly.
-		if isChallengeError(err) {
+		if ctx.Err() == nil && isChallengeError(err) {
 			state, started := c.startBrowserFallback(pending)
 			if started {
 				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; continuing in the browser", email)
@@ -1269,6 +1330,9 @@ func (c *Controller) runPasswordLogin(ctx context.Context, pending *pendingLogin
 			VerificationReason: res.VerificationReason,
 		}
 	}
+	// The password already authenticated the session; a failed token
+	// exchange can retry without asking for a code that does not exist.
+	c.markSessionVerified(pending, gen, res.SessionToken)
 	return c.completeLogin(ctx, email, res.SessionToken, gen)
 }
 
@@ -1321,45 +1385,139 @@ func isChallengeError(err error) bool {
 
 // Login2FA verifies an authenticator code, an unblock code, the emailed
 // code, or with an empty code re-checks the email-link flow via
-// GET /session/status.
-func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
+// GET /session/status. Resend asks Firefox Accounts for a fresh code
+// instead of submitting one.
+func (c *Controller) Login2FA(ctx context.Context, p api.Login2FAPayload) api.LoginState {
+	code := strings.TrimSpace(p.Code)
 	c.mu.Lock()
 	pending := c.pending
 	gen := c.authGen
-	c.mu.Unlock()
 	if pending == nil || pending.email == "" {
+		c.mu.Unlock()
 		return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
 	}
-	code = strings.TrimSpace(code)
-	method := pending.method
-	if method == "" {
-		method = "2fa"
+	if pending.run != nil {
+		if pending.step != "captcha" {
+			email := pending.email
+			c.mu.Unlock()
+			return api.LoginState{Step: "2fa", Email: email, Method: "2fa", Error: "sign-in is already in progress"}
+		}
+		// A fresh code submit replaces the captcha attempt.
+		pending.run.cancel()
+		pending.run = nil
+		pending.captcha = nil
+		pending.captchaImage = ""
+		pending.captchaTried = false
+	}
+	req := login2faRequest{
+		email:              pending.email,
+		sessionToken:       pending.sessionToken,
+		authPW:             pending.authPW,
+		verificationMethod: pending.verificationMethod,
+		verificationReason: pending.verificationReason,
+		method:             pending.method,
+		code:               code,
+		sessionVerified:    pending.sessionVerified,
+		resend:             p.Resend,
+	}
+	// Reject states that cannot make a request before starting a worker.
+	if req.resend && req.verificationMethod == "totp-2fa" {
+		c.mu.Unlock()
+		return login2faState(req, "totp", "resend is not available for an authenticator code")
+	}
+	if req.resend && req.verificationMethod == "email" {
+		c.mu.Unlock()
+		return login2faState(req, "email", "resend is not available for the email link")
+	}
+	unblock := req.verificationMethod == "email-2fa" && req.verificationReason == "unblock-code"
+	if req.sessionToken == "" && !unblock {
+		c.mu.Unlock()
+		return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
+	}
+	if !req.resend && !req.sessionVerified {
+		switch {
+		case req.verificationMethod == "totp-2fa" && req.code == "":
+			c.mu.Unlock()
+			return login2faState(req, "totp", "enter the authenticator code")
+		case unblock && req.code == "":
+			c.mu.Unlock()
+			return login2faState(req, "unblock", "enter the unblock code sent to your email")
+		}
+	}
+	run := startLoginRunLocked(ctx, pending, "2fa", func(runCtx context.Context, run *loginRun) api.LoginState {
+		return c.run2FA(runCtx, pending, run, gen, req)
+	})
+	c.mu.Unlock()
+	return c.awaitLoginRun(ctx, pending, run, req.email)
+}
+
+// login2faMethod names the verification surface a request belongs to.
+func login2faMethod(req login2faRequest) string {
+	switch {
+	case req.verificationMethod == "totp-2fa":
+		return "totp"
+	case req.verificationMethod == "email-2fa" && req.verificationReason == "unblock-code":
+		return "unblock"
+	}
+	if req.method == "" {
+		return "2fa"
+	}
+	return req.method
+}
+
+// login2faState keeps the verification fields on a 2FA reply so the client
+// returns to the same code screen after an error or a resend.
+func login2faState(req login2faRequest, method, message string) api.LoginState {
+	return api.LoginState{
+		Step:               "2fa",
+		Email:              req.email,
+		Method:             method,
+		VerificationMethod: req.verificationMethod,
+		VerificationReason: req.verificationReason,
+		Error:              message,
+	}
+}
+
+// run2FA is the daemon-owned verification and token exchange. It runs off
+// the request goroutine so a challenge on any step can wait for a person.
+func (c *Controller) run2FA(ctx context.Context, pending *pendingLogin, run *loginRun, gen uint64, req login2faRequest) api.LoginState {
+	ctx = withPersonCaptcha(ctx, run)
+	method := login2faMethod(req)
+
+	// The code was already accepted on an earlier submit; a failed token
+	// exchange must not ask for a code the server has consumed.
+	if req.sessionVerified {
+		return c.completeLogin(ctx, req.email, req.sessionToken, gen)
 	}
 
 	switch {
-	case pending.verificationMethod == "totp-2fa":
-		if pending.sessionToken == "" {
-			return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
+	case req.verificationMethod == "totp-2fa":
+		if err := c.fxa.VerifyTOTP(ctx, req.sessionToken, req.code); err != nil {
+			c.log.Logf(logging.Warn, "auth", "authenticator verification for %s failed: %v", req.email, err)
+			return login2faState(req, "totp", friendlyLoginError(err))
 		}
-		if code == "" {
-			return api.LoginState{Step: "2fa", Email: pending.email, Method: "totp", Error: "enter the authenticator code"}
+		c.markSessionVerified(pending, gen, req.sessionToken)
+	case req.verificationMethod == "email-2fa" && req.verificationReason == "unblock-code":
+		if req.resend {
+			if err := c.fxa.SendUnblockCode(ctx, req.email); err != nil {
+				c.log.Logf(logging.Warn, "auth", "could not resend the unblock code for %s: %v", req.email, err)
+				return login2faState(req, "unblock", friendlyLoginError(err))
+			}
+			c.log.Logf(logging.Info, "auth", "unblock code resent to %s", req.email)
+			state := login2faState(req, "unblock", "")
+			state.CodeSent = true
+			return state
 		}
-		if err := c.fxa.VerifyTOTP(ctx, pending.sessionToken, code); err != nil {
-			return api.LoginState{Step: "2fa", Email: pending.email, Method: "totp", Error: friendlyLoginError(err)}
-		}
-	case pending.verificationMethod == "email-2fa" && pending.verificationReason == "unblock-code":
-		if code == "" {
-			return api.LoginState{Step: "2fa", Email: pending.email, Method: "unblock", Error: "enter the unblock code sent to your email"}
-		}
-		res, err := c.fxa.LoginUnblock(ctx, pending.email, pending.authPW, code)
+		res, err := c.fxa.LoginUnblock(ctx, req.email, req.authPW, req.code)
 		if err != nil {
-			return api.LoginState{Step: "2fa", Email: pending.email, Method: "unblock", Error: friendlyLoginError(err)}
+			c.log.Logf(logging.Warn, "auth", "unblock verification for %s failed: %v", req.email, err)
+			return login2faState(req, "unblock", friendlyLoginError(err))
 		}
 		if !res.Verified {
 			c.mu.Lock()
 			if c.authGen != gen || c.pending != pending {
 				c.mu.Unlock()
-				return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
+				return api.LoginState{Step: "done", Email: req.email, Error: errLoginSessionChanged.Error()}
 			}
 			pending.sessionToken = res.SessionToken
 			if res.VerificationMethod != "" {
@@ -1370,39 +1528,62 @@ func (c *Controller) Login2FA(ctx context.Context, code string) api.LoginState {
 			}
 			pending.method = "unblock"
 			pending.step = "2fa"
-			c.mu.Unlock()
-			return api.LoginState{
+			state := api.LoginState{
 				Step:               "2fa",
 				Email:              pending.email,
 				Method:             "unblock",
 				VerificationMethod: pending.verificationMethod,
 				VerificationReason: pending.verificationReason,
 			}
+			c.mu.Unlock()
+			return state
 		}
-		return c.completeLogin(ctx, pending.email, res.SessionToken, gen)
+		// The unblock code authenticated the session; a failed token
+		// exchange can retry without asking for the consumed code again.
+		c.markSessionVerified(pending, gen, res.SessionToken)
+		return c.completeLogin(ctx, req.email, res.SessionToken, gen)
 
 	default:
-		if pending.sessionToken == "" {
-			return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
+		if req.resend {
+			if err := c.fxa.ResendCode(ctx, req.sessionToken); err != nil {
+				c.log.Logf(logging.Warn, "auth", "could not resend the verification code for %s: %v", req.email, err)
+				return login2faState(req, method, friendlyLoginError(err))
+			}
+			c.log.Logf(logging.Info, "auth", "verification code resent to %s", req.email)
+			state := login2faState(req, method, "")
+			state.CodeSent = true
+			return state
 		}
-		if code == "" {
-			state, err := c.fxa.SessionStatus(ctx, pending.sessionToken)
+		if req.code == "" {
+			state, err := c.fxa.SessionStatus(ctx, req.sessionToken)
 			if err != nil {
-				return api.LoginState{Step: "2fa", Email: pending.email, Method: method, Error: friendlyLoginError(err)}
+				c.log.Logf(logging.Warn, "auth", "session status for %s failed: %v", req.email, err)
+				return login2faState(req, method, friendlyLoginError(err))
 			}
 			if state != "verified" {
-				return api.LoginState{
-					Step:   "2fa",
-					Email:  pending.email,
-					Method: method,
-					Error:  "email link not confirmed yet; click the link in the email, then press Enter",
-				}
+				return login2faState(req, method, "email link not confirmed yet; click the link in the email, then press Enter")
 			}
-		} else if err := c.fxa.VerifyCode(ctx, pending.sessionToken, code); err != nil {
-			return api.LoginState{Step: "2fa", Email: pending.email, Method: method, Error: friendlyLoginError(err)}
+		} else if err := c.fxa.VerifyCode(ctx, req.sessionToken, req.code); err != nil {
+			c.log.Logf(logging.Warn, "auth", "verification code for %s failed: %v", req.email, err)
+			return login2faState(req, method, friendlyLoginError(err))
 		}
+		c.markSessionVerified(pending, gen, req.sessionToken)
 	}
-	return c.completeLogin(ctx, pending.email, pending.sessionToken, gen)
+	return c.completeLogin(ctx, req.email, req.sessionToken, gen)
+}
+
+// markSessionVerified records that the server accepted the password or code,
+// so a later retry can skip straight to the token exchange. A non-empty
+// session token is remembered for that retry.
+func (c *Controller) markSessionVerified(pending *pendingLogin, gen uint64, sessionToken string) {
+	c.mu.Lock()
+	if c.authGen == gen && c.pending == pending {
+		if sessionToken != "" {
+			pending.sessionToken = sessionToken
+		}
+		pending.sessionVerified = true
+	}
+	c.mu.Unlock()
 }
 
 func (c *Controller) completeLogin(ctx context.Context, email, sessionToken string, gen uint64) api.LoginState {
@@ -1414,13 +1595,59 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	}
 	c.mu.Unlock()
 
-	tokens, err := c.fxa.OAuthToken(ctx, sessionToken)
+	tokens, err := c.fxa.ExchangeSession(ctx, sessionToken)
+	if err != nil && ctx.Err() == nil {
+		// The legacy fxa-credentials route is the historical path and still
+		// answers on some hosts; keep it as the second attempt.
+		legacyTokens, legacyErr := c.fxa.OAuthToken(ctx, sessionToken)
+		if legacyErr == nil {
+			tokens, err = legacyTokens, nil
+		} else if isChallengeError(legacyErr) || !isChallengeError(err) {
+			err = legacyErr
+		}
+	}
 	if err != nil {
-		return api.LoginState{Step: "2fa", Email: email, Error: "could not fetch OAuth tokens: " + friendlyLoginError(err)}
+		// The token exchange is the one step with no code left to retry: a
+		// hard edge block there must not dead-end the whole sign-in. Hand the
+		// same account to the browser flow, exactly like a challenged
+		// password request.
+		if ctx.Err() == nil && isChallengeError(err) {
+			state, started := c.startBrowserFallback(pending)
+			if started {
+				c.log.Logf(logging.Warn, "auth", "token exchange for %s is blocked; continuing in the browser", email)
+				return state
+			}
+			if state.Step == "done" || state.Step == "email" {
+				c.log.Logf(logging.Warn, "auth", "token exchange for %s is blocked; browser fallback unavailable: %s", email, state.Error)
+				return state
+			}
+		}
+		c.log.Logf(logging.Warn, "auth", "could not fetch OAuth tokens for %s: %v", email, err)
+		c.mu.Lock()
+		if pending == nil || c.authGen != gen || c.pending != pending {
+			c.mu.Unlock()
+			return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
+		}
+		// A password-only attempt has no code screen to return to: keep the
+		// error on the password step so a retry is possible there.
+		step := "2fa"
+		if pending.verificationMethod == "" {
+			step = "password"
+		}
+		state := api.LoginState{
+			Step:               step,
+			Email:              email,
+			Method:             pending.method,
+			VerificationMethod: pending.verificationMethod,
+			VerificationReason: pending.verificationReason,
+			Error:              "could not fetch OAuth tokens: " + friendlyLoginError(err),
+		}
+		c.mu.Unlock()
+		return state
 	}
 
 	c.mu.Lock()
-	if c.authGen != gen || c.pending != pending {
+	if pending == nil || c.authGen != gen || c.pending != pending {
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
 	}

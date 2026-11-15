@@ -168,6 +168,7 @@ fun rememberAccountSection(container: AppContainer): AccountSectionUi {
             onSubmitCaptcha = viewModel::submitCaptcha,
             onCaptchaBrowser = viewModel::submitCaptchaBrowser,
             onRecheck = viewModel::recheckEmailLink,
+            onResendCode = viewModel::resendCode,
             onSignOut = viewModel::requestSignOut,
             onDismissSignOut = viewModel::dismissSignOut,
             onConfirmSignOut = viewModel::confirmSignOut,
@@ -253,6 +254,7 @@ fun AccountSection(
                 onCaptchaBrowser = actions.onCaptchaBrowser,
                 onRecheck = actions.onRecheck,
                 onBrowser = null,
+                onResendCode = actions.onResendCode,
             )
             TextButton(
                 onClick = actions.onCancelAdd,
@@ -285,6 +287,7 @@ fun AccountSection(
                 onCaptchaBrowser = actions.onCaptchaBrowser,
                 onRecheck = actions.onRecheck,
                 onBrowser = actions.onAddBrowser,
+                onResendCode = actions.onResendCode,
                 signedInNote = stringResource(R.string.account_signed_in_note),
             )
         }
@@ -857,6 +860,7 @@ data class AccountActions(
     val onSubmitEmail: (String) -> Unit = {},
     val onSubmitPassword: (String) -> Unit = {},
     val onSubmitCode: (String) -> Unit = {},
+    val onResendCode: () -> Unit = {},
     val onSubmitCaptcha: (String) -> Unit = {},
     val onCaptchaBrowser: () -> Unit = {},
     val onRecheck: () -> Unit = {},

@@ -34,7 +34,7 @@ interface AccountGateway {
 
     suspend fun loginPassword(password: String): LoginState
 
-    suspend fun login2fa(code: String): LoginState
+    suspend fun login2fa(code: String, resend: Boolean = false): LoginState
 
     /** Answers the image CAPTCHA; an empty answer asks for the browser flow. */
     suspend fun loginCaptcha(answer: String): LoginState
@@ -72,7 +72,8 @@ class EngineAccountGateway(private val engine: EngineClient) : AccountGateway {
 
     override suspend fun loginPassword(password: String): LoginState = engine.loginPassword(password)
 
-    override suspend fun login2fa(code: String): LoginState = engine.login2fa(code)
+    override suspend fun login2fa(code: String, resend: Boolean): LoginState =
+        engine.login2fa(code, resend)
 
     override suspend fun loginCaptcha(answer: String): LoginState = engine.loginCaptcha(answer)
 
@@ -332,6 +333,20 @@ class AccountViewModel(
         viewModelScope.launch { runLogin { gateway.login2fa(trimmed) } }
     }
 
+    /**
+     * Asks Firefox Accounts for a fresh emailed code. The current code field
+     * is left untouched; a successful reply confirms with `code_sent`.
+     */
+    fun resendCode() {
+        val current = mutableState.value.signIn
+        if (current.phase != SignInPhase.CODE) return
+        if (!signInIdle()) return
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null, codeSent = false))
+        }
+        viewModelScope.launch { runLogin { gateway.login2fa("", resend = true) } }
+    }
+
     /** The CAPTCHA answer is captured by this request only; never stored. */
     fun submitCaptcha(answer: String) {
         val trimmed = answer.trim()
@@ -420,6 +435,7 @@ class AccountViewModel(
                             verificationMethod = method,
                             verificationReason = login.verificationReason
                                 ?: it.signIn.verificationReason,
+                            codeSent = login.codeSent,
                             busy = false,
                             error = if (pending) null else login.error,
                             message = null,
@@ -524,6 +540,7 @@ class AccountViewModel(
                     error = error,
                     message = null,
                     captchaImage = captchaImage,
+                    codeSent = false,
                 ),
             )
         }

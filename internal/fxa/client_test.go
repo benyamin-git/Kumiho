@@ -744,3 +744,28 @@ func TestAPIErrorParsesVerificationFields(t *testing.T) {
 		t.Fatalf("verification fields = %q / %q", apiErr.VerificationMethod, apiErr.VerificationReason)
 	}
 }
+
+// ResendCode asks the auth server to email a fresh sign-in code. Like
+// VerifyCode it is Hawk-signed with the session token and carries no body.
+func TestResendCode(t *testing.T) {
+	var gotMethod, gotPath, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
+	if err := c.ResendCode(context.Background(), testSessionTokenHex()); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/v1/session/resend_code" {
+		t.Fatalf("request = %s %s, want POST /v1/session/resend_code", gotMethod, gotPath)
+	}
+	if !strings.HasPrefix(gotAuth, `Hawk id="`+testHawkID+`", ts="`) {
+		t.Fatalf("Authorization = %q, want a Hawk session signature", gotAuth)
+	}
+}

@@ -102,6 +102,9 @@ private fun decodeCaptchaImage(dataUrl: String?): Bitmap? {
     }.getOrNull()
 }
 
+/** The wire value Firefox Accounts uses for the emailed numeric code. */
+private const val EMAIL_2FA_METHOD = "email-2fa"
+
 /**
  * The Firefox Accounts pane: email, password, then either a code, an image
  * CAPTCHA, or the email-link waiting state. It is UI only — no view model, no
@@ -122,6 +125,7 @@ fun SignInPane(
     onSubmitCaptcha: (String) -> Unit,
     onBrowser: (() -> Unit)? = null,
     onCaptchaBrowser: (() -> Unit)? = null,
+    onResendCode: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     signedInNote: String? = null,
     tvFocus: Boolean = false,
@@ -303,6 +307,14 @@ fun SignInPane(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (state.codeSent) {
+                    Text(
+                        text = stringResource(R.string.sign_in_code_sent),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag(SetupTags.SIGN_IN_CODE_SENT),
+                    )
+                }
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it },
@@ -341,6 +353,19 @@ fun SignInPane(
                         .testTag(SetupTags.SIGN_IN_CODE_SUBMIT),
                 ) {
                     Text(stringResource(R.string.sign_in_code_submit))
+                }
+                if (onResendCode != null && state.verificationMethod == EMAIL_2FA_METHOD) {
+                    TextButton(
+                        onClick = onResendCode,
+                        enabled = !state.busy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = Dimens.ControlHeight)
+                            .tvButtonFocusRing(tvFocus)
+                            .testTag(SetupTags.SIGN_IN_CODE_RESEND),
+                    ) {
+                        Text(stringResource(R.string.sign_in_code_resend))
+                    }
                 }
             }
 

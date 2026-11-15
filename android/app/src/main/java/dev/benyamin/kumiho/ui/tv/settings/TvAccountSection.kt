@@ -137,6 +137,7 @@ fun TvAccountSection(
                         onCaptchaBrowser = actions.onCaptchaBrowser,
                         onRecheck = actions.onRecheck,
                         onBrowser = null,
+                        onResendCode = actions.onResendCode,
                         tvFocus = true,
                     )
                 }
@@ -173,6 +174,7 @@ fun TvAccountSection(
                         onCaptchaBrowser = actions.onCaptchaBrowser,
                         onRecheck = actions.onRecheck,
                         onBrowser = actions.onAddBrowser,
+                        onResendCode = actions.onResendCode,
                         signedInNote = stringResource(R.string.account_signed_in_note),
                         tvFocus = true,
                     )

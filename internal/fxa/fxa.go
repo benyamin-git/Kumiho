@@ -18,18 +18,20 @@ const (
 	// host (HTTP 406 with an empty body and no challenge page, which no
 	// solved challenge can clear) while the oauth host keeps answering with
 	// the identical auth-server build. The fallback is tried after a 406 and
-	// before any solve, so the normal path never depends on it. It is not a
-	// usable refresh host: the oauth host also hard-blocks /v1/token.
+	// before any solve, so the normal path never depends on it. It also
+	// answers the standard /v1/token form grant, so it backs up refresh and
+	// the code exchange when the api host is hard-blocked.
 	DefaultFallbackBaseURL = "https://oauth.accounts.firefox.com/v1"
-	// ClientID is Firefox Desktop's OAuth client. The password flow uses it,
-	// and it is the legacy default for accounts created before browser tokens
-	// recorded their own client. Desktop relies on Firefox's in-process
-	// WebChannel, so a standalone app cannot receive its URN redirect.
+	// ClientID is Firefox Desktop's OAuth client. It signs the legacy
+	// fxa-credentials token exchange, which Fastly hard-blocks, and is the
+	// legacy default for accounts created before browser tokens recorded
+	// their own client. Desktop relies on Firefox's in-process WebChannel, so
+	// a standalone app cannot receive its URN redirect.
 	ClientID = "5882386c6d801776"
 	// OAuthClientID is Firefox for Android's public OAuth client. It has an
 	// HTTPS success redirect registered on accounts.firefox.com, so any normal
 	// browser can complete the flow and show a copyable URL. The browser flow
-	// uses this client; the password flow keeps ClientID.
+	// and the password authorization-code exchange both use this client.
 	OAuthClientID = "a2270f727f45f648"
 	// Scope requests the VPN entitlement plus profile.
 	Scope = "profile https://identity.mozilla.com/apps/vpn"
@@ -46,11 +48,13 @@ const (
 	// DefaultAuthorizationEndpoint is the FxA browser consent page.
 	DefaultAuthorizationEndpoint = "https://accounts.firefox.com/authorization"
 	// DefaultTokenEndpoint is the OAuth server's standard RFC 6749 endpoint.
-	// The api host serves the same OAuth server and answers where Fastly now
-	// hard-blocks the oauth host and the legacy auth-server /oauth/token route
-	// (empty 406, no challenge page), so both the authorization-code exchange
-	// and refresh use it.
+	// Either FxA host can hard-block it with an empty 406 (no challenge page),
+	// so the second host is tried before failing; the token exchange itself
+	// never depends on one hostname.
 	DefaultTokenEndpoint = "https://api.accounts.firefox.com/v1/token"
+	// DefaultTokenFallbackEndpoint is the same OAuth server behind the
+	// sibling hostname, used when the api host is hard-blocked or unreachable.
+	DefaultTokenFallbackEndpoint = "https://oauth.accounts.firefox.com/v1/token"
 	// OAuthRedirectURI is the HTTPS success page registered for OAuthClientID.
 	// FxA navigates here with the authorization code and state in the query,
 	// which a browser can display and the user can paste back. This replaces

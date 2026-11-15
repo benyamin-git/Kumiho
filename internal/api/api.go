@@ -63,9 +63,11 @@ type LoginPasswordPayload struct {
 }
 
 // Login2FAPayload supplies the emailed code, or an empty code to re-check
-// the email-link verification flow.
+// the email-link verification flow. Resend asks Firefox Accounts for a fresh
+// code without submitting one.
 type Login2FAPayload struct {
-	Code string `json:"code"`
+	Code   string `json:"code"`
+	Resend bool   `json:"resend,omitempty"`
 }
 
 // LoginCaptchaPayload supplies a person's answer to an image CAPTCHA. An
@@ -86,8 +88,11 @@ type LoginState struct {
 	LoginID            string `json:"login_id,omitempty"`
 	Error              string `json:"error,omitempty"`
 	// CaptchaImage is a data: URL of the image Fastly asks the person to
-	// read during a challenged password sign-in.
+	// read during a challenged sign-in step.
 	CaptchaImage string `json:"captcha_image,omitempty"`
+	// CodeSent reports that a resend request delivered a fresh verification
+	// code; the client stays on the 2FA step.
+	CodeSent bool `json:"code_sent,omitempty"`
 }
 
 // AccountSummary is one row in the Account screen.

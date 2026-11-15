@@ -178,20 +178,27 @@ them locally for any change under `android/`, `mobile/` or
   success redirect URL.
   Clients only open the returned URL and poll `login_status`/
   `accounts_add_status`; desktop clients paste the success-page URL, while
-  Android intercepts it in the in-app WebView. A password login challenged by
-  Mozilla's edge is not terminal: the engine attaches a context solver and
-  returns `step: captcha` with `captcha_image` (a `data:image/…` URL) while the
-  asynchronous password run waits; `login_captcha` carries the answer back, a
-  wrong answer returns a fresh image, and an empty answer switches that same
-  attempt to the browser flow. The Windows GUI and the Android phone/TV app
-  render the image inline; the TUI and CLI answer with an empty
-  `login_captcha`. The engine can also drop the password pending state and
-  return a `browser` step for the same email/account, so clients must accept
-  `step: browser` from `login_password` and poll that flow. Browser
-  sign-in uses the public Firefox for Android client `a2270f727f45f648` and its
-  HTTPS success page;
-  password sign-in keeps `5882386c6d801776`. `Tokens.ClientID` records the
-  issuing client so each token refreshes through the right endpoint.
+  Android intercepts it in the in-app WebView. A challenged sign-in step is
+  not terminal: the engine attaches a person solver and returns
+  `step: captcha` with `captcha_image` (a `data:image/…` URL) while the
+  asynchronous run waits; `login_captcha` carries the answer back, a wrong
+  answer returns a fresh image, and an empty answer switches that same
+  attempt to the browser flow. The run covers the password request, the 2FA
+  methods (verify code, TOTP, unblock, session status, resend) and the token
+  exchange; `Login2FA` is asynchronous for the same reason. The Windows GUI
+  and the Android phone/TV app render the image inline; the TUI and CLI
+  answer with an empty `login_captcha`. The engine can also drop the password
+  pending state and return a `browser` step for the same email/account, so
+  clients must accept `step: browser` from `login_password` and poll that
+  flow. Browser sign-in uses the public Firefox for Android client
+  `a2270f727f45f648` and its HTTPS success page. Password sign-in now uses
+  the same client, the auth server's `POST /oauth/authorization` code endpoint
+  and the OAuth form exchange at `/v1/token`; the legacy fxa-credentials
+  `/oauth/token` exchange (`5882386c6d801776`) is only a fallback because
+  Fastly hard-blocks it. `Tokens.ClientID` records the issuing client so each
+  token refreshes through the right endpoint. A hard-blocked token exchange
+  also continues in the browser flow. Resend is the additive
+  `login_2fa {resend:true}` and replies with `code_sent`.
   `internal/webauth` is gone.
   `internal/engine/accounts.go` owns `accounts.json` v2 (five-account cap,
   labels, active id, `last_method`, FxA tokens, durable `reauth_required`) and
@@ -261,8 +268,9 @@ them locally for any change under `android/`, `mobile/` or
   `relay_token`, `relay_test`, the `fastest` connect/select field, cached
   `latency` and `allow_locked` in the locations reply, and the `ping_done`
   event; existing envelopes stay byte-compatible. The inline CAPTCHA adds the
-  `login_captcha` command and `captcha_image` field additively; protocol v1
-  stays byte-compatible.
+  `login_captcha` command and `captcha_image` field additively; the resend
+  path adds `resend` to `login_2fa` and `code_sent` to the login state
+  additively; protocol v1 stays byte-compatible.
   `ipc.DefaultTransport()` selects the
   platform transport (`default_unix.go` / `default_windows.go`): Unix socket
   vs a `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is

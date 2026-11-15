@@ -24,6 +24,8 @@ object SetupTags {
     const val SIGN_IN_PASSWORD_SUBMIT = "setup_sign_in_password_submit"
     const val SIGN_IN_CODE = "setup_sign_in_code"
     const val SIGN_IN_CODE_SUBMIT = "setup_sign_in_code_submit"
+    const val SIGN_IN_CODE_RESEND = "setup_sign_in_code_resend"
+    const val SIGN_IN_CODE_SENT = "setup_sign_in_code_sent"
     const val SIGN_IN_CAPTCHA = "setup_sign_in_captcha"
     const val SIGN_IN_CAPTCHA_SUBMIT = "setup_sign_in_captcha_submit"
     const val SIGN_IN_CAPTCHA_IMAGE = "setup_sign_in_captcha_image"

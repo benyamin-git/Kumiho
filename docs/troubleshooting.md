@@ -218,21 +218,36 @@ and only spends a solve when every host still answers `406`. A dropped
 connection on that sibling is retried once. `[fastly]` lines in the log show
 each solve step; the sibling attempt is silent unless it also fails.
 
-Token refresh does not use the legacy auth-server `/v1/oauth/token` route:
-Fastly now answers that route on both hosts with an empty `406` hard block,
-which has no challenge page and cannot be solved. Kumiho refreshes with the
-OAuth server's standard form grant at
-`https://api.accounts.firefox.com/v1/token` instead, falling back to the oauth
-host only when the api host is challenged.
+Token refresh and password sign-in do not end on the legacy auth-server
+`/v1/oauth/token` route: Fastly answers it with an empty `406` hard block,
+which has no challenge page and cannot be solved. Refresh uses the OAuth
+server's standard form grant at `https://api.accounts.firefox.com/v1/token`,
+falling back to the oauth host when the api host is challenged. Password
+sign-in asks the auth server for an authorization code with
+`POST /v1/oauth/authorization` (Hawk session + PKCE) and redeems it at the same
+form endpoint, so it never depends on the legacy route. The legacy exchange is
+kept only as a second attempt. If both hosts hard-block the exchange, the
+engine continues the same account in the browser flow instead of dead-ending
+on the code screen.
 
 If it still fails the error is explicit: `could not solve the anti-bot
-challenge; retry or disable solve_challenges`. A captcha or an unknown
-challenge type cannot be solved and fails the same way. Setting
+challenge; retry or disable solve_challenges`. An image CAPTCHA on the
+password, 2FA or token-exchange step is shown inline in the Windows GUI and
+the Android phone/TV app; a wrong answer returns a fresh image. The TUI and
+CLI cannot show an image, so an empty answer switches the attempt to the
+browser flow. An unknown challenge type still fails the same way. Setting
 `solve_challenges=off` skips the solver: the challenged host then fails
 immediately (the login still tries the sibling host), and when no host can be
 cleared the error is
 `anti-bot challenge solving is disabled; enable solve_challenges and try
 again`; that is a diagnostic step to isolate the problem, not a fix.
+
+If the verification email does not arrive, use **Send a new code** on the
+Android code screen (the additive `login_2fa {resend:true}` command). A
+successful resend replies on the same 2FA step with `code_sent:true`; entering
+the previously delivered code remains valid until it expires. The Windows GUI,
+TUI and CLI have no resend control yet; restarting the sign-in sends a new
+code.
 
 ## Watchdog keeps rotating edges
 

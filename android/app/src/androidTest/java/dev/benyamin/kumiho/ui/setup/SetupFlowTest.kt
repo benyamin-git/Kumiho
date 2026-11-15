@@ -154,6 +154,7 @@ class SetupFlowTest {
                     onSubmitCaptcha = {},
                     onCaptchaBrowser = {},
                     onRecheck = {},
+                    onResendCode = {},
                 )
             }
         }
@@ -435,7 +436,7 @@ internal class FakeSetupEngine : SetupEngine {
         return onPassword(password)
     }
 
-    override suspend fun login2fa(code: String): LoginState {
+    override suspend fun login2fa(code: String, resend: Boolean): LoginState {
         codeCalls += code
         return onCode(code)
     }

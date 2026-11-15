@@ -198,6 +198,27 @@ class SetupViewModelTest {
         }
 
     @Test
+    fun `resend asks the engine for a fresh code and shows the confirmation`() =
+        runTest(mainRule.testDispatcher) {
+            engine.onPassword = { LoginState("2fa", "user@example.com", "email-2fa", null, null) }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("hunter2")
+            runCurrent()
+            assertEquals(SignInPhase.CODE, viewModel.state.value.signIn.phase)
+
+            viewModel.resendCode()
+            runCurrent()
+            assertEquals(1, engine.resendCalls)
+            assertTrue(engine.codeCalls.isEmpty())
+            assertTrue(viewModel.state.value.signIn.codeSent)
+            assertFalse(viewModel.state.value.signIn.busy)
+            assertEquals(SignInPhase.CODE, viewModel.state.value.signIn.phase)
+        }
+
+    @Test
     fun `first run can start browser sign-in`() = runTest(mainRule.testDispatcher) {
         engine.loginStartResult = { _, _ ->
             LoginState(
@@ -1020,6 +1041,10 @@ private class FakeEngine : SetupEngine {
     var emailFailure: Exception? = null
     var passwordFailure: Exception? = null
     var codeFailure: Exception? = null
+    var resendCalls = 0
+    var onResend: () -> LoginState = {
+        LoginState("2fa", "user@example.com", "email-2fa", null, null, codeSent = true)
+    }
     var captchaFailure: Exception? = null
     var languageFailure: Exception? = null
 
@@ -1047,7 +1072,12 @@ private class FakeEngine : SetupEngine {
         return onPassword(password)
     }
 
-    override suspend fun login2fa(code: String): LoginState {
+    override suspend fun login2fa(code: String, resend: Boolean): LoginState {
+        if (resend) {
+            resendCalls++
+            codeFailure?.let { throw it }
+            return onResend()
+        }
         codeCalls += code
         codeFailure?.let { throw it }
         return onCode(code)

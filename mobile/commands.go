@@ -230,7 +230,7 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		}
 		lctx, cancel := context.WithTimeout(ctx, login2FATimeout)
 		defer cancel()
-		state := f.ctrl.Login2FA(lctx, p.Code)
+		state := f.ctrl.Login2FA(lctx, p)
 		f.pushStatus()
 		return encodeResponse("login_state", state)
 

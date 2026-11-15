@@ -67,6 +67,8 @@ data class SignInPaneState(
      * [SignInPhase.CAPTCHA]; null on every other phase.
      */
     val captchaImage: String? = null,
+    /** A resend request delivered a fresh emailed code. */
+    val codeSent: Boolean = false,
     /** A request is in flight; buttons and fields stay disabled. */
     val busy: Boolean = false,
     /** The engine's own error text, shown inline. */

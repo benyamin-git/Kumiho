@@ -694,7 +694,7 @@ class AccountAccountsTest {
 
         override suspend fun loginPassword(password: String): LoginState = passwordResult
 
-        override suspend fun login2fa(code: String): LoginState =
+        override suspend fun login2fa(code: String, resend: Boolean): LoginState =
             LoginState("done", "user@example.com", null, null, null)
 
         override suspend fun loginCaptcha(answer: String): LoginState {

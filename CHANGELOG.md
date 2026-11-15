@@ -17,6 +17,25 @@ and this project adheres to
   and submit the answer through the new `login_captcha` command. A wrong answer
   returns a new image; "Use the browser instead" switches the same attempt to
   the browser flow. The TUI and CLI keep the browser fallback.
+- **Resend the sign-in code.** The Android phone/TV code screen now offers
+  **Send a new code** when Firefox Accounts emails a code, using the additive
+  `login_2fa {resend:true}` command and the `code_sent` reply field. A code
+  email that is rate-limited or lost no longer strands the sign-in.
+
+### Fixed
+
+- **Password sign-in no longer dead-ends at the OAuth token exchange.**
+  Fastly hard-blocks the legacy `/oauth/token` route with an empty 406 that no
+  CAPTCHA can clear. After the password and any code/TOTP step, Kumiho now
+  asks the auth server for an authorization code at `/oauth/authorization`
+  (Hawk + PKCE) and redeems it at the OAuth server's form endpoint, trying the
+  api and oauth hosts. The legacy exchange is only a fallback, and a remaining
+  hard block continues the same account in the browser flow.
+- **The inline CAPTCHA covers the whole sign-in.** A challenge on the emailed
+  code, authenticator code, unblock code, session-status check or token
+  exchange now pauses for the image instead of returning
+  `could not solve the anti-bot challenge`. A verified code is remembered, so
+  retrying a failed token exchange does not consume or re-ask for it.
 
 ## [1.0.0] - 2026-11-13
 

@@ -21,8 +21,11 @@ interface SetupEngine {
 
     suspend fun loginPassword(password: String): LoginState
 
-    /** Supplies the emailed code; an empty code re-checks the email link. */
-    suspend fun login2fa(code: String): LoginState
+    /**
+     * Supplies the emailed code; an empty code re-checks the email link.
+     * Resend asks Firefox Accounts for a fresh code without submitting one.
+     */
+    suspend fun login2fa(code: String, resend: Boolean = false): LoginState
 
     /** Answers the image CAPTCHA; an empty answer asks for the browser flow. */
     suspend fun loginCaptcha(answer: String): LoginState
@@ -56,7 +59,8 @@ class EngineSetupEngine(private val client: EngineClient) : SetupEngine {
 
     override suspend fun loginPassword(password: String): LoginState = client.loginPassword(password)
 
-    override suspend fun login2fa(code: String): LoginState = client.login2fa(code)
+    override suspend fun login2fa(code: String, resend: Boolean): LoginState =
+        client.login2fa(code, resend)
 
     override suspend fun loginCaptcha(answer: String): LoginState = client.loginCaptcha(answer)
 

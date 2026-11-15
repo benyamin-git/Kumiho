@@ -60,6 +60,10 @@ func newTestControllerWithProvider(t *testing.T, handler http.HandlerFunc, plat 
 	// Fixtures must never reach the production fallback host; tests that
 	// exercise the fallback point it at their own server explicitly.
 	client.FallbackBaseURL = ""
+	// Same for the OAuth token endpoints used by the authorization-code
+	// exchange.
+	client.TokenEndpoint = server.URL + "/v1/token"
+	client.TokenFallbackEndpoint = ""
 	// Keep logout's best-effort token revocation hermetic: never fall through
 	// to the production destroy endpoint from a test.
 	client.DestroyEndpoint = server.URL + "/v1/oauth/destroy"
@@ -154,7 +158,7 @@ func TestLoginFlowWith2FACode(t *testing.T) {
 	if ls.Step != "2fa" || ls.VerificationMethod != "email-2fa" || ls.Error != "" {
 		t.Fatalf("login_password = %+v", ls)
 	}
-	ls = ctrl.Login2FA(ctx, "123456")
+	ls = ctrl.Login2FA(ctx, api.Login2FAPayload{Code: "123456"})
 	if ls.Step != "done" || ls.Error != "" {
 		t.Fatalf("login_2fa = %+v", ls)
 	}
@@ -188,11 +192,11 @@ func TestLoginFlowEmailLink(t *testing.T) {
 	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "2fa" {
 		t.Fatalf("login_password = %+v", ls)
 	}
-	ls := ctrl.Login2FA(ctx, "")
+	ls := ctrl.Login2FA(ctx, api.Login2FAPayload{Code: ""})
 	if ls.Step != "2fa" || !strings.Contains(ls.Error, "not confirmed") {
 		t.Fatalf("first link check = %+v", ls)
 	}
-	ls = ctrl.Login2FA(ctx, "")
+	ls = ctrl.Login2FA(ctx, api.Login2FAPayload{Code: ""})
 	if ls.Step != "done" || ls.Error != "" {
 		t.Fatalf("second link check = %+v", ls)
 	}

@@ -311,6 +311,7 @@ fun SetupFlow(
                             onSubmitCaptcha = viewModel::submitCaptcha,
                             onCaptchaBrowser = viewModel::submitCaptchaBrowser,
                             onRecheck = viewModel::recheckEmailLink,
+                            onResendCode = viewModel::resendCode,
                         )
                         SetupStep.PERMISSIONS -> PermissionsStep(
                             permissions = state.permissions,

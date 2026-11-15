@@ -736,6 +736,21 @@ class SetupViewModel(
     }
 
     /**
+     * Asks Firefox Accounts for a fresh emailed code. The current code field
+     * is left untouched; a successful reply confirms with `code_sent`.
+     */
+    fun resendCode() {
+        val current = mutableState.value
+        if (current.step != SetupStep.SIGN_IN) return
+        if (current.signIn.phase != SignInPhase.CODE) return
+        if (current.signIn.busy) return
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null, codeSent = false))
+        }
+        viewModelScope.launch { runLogin { engine.login2fa("", resend = true) } }
+    }
+
+    /**
      * Sends the image CAPTCHA answer once; the answer is never stored. The
      * engine replies with the next captcha round (and its error) or the next
      * sign-in step.
@@ -821,6 +836,7 @@ class SetupViewModel(
                             phase = SignInPhase.PASSWORD,
                             email = login.email ?: it.signIn.email,
                             captchaImage = null,
+                            codeSent = false,
                             busy = false,
                             error = login.error,
                             message = null,
@@ -836,6 +852,7 @@ class SetupViewModel(
                             phase = SignInPhase.CAPTCHA,
                             email = login.email ?: it.signIn.email,
                             captchaImage = login.captchaImage,
+                            codeSent = false,
                             busy = false,
                             error = login.error,
                             message = null,
@@ -861,6 +878,7 @@ class SetupViewModel(
                             verificationReason = login.verificationReason
                                 ?: it.signIn.verificationReason,
                             captchaImage = null,
+                            codeSent = login.codeSent,
                             busy = false,
                             error = if (pending) null else login.error,
                             message = null,

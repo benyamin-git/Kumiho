@@ -342,7 +342,7 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 			replyErr(api.CodeBadRequest, err.Error())
 			return
 		}
-		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.Login2FA(ctx, p.Code))
+		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.Login2FA(ctx, p))
 		h.broadcastStatus()
 
 	case ipc.TypeLoginCaptcha:

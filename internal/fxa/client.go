@@ -29,6 +29,7 @@ type Client struct {
 	// Browser OAuth endpoints; empty values fall back to the package defaults.
 	AuthorizationEndpoint string
 	TokenEndpoint         string
+	TokenFallbackEndpoint string // tried after a TokenEndpoint 406 or transport failure
 	ProfileEndpoint       string
 	DestroyEndpoint       string
 }
@@ -43,6 +44,7 @@ func NewClient() *Client {
 		Rand:                  rand.Reader,
 		AuthorizationEndpoint: DefaultAuthorizationEndpoint,
 		TokenEndpoint:         DefaultTokenEndpoint,
+		TokenFallbackEndpoint: DefaultTokenFallbackEndpoint,
 		ProfileEndpoint:       DefaultProfileEndpoint,
 		DestroyEndpoint:       DefaultDestroyEndpoint,
 	}
@@ -131,6 +133,13 @@ func (c *Client) VerifyCode(ctx context.Context, sessionToken, code string) erro
 	return err
 }
 
+// ResendCode emails a fresh sign-in verification code
+// (POST /session/resend_code, Hawk-signed with the session token).
+func (c *Client) ResendCode(ctx context.Context, sessionToken string) error {
+	_, err := c.doJSON(ctx, http.MethodPost, "/session/resend_code", sessionToken, nil)
+	return err
+}
+
 // SessionStatus returns the session state (GET /session/status), e.g.
 // "verified" or "unverified". Used for the email-link verification flow.
 func (c *Client) SessionStatus(ctx context.Context, sessionToken string) (string, error) {
@@ -178,9 +187,10 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (*Tokens, err
 
 // RefreshWithClient renews the access token with the OAuth client recorded on
 // the token set. It posts the standard RFC 6749 refresh-token grant to
-// /v1/token. The legacy auth-server /v1/oauth/token route now answers Fastly's
+// /v1/token. The legacy auth-server /v1/oauth/token route answers Fastly's
 // empty 406 hard block (no challenge page, so no solve can clear it) on both
-// hosts; the OAuth server's form endpoint on the api host still answers.
+// hosts; the form endpoint is tried on the api host and then the oauth
+// sibling, so a block on either one is not terminal.
 func (c *Client) RefreshWithClient(ctx context.Context, refreshToken, clientID string) (*Tokens, error) {
 	clientID = strings.TrimSpace(clientID)
 	if clientID == "" {

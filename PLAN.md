@@ -73,8 +73,9 @@ All facts below were read directly from `Vauth/FoxyVPN` (Kotlin, MIT) and its cr
 | Hawk normalized string | `hawk.1.header\n{ts}\n{nonce}\n{METHOD}\n{path}\n{host}\n{port}\n{payloadHash}\n\n`; payloadHash = `Base64(SHA256("hawk.1.payload\napplication/json\n"+body+"\n"))` |
 | Login body | `{email, authPW: hex, verificationMethod: "email-2fa"}`; on errno 107 retry without `verificationMethod` |
 | 2FA | `POST /session/verify_code` `{code}` with Hawk; if server answers method `email` (link flow) tell user to click the link and press Enter |
-| OAuth grant | `POST /oauth/token` `{client_id, grant_type:"fxa-credentials", scope, access_type:"offline"}` with Hawk |
-| Refresh | `POST /v1/token` form `{client_id, grant_type:"refresh_token", refresh_token, scope}` (no Hawk); the legacy auth-server `/oauth/token` JSON route is hard-blocked by Fastly (empty 406, no challenge page) |
+| OAuth grant (password) | `POST /oauth/authorization` with Hawk and `{response_type:"code", client_id: a2270f727f45f648, redirect_uri, scope, state, access_type:"offline", code_challenge, code_challenge_method:"S256"}` → `{code,state}`; then `POST /v1/token` form `{client_id, grant_type:"authorization_code", code, code_verifier, redirect_uri}`. The legacy `/oauth/token` fxa-credentials exchange (`5882386c6d801776`) is hard-blocked by Fastly (empty 406, no challenge page) and is only tried if the code exchange fails; if both fail the run continues in the browser flow |
+| Refresh | `POST /v1/token` form `{client_id, grant_type:"refresh_token", refresh_token, scope}` (no Hawk); the legacy auth-server `/oauth/token` JSON route is hard-blocked by Fastly (empty 406, no challenge page); the api host is tried first and the oauth sibling is the fallback |
+| 2FA resend | `POST /session/resend_code` with Hawk, no body; `login_2fa {resend:true}` replies on the 2FA step with `code_sent:true` |
 | Token TTL | `expires_in` (typically 86400 s), treat invalid 60 s before expiry |
 | Guardian | `https://vpn.mozilla.org` `GET /api/v1/fpn/token`, `GET /api/v1/fpn/status`, `POST /api/v1/fpn/activate`; `Authorization: Bearer <access_token>` |
 | Proxy pass | response `{token}` JWT; expiry from `expires_at` or JWT `exp`; quota from `X-Quota-Limit`, `X-Quota-Remaining`, `X-Quota-Reset` |
@@ -107,23 +108,29 @@ no interactive captcha UI.
 - Each solve uses an isolated per-solve cookie jar and proceeds serially (one
   origin, one round at a time). One solve has a 60 s budget with 250–750 ms
   jitter between rounds; every attempt is logged at warn under the `fastly` tag.
-- Unsupported types — captcha included — fail with a clear error naming the
-  type. The Guardian client retries a challenged request up to 5 times.
-  The Firefox Accounts client instead tries each host once without solving,
-  then gives each challenged host one solve: a second 406 means that host
-  cannot be cleared (Fastly also hard-blocks
+- Unsupported challenge types fail with a clear error naming the type. An
+  image CAPTCHA on the password sign-in is not solved automatically: the
+  engine bridges it to a person through `login_captcha` on the password
+  request and on the whole 2FA run (verify code, TOTP, unblock, session
+  status and the OAuth token exchange). The Windows GUI and Android phone/TV
+  app render the image inline; the TUI and CLI submit an empty answer and
+  switch the same attempt to the browser flow. Guardian keeps the automated
+  solver only and retries a challenged request up to 5 times.
+  The Firefox Accounts client tries each host once without solving, then
+  gives each challenged host one solve: a second 406 means that host cannot
+  be cleared (Fastly also hard-blocks
   `POST api.accounts.firefox.com/v1/account/login` with an empty 406 that no
   challenge cookie can clear). The sibling host
   `https://oauth.accounts.firefox.com/v1` — the same auth-server build behind
-  a hostname the block does not cover — therefore answers first in the common
-  hard-block case, before any solve is spent. A transport-level failure on
-  that sibling (the edge can reset the connection after challenging the
-  primary) is retried once after 500 ms. Refresh uses the OAuth server's
-  standard `/v1/token` form grant: the legacy auth-server `/oauth/token` route
-  is hard-blocked on both hosts, and the oauth host now hard-blocks
-  `/v1/token` too, so the api host answers first and the sibling is only a
-  fallback. `solve_challenges` defaults on and is
-  read per control-plane request, so it applies immediately; off restores the
+  a hostname the block may not cover — is tried before a solve is spent. A
+  transport-level failure on that sibling (the edge can reset the connection
+  after challenging the primary) is retried once after 500 ms. Password
+  sign-in no longer ends on the blocked legacy `/oauth/token` route: the
+  engine mints an authorization code at `POST /oauth/authorization` and
+  redeems it at the OAuth server's form endpoint, trying the api and oauth
+  hosts. Refresh uses the same form grant on the api host with the oauth
+  sibling as its fallback. `solve_challenges` defaults on and is read per
+  control-plane request, so it applies immediately; off restores the
   immediate, clearly worded failure on the primary host, and the fallback is
   still tried.
 - The solver sends a Chrome 126 (Windows) UA. FxA requests send the desktop

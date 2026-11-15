@@ -44,6 +44,7 @@ fun SignInStep(
     onSubmitCaptcha: (String) -> Unit,
     onCaptchaBrowser: () -> Unit,
     onRecheck: () -> Unit,
+    onResendCode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -94,6 +95,7 @@ fun SignInStep(
                 onCaptchaBrowser = onCaptchaBrowser,
                 onRecheck = onRecheck,
                 onBrowser = onBrowser,
+                onResendCode = onResendCode,
             )
         }
     }

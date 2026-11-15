@@ -79,6 +79,7 @@ func TestOAuthEndpointDefaults(t *testing.T) {
 	for name, got := range map[string]string{
 		"AuthorizationEndpoint": c.AuthorizationEndpoint,
 		"TokenEndpoint":         c.TokenEndpoint,
+		"TokenFallbackEndpoint": c.TokenFallbackEndpoint,
 		"ProfileEndpoint":       c.ProfileEndpoint,
 		"DestroyEndpoint":       c.DestroyEndpoint,
 	} {
@@ -88,6 +89,8 @@ func TestOAuthEndpointDefaults(t *testing.T) {
 			want = DefaultAuthorizationEndpoint
 		case "TokenEndpoint":
 			want = DefaultTokenEndpoint
+		case "TokenFallbackEndpoint":
+			want = DefaultTokenFallbackEndpoint
 		case "ProfileEndpoint":
 			want = DefaultProfileEndpoint
 		case "DestroyEndpoint":
@@ -397,5 +400,128 @@ func TestRefreshUsesStandardTokenEndpoint(t *testing.T) {
 	}
 	if DefaultTokenEndpoint != "https://api.accounts.firefox.com/v1/token" {
 		t.Fatalf("DefaultTokenEndpoint = %q, want the answering api host", DefaultTokenEndpoint)
+	}
+}
+
+// ExchangeSession replaces the legacy auth-server /oauth/token
+// fxa-credentials exchange, which Fastly hard-blocks with an empty 406. It
+// mints an authorization code from the verified session and redeems it at
+// the OAuth server's form endpoint.
+func TestExchangeSessionUsesAuthorizationCode(t *testing.T) {
+	var gotAuth string
+	var gotAuthorize map[string]any
+	var gotForm url.Values
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/oauth/authorization":
+			if r.Method != http.MethodPost {
+				t.Errorf("authorization method = %s, want POST", r.Method)
+			}
+			gotAuth = r.Header.Get("Authorization")
+			if err := json.NewDecoder(r.Body).Decode(&gotAuthorize); err != nil {
+				t.Errorf("decode authorization body: %v", err)
+				return
+			}
+			state, _ := gotAuthorize["state"].(string)
+			fmt.Fprintf(w, `{"code":"the-code","state":%q,"redirect":"https://accounts.firefox.com/oauth/success/%s?code=the-code&state=%s"}`, state, OAuthClientID, state)
+		case "/v1/token":
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse token form: %v", err)
+				return
+			}
+			gotForm = r.PostForm
+			fmt.Fprintf(w, `{"access_token":"access-token","refresh_token":"refresh-token","scope":%q,"expires_in":3600}`, Scope)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
+	c.TokenEndpoint = srv.URL + "/v1/token"
+	c.TokenFallbackEndpoint = ""
+	c.Now = func() time.Time { return time.Unix(1000, 0) }
+
+	tokens, err := c.ExchangeSession(context.Background(), testSessionTokenHex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(gotAuth, `Hawk id="`+testHawkID+`", ts="1000", nonce="`) {
+		t.Fatalf("Authorization = %q, want a Hawk session signature", gotAuth)
+	}
+	if gotAuthorize["client_id"] != OAuthClientID ||
+		gotAuthorize["response_type"] != "code" ||
+		gotAuthorize["redirect_uri"] != OAuthRedirectURI ||
+		gotAuthorize["scope"] != Scope ||
+		gotAuthorize["access_type"] != "offline" ||
+		gotAuthorize["code_challenge_method"] != "S256" {
+		t.Fatalf("authorization body = %#v", gotAuthorize)
+	}
+	state, _ := gotAuthorize["state"].(string)
+	challenge, _ := gotAuthorize["code_challenge"].(string)
+	if state == "" || challenge == "" {
+		t.Fatalf("authorization body is missing state/challenge: %#v", gotAuthorize)
+	}
+	if gotForm.Get("grant_type") != "authorization_code" ||
+		gotForm.Get("code") != "the-code" ||
+		gotForm.Get("client_id") != OAuthClientID ||
+		gotForm.Get("redirect_uri") != OAuthRedirectURI ||
+		gotForm.Get("code_verifier") == "" {
+		t.Fatalf("token form = %#v", gotForm)
+	}
+	sum := sha256.Sum256([]byte(gotForm.Get("code_verifier")))
+	if base64.RawURLEncoding.EncodeToString(sum[:]) != challenge {
+		t.Fatal("token code_verifier does not match the authorization challenge")
+	}
+	if tokens.AccessToken != "access-token" || tokens.RefreshToken != "refresh-token" ||
+		tokens.ClientID != OAuthClientID || tokens.ExpiresAt != 4600 {
+		t.Fatalf("tokens = %+v", tokens)
+	}
+}
+
+func TestExchangeSessionRejectsStateMismatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"code":"the-code","state":"not-the-state"}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient()
+	c.BaseURL = srv.URL + "/v1"
+	c.FallbackBaseURL = ""
+	if _, err := c.ExchangeSession(context.Background(), testSessionTokenHex()); err == nil ||
+		!strings.Contains(err.Error(), "state") {
+		t.Fatalf("error = %v, want a state mismatch", err)
+	}
+}
+
+// The OAuth server's form endpoint can be hard-blocked on either host; the
+// second endpoint is tried on a challenge, exactly like refresh.
+func TestExchangeCodeFallsBackToSiblingHost(t *testing.T) {
+	blocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotAcceptable)
+	}))
+	defer blocked.Close()
+	var answeringHits int
+	answering := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		answeringHits++
+		fmt.Fprintf(w, `{"access_token":"access-token","refresh_token":"refresh-token","scope":%q,"expires_in":3600}`, Scope)
+	}))
+	defer answering.Close()
+
+	c := NewClient()
+	c.BaseURL = "http://127.0.0.1:1/v1"
+	c.FallbackBaseURL = ""
+	c.TokenEndpoint = blocked.URL + "/v1/token"
+	c.TokenFallbackEndpoint = answering.URL + "/v1/token"
+
+	tokens, err := c.ExchangeCode(context.Background(), "the-code", "the-verifier", OAuthRedirectURI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answeringHits != 1 || tokens.AccessToken != "access-token" {
+		t.Fatalf("answering hits = %d, tokens = %+v", answeringHits, tokens)
 	}
 }
