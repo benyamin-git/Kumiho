@@ -32,13 +32,15 @@ prefs="$run_dir/gui.toml"
 
 # running_pid prints the live harness pid from the pidfile; it fails unless
 # the pid exists and still belongs to our binary, so a recycled pid can never
-# be killed by accident.
+# be killed by accident. A binary replaced by a rebuild keeps its original
+# name but gains a " (deleted)" suffix, so that is stripped first.
 running_pid() {
   local pid exe want
   [[ -f "$pidfile" ]] || return 1
   pid="$(cat "$pidfile")"
   [[ -n "$pid" && -d "/proc/$pid" ]] || return 1
   exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+  exe="${exe% (deleted)}"
   want="$(readlink -f "$bin" 2>/dev/null || printf '%s' "$bin")"
   [[ -n "$exe" && "$exe" == "$want" ]] || return 1
   printf '%s' "$pid"
