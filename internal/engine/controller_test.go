@@ -1181,6 +1181,126 @@ func TestChallengeSolverEndToEndInstallsSharedCookie(t *testing.T) {
 	}
 }
 
+// A password login challenged by an image CAPTCHA pauses for a person: the
+// engine returns the image, a wrong answer comes back with the same image and
+// an error, and the right answer completes the sign-in.
+func TestLoginPasswordCaptcha(t *testing.T) {
+	const prefix = "/_fs-ch-captcha"
+	const image = "data:image/png;base64,iVBORw0KGgo="
+	var posted []string
+	var postedMu sync.Mutex
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/login":
+			if _, err := r.Cookie("fk"); err != nil {
+				w.WriteHeader(http.StatusNotAcceptable)
+				return
+			}
+			fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionHex())
+		case "/v1/oauth/token":
+			fmt.Fprint(w, `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`)
+		case "/":
+			if _, err := r.Cookie("fk"); err == nil {
+				fmt.Fprint(w, "<html>signed in</html>")
+				return
+			}
+			w.Header().Set("Set-Cookie", "fk=1; Path=/")
+			fmt.Fprintf(w, `<html><body>Client Challenge <script src="%s/script.js"></script></body></html>`, prefix)
+		case prefix + "/script.js":
+			fmt.Fprintf(w, `init([{"ty":"captcha","data":{"image_b64":%q}}], "tok-1", %q)`, image, prefix)
+		case prefix + "/fst-post-back":
+			var body struct {
+				Data []struct {
+					Answer string `json:"answer"`
+				} `json:"data"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode post-back: %v", err)
+				return
+			}
+			answer := ""
+			if len(body.Data) > 0 {
+				answer = body.Data[0].Answer
+			}
+			postedMu.Lock()
+			posted = append(posted, answer)
+			postedMu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			if answer != "right" {
+				fmt.Fprintf(w, `{"status":"pending","ch":[{"ty":"captcha","data":{"image_b64":%q}}],"tok":"tok-2"}`, image)
+				return
+			}
+			fmt.Fprint(w, `{"status":"success"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}
+	ctrl, _ := newTestController(t, handler)
+	ctx := context.Background()
+
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	ls := ctrl.LoginPassword(ctx, "pw")
+	if ls.Step != "captcha" || ls.CaptchaImage != image || ls.Error != "" {
+		t.Fatalf("challenged login = %+v, want the captcha step with its image", ls)
+	}
+	st := ctrl.Snapshot()
+	if st.Login == nil || st.Login.Step != "captcha" || st.Login.CaptchaImage != image {
+		t.Fatalf("snapshot login = %+v, want the waiting captcha", st.Login)
+	}
+
+	ls = ctrl.LoginCaptcha(ctx, "wrong")
+	if ls.Step != "captcha" || ls.CaptchaImage != image || ls.Error == "" {
+		t.Fatalf("wrong captcha = %+v, want the same image and a retry error", ls)
+	}
+	ls = ctrl.LoginCaptcha(ctx, "right")
+	if ls.Step != "done" || ls.Error != "" {
+		t.Fatalf("right captcha = %+v, want a completed sign-in", ls)
+	}
+	postedMu.Lock()
+	got := append([]string(nil), posted...)
+	postedMu.Unlock()
+	if len(got) != 2 || got[0] != "wrong" || got[1] != "right" {
+		t.Fatalf("captcha answers posted = %v, want [wrong right]", got)
+	}
+	if st := ctrl.Snapshot(); st.Email != "user@example.com" || !st.Authenticated {
+		t.Fatalf("snapshot after captcha login = %+v", st)
+	}
+}
+
+// A terminal client cannot show the image; an empty answer switches the same
+// pending sign-in to the browser flow instead of dead-ending.
+func TestLoginCaptchaEmptyAnswerStartsBrowser(t *testing.T) {
+	const prefix = "/_fs-ch-captcha"
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/account/login":
+			w.WriteHeader(http.StatusNotAcceptable)
+		case "/":
+			w.Header().Set("Set-Cookie", "fk=1; Path=/")
+			fmt.Fprintf(w, `<html><body>Client Challenge <script src="%s/script.js"></script></body></html>`, prefix)
+		case prefix + "/script.js":
+			fmt.Fprint(w, `init([{"ty":"captcha","data":{"image_b64":"data:image/png;base64,AAAA"}}], "tok-1", "`+prefix+`")`)
+		default:
+			http.NotFound(w, r)
+		}
+	}
+	ctrl, _ := newTestController(t, handler)
+	ctx := context.Background()
+	ctrl.LoginEmail("user@example.com")
+	if ls := ctrl.LoginPassword(ctx, "pw"); ls.Step != "captcha" {
+		t.Fatalf("login = %+v, want the captcha step", ls)
+	}
+	ls := ctrl.LoginCaptcha(ctx, "")
+	if ls.Step != "browser" || ls.URL == "" {
+		t.Fatalf("empty captcha = %+v, want the browser flow", ls)
+	}
+	if st := ctrl.Snapshot(); st.Login == nil || st.Login.Step != "browser" {
+		t.Fatalf("snapshot login = %+v, want the browser flow", st.Login)
+	}
+}
+
 // solve_challenges is consulted on every Solve call (D31): toggling it
 // between attempts changes the outcome immediately; off does no solver I/O
 // and fails the first 406, and the two user-facing messages must differ.

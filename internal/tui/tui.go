@@ -773,6 +773,11 @@ func (m *Model) handleLoginState(msg loginStateMsg) (tea.Model, tea.Cmd) {
 			m.code = ""
 		}
 		return m, nil
+	case "captcha":
+		// A terminal cannot show the image; the engine switches this same
+		// attempt to the browser flow when the answer is empty.
+		m.busy = true
+		return m, callLogin(m.client, ipc.TypeLoginCaptcha, api.LoginCaptchaPayload{})
 	}
 	return m, nil
 }

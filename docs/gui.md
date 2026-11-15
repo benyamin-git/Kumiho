@@ -133,7 +133,10 @@ the screens. The rail and header are hidden while it runs. Its steps are:
    **Cancel** and checks
    every second. There is no loopback listener, so the browser may run on
    another machine. Password sign-in keeps the
-   in-app email → password → 2FA/email-link pages. Kumiho stores the resulting
+   in-app email → password → 2FA/email-link pages; if Mozilla asks for an image
+   captcha, the image appears inline and a wrong answer shows a new one, with
+   **Use the browser instead** to continue the same attempt in the browser.
+   Kumiho stores the resulting
    tokens on this PC and never your password. If tokens already exist, the
    step offers to continue or to sign out first.
 3. **Health check** — the daemon's preflight (`kumiho doctor`). Fix anything

@@ -17,6 +17,7 @@ const (
 	TypeLoginEmail          = "login_email"
 	TypeLoginPassword       = "login_password"
 	TypeLogin2FA            = "login_2fa"
+	TypeLoginCaptcha        = "login_captcha"
 	TypeLoginStart          = "login_start"
 	TypeLoginComplete       = "login_complete"
 	TypeLoginStatus         = "login_status"

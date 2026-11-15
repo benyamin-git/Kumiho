@@ -1,6 +1,6 @@
 /* The onboarding wizard (inventory §Onboarding wizard, D12/D16; T3.4): the
  * five-step first-run page — welcome + consent → sign in (email → password →
- * 2FA, or the already-signed-in variant) → health check → autoconnect →
+ * 2FA/captcha, or the already-signed-in variant) → health check → autoconnect →
  * all set.
  *
  * The wizard is not a rail destination: the router gates every route to this
@@ -13,8 +13,8 @@
  * Everything renders from the store's state envelopes; actions go through
  * the transport and the screen re-renders from the next envelope — "" means
  * accepted, never completed (T1.7). Login runs over the frozen actions
- * (login_email/login_password/login_2fa, plus login_start/login_status/
- * login_cancel/login_complete for the browser flow) and reads the
+ * (login_email/login_password/login_captcha/login_2fa, plus login_start/
+ * login_status/login_cancel/login_complete for the browser flow) and reads the
  * controller's Login projection: a terminal `done` reply advances to Health
  * check, an error renders on the status line, and a live session
  * (status.authenticated) always shows the signed-in page instead of the
@@ -387,6 +387,21 @@ function build(host) {
   code.input.dir = "ltr";
   password.wrap.hidden = true;
   code.wrap.hidden = true;
+  // The inline image CAPTCHA Mozilla's edge asks for on a password attempt.
+  // The answer is submitted through login_captcha; "Use the browser" asks the
+  // engine for the browser flow instead, the terminal clients' fallback.
+  const captcha = fieldBox("onb-captcha", t("onboarding.login.captcha_label"), "text", t("onboarding.login.captcha_placeholder"));
+  captcha.input.dir = "ltr";
+  captcha.input.autocapitalize = "off";
+  const captchaImage = el("img", "captcha-image");
+  captchaImage.alt = t("onboarding.login.captcha_alt");
+  captchaImage.hidden = true;
+  captcha.wrap.insertBefore(captchaImage, captcha.input);
+  const captchaBrowser = el("button", "button button--text captcha-browser", t("onboarding.login.captcha_browser"));
+  captchaBrowser.type = "button";
+  captchaBrowser.id = "onb-captcha-browser";
+  captcha.wrap.append(captchaBrowser);
+  captcha.wrap.hidden = true;
   // The browser waiting card: the engine URL, the pasted redirect URL,
   // Open again and Cancel.
   const browser = el("div", "onb__browser");
@@ -412,7 +427,7 @@ function build(host) {
   browserContinue.id = "onb-browser-continue";
   browserActions.append(browserOpen, browserCancel, browserContinue);
   browser.append(browserBody, browserURL, browserRedirect.wrap, browserError, browserActions);
-  login.append(loginBody, methods, signed, email.wrap, password.wrap, code.wrap, browser);
+  login.append(loginBody, methods, signed, email.wrap, password.wrap, code.wrap, captcha.wrap, browser);
 
   // Step 3: health check (the run summary lives on the status line; the
   // rows render compactly, one line per check).
@@ -520,6 +535,9 @@ function build(host) {
     email: email,
     password: password,
     code: code,
+    captcha: captcha,
+    captchaImage: captchaImage,
+    captchaBrowser: captchaBrowser,
     browser: browser,
     browserURL: browserURL,
     browserRedirect: browserRedirect,
@@ -663,6 +681,7 @@ export default {
       const step = (login && login.step) || "";
       if (step === "password") return "password";
       if (step === "2fa") return "2fa";
+      if (step === "captcha") return "captcha";
       if (signedIn(snapshot)) return "signedin";
       if (step === "browser") return "browser";
       if (step === "email" && login.error) return "email";
@@ -872,6 +891,7 @@ export default {
         case STEP_LOGIN:
           if (page === "password") target = ui.password.input;
           else if (page === "2fa") target = ui.code.input;
+          else if (page === "captcha") target = ui.captcha.input;
           else if (page === "email") target = ui.email.input;
           else if (page === "browser") target = ui.browserRedirect.input;
           else target = ui.primary;
@@ -1039,6 +1059,16 @@ export default {
       } else if (page === "2fa") {
         action = "login_2fa";
         payload = { code: ui.code.input.value };
+      } else if (page === "captcha") {
+        // An empty login_captcha asks the engine for the browser flow, so a
+        // blank field must not submit: it would silently leave this page.
+        const answer = ui.captcha.input.value.trim();
+        if (!answer) {
+          ui.captcha.input.focus();
+          return;
+        }
+        action = "login_captcha";
+        payload = { answer: answer };
       }
       if (!payload) return;
       view.submitted = true;
@@ -1057,8 +1087,25 @@ export default {
       });
     }
 
-    // -------------------------------------------------------------- health
+    /** The captcha page's escape hatch: login_captcha with an empty answer
+     * asks the engine for the browser flow, exactly what the terminal clients
+     * do when the image cannot be shown. */
+    function submitCaptchaBrowser() {
+      if (view.busy || view.logoutBusy) return;
+      view.submitPage = "captcha";
+      view.pagePinned = false;
+      beginBusy();
+      ctx.send("login_captcha", { answer: "" }).then(function (err) {
+        if (err) {
+          endBusy();
+          pinPage("captcha");
+          render();
+          console.warn("kumiho: login_captcha (browser) refused: " + err);
+        }
+      });
+    }
 
+    // -------------------------------------------------------------- health
     /** The inventory's first-shown rule: run the suite once, and only when
      * no report exists yet (the Diagnostics rule). */
     function maybeRunChecks(snapshot) {
@@ -1194,6 +1241,8 @@ export default {
           if (page === "password") {
             pinPage("email");
           } else if (page === "2fa") {
+            pinPage("password");
+          } else if (page === "captcha") {
             pinPage("password");
           } else if (page === "email") {
             pinPage("choice");
@@ -1358,6 +1407,7 @@ export default {
       if (pageChanged) {
         if (view.renderedPage === "password") ui.password.input.value = "";
         if (view.renderedPage === "2fa") ui.code.input.value = "";
+        if (view.renderedPage === "captcha") ui.captcha.input.value = "";
         view.renderedPage = page;
       }
       if (page === "email" && !ui.email.input.value) {
@@ -1377,11 +1427,13 @@ export default {
       const showEmail = page === "email";
       const showPassword = page === "password";
       const showCode = page === "2fa";
+      const showCaptcha = page === "captcha";
       const showSigned = page === "signedin";
       if (ui.methods.hidden !== !showChoice) ui.methods.hidden = !showChoice;
       if (ui.email.wrap.hidden !== !showEmail) ui.email.wrap.hidden = !showEmail;
       if (ui.password.wrap.hidden !== !showPassword) ui.password.wrap.hidden = !showPassword;
       if (ui.code.wrap.hidden !== !showCode) ui.code.wrap.hidden = !showCode;
+      if (ui.captcha.wrap.hidden !== !showCaptcha) ui.captcha.wrap.hidden = !showCaptcha;
       if (ui.signed.hidden !== !showSigned) ui.signed.hidden = !showSigned;
       if (ui.browser.hidden !== !showBrowser) ui.browser.hidden = !showBrowser;
       if (ui.loginBody.hidden !== showBrowser) ui.loginBody.hidden = showBrowser;
@@ -1395,6 +1447,7 @@ export default {
       else if (showEmail) body = t(LOGIN_EMAIL_BODY_KEY);
       else if (showPassword) body = t(LOGIN_PASSWORD_BODY_KEY);
       else if (showCode) body = twoFactorBody(login);
+      else if (showCaptcha) body = t("onboarding.login.captcha_body");
       else if (showBrowser) body = t(LOGIN_WAITING_BODY_KEY);
       if (ui.loginBody.textContent !== body) ui.loginBody.textContent = body;
 
@@ -1467,11 +1520,31 @@ export default {
         view.openedURL = "";
       }
 
+      if (showCaptcha) {
+        const image = (login && login.captcha_image) || "";
+        if (ui.captchaImage.getAttribute("src") !== (image || null)) {
+          if (image) ui.captchaImage.src = image;
+          else ui.captchaImage.removeAttribute("src");
+        }
+        ui.captchaImage.hidden = !image;
+        // A retry replaces the challenge: never leave the rejected answer in
+        // the field. The image (or the error explaining it) is the identity.
+        const mark = image + "\u0000" + ((login && login.error) || "");
+        if (mark !== view.captchaMark) {
+          view.captchaMark = mark;
+          ui.captcha.input.value = "";
+        }
+        ui.captcha.input.disabled = !!view.busy || !!view.logoutBusy;
+        ui.captchaBrowser.disabled = !!view.busy || !!view.logoutBusy;
+      } else {
+        view.captchaMark = "";
+      }
+
       // The credential fields mirror the wire's login error (aria-invalid);
       // the message itself lives on the status line.
-      const invalid = !!((showEmail || showPassword || showCode) && login && login.error);
-      const activeField = showEmail ? ui.email.input : showPassword ? ui.password.input : showCode ? ui.code.input : null;
-      for (const input of [ui.email.input, ui.password.input, ui.code.input]) {
+      const invalid = !!((showEmail || showPassword || showCode || showCaptcha) && login && login.error);
+      const activeField = showEmail ? ui.email.input : showPassword ? ui.password.input : showCode ? ui.code.input : showCaptcha ? ui.captcha.input : null;
+      for (const input of [ui.email.input, ui.password.input, ui.code.input, ui.captcha.input]) {
         if (input === activeField && invalid) input.setAttribute("aria-invalid", "true");
         else input.removeAttribute("aria-invalid");
         const disabled = !!view.busy || !!view.logoutBusy || input !== activeField;
@@ -1700,6 +1773,7 @@ export default {
     });
     ui.browserCancel.addEventListener("click", cancelBrowserLogin);
     ui.browserContinue.addEventListener("click", submitRedirect);
+    ui.captchaBrowser.addEventListener("click", submitCaptchaBrowser);
     ui.browserRedirect.input.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
@@ -1721,7 +1795,7 @@ export default {
       returnFocus();
       render();
     });
-    for (const input of [ui.email.input, ui.password.input, ui.code.input]) {
+    for (const input of [ui.email.input, ui.password.input, ui.code.input, ui.captcha.input]) {
       input.addEventListener("keydown", function (event) {
         if (event.key !== "Enter") return;
         event.preventDefault();

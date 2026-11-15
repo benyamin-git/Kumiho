@@ -41,6 +41,8 @@ fun SignInStep(
     onSubmitEmail: (String) -> Unit,
     onSubmitPassword: (String) -> Unit,
     onSubmitCode: (String) -> Unit,
+    onSubmitCaptcha: (String) -> Unit,
+    onCaptchaBrowser: () -> Unit,
     onRecheck: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -88,6 +90,8 @@ fun SignInStep(
                 onSubmitEmail = onSubmitEmail,
                 onSubmitPassword = onSubmitPassword,
                 onSubmitCode = onSubmitCode,
+                onSubmitCaptcha = onSubmitCaptcha,
+                onCaptchaBrowser = onCaptchaBrowser,
                 onRecheck = onRecheck,
                 onBrowser = onBrowser,
             )

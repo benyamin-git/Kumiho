@@ -85,6 +85,11 @@ const (
 	ActionLoginComplete       = "login_complete"
 )
 
+// ActionLoginCaptcha answers the inline image CAPTCHA a password sign-in hit;
+// it is appended after the v0.6.0 block. An empty answer hands the attempt to
+// the browser flow (what the terminal clients do).
+const ActionLoginCaptcha = "login_captcha"
+
 // actionNames lists every action the bridge accepts, in plan order.
 var actionNames = []string{
 	ActionConnect,
@@ -130,6 +135,7 @@ var actionNames = []string{
 	ActionLoginStatus,
 	ActionLoginCancel,
 	ActionLoginComplete,
+	ActionLoginCaptcha,
 }
 
 // knownActions is the set of accepted names, built from actionNames.

@@ -274,6 +274,102 @@ class SetupViewModelTest {
     }
 
     @Test
+    fun `captcha step carries the image and a wrong answer is a new round`() =
+        runTest(mainRule.testDispatcher) {
+            engine.onPassword = {
+                LoginState(
+                    "captcha",
+                    "user@example.com",
+                    null,
+                    null,
+                    null,
+                    captchaImage = CAPTCHA_IMAGE,
+                )
+            }
+            engine.onCaptcha = { answer ->
+                if (answer == "abc123") {
+                    LoginState("done", "user@example.com", null, null, null)
+                } else {
+                    LoginState(
+                        "captcha",
+                        "user@example.com",
+                        null,
+                        null,
+                        "that captcha answer was not accepted; try again",
+                        captchaImage = CAPTCHA_IMAGE,
+                    )
+                }
+            }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("hunter2")
+            runCurrent()
+
+            assertEquals(SignInPhase.CAPTCHA, viewModel.state.value.signIn.phase)
+            assertEquals(CAPTCHA_IMAGE, viewModel.state.value.signIn.captchaImage)
+            assertFalse(viewModel.state.value.signedIn)
+
+            // A blank answer never reaches the engine.
+            viewModel.submitCaptcha("   ")
+            runCurrent()
+            assertEquals(SetupMessage.CAPTCHA_REQUIRED, viewModel.state.value.signIn.message)
+            assertTrue(engine.captchaCalls.isEmpty())
+
+            viewModel.submitCaptcha(" wrong ")
+            runCurrent()
+            assertEquals(listOf("wrong"), engine.captchaCalls)
+            assertEquals(
+                "that captcha answer was not accepted; try again",
+                viewModel.state.value.signIn.error,
+            )
+            assertEquals(CAPTCHA_IMAGE, viewModel.state.value.signIn.captchaImage)
+
+            viewModel.submitCaptcha("abc123")
+            runCurrent()
+            assertEquals(listOf("wrong", "abc123"), engine.captchaCalls)
+            assertTrue(viewModel.state.value.signedIn)
+            assertNull(
+                "the challenge image is dropped once signed in",
+                viewModel.state.value.signIn.captchaImage,
+            )
+        }
+
+    @Test
+    fun `captcha fallback asks the engine for the browser flow`() =
+        runTest(mainRule.testDispatcher) {
+            engine.onPassword = {
+                LoginState(
+                    "captcha",
+                    "user@example.com",
+                    null,
+                    null,
+                    null,
+                    captchaImage = CAPTCHA_IMAGE,
+                )
+            }
+            engine.onCaptcha = { answer ->
+                assertEquals("", answer)
+                browserState()
+            }
+            val viewModel = viewModel()
+            reachSignIn(viewModel)
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("hunter2")
+            runCurrent()
+
+            viewModel.submitCaptchaBrowser()
+            runCurrent()
+
+            assertEquals(listOf(""), engine.captchaCalls)
+            assertEquals("setup-1", viewModel.state.value.browser?.id)
+            assertTrue(viewModel.state.value.browserWebViewOpen)
+            assertEquals(SignInPhase.CAPTCHA, viewModel.state.value.signIn.phase)
+        }
+
+    @Test
     fun `closing the setup webview keeps the flow and reopening restores it`() =
         runTest(mainRule.testDispatcher) {
             engine.loginStartResult = { _, _ -> browserState() }
@@ -900,6 +996,8 @@ class SetupViewModelTest {
             "https://vpn.mozilla.org/api/v2/vpn/login/android?port=49152"
         const val FULL_REDIRECT =
             "https://accounts.firefox.com/oauth/success/a2270f727f45f648?code=code-1&state=state-1"
+        const val CAPTCHA_IMAGE =
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAIAAADZSiLoAAAAEElEQVR4nGP4z8AAQQxYWACPjgj4kWPEuQAAAABJRU5ErkJggg=="
     }
 }
 
@@ -908,6 +1006,7 @@ private class FakeEngine : SetupEngine {
     val emailCalls = mutableListOf<String>()
     val passwordCalls = mutableListOf<String>()
     val codeCalls = mutableListOf<String>()
+    val captchaCalls = mutableListOf<String>()
     val loginStartCalls = mutableListOf<Pair<String, String?>>()
     val loginStatusCalls = mutableListOf<String>()
     val loginCompleteCalls = mutableListOf<Pair<String, String?>>()
@@ -921,11 +1020,13 @@ private class FakeEngine : SetupEngine {
     var emailFailure: Exception? = null
     var passwordFailure: Exception? = null
     var codeFailure: Exception? = null
+    var captchaFailure: Exception? = null
     var languageFailure: Exception? = null
 
     var onEmail: (String) -> LoginState = { LoginState("password", it, null, null, null) }
     var onPassword: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
     var onCode: (String) -> LoginState = { LoginState("email", null, null, null, null) }
+    var onCaptcha: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
     var accountsResult: suspend () -> Accounts = {
         Accounts(emptyList(), null, false, 10, null, null, null)
     }
@@ -950,6 +1051,12 @@ private class FakeEngine : SetupEngine {
         codeCalls += code
         codeFailure?.let { throw it }
         return onCode(code)
+    }
+
+    override suspend fun loginCaptcha(answer: String): LoginState {
+        captchaCalls += answer
+        captchaFailure?.let { throw it }
+        return onCaptcha(answer)
     }
 
     override suspend fun refreshStatus(): EngineStatus {

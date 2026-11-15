@@ -746,6 +746,7 @@ func (c *Controller) Disconnect() error {
 // would otherwise outlive the engine).
 func (c *Controller) Shutdown() {
 	c.cancelBrowser()
+	c.cancelPending()
 	c.stopTunnel("daemon shutdown")
 }
 

@@ -29,6 +29,7 @@ enum class SignInPhase {
     EMAIL,
     PASSWORD,
     CODE,
+    CAPTCHA,
     EMAIL_LINK_WAITING,
     AUTHENTICATED,
 }
@@ -41,6 +42,7 @@ enum class SetupMessage {
     EMAIL_REQUIRED,
     PASSWORD_REQUIRED,
     CODE_REQUIRED,
+    CAPTCHA_REQUIRED,
     UNEXPECTED_STEP,
     NO_BROWSER,
     BROWSER_START_FAILED,
@@ -60,6 +62,11 @@ data class SignInPaneState(
     val verificationMethod: String? = null,
     /** The engine's human-readable reason for the verification, when given. */
     val verificationReason: String? = null,
+    /**
+     * The `data:image/…` challenge image while [phase] is
+     * [SignInPhase.CAPTCHA]; null on every other phase.
+     */
+    val captchaImage: String? = null,
     /** A request is in flight; buttons and fields stay disabled. */
     val busy: Boolean = false,
     /** The engine's own error text, shown inline. */

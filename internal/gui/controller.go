@@ -99,6 +99,7 @@ type Daemon interface {
 	LogsClear(context.Context) (api.Result, error)
 	LoginEmail(context.Context, api.LoginEmailPayload) (api.LoginState, error)
 	LoginPassword(context.Context, api.LoginPasswordPayload) (api.LoginState, error)
+	LoginCaptcha(context.Context, api.LoginCaptchaPayload) (api.LoginState, error)
 	Login2FA(context.Context, api.Login2FAPayload) (api.LoginState, error)
 	LoginStart(context.Context, api.LoginStartPayload) (api.LoginState, error)
 	LoginStatus(context.Context, api.LoginStatusPayload) (api.LoginState, error)
@@ -155,7 +156,7 @@ type StatusView struct {
 
 // LoginView is the daemon-driven sign-in projection (inventory §Onboarding).
 type LoginView struct {
-	Step               string `json:"step,omitempty"` // email|password|2fa|browser|done|error|cancelled
+	Step               string `json:"step,omitempty"` // email|password|captcha|2fa|browser|done|error|cancelled
 	Email              string `json:"email,omitempty"`
 	ErrorCode          string `json:"error_code,omitempty"`
 	Method             string `json:"method,omitempty"` // email|browser
@@ -163,7 +164,11 @@ type LoginView struct {
 	VerificationReason string `json:"verification_reason,omitempty"`
 	URL                string `json:"url,omitempty"`
 	ID                 string `json:"id,omitempty"`
-	Error              string `json:"error,omitempty"`
+	// CaptchaImage is the data: URL of the image Mozilla's edge asks the
+	// person to read on the captcha step. The UI renders it inline; nothing
+	// else in the flow carries it, and it is dropped on every other step.
+	CaptchaImage string `json:"captcha_image,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 // ServiceState is the GUI-side projection of the background service; T3.3
@@ -468,8 +473,8 @@ func (c *Controller) Snapshot() State {
 // action's notice per the inventory.
 //
 // Handled here: connect, disconnect, select_location, ping, settings_get,
-// settings_set, login_email, login_password, login_2fa, login_start,
-// login_status, login_cancel, login_complete, accounts_list,
+// settings_set, login_email, login_password, login_captcha, login_2fa,
+// login_start, login_status, login_cancel, login_complete, accounts_list,
 // accounts_add_start, accounts_add_status, accounts_add_cancel,
 // accounts_remove, accounts_use, accounts_update, accounts_set_rotation,
 // logout, logs_snapshot, logs_subscribe, logs_unsubscribe, logs_clear,
@@ -505,7 +510,7 @@ func (c *Controller) Dispatch(act Action) error {
 		return c.dispatchPrepare(act)
 	case ActionUpdateCheck:
 		return c.dispatchUpdateCheck()
-	case ActionLoginEmail, ActionLoginPassword, ActionLogin2FA,
+	case ActionLoginEmail, ActionLoginPassword, ActionLoginCaptcha, ActionLogin2FA,
 		ActionLoginStart, ActionLoginStatus, ActionLoginCancel,
 		ActionLoginComplete,
 		ActionAccountsAddStart, ActionAccountsAddStatus, ActionAccountsAddCancel:
@@ -923,6 +928,12 @@ func (c *Controller) dispatchLogin(act Action) error {
 			return err
 		}
 		st, err = c.d.LoginPassword(ctx, p)
+	case ActionLoginCaptcha:
+		var p api.LoginCaptchaPayload
+		if p, err = decodePayload[api.LoginCaptchaPayload](act); err != nil {
+			return err
+		}
+		st, err = c.d.LoginCaptcha(ctx, p)
 	case ActionLoginStart, ActionAccountsAddStart:
 		var p api.LoginStartPayload
 		if p, err = decodePayload[api.LoginStartPayload](act); err != nil {
@@ -1099,6 +1110,11 @@ func (c *Controller) loginActionError(name string, accountFlow bool, err error) 
 		prefix, code = "could not finish sign-in: ", "onboarding.sign_in.complete_failed"
 		if accountFlow {
 			slot, code = slotAccount, "account.add.complete_failed"
+		}
+	case ActionLoginCaptcha:
+		prefix, code = "could not solve the captcha: ", "onboarding.sign_in.captcha_failed"
+		if accountFlow {
+			slot, code = slotAccount, "account.add.captcha_failed"
 		}
 	case ActionLoginStart:
 		prefix, code = "could not start sign-in: ", "onboarding.sign_in.start_failed"
@@ -1937,6 +1953,14 @@ func (c *Controller) mergeLogin(st api.LoginState) bool {
 	login.VerificationReason = st.VerificationReason
 	login.URL = st.URL
 	login.ID = st.LoginID
+	// The image belongs to the captcha step alone: any other named step
+	// drops it, so a later password/2FA/browser screen never inherits a
+	// stale challenge.
+	if st.Step == "captcha" {
+		login.CaptchaImage = st.CaptchaImage
+	} else if st.Step != "" {
+		login.CaptchaImage = ""
+	}
 	// A status poll for the same waiting browser flow carries no error; it
 	// must not erase the retryable completion error the waiting card shows
 	// inline. The error clears on the next completion attempt (which replaces

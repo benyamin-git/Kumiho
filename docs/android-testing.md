@@ -499,8 +499,9 @@ remain open.
       code step; an email-link account shows the waiting state and signs in
       after the link is confirmed or **Re-check**.
 - [ ] A wrong password is shown inline and the form stays usable. When Mozilla
-      challenges the password API, the app continues in the browser sign-in
-      flow for the same account instead of stopping on the form.
+      asks for an image captcha, the image appears inline, a wrong answer shows
+      a new image, **Verify** completes the sign-in and **Use the browser
+      instead** continues the same attempt in the browser sign-in flow.
 - [ ] Denying VPN consent and notification permission still allows **Finish**;
       the state reads *Not granted* / *Not allowed*, not a fake grant.
 - [ ] Granting both and using **Finish and connect** reaches the dashboard and

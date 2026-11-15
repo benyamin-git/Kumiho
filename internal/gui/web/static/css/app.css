@@ -434,6 +434,26 @@ select.input {
 }
 
 /* ------------------------------------------------------------------------
+ * Inline image CAPTCHA (password sign-in challenged by Mozilla's edge): the
+ * challenge image plus the browser-fallback action, shared by onboarding and
+ * the account section. The image is content, so it sits on a container step
+ * with a hairline and never a shadow (ban 7).
+ * ---------------------------------------------------------------------- */
+.captcha-image {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  margin-block-end: var(--space-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-input);
+  background: var(--surface-container-2);
+}
+
+.captcha-browser {
+  align-self: flex-start;
+}
+
+/* ------------------------------------------------------------------------
  * Cards: surface step + hairline, no shadows (ban 7).
  * ---------------------------------------------------------------------- */
 .card {

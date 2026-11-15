@@ -36,6 +36,7 @@ const (
 	loginCompleteTimeout = 90 * time.Second
 	loginPasswordTimeout = 60 * time.Second
 	login2FATimeout      = 60 * time.Second
+	loginCaptchaTimeout  = 90 * time.Second
 	resetStateTimeout    = 10 * time.Second
 	doctorTimeout        = 30 * time.Second
 	revokeTimeout        = 10 * time.Second
@@ -230,6 +231,17 @@ func (f *facade) dispatch(ctx context.Context, req *request) (string, error) {
 		lctx, cancel := context.WithTimeout(ctx, login2FATimeout)
 		defer cancel()
 		state := f.ctrl.Login2FA(lctx, p.Code)
+		f.pushStatus()
+		return encodeResponse("login_state", state)
+
+	case "login_captcha":
+		var p api.LoginCaptchaPayload
+		if err := decodePayload(req, &p); err != nil {
+			return f.fail(err)
+		}
+		lctx, cancel := context.WithTimeout(ctx, loginCaptchaTimeout)
+		defer cancel()
+		state := f.ctrl.LoginCaptcha(lctx, p.Answer)
 		f.pushStatus()
 		return encodeResponse("login_state", state)
 

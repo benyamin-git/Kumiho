@@ -294,7 +294,7 @@ Unix socket `/run/kumiho/control.sock`, mode `0660`, owner `kumiho:kumiho` (inst
 | C→S | Purpose |
 |---|---|
 | `hello` | version handshake |
-| `login_email {email}` → `login_password {password}` → `login_2fa {code}` | interactive auth state machine |
+| `login_email {email}` → `login_password {password}` → `login_2fa {code}` / `login_captcha {answer}` | interactive auth state machine; an empty captcha answer switches to the browser flow |
 | `logout` | clear tokens, disconnect |
 | `connect {location_code?, city_code?, server?, proxy_only?}` | connect (defaults to persisted) |
 | `disconnect` | graceful teardown |
@@ -307,7 +307,7 @@ Unix socket `/run/kumiho/control.sock`, mode `0660`, owner `kumiho:kumiho` (inst
 
 | S→C | Payload |
 |---|---|
-| `login_state {step, error?}` | credentials → 2FA → done |
+| `login_state {step, error?, captcha_image?}` | credentials → 2FA/CAPTCHA → done |
 | `status {state, location, server, since, rates, totals, quota, pass_expires, dns, kill_switch, ipv6, exit_ip?}` | dashboard |
 | `locations {countries[]}` | list with city/server metadata |
 | `ping_result {host, rtt_ms or null}` | latency |
@@ -315,9 +315,17 @@ Unix socket `/run/kumiho/control.sock`, mode `0660`, owner `kumiho:kumiho` (inst
 | `log {ts, level, tag, msg}` | streamed entries |
 | `error {code, message}` | recoverable errors |
 
-A password step that hits Mozilla's anti-bot edge returns `step: browser` from
-`login_password` with the browser flow already active; clients poll the
-returned `login_id` instead of calling `login_start` again.
+When the password edge asks for a human, `login_password` returns
+`step: captcha` with `captcha_image`, a `data:image/…` URL. Clients that can
+render images answer with `login_captcha`; a wrong answer returns a fresh image
+in the same attempt. An empty answer switches that same attempt to the browser
+flow, which is how the TUI and CLI (and an unreadable image) continue, and it
+returns `step: browser` with the active `login_id`.
+
+A password step that hits Mozilla's anti-bot edge and escalates by itself
+returns `step: browser` from `login_password` with the browser flow already
+active; clients poll the returned `login_id` instead of calling `login_start`
+again.
 
 ---
 

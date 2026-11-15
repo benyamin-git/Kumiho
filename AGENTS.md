@@ -179,9 +179,15 @@ them locally for any change under `android/`, `mobile/` or
   Clients only open the returned URL and poll `login_status`/
   `accounts_add_status`; desktop clients paste the success-page URL, while
   Android intercepts it in the in-app WebView. A password login challenged by
-  Mozilla's edge is not terminal: the engine drops the password pending state
-  and returns this browser flow for the same email/account, so clients must
-  accept `step: browser` from `login_password` and poll that flow. Browser
+  Mozilla's edge is not terminal: the engine attaches a context solver and
+  returns `step: captcha` with `captcha_image` (a `data:image/…` URL) while the
+  asynchronous password run waits; `login_captcha` carries the answer back, a
+  wrong answer returns a fresh image, and an empty answer switches that same
+  attempt to the browser flow. The Windows GUI and the Android phone/TV app
+  render the image inline; the TUI and CLI answer with an empty
+  `login_captcha`. The engine can also drop the password pending state and
+  return a `browser` step for the same email/account, so clients must accept
+  `step: browser` from `login_password` and poll that flow. Browser
   sign-in uses the public Firefox for Android client `a2270f727f45f648` and its
   HTTPS success page;
   password sign-in keeps `5882386c6d801776`. `Tokens.ClientID` records the
@@ -254,7 +260,9 @@ them locally for any change under `android/`, `mobile/` or
   `clear_recents`, `settings_set` keys `allow_locked`/`relay_url`/
   `relay_token`, `relay_test`, the `fastest` connect/select field, cached
   `latency` and `allow_locked` in the locations reply, and the `ping_done`
-  event; existing envelopes stay byte-compatible.
+  event; existing envelopes stay byte-compatible. The inline CAPTCHA adds the
+  `login_captcha` command and `captcha_image` field additively; protocol v1
+  stays byte-compatible.
   `ipc.DefaultTransport()` selects the
   platform transport (`default_unix.go` / `default_windows.go`): Unix socket
   vs a `go-winio` named pipe with the `kumiho` group ACL. Windows `shutdown` is

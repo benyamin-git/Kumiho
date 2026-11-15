@@ -151,6 +151,8 @@ class SetupFlowTest {
                     onSubmitEmail = {},
                     onSubmitPassword = {},
                     onSubmitCode = {},
+                    onSubmitCaptcha = {},
+                    onCaptchaBrowser = {},
                     onRecheck = {},
                 )
             }
@@ -240,6 +242,104 @@ class SetupFlowTest {
     }
 
     @Test
+    fun captchaStepShowsTheImageAndRetriesWithANewRound() {
+        engine.onPassword = {
+            LoginState(
+                step = "captcha",
+                email = EMAIL,
+                verificationMethod = null,
+                verificationReason = null,
+                error = null,
+                captchaImage = CAPTCHA_IMAGE,
+            )
+        }
+        engine.onCaptcha = { answer ->
+            if (answer == "abc123") {
+                LoginState("done", EMAIL, null, null, null)
+            } else {
+                LoginState(
+                    step = "captcha",
+                    email = EMAIL,
+                    verificationMethod = null,
+                    verificationReason = null,
+                    error = "that captcha answer was not accepted; try again",
+                    captchaImage = CAPTCHA_IMAGE,
+                )
+            }
+        }
+        val viewModel = show()
+        walkToSignIn(viewModel)
+
+        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL).performTextInput(EMAIL)
+        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL_SUBMIT).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.signIn.phase == SignInPhase.PASSWORD }
+        rule.onNodeWithTag(SetupTags.SIGN_IN_PASSWORD).performTextInput(SECRET)
+        rule.onNodeWithTag(SetupTags.SIGN_IN_PASSWORD_SUBMIT).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.signIn.phase == SignInPhase.CAPTCHA }
+
+        // The inline image is shown; an empty answer cannot be submitted.
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_IMAGE).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_SUBMIT).assertIsNotEnabled()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_BROWSER).assertIsDisplayed()
+
+        // A wrong answer is a new round, not a dead end.
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA).performTextInput("wrong")
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_SUBMIT).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.signIn.error != null }
+        rule.waitForIdle()
+        assertEquals("wrong", engine.captchaCalls.single())
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_IMAGE).assertIsDisplayed()
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA).assertExists()
+
+        // The right answer completes the sign-in.
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA).performTextInput("abc123")
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_SUBMIT).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.signedIn }
+        assertEquals(listOf("wrong", "abc123"), engine.captchaCalls)
+    }
+
+    @Test
+    fun captchaBrowserFallbackSwitchesTheSameAttemptToTheBrowser() {
+        engine.onPassword = {
+            LoginState(
+                step = "captcha",
+                email = EMAIL,
+                verificationMethod = null,
+                verificationReason = null,
+                error = null,
+                captchaImage = CAPTCHA_IMAGE,
+            )
+        }
+        engine.onCaptcha = { answer ->
+            assertEquals("", answer)
+            LoginState(
+                step = "browser",
+                email = EMAIL,
+                verificationMethod = null,
+                verificationReason = null,
+                error = null,
+                method = "browser",
+                url = "https://accounts.firefox.com/signin",
+                loginId = "captcha-fallback-1",
+            )
+        }
+        val viewModel = show()
+        walkToSignIn(viewModel)
+
+        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL).performTextInput(EMAIL)
+        rule.onNodeWithTag(SetupTags.SIGN_IN_EMAIL_SUBMIT).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.signIn.phase == SignInPhase.PASSWORD }
+        rule.onNodeWithTag(SetupTags.SIGN_IN_PASSWORD).performTextInput(SECRET)
+        rule.onNodeWithTag(SetupTags.SIGN_IN_PASSWORD_SUBMIT).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.signIn.phase == SignInPhase.CAPTCHA }
+
+        rule.onNodeWithTag(SetupTags.SIGN_IN_CAPTCHA_BROWSER).performClick()
+        rule.waitUntil(TIMEOUT) { viewModel.state.value.browser?.id == "captcha-fallback-1" }
+        assertEquals(listOf(""), engine.captchaCalls)
+        rule.onNodeWithTag(SetupTags.SIGN_IN_BROWSER_WAITING).assertExists()
+    }
+
+    @Test
     fun connectNowIsOfferedOnlyWithVpnConsentAndFinishesInOrder() {
         engine.onPassword = { LoginState("done", EMAIL, null, null, null) }
         permissions.vpn = true
@@ -304,6 +404,8 @@ class SetupFlowTest {
         const val EMAIL = "user@example.com"
         const val SECRET = "correct-horse-battery-staple"
         const val TIMEOUT = 10_000L
+        const val CAPTCHA_IMAGE =
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAIAAADZSiLoAAAAEElEQVR4nGP4z8AAQQxYWACPjgj4kWPEuQAAAABJRU5ErkJggg=="
     }
 }
 
@@ -312,11 +414,13 @@ internal class FakeSetupEngine : SetupEngine {
     val emailCalls = mutableListOf<String>()
     val passwordCalls = mutableListOf<String>()
     val codeCalls = mutableListOf<String>()
+    val captchaCalls = mutableListOf<String>()
     val languageCalls = mutableListOf<String>()
 
     var onEmail: (String) -> LoginState = { LoginState("password", it, null, null, null) }
     var onPassword: (String) -> LoginState = { LoginState("done", "user@example.com", null, null, null) }
     var onCode: (String) -> LoginState = { pending() }
+    var onCaptcha: (String) -> LoginState = { error("captcha is not used in this test") }
     var loginStartResult: suspend (String, String?) -> LoginState = { _, _ ->
         error("browser sign-in is not used in this test")
     }
@@ -334,6 +438,11 @@ internal class FakeSetupEngine : SetupEngine {
     override suspend fun login2fa(code: String): LoginState {
         codeCalls += code
         return onCode(code)
+    }
+
+    override suspend fun loginCaptcha(answer: String): LoginState {
+        captchaCalls += answer
+        return onCaptcha(answer)
     }
 
     override suspend fun refreshStatus(): EngineStatus = signedOutStatus()

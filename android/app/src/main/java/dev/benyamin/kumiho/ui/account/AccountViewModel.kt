@@ -36,6 +36,9 @@ interface AccountGateway {
 
     suspend fun login2fa(code: String): LoginState
 
+    /** Answers the image CAPTCHA; an empty answer asks for the browser flow. */
+    suspend fun loginCaptcha(answer: String): LoginState
+
     suspend fun loginCancel(id: String)
 
     suspend fun logout()
@@ -70,6 +73,8 @@ class EngineAccountGateway(private val engine: EngineClient) : AccountGateway {
     override suspend fun loginPassword(password: String): LoginState = engine.loginPassword(password)
 
     override suspend fun login2fa(code: String): LoginState = engine.login2fa(code)
+
+    override suspend fun loginCaptcha(answer: String): LoginState = engine.loginCaptcha(answer)
 
     override suspend fun loginCancel(id: String) = engine.loginCancel(id)
 
@@ -262,12 +267,14 @@ class AccountViewModel(
                 } else if (signedIn) {
                     current.signIn.copy(
                         phase = SignInPhase.AUTHENTICATED,
+                        captchaImage = null,
                         accountEmail = account.email ?: current.signIn.accountEmail,
                         busy = false,
                     )
                 } else {
                     current.signIn.copy(
                         phase = SignInPhase.EMAIL,
+                        captchaImage = null,
                         busy = false,
                     )
                 },
@@ -325,6 +332,29 @@ class AccountViewModel(
         viewModelScope.launch { runLogin { gateway.login2fa(trimmed) } }
     }
 
+    /** The CAPTCHA answer is captured by this request only; never stored. */
+    fun submitCaptcha(answer: String) {
+        val trimmed = answer.trim()
+        if (trimmed.isEmpty()) {
+            setSignInMessage(SetupMessage.CAPTCHA_REQUIRED)
+            return
+        }
+        if (!signInIdle()) return
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null))
+        }
+        viewModelScope.launch { runLogin { gateway.loginCaptcha(trimmed) } }
+    }
+
+    /** The image is unreadable: ask the engine for the browser flow. */
+    fun submitCaptchaBrowser() {
+        if (!signInIdle()) return
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null))
+        }
+        viewModelScope.launch { runLogin { gateway.loginCaptcha("") } }
+    }
+
     fun recheckEmailLink() {
         val current = mutableState.value
         if (current.signIn.phase != SignInPhase.EMAIL_LINK_WAITING) return
@@ -364,6 +394,16 @@ class AccountViewModel(
                     email = login.email,
                     busy = false,
                     error = login.error,
+                )
+            }
+            STEP_CAPTCHA -> {
+                stopEmailPolling()
+                updateSignIn(
+                    phase = SignInPhase.CAPTCHA,
+                    email = login.email,
+                    busy = false,
+                    error = login.error,
+                    captchaImage = login.captchaImage,
                 )
             }
             STEP_2FA -> {
@@ -429,6 +469,7 @@ class AccountViewModel(
                                 busy = false,
                                 error = failure,
                                 message = null,
+                                captchaImage = null,
                             ),
                         )
                     }
@@ -441,6 +482,7 @@ class AccountViewModel(
                         addingAccount = false,
                         signIn = it.signIn.copy(
                             phase = SignInPhase.AUTHENTICATED,
+                            captchaImage = null,
                             accountEmail = login.email ?: it.signIn.accountEmail
                             ?: it.signIn.email.takeIf { value -> value.isNotBlank() },
                             busy = false,
@@ -471,6 +513,7 @@ class AccountViewModel(
         email: String?,
         busy: Boolean,
         error: String?,
+        captchaImage: String? = null,
     ) {
         mutableState.update {
             it.copy(
@@ -480,6 +523,7 @@ class AccountViewModel(
                     busy = busy,
                     error = error,
                     message = null,
+                    captchaImage = captchaImage,
                 ),
             )
         }
@@ -1208,6 +1252,7 @@ class AccountViewModel(
         const val DEFAULT_BROWSER_POLL_INTERVAL_MS = 1_000L
         const val STEP_EMAIL = "email"
         const val STEP_PASSWORD = "password"
+        const val STEP_CAPTCHA = "captcha"
         const val STEP_2FA = "2fa"
         const val STEP_BROWSER = "browser"
         const val STEP_DONE = "done"

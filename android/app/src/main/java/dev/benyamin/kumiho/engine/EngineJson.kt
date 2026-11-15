@@ -117,6 +117,7 @@ object EngineJson {
         method = string(fields, "method"),
         url = string(fields, "url"),
         loginId = string(fields, "login_id"),
+        captchaImage = string(fields, "captcha_image"),
     )
 
     fun accounts(json: String): Accounts = accounts(parseObject(json, "accounts"))

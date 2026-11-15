@@ -664,6 +664,61 @@ func TestLoginPasswordChallengeEntersBrowserWaiting(t *testing.T) {
 	}
 }
 
+// A captcha step cannot render in a terminal. The login modal must ask the
+// engine for the browser flow with an empty answer and then wait for it.
+func TestLoginCaptchaFallsBackToTheBrowser(t *testing.T) {
+	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
+		if req.typ == ipc.TypeLoginCaptcha {
+			return ipc.TypeLoginState, api.LoginState{
+				Step:    "browser",
+				Method:  "browser",
+				URL:     "https://example.test/login",
+				LoginID: "login-captcha",
+			}
+		}
+		return "", nil
+	})
+	m := &Model{
+		client:   d.client,
+		screen:   screenLogin,
+		step:     "password",
+		email:    "user@example.com",
+		password: "hunter2",
+		busy:     true,
+	}
+
+	_, cmd := m.handleLoginState(loginStateMsg{state: api.LoginState{Step: "captcha"}})
+	if cmd == nil {
+		t.Fatal("the captcha step should ask the engine for the browser flow")
+	}
+	msg, ok := cmd().(loginStateMsg)
+	if !ok {
+		t.Fatalf("captcha fallback message = %T", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("login_captcha error: %v", msg.err)
+	}
+
+	_, cmd = m.handleLoginState(msg)
+	if cmd == nil {
+		t.Fatal("the browser flow should start polling")
+	}
+	requests := d.requests()
+	if len(requests) != 1 || requests[0].typ != ipc.TypeLoginCaptcha {
+		t.Fatalf("requests = %v, want login_captcha", d.types())
+	}
+	var payload api.LoginCaptchaPayload
+	if err := envPayload(requests[0].payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Answer != "" {
+		t.Fatalf("answer = %q, want empty to request the browser", payload.Answer)
+	}
+	if !m.ac.polling || m.ac.browserID != "login-captcha" {
+		t.Fatalf("browser waiting state = polling:%v id:%q", m.ac.polling, m.ac.browserID)
+	}
+}
+
 func TestLoginFieldsDropControlCharacters(t *testing.T) {
 	d := newTUIFakeDaemon(t, func(req tuiRequest) (string, any) {
 		if req.typ == ipc.TypeLoginEmail {

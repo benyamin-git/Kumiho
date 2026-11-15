@@ -485,10 +485,7 @@ func (c *Controller) LoginCancel(id string) error {
 			b.oauthState = ""
 			b.state = api.LoginState{Step: "cancelled", Method: MethodBrowser, LoginID: b.id}
 		}
-		if c.pending != nil {
-			c.pending.authPW = ""
-			c.pending = nil
-		}
+		c.cancelPendingLocked()
 		c.mu.Unlock()
 		c.notify()
 		return nil

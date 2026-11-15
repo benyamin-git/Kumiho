@@ -68,9 +68,16 @@ type Login2FAPayload struct {
 	Code string `json:"code"`
 }
 
+// LoginCaptchaPayload supplies a person's answer to an image CAPTCHA. An
+// empty answer asks the engine for the browser flow instead, for clients
+// that cannot show an image.
+type LoginCaptchaPayload struct {
+	Answer string `json:"answer"`
+}
+
 // LoginState is the reply to every login step.
 type LoginState struct {
-	Step               string `json:"step"` // email|password|2fa|browser|done|error|cancelled
+	Step               string `json:"step"` // email|password|2fa|captcha|browser|done|error|cancelled
 	Email              string `json:"email,omitempty"`
 	Method             string `json:"method,omitempty"` // email|totp|unblock|2fa|browser
 	VerificationMethod string `json:"verification_method,omitempty"`
@@ -78,6 +85,9 @@ type LoginState struct {
 	URL                string `json:"url,omitempty"`
 	LoginID            string `json:"login_id,omitempty"`
 	Error              string `json:"error,omitempty"`
+	// CaptchaImage is a data: URL of the image Fastly asks the person to
+	// read during a challenged password sign-in.
+	CaptchaImage string `json:"captcha_image,omitempty"`
 }
 
 // AccountSummary is one row in the Account screen.

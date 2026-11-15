@@ -50,6 +50,7 @@ import dev.benyamin.kumiho.ui.account.pasteMessageText
 import dev.benyamin.kumiho.ui.i18n.ltrTechnical
 import dev.benyamin.kumiho.ui.settings.LANGUAGE_OPTIONS
 import dev.benyamin.kumiho.ui.settings.languageLabel
+import dev.benyamin.kumiho.ui.setup.CaptchaImage
 import dev.benyamin.kumiho.ui.setup.SetupActions
 import dev.benyamin.kumiho.ui.setup.SetupHost
 import dev.benyamin.kumiho.ui.setup.SetupMessage
@@ -536,6 +537,31 @@ private fun SignInStep(state: SetupState, actions: SetupActions, focus: FocusReq
             )
             CodeField(state = signIn, onSubmit = actions.onSubmitCode, focus = focus)
         }
+        signIn.phase == SignInPhase.CAPTCHA -> {
+            Text(
+                text = stringResource(R.string.sign_in_captcha_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onSurface,
+            )
+            CaptchaImage(
+                dataUrl = signIn.captchaImage,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(R.string.sign_in_captcha_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+            CaptchaField(state = signIn, onSubmit = actions.onSubmitCaptcha, focus = focus)
+            TvButton(
+                label = stringResource(R.string.sign_in_captcha_browser),
+                onClick = actions.onCaptchaBrowser,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(SetupTags.SIGN_IN_CAPTCHA_BROWSER),
+                enabled = !signIn.busy,
+            )
+        }
         signIn.phase == SignInPhase.EMAIL_LINK_WAITING -> {
             Text(
                 text = stringResource(R.string.sign_in_link_title),
@@ -770,6 +796,42 @@ private fun CodeField(
             .focusRequester(focus)
             .testTag(SetupTags.SIGN_IN_CODE_SUBMIT),
         enabled = !state.busy,
+        primary = true,
+    )
+}
+
+@Composable
+private fun CaptchaField(
+    state: dev.benyamin.kumiho.ui.setup.SignInPaneState,
+    onSubmit: (String) -> Unit,
+    focus: FocusRequester,
+) {
+    var captcha by remember { mutableStateOf("") }
+    TvField(
+        label = stringResource(R.string.sign_in_captcha_label),
+        value = captcha,
+        onValueChange = { captcha = it },
+        enabled = !state.busy,
+        imeAction = ImeAction.Done,
+        onDone = {
+            val value = captcha
+            captcha = ""
+            if (value.isNotBlank()) onSubmit(value)
+        },
+        modifier = Modifier.testTag(SetupTags.SIGN_IN_CAPTCHA),
+    )
+    TvButton(
+        label = stringResource(R.string.sign_in_captcha_submit),
+        onClick = {
+            val value = captcha
+            captcha = ""
+            onSubmit(value)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focus)
+            .testTag(SetupTags.SIGN_IN_CAPTCHA_SUBMIT),
+        enabled = !state.busy && captcha.isNotBlank(),
         primary = true,
     )
 }

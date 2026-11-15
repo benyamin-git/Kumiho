@@ -345,6 +345,15 @@ func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, e
 		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.Login2FA(ctx, p.Code))
 		h.broadcastStatus()
 
+	case ipc.TypeLoginCaptcha:
+		var p api.LoginCaptchaPayload
+		if err := env.DecodePayload(&p); err != nil {
+			replyErr(api.CodeBadRequest, err.Error())
+			return
+		}
+		_ = conn.Reply(env.ID, ipc.TypeLoginState, h.ctrl.LoginCaptcha(ctx, p.Answer))
+		h.broadcastStatus()
+
 	case ipc.TypeLoginStart, ipc.TypeAccountsAddStart:
 		var p api.LoginStartPayload
 		if err := env.DecodePayload(&p); err != nil {

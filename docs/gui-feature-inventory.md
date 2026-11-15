@@ -437,7 +437,8 @@ holds the daemon's `accounts_list` projection and the account actions:
    and `Remove`.
 3. **Browser waiting card** and the **Add account**, **Rename** and **Remove**
    dialogs as before; the password form is the onboarding credential flow
-   inline.
+   inline, including the inline image CAPTCHA page with its `Captcha answer`
+   field, inline error and **Use the browser instead** fallback.
 4. The sign-out confirmation and the status line are unchanged.
 
 **Interactions:** the page-level `Refresh` and the status line's `Retry`
@@ -670,7 +671,7 @@ Steps (exact strings):
   disables it again. The gate is enforced by the model too.
 - Action: `Continue`.
 
-### 2. `Sign in` (browser or email → password → 2FA)
+### 2. `Sign in` (browser or email → password → 2FA/captcha)
 
 The step opens on the **email page** with the last successful method
 preselected (browser on first run). Body: `Sign in with the Firefox account
@@ -695,12 +696,21 @@ path. `Back` returns to consent.
     choose Continue with the code empty to finish signing in.`
   Field label `Verification code`, normal input; submitting empty re-checks
   the email-link flow. `Back` returns to password.
+- **Captcha page.** The daemon's `captcha_image` (`data:image/…`) renders
+  inline above the answer field while the password attempt waits. Body:
+  `Mozilla asked for a CAPTCHA. Type the characters in the image to continue.`
+  Field label `Captcha answer`, cue `Type the characters`; **Continue** submits
+  `login_captcha` and a wrong answer paints the fresh image with an inline
+  error. A text button, **Use the browser instead**, sends `login_captcha` with
+  an empty answer and switches the same attempt to the browser waiting card.
+  An unusable image still leaves the answer field and the browser fallback, so
+  the page is never a dead end.
 
 While a round trip runs: the status line reads `Signing in...` and `Back` /
 `Continue` are disabled. `Enter` in the sign-in field submits the page.
 Carried-over text rules: the email is restored when returning to the email
-page; passwords and codes are always cleared when leaving their page; a
-failed email submit keeps the typed text so it can be fixed.
+page; passwords, codes and captcha answers are always cleared when leaving
+their page; a failed email submit keeps the typed text so it can be fixed.
 
 **Already-signed-in handling (never a dead-end):** if the daemon already
 holds a session while on a login page (upgrade/CLI sign-in), the page shows

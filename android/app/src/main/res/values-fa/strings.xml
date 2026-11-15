@@ -99,6 +99,12 @@
     <string name="sign_in_code_label">کد تأیید</string>
     <string name="sign_in_code_note">کدی را که Firefox Accounts برایتان فرستاده وارد کنید، سپس «تأیید» را بزنید. این فیلد پس از هر تلاش پاک می‌شود.</string>
     <string name="sign_in_code_submit">تأیید</string>
+    <string name="sign_in_captcha_title">تأیید کنید که ربات نیستید</string>
+    <string name="sign_in_captcha_note">Mozilla پیش از پذیرش رمز عبور این بررسی را خواسته است. نویسه‌های تصویر را وارد کنید و سپس «تأیید» را بزنید. پاسخ نادرست یک تصویر تازه نشان می‌دهد.</string>
+    <string name="sign_in_captcha_label">نویسه‌های تصویر</string>
+    <string name="sign_in_captcha_submit">تأیید</string>
+    <string name="sign_in_captcha_browser">به‌جای آن از مرورگر استفاده کنید</string>
+    <string name="sign_in_captcha_image">تصویر چالش ورود</string>
     <string name="sign_in_reason">Firefox Accounts این تأیید را خواسته است: %1$s</string>
     <string name="sign_in_link_title">ایمیل خود را بررسی کنید</string>
     <string name="sign_in_link_text">Firefox Accounts یک پیوند تأیید به %1$s فرستاده است. آن را باز کنید، سپس به اینجا برگردید.</string>
@@ -112,6 +118,7 @@
     <string name="sign_in_email_required">نشانی ایمیل حساب Firefox خود را وارد کنید.</string>
     <string name="sign_in_password_required">رمز عبور حساب Firefox خود را وارد کنید.</string>
     <string name="sign_in_code_required">کد موجود در ایمیل را وارد کنید.</string>
+    <string name="sign_in_captcha_required">نویسه‌های نمایش‌داده‌شده در تصویر را وارد کنید.</string>
     <string name="sign_in_unexpected_step">موتور با گام ورود غیرمنتظره‌ای پاسخ داد. از نشانی ایمیل دوباره شروع کنید.</string>
     <string name="sign_in_browser_start_failed">ورود مرورگری شروع نشد. از نشانی ایمیل دوباره شروع کنید.</string>
     <string name="permissions_title">مجوزهای اندروید</string>

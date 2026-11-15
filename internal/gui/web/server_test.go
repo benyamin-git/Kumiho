@@ -240,6 +240,8 @@ func TestSecurityHeaders(t *testing.T) {
 		got := do(t, "GET", s.URL()+rel)
 		if csp := got.header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
 			t.Errorf("GET /%s CSP = %q; want default-src 'self'", rel, csp)
+		} else if !strings.Contains(csp, "img-src 'self' data:") {
+			t.Errorf("GET /%s CSP = %q; want the CAPTCHA data: image allowed", rel, csp)
 		}
 		if x := got.header.Get("X-Content-Type-Options"); x != "nosniff" {
 			t.Errorf("GET /%s X-Content-Type-Options = %q; want nosniff", rel, x)

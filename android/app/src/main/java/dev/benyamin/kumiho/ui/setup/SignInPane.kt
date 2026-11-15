@@ -1,5 +1,9 @@
 package dev.benyamin.kumiho.ui.setup
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,11 +34,13 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -65,14 +72,45 @@ private fun Modifier.tvButtonFocusRing(active: Boolean): Modifier {
 }
 
 /**
- * The Firefox Accounts pane: email, password, then either a code or the
- * email-link waiting state. It is UI only — no view model, no engine, no
- * Android permission API — so the Account screen (T15) can reuse it.
+ * The inline image CAPTCHA (`data:image/…;base64,…`). A raster image decodes
+ * once per URL; an unsupported payload renders nothing and the answer field
+ * plus the browser fallback remain, so the flow is never trapped.
+ */
+@Composable
+internal fun CaptchaImage(
+    dataUrl: String?,
+    modifier: Modifier = Modifier,
+) {
+    val image = remember(dataUrl) { decodeCaptchaImage(dataUrl) } ?: return
+    Image(
+        bitmap = image.asImageBitmap(),
+        contentDescription = stringResource(R.string.sign_in_captcha_image),
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+            .heightIn(max = 120.dp)
+            .testTag(SetupTags.SIGN_IN_CAPTCHA_IMAGE),
+    )
+}
+
+private fun decodeCaptchaImage(dataUrl: String?): Bitmap? {
+    if (dataUrl == null || !dataUrl.startsWith("data:image/")) return null
+    val comma = dataUrl.indexOf(',')
+    if (comma <= 0 || !dataUrl.substring(0, comma).endsWith(";base64")) return null
+    return runCatching {
+        val bytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    }.getOrNull()
+}
+
+/**
+ * The Firefox Accounts pane: email, password, then either a code, an image
+ * CAPTCHA, or the email-link waiting state. It is UI only — no view model, no
+ * engine, no Android permission API — so the Account screen (T15) can reuse it.
  *
- * Secrets never leave the composable: the password and the code live in
- * `remember` (never `rememberSaveable`, so they are not written to the saved
- * instance state) and are cleared synchronously the moment their submit is
- * pressed, before the caller sees them.
+ * Secrets never leave the composable: the password, the code and the CAPTCHA
+ * answer live in `remember` (never `rememberSaveable`, so they are not written
+ * to the saved instance state) and are cleared synchronously the moment their
+ * submit is pressed, before the caller sees them.
  */
 @Composable
 fun SignInPane(
@@ -81,7 +119,9 @@ fun SignInPane(
     onSubmitPassword: (String) -> Unit,
     onSubmitCode: (String) -> Unit,
     onRecheck: () -> Unit,
+    onSubmitCaptcha: (String) -> Unit,
     onBrowser: (() -> Unit)? = null,
+    onCaptchaBrowser: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     signedInNote: String? = null,
     tvFocus: Boolean = false,
@@ -89,17 +129,20 @@ fun SignInPane(
     var email by rememberSaveable { mutableStateOf(state.email) }
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var captcha by remember { mutableStateOf("") }
 
     val focusManager = LocalFocusManager.current
     val emailFocus = remember { FocusRequester() }
     val passwordFocus = remember { FocusRequester() }
     val codeFocus = remember { FocusRequester() }
+    val captchaFocus = remember { FocusRequester() }
 
     LaunchedEffect(state.phase, tvFocus) {
         if (!tvFocus) return@LaunchedEffect
         val target = when (state.phase) {
             SignInPhase.PASSWORD -> passwordFocus
             SignInPhase.CODE -> codeFocus
+            SignInPhase.CAPTCHA -> captchaFocus
             else -> null
         }
         target?.let { runCatching { it.requestFocus() } }
@@ -301,6 +344,81 @@ fun SignInPane(
                 }
             }
 
+            SignInPhase.CAPTCHA -> {
+                Text(
+                    text = stringResource(R.string.sign_in_captcha_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (state.email.isNotBlank()) {
+                    Text(
+                        text = state.email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                CaptchaImage(
+                    dataUrl = state.captchaImage,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(R.string.sign_in_captcha_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = captcha,
+                    onValueChange = { captcha = it },
+                    label = { Text(stringResource(R.string.sign_in_captcha_label)) },
+                    singleLine = true,
+                    enabled = !state.busy,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            val value = captcha
+                            captcha = ""
+                            if (value.isNotBlank()) onSubmitCaptcha(value)
+                        },
+                    ),
+                    textStyle = MaterialTheme.typography.bodyLarge.ltrTechnical(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(captchaFocus)
+                        .then(downToNext)
+                        .testTag(SetupTags.SIGN_IN_CAPTCHA),
+                )
+                Button(
+                    onClick = {
+                        val value = captcha
+                        captcha = ""
+                        onSubmitCaptcha(value)
+                    },
+                    enabled = !state.busy && captcha.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Dimens.ControlHeight)
+                        .tvButtonFocusRing(tvFocus)
+                        .testTag(SetupTags.SIGN_IN_CAPTCHA_SUBMIT),
+                ) {
+                    Text(stringResource(R.string.sign_in_captcha_submit))
+                }
+                if (onCaptchaBrowser != null) {
+                    TextButton(
+                        onClick = onCaptchaBrowser,
+                        enabled = !state.busy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tvButtonFocusRing(tvFocus)
+                            .testTag(SetupTags.SIGN_IN_CAPTCHA_BROWSER),
+                    ) {
+                        Text(stringResource(R.string.sign_in_captcha_browser))
+                    }
+                }
+            }
+
             SignInPhase.EMAIL_LINK_WAITING -> {
                 Text(
                     text = stringResource(R.string.sign_in_link_title),
@@ -399,6 +517,7 @@ internal fun setupMessageText(message: SetupMessage): String = stringResource(
         SetupMessage.EMAIL_REQUIRED -> R.string.sign_in_email_required
         SetupMessage.PASSWORD_REQUIRED -> R.string.sign_in_password_required
         SetupMessage.CODE_REQUIRED -> R.string.sign_in_code_required
+        SetupMessage.CAPTCHA_REQUIRED -> R.string.sign_in_captcha_required
         SetupMessage.UNEXPECTED_STEP -> R.string.sign_in_unexpected_step
         SetupMessage.NO_BROWSER -> R.string.sign_in_no_browser
         SetupMessage.BROWSER_START_FAILED -> R.string.sign_in_browser_start_failed

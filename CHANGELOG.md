@@ -8,6 +8,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- **Inline image CAPTCHA for password sign-in.** When Mozilla's edge asks for
+  a CAPTCHA, the Windows GUI and the Android phone/TV app show the image inline
+  and submit the answer through the new `login_captcha` command. A wrong answer
+  returns a new image; "Use the browser instead" switches the same attempt to
+  the browser flow. The TUI and CLI keep the browser fallback.
+
 ## [1.0.0] - 2026-11-13
 
 ### Added

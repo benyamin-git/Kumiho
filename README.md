@@ -136,11 +136,13 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 
 ## Features
 
-- **Your Firefox account** — password or browser sign-in, 2FA, up to five
-  accounts with labels and a session-wide sign-out.
+- **Your Firefox account** — password or browser sign-in, 2FA, inline image
+  CAPTCHA, up to five accounts with labels and a session-wide sign-out.
 - **Mozilla's edge challenge handled** — solves the Fastly challenge and
   retries a blocked auth host; if the challenge still blocks the password
-  API, the same sign-in continues in the browser instead of dead-ending.
+  API, the Windows GUI and Android phone/TV app show the image CAPTCHA inline,
+  and the terminal clients continue that same sign-in in the browser instead
+  of dead-ending.
 - **Blocked-region first run** — HTTP 451 is reported honestly, with a reusable
   **Blocked region** guide that signs in through another VPN, prepares a pass
   once, and then renews through Kumiho's own tunnel. The user-operated relay
@@ -175,8 +177,8 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
 
 - Non-DNS UDP (QUIC/HTTP3, VoIP, games) is intentionally blocked inside the
   tunnel; applications fall back to TCP.
-- The password flow cannot solve an interactive captcha. Use browser sign-in
-  when Mozilla asks for one.
+- The CLI and TUI cannot render an image CAPTCHA; they continue that password
+  sign-in in the browser.
 - The Windows binary is unsigned, so SmartScreen warns on first run.
 - Android captures and blackholes IPv6 instead of tunneling it. Android
   self-updates only after you confirm in the system installer; there is no

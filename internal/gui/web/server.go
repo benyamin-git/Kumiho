@@ -48,8 +48,9 @@ const indexFile = "index.html"
 // cspBase is the Content-Security-Policy sent on every response. Responses
 // that carry a theme block append a style-src nonce directive: CSP falls
 // style-src back to default-src, and without the nonce that fallback would
-// block the injected inline <style>.
-const cspBase = "default-src 'self'"
+// block the injected inline <style>. img-src allows data: because the login
+// CAPTCHA challenge is an inline data:image URL.
+const cspBase = "default-src 'self'; img-src 'self' data:"
 
 // Options configures a Server. All fields are read once by New.
 type Options struct {

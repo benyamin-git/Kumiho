@@ -191,6 +191,77 @@ class AccountStateTest {
         }
 
     @Test
+    fun `a captcha step carries the image and answers are forwarded once`() =
+        runTest(mainRule.testDispatcher) {
+            gateway.accountResult = {
+                account(
+                    email = if (gateway.signedIn) "user@example.com" else null,
+                    tokenExpires = if (gateway.signedIn) TOKEN_EXPIRY else 0L,
+                    error = if (gateway.signedIn) null else "not signed in",
+                )
+            }
+            gateway.onEmail = { LoginState("password", it, null, null, null) }
+            gateway.onPassword = {
+                LoginState(
+                    "captcha",
+                    "user@example.com",
+                    null,
+                    null,
+                    null,
+                    captchaImage = CAPTCHA_IMAGE,
+                )
+            }
+            gateway.onCaptcha = { answer ->
+                if (answer == "abc123") {
+                    gateway.signedIn = true
+                    LoginState("done", "user@example.com", null, null, null)
+                } else {
+                    LoginState(
+                        "captcha",
+                        "user@example.com",
+                        null,
+                        null,
+                        "that captcha answer was not accepted; try again",
+                        captchaImage = CAPTCHA_IMAGE,
+                    )
+                }
+            }
+            val viewModel = viewModel()
+            runCurrent()
+
+            viewModel.submitEmail("user@example.com")
+            runCurrent()
+            viewModel.submitPassword("hunter2")
+            runCurrent()
+            assertEquals(SignInPhase.CAPTCHA, viewModel.state.value.signIn.phase)
+            assertEquals(CAPTCHA_IMAGE, viewModel.state.value.signIn.captchaImage)
+
+            // A blank answer is a local message, not an engine call.
+            viewModel.submitCaptcha("  ")
+            runCurrent()
+            assertEquals(
+                dev.benyamin.kumiho.ui.setup.SetupMessage.CAPTCHA_REQUIRED,
+                viewModel.state.value.signIn.message,
+            )
+            assertTrue(gateway.captchaCalls.isEmpty())
+
+            viewModel.submitCaptcha("wrong")
+            runCurrent()
+            assertEquals(listOf("wrong"), gateway.captchaCalls)
+            assertEquals(
+                "that captcha answer was not accepted; try again",
+                viewModel.state.value.signIn.error,
+            )
+            assertEquals(CAPTCHA_IMAGE, viewModel.state.value.signIn.captchaImage)
+
+            viewModel.submitCaptcha("abc123")
+            runCurrent()
+            assertEquals(listOf("wrong", "abc123"), gateway.captchaCalls)
+            assertTrue(viewModel.state.value.signedIn)
+            assertNull(viewModel.state.value.signIn.captchaImage)
+        }
+
+    @Test
     fun `an empty email is rejected locally and never reaches the engine`() =
         runTest(mainRule.testDispatcher) {
             val viewModel = viewModel()
@@ -295,12 +366,14 @@ class AccountStateTest {
         var onEmail: suspend (String) -> LoginState = { LoginState("password", it, null, null, null) }
         var onPassword: suspend (String) -> LoginState = { LoginState("2fa", null, null, null, null) }
         var onCode: suspend (String) -> LoginState = { LoginState("done", null, null, null, null) }
+        var onCaptcha: suspend (String) -> LoginState = { LoginState("done", null, null, null, null) }
         var logoutError: Exception? = null
         var logoutCalls = 0
         var signedIn = false
         val emailCalls = mutableListOf<String>()
         val passwordCalls = mutableListOf<String>()
         val codeCalls = mutableListOf<String>()
+        val captchaCalls = mutableListOf<String>()
 
         override suspend fun account(): Account = accountResult()
 
@@ -317,6 +390,11 @@ class AccountStateTest {
         override suspend fun login2fa(code: String): LoginState {
             codeCalls += code
             return onCode(code)
+        }
+
+        override suspend fun loginCaptcha(answer: String): LoginState {
+            captchaCalls += answer
+            return onCaptcha(answer)
         }
 
         override suspend fun logout() {
@@ -352,6 +430,8 @@ class AccountStateTest {
 
     private companion object {
         val TOKEN_EXPIRY: Long = Instant.parse("2026-11-21T12:00:00Z").epochSecond
+        const val CAPTCHA_IMAGE =
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAIAAADZSiLoAAAAEElEQVR4nGP4z8AAQQxYWACPjgj4kWPEuQAAAABJRU5ErkJggg=="
 
         fun account(
             email: String? = "user@example.com",

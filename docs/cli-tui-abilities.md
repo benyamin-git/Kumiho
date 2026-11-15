@@ -126,7 +126,8 @@ Global CLI mechanics (apply to every subcommand):
   - `Email: ` (plain read)
   - `Password: ` (hidden read)
   - `Code: ` (plain read) for the 2FA/TOTP/unblock step
-  Flow: `login_email` → `login_password` → optional `login_2fa` → `done`.
+  Flow: `login_email` → `login_password` → optional `login_2fa` →
+  optional `login_captcha` → `done`.
   2FA with `verification_method == "email"` (link flow) prints `Check your
   email and open the sign-in link, then press Enter (leave the code empty).`
   Otherwise prints `Enter the code from the email you received.`
@@ -655,6 +656,7 @@ Requests (client → daemon), one line each:
 | `login_email` | `{email}` → `login_state{step: email\|password\|2fa\|done, email?, verification_method?, verification_reason?, error?}` | starts the auth state machine |
 | `login_password` | `{password}` → `login_state` | derive authPW server-side |
 | `login_2fa` | `{code}` → `login_state` | empty code re-checks the email-link flow via session status |
+| `login_captcha` | `{answer}` → `login_state` | answers the image CAPTCHA; an empty answer switches the same attempt to the browser flow (how CLI and TUI continue) |
 | `logout` | (none) → `{ok}` | clears tokens + disconnects; broadcast status |
 | `connect` | `{location_code?, city_code?, server?, proxy_only?, fastest?}` → `{ok}` | can take ~30 s+; `fastest:true` resolves the minimum fresh cache once; errors `bad_request` / `not_authenticated` / `internal`; broadcast status |
 | `disconnect` | (none) → `{ok}` | `bad_request "not connected"` when idle; broadcast status |
@@ -726,16 +728,20 @@ Gap flags (daemon-side abilities beyond the IPC surface):
 
 ## Auth / token handling
 - Login is always daemon-mediated. The password flow uses
-  `login_email`/`login_password`/`login_2fa`; the browser flow uses
-  `login_start`, `login_status` and `login_cancel` (add/re-authenticate use
-  the `accounts_*` aliases). Clients never see a password derivation, and no
-  client stores tokens.
+  `login_email`/`login_password`/`login_2fa`/`login_captcha`; the browser flow
+  uses `login_start`, `login_status` and `login_cancel` (add/re-authenticate
+  use the `accounts_*` aliases). Clients never see a password derivation, and
+  no client stores tokens.
 - Password steps: email → password → optional 2FA (`email` link method or
-  emailed code/TOTP/unblock) → done. `login_state.error` carries friendly
-  messages (wrong password, link-not-confirmed, timeouts). A Fastly challenge
-  on the password API is not a terminal error: the engine abandons the
-  password attempt and returns a `browser` step for the same email/account,
-  with the flow already active. The CLI caps a password attempt loop at 12.
+  emailed code/TOTP/unblock) or an image CAPTCHA → done. `login_state.error`
+  carries friendly messages (wrong password, link-not-confirmed, timeouts). A
+  `captcha` step carries `captcha_image` (a `data:image/…` URL); a wrong
+  answer returns a fresh image in the same attempt. A terminal cannot show
+  the image, so the CLI and TUI answer with an empty `login_captcha`, which
+  asks the engine for the browser flow on that same attempt. The flow the
+  engine escalates on its own also arrives as a `browser` step for the same
+  email/account, with the flow already active. The CLI caps a password attempt
+  loop at 12.
 - Browser steps: `login_start` returns `{method, login_id, url}` with step
   `browser`. Clients open the URL, ask for the complete URL from the browser's
   Firefox Accounts success page, send it with `login_complete`, and poll
@@ -744,8 +750,9 @@ Gap flags (daemon-side abilities beyond the IPC surface):
   poll that `login_id` instead of starting a second flow. The daemon runs a
   direct Firefox Accounts OAuth flow with PKCE and `state`, no listener and a
   ten-minute deadline. The redirect URL, code, verifier and tokens are never
-  logged. Captcha, password, TOTP and unblock codes are handled by Mozilla's
-  page, never automated by Kumiho.
+  logged. Passwords, TOTP and unblock codes are handled by Mozilla's page;
+  the image CAPTCHA is answered by the user through `login_captcha` and the
+  engine never guesses an answer.
 - Signing in while an account is active adds/switches on completion; there is
   no sign-out-first requirement. Only another in-flight login is refused. The
   active account cannot change while the tunnel is up (`accounts_use` returns

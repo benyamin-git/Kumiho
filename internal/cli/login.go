@@ -208,6 +208,12 @@ func runPasswordSignIn(ctx context.Context, client *ipc.Client, startType, statu
 			}
 			ls = loginCall(ctx, client, ipc.TypeLogin2FA, api.Login2FAPayload{Code: line}, stderr, command)
 
+		case "captcha":
+			// A terminal cannot show the image; the daemon switches this
+			// same attempt to the browser flow.
+			fmt.Fprintln(stderr, "Mozilla asks for an image captcha; continuing in the browser.")
+			ls = loginCall(ctx, client, ipc.TypeLoginCaptcha, api.LoginCaptchaPayload{}, stderr, command)
+
 		case "email":
 			tty.SetPrompt("Email: ")
 			addr, err := tty.ReadLine()

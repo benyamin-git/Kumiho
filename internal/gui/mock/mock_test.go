@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -478,6 +479,47 @@ func TestLoginEmailMachine(t *testing.T) {
 	}
 }
 
+// TestLoginCaptchaMachine pins the fixture's CAPTCHA branch: the literal
+// password "captcha" asks for the image, the fixture answer finishes the flow,
+// a wrong answer asks again with a fresh image and a blank answer hands it to
+// the browser step.
+func TestLoginCaptchaMachine(t *testing.T) {
+	ctx := context.Background()
+	m := New()
+
+	st, err := m.LoginPassword(ctx, api.LoginPasswordPayload{Password: "captcha"})
+	if err != nil {
+		t.Fatalf("LoginPassword(captcha): %v", err)
+	}
+	if st.Step != "captcha" || !strings.HasPrefix(st.CaptchaImage, "data:image/") {
+		t.Fatalf("captcha step = %+v, want an inline image", st)
+	}
+
+	st, err = m.LoginCaptcha(ctx, api.LoginCaptchaPayload{Answer: "nope"})
+	if err != nil {
+		t.Fatalf("LoginCaptcha(wrong): %v", err)
+	}
+	if st.Step != "captcha" || !strings.HasPrefix(st.CaptchaImage, "data:image/") || st.Error == "" {
+		t.Fatalf("wrong-answer step = %+v, want the captcha step again with an error", st)
+	}
+
+	st, err = m.LoginCaptcha(ctx, api.LoginCaptchaPayload{Answer: "K7M2"})
+	if err != nil {
+		t.Fatalf("LoginCaptcha(answer): %v", err)
+	}
+	if st.Step != "done" {
+		t.Fatalf("answered step = %+v, want done", st)
+	}
+
+	st, err = m.LoginCaptcha(ctx, api.LoginCaptchaPayload{})
+	if err != nil {
+		t.Fatalf("LoginCaptcha(blank): %v", err)
+	}
+	if st.Step != "browser" || st.URL == "" || st.LoginID == "" {
+		t.Fatalf("fallback step = %+v, want the browser flow", st)
+	}
+}
+
 // TestFailNextAppliesToEveryCall checks the injection across the whole
 // daemon surface: exactly one call fails with the sentinel unchanged, the
 // next call succeeds.
@@ -502,6 +544,7 @@ func TestFailNextAppliesToEveryCall(t *testing.T) {
 		{"logs_clear", func(m *Mock) error { _, err := m.LogsClear(ctx); return err }},
 		{"login_email", func(m *Mock) error { _, err := m.LoginEmail(ctx, api.LoginEmailPayload{}); return err }},
 		{"login_password", func(m *Mock) error { _, err := m.LoginPassword(ctx, api.LoginPasswordPayload{}); return err }},
+		{"login_captcha", func(m *Mock) error { _, err := m.LoginCaptcha(ctx, api.LoginCaptchaPayload{}); return err }},
 		{"login_2fa", func(m *Mock) error { _, err := m.Login2FA(ctx, api.Login2FAPayload{}); return err }},
 		{"logout", func(m *Mock) error { _, err := m.Logout(ctx); return err }},
 	}

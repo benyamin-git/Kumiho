@@ -379,6 +379,13 @@ func (c *DaemonClient) LoginPassword(ctx context.Context, p api.LoginPasswordPay
 	return st, err
 }
 
+// LoginCaptcha implements Daemon.
+func (c *DaemonClient) LoginCaptcha(ctx context.Context, p api.LoginCaptchaPayload) (api.LoginState, error) {
+	var st api.LoginState
+	err := c.dec(ctx, ipc.TypeLoginCaptcha, p, &st)
+	return st, err
+}
+
 // Login2FA implements Daemon.
 func (c *DaemonClient) Login2FA(ctx context.Context, p api.Login2FAPayload) (api.LoginState, error) {
 	var st api.LoginState

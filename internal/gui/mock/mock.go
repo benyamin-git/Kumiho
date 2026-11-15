@@ -32,6 +32,11 @@ const eventsBuffer = 64
 // so both label styles exist deterministically.
 const pingRTTMS = 42.0
 
+// captchaImageData is the deterministic image the fixture returns on the
+// captcha step: an inline SVG reading "K7M2", the answer the fixture accepts.
+const captchaImageData = "data:image/svg+xml;base64," +
+	"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCAxODAgNjAiPjxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iNjAiIHJ4PSI4IiBmaWxsPSIjZWVmMWY1Ii8+PHBhdGggZD0iTTEyIDQ2IEwzMCAxNCBNMjIgMzAgTDQ0IDQ2IiBzdHJva2U9IiM4YTk0YTYiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIvPjx0ZXh0IHg9IjgwIiB5PSI0MCIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjgiIGxldHRlci1zcGFjaW5nPSI2IiBmaWxsPSIjMmIzMzQwIj5LN00yPC90ZXh0PjxwYXRoIGQ9Ik02IDIwIEgxNzQgTTYgMzQgSDE3NCBNNDAgNiBWNTQgTTE0MCA2IFY1NCIgc3Ryb2tlPSIjYzNjYWQ2IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4="
+
 // Ensure the mock stays in lockstep with the controller's Daemon interface.
 var _ gui.Daemon = (*Mock)(nil)
 
@@ -587,10 +592,36 @@ func (m *Mock) LoginEmail(ctx context.Context, p api.LoginEmailPayload) (api.Log
 	return api.LoginState{Step: "password", Email: email, Method: "email"}, nil
 }
 
-// LoginPassword implements gui.Daemon: the flow signs in immediately.
-func (m *Mock) LoginPassword(ctx context.Context, _ api.LoginPasswordPayload) (api.LoginState, error) {
+// LoginPassword implements gui.Daemon: the flow signs in immediately, except
+// for the literal password "captcha", which asks for the image CAPTCHA so the
+// harness can drive that step deterministically (any answer finishes it).
+func (m *Mock) LoginPassword(ctx context.Context, p api.LoginPasswordPayload) (api.LoginState, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.LoginState{}, err
+	}
+	if p.Password == "captcha" {
+		return api.LoginState{Step: "captcha", CaptchaImage: captchaImageData}, nil
+	}
+	return api.LoginState{Step: "done"}, nil
+}
+
+// LoginCaptcha implements gui.Daemon: the fixture answer K7M2 finishes the
+// flow, a wrong answer asks again with a fresh image, and a blank answer falls
+// back to the browser flow, exactly like the engine.
+func (m *Mock) LoginCaptcha(ctx context.Context, p api.LoginCaptchaPayload) (api.LoginState, error) {
+	if err := m.begin(ctx); err != nil {
+		return api.LoginState{}, err
+	}
+	answer := strings.TrimSpace(p.Answer)
+	if answer == "" {
+		return m.startLogin(api.LoginStartPayload{Method: "browser"}), nil
+	}
+	if !strings.EqualFold(answer, "K7M2") {
+		return api.LoginState{
+			Step:         "captcha",
+			CaptchaImage: captchaImageData,
+			Error:        "that captcha answer was not accepted; try again",
+		}, nil
 	}
 	return api.LoginState{Step: "done"}, nil
 }

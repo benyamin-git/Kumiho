@@ -115,6 +115,7 @@ function loginMark(login) {
     login.verification_reason || "",
     login.url || "",
     login.id || "",
+    login.captcha_image || "",
     login.error || "",
     login.error_code || "",
   ].join("\u0000");
@@ -230,6 +231,19 @@ function build(host) {
   code.input.dir = "ltr";
   password.wrap.hidden = true;
   code.wrap.hidden = true;
+  // The inline image CAPTCHA Mozilla's edge asks for on a password attempt;
+  // "Use the browser" asks the engine for the browser flow instead.
+  const captcha = fieldBox("acct-add-captcha", t("account.field.captcha"), "text", t("account.captcha.placeholder"));
+  captcha.input.dir = "ltr";
+  captcha.input.autocapitalize = "off";
+  const captchaImage = el("img", "captcha-image");
+  captchaImage.alt = t("account.captcha.alt");
+  captchaImage.hidden = true;
+  captcha.wrap.insertBefore(captchaImage, captcha.input);
+  const captchaBrowser = el("button", "button button--text captcha-browser", t("account.captcha.browser"));
+  captchaBrowser.type = "button";
+  captcha.wrap.append(captchaBrowser);
+  captcha.wrap.hidden = true;
   const formStatus = el("p", "acct__form-status");
   formStatus.setAttribute("aria-live", "polite");
   formStatus.hidden = true;
@@ -239,7 +253,7 @@ function build(host) {
   const formSubmit = el("button", "button button--filled acct__form-submit", t("common.continue"));
   formSubmit.type = "button";
   formActions.append(formCancel, formSubmit);
-  addform.append(addformTitle, addformBody, email.wrap, password.wrap, code.wrap, formStatus, formDetails, formActions);
+  addform.append(addformTitle, addformBody, email.wrap, password.wrap, code.wrap, captcha.wrap, formStatus, formDetails, formActions);
   addform.setAttribute("aria-labelledby", addformTitle.id);
 
   // The sign-out confirmation (the existing dialog).
@@ -357,6 +371,9 @@ function build(host) {
     email: email,
     password: password,
     code: code,
+    captcha: captcha,
+    captchaImage: captchaImage,
+    captchaBrowser: captchaBrowser,
     formStatus: formStatus,
     formDetails: formDetails,
     formCancel: formCancel,
@@ -798,6 +815,7 @@ export default {
         });
       }
       if (view.addStep === "2fa") return twoFactorBody(login);
+      if (view.addStep === "captcha") return t("account.form.captcha");
       return t("account.form.start");
     }
 
@@ -812,9 +830,11 @@ export default {
       const showEmail = view.addStep === "start";
       const showPassword = view.addStep === "password";
       const showCode = view.addStep === "2fa";
+      const showCaptcha = view.addStep === "captcha";
       if (ui.email.wrap.hidden !== !showEmail) ui.email.wrap.hidden = !showEmail;
       if (ui.password.wrap.hidden !== !showPassword) ui.password.wrap.hidden = !showPassword;
       if (ui.code.wrap.hidden !== !showCode) ui.code.wrap.hidden = !showCode;
+      if (ui.captcha.wrap.hidden !== !showCaptcha) ui.captcha.wrap.hidden = !showCaptcha;
 
       const body = addformBody(login);
       if (ui.addformBody.textContent !== body) ui.addformBody.textContent = body;
@@ -837,8 +857,16 @@ export default {
       ui.formDetails.textContent = errorDetail;
       ui.formDetails.hidden = !errorDetail;
       const invalid = !!errorSummaryText;
-      const active = showEmail ? ui.email.input : showPassword ? ui.password.input : ui.code.input;
-      for (const input of [ui.email.input, ui.password.input, ui.code.input]) {
+      const active = showEmail
+        ? ui.email.input
+        : showPassword
+          ? ui.password.input
+          : showCode
+            ? ui.code.input
+            : showCaptcha
+              ? ui.captcha.input
+              : null;
+      for (const input of [ui.email.input, ui.password.input, ui.code.input, ui.captcha.input]) {
         if (input === active && invalid) input.setAttribute("aria-invalid", "true");
         else input.removeAttribute("aria-invalid");
         const disabled = view.starting || input !== active;
@@ -847,10 +875,26 @@ export default {
       if (ui.formSubmit.disabled !== view.starting) ui.formSubmit.disabled = view.starting;
       if (ui.formCancel.disabled !== view.starting) ui.formCancel.disabled = view.starting;
 
+      if (showCaptcha) {
+        const image = (login && login.captcha_image) || "";
+        if (ui.captchaImage.getAttribute("src") !== (image || null)) {
+          if (image) ui.captchaImage.src = image;
+          else ui.captchaImage.removeAttribute("src");
+        }
+        ui.captchaImage.hidden = !image;
+        ui.captchaBrowser.disabled = view.starting;
+      }
+
       const focusKey = view.addMethod + ":" + view.addStep;
       if (focusKey !== view.formFocusKey) {
         view.formFocusKey = focusKey;
-        const target = showEmail ? ui.email.input : showPassword ? ui.password.input : ui.code.input;
+        const target = showEmail
+          ? ui.email.input
+          : showPassword
+            ? ui.password.input
+            : showCode
+              ? ui.code.input
+              : ui.captcha.input;
         queueMicrotask(function () {
           if (!disposed && view.adding && view.addMethod === "password") target.focus();
         });
@@ -959,6 +1003,8 @@ export default {
       ui.email.input.value = "";
       ui.password.input.value = "";
       ui.code.input.value = "";
+      ui.captcha.input.value = "";
+      view.captchaMark = "";
       endStarting();
     }
 
@@ -1028,6 +1074,14 @@ export default {
         if (view.addStep !== "2fa") ui.code.input.value = "";
         view.addStep = "2fa";
         view.addEmail = (login && login.email) || view.addEmail;
+      } else if (step === "captcha") {
+        // A retry replaces the challenge; never keep the rejected answer.
+        const mark = ((login && login.captcha_image) || "") + "\u0000" + ((login && login.error) || "");
+        if (view.addStep !== "captcha" || view.captchaMark !== mark) ui.captcha.input.value = "";
+        view.captchaMark = mark;
+        view.addStep = "captcha";
+        view.addEmail = (login && login.email) || view.addEmail;
+        view.formError = "";
       } else if (step === "email") {
         view.addStep = "start";
         view.formError = (login && login.error) || "";
@@ -1110,6 +1164,16 @@ export default {
       } else if (view.addStep === "2fa") {
         action = "login_2fa";
         payload = { code: ui.code.input.value };
+      } else if (view.addStep === "captcha") {
+        // An empty login_captcha asks the engine for the browser flow, so a
+        // blank field must not submit.
+        const answer = ui.captcha.input.value.trim();
+        if (!answer) {
+          ui.captcha.input.focus();
+          return;
+        }
+        action = "login_captcha";
+        payload = { answer: answer };
       }
       if (!action) return;
       view.addError = "";
@@ -1124,6 +1188,25 @@ export default {
         view.formErrorSummary = t("error.generic");
         render();
         console.warn("kumiho: " + action + " refused: " + err);
+      });
+    }
+
+    /** The captcha page's escape hatch: login_captcha with an empty answer
+     * asks the engine for the browser flow instead of showing the image. */
+    function submitCaptchaBrowser() {
+      if (!view.adding || view.addMethod !== "password" || view.starting) return;
+      view.addError = "";
+      view.addErrorDetail = "";
+      view.formError = "";
+      view.formErrorSummary = "";
+      beginStarting();
+      ctx.send("login_captcha", { answer: "" }).then(function (err) {
+        if (!err) return;
+        endStarting();
+        view.formError = err;
+        view.formErrorSummary = t("error.generic");
+        render();
+        console.warn("kumiho: login_captcha (browser) refused: " + err);
       });
     }
 
@@ -1277,7 +1360,8 @@ export default {
       returnFocus(ui.add);
     });
     ui.formSubmit.addEventListener("click", submitPasswordStep);
-    for (const input of [ui.email.input, ui.password.input, ui.code.input]) {
+    ui.captchaBrowser.addEventListener("click", submitCaptchaBrowser);
+    for (const input of [ui.email.input, ui.password.input, ui.code.input, ui.captcha.input]) {
       input.addEventListener("keydown", function (event) {
         if (event.key !== "Enter") return;
         event.preventDefault();

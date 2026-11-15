@@ -24,6 +24,9 @@ interface SetupEngine {
     /** Supplies the emailed code; an empty code re-checks the email link. */
     suspend fun login2fa(code: String): LoginState
 
+    /** Answers the image CAPTCHA; an empty answer asks for the browser flow. */
+    suspend fun loginCaptcha(answer: String): LoginState
+
     /** Starts the active-account browser flow (`method == "browser"`). */
     suspend fun loginStart(method: String, email: String? = null): LoginState
 
@@ -54,6 +57,8 @@ class EngineSetupEngine(private val client: EngineClient) : SetupEngine {
     override suspend fun loginPassword(password: String): LoginState = client.loginPassword(password)
 
     override suspend fun login2fa(code: String): LoginState = client.login2fa(code)
+
+    override suspend fun loginCaptcha(answer: String): LoginState = client.loginCaptcha(answer)
 
     override suspend fun loginStart(method: String, email: String?): LoginState =
         client.loginStart(method, email)

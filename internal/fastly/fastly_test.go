@@ -744,27 +744,109 @@ func TestClientMetrics(t *testing.T) {
 }
 
 func TestUnsupportedTypes(t *testing.T) {
-	for _, ty := range []string{"captcha", "unknown"} {
-		t.Run(ty, func(t *testing.T) {
-			sc := scenario{
-				challenges: []map[string]any{{"ty": ty, "data": map[string]any{}}},
-				token:      "tok-unsupported",
-			}
-			f := newFixture(t, sc.handler(t))
-			s := f.newSolver(newJar(t))
-
-			err := s.Solve(context.Background(), challengedURL)
-			if !errors.Is(err, ErrUnsupported) {
-				t.Fatalf("error = %v, want ErrUnsupported", err)
-			}
-			if !strings.Contains(err.Error(), ty) {
-				t.Errorf("error = %q, want the challenge type %q", err, ty)
-			}
-			if got := len(f.requestsFor("POST", originHost, testPrefix+"/fst-post-back")); got != 0 {
-				t.Errorf("post-back requests = %d, want 0", got)
-			}
-		})
+	const ty = "unknown"
+	sc := scenario{
+		challenges: []map[string]any{{"ty": ty, "data": map[string]any{}}},
+		token:      "tok-unsupported",
 	}
+	f := newFixture(t, sc.handler(t))
+	s := f.newSolver(newJar(t))
+
+	err := s.Solve(context.Background(), challengedURL)
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("error = %v, want ErrUnsupported", err)
+	}
+	if !strings.Contains(err.Error(), ty) {
+		t.Errorf("error = %q, want the challenge type %q", err, ty)
+	}
+	if got := len(f.requestsFor("POST", originHost, testPrefix+"/fst-post-back")); got != 0 {
+		t.Errorf("post-back requests = %d, want 0", got)
+	}
+}
+
+func TestCaptcha(t *testing.T) {
+	const image = "data:image/png;base64,AAAA"
+	sc := scenario{
+		challenges: []map[string]any{{"ty": "captcha", "data": map[string]any{"image_b64": image}}},
+		token:      "tok-captcha",
+		pending:    1,
+	}
+	f := newFixture(t, sc.handler(t))
+	shared := newJar(t)
+	s := f.newSolver(shared)
+
+	var shown []string
+	answers := []string{" wrong ", "right"}
+	ctx := WithCaptchaSolver(context.Background(), func(_ context.Context, imageDataURL string) (string, error) {
+		shown = append(shown, imageDataURL)
+		return answers[len(shown)-1], nil
+	})
+	if err := s.Solve(ctx, challengedURL); err != nil {
+		t.Fatalf("Solve: %v", err)
+	}
+
+	if len(shown) != len(answers) {
+		t.Fatalf("captchas shown = %d, want %d", len(shown), len(answers))
+	}
+	for i, got := range shown {
+		if got != image {
+			t.Errorf("captcha %d image = %q, want %q", i, got, image)
+		}
+	}
+	posts := f.requestsFor("POST", originHost, testPrefix+"/fst-post-back")
+	if len(posts) != 2 {
+		t.Fatalf("post-back requests = %d, want 2", len(posts))
+	}
+	for i, want := range []string{"wrong", "right"} {
+		pb := decodePostBack(t, posts[i])
+		if len(pb.Data) != 1 {
+			t.Fatalf("post-back %d answers = %d, want 1", i, len(pb.Data))
+		}
+		if got := pb.Data[0]["ty"]; got != "captcha" {
+			t.Errorf("post-back %d type = %#v, want captcha", i, got)
+		}
+		if got := pb.Data[0]["answer"]; got != want {
+			t.Errorf("post-back %d answer = %#v, want %q", i, got, want)
+		}
+	}
+	requireCookie(t, shared, originBase+"/")
+}
+
+func TestCaptchaWithoutSolver(t *testing.T) {
+	sc := scenario{
+		challenges: []map[string]any{{"ty": "captcha", "data": map[string]any{
+			"image_b64": "data:image/png;base64,AAAA",
+		}}},
+		token: "tok-captcha",
+	}
+	f := newFixture(t, sc.handler(t))
+	s := f.newSolver(newJar(t))
+
+	err := s.Solve(context.Background(), challengedURL)
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("error = %v, want ErrUnsupported", err)
+	}
+	if !strings.Contains(err.Error(), "captcha") {
+		t.Errorf("error = %q, want the challenge type", err)
+	}
+	if got := len(f.requestsFor("POST", originHost, testPrefix+"/fst-post-back")); got != 0 {
+		t.Errorf("post-back requests = %d, want 0", got)
+	}
+}
+
+func TestCaptchaRejectsBadImageData(t *testing.T) {
+	sc := scenario{
+		challenges: []map[string]any{{"ty": "captcha", "data": map[string]any{"image_b64": "not-an-image"}}},
+		token:      "tok-captcha",
+	}
+	f := newFixture(t, sc.handler(t))
+	s := f.newSolver(newJar(t))
+
+	ctx := WithCaptchaSolver(context.Background(), func(context.Context, string) (string, error) {
+		t.Error("the solver must not be called with malformed image data")
+		return "", nil
+	})
+	requireStatusError(t, s.Solve(ctx, challengedURL), "unrecognized captcha challenge data")
 }
 
 func TestDisabled(t *testing.T) {

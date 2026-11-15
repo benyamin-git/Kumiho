@@ -461,6 +461,10 @@ func (f *fakeDaemon) LoginPassword(_ context.Context, p api.LoginPasswordPayload
 	return f.login("login_password", p.Password)
 }
 
+func (f *fakeDaemon) LoginCaptcha(_ context.Context, p api.LoginCaptchaPayload) (api.LoginState, error) {
+	return f.login("login_captcha", p.Answer)
+}
+
 func (f *fakeDaemon) Login2FA(_ context.Context, p api.Login2FAPayload) (api.LoginState, error) {
 	return f.login("login_2fa", p.Code)
 }
@@ -1025,6 +1029,47 @@ func TestDispatchLoginPasswordBrowserFallback(t *testing.T) {
 	if l == nil || l.Step != "browser" || l.Method != "browser" ||
 		l.URL != "https://example.test/login" || l.ID != "fallback-1" || l.Error != "" {
 		t.Fatalf("login = %+v, want the browser fallback flow", l)
+	}
+}
+
+// A password login challenged by Mozilla's edge surfaces the inline image
+// CAPTCHA; the answer's reply advances the flow and drops the image.
+func TestDispatchLoginCaptcha(t *testing.T) {
+	f := newFakeDaemon()
+	const image = "data:image/png;base64,AAAA"
+	f.set(func(d *fakeDaemon) {
+		d.loginReplies["login_email"] = api.LoginState{Step: "password", Email: "user@example.com"}
+		d.loginReplies["login_password"] = api.LoginState{
+			Step:         "captcha",
+			Email:        "user@example.com",
+			CaptchaImage: image,
+		}
+		d.loginReplies["login_captcha"] = api.LoginState{Step: "done", Email: "user@example.com"}
+	})
+	ctrl := NewController(f, Options{})
+
+	if err := ctrl.Dispatch(Action{Name: ActionLoginEmail, Payload: []byte(`{"email":"user@example.com"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_email) = %v", err)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionLoginPassword, Payload: []byte(`{"password":"hunter2"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_password) = %v", err)
+	}
+	if l := ctrl.Snapshot().Login; l == nil || l.Step != "captcha" || l.CaptchaImage != image {
+		t.Fatalf("login = %+v, want the captcha step with its image", l)
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionLoginCaptcha, Payload: []byte(`{"answer":"K7M2"}`)}); err != nil {
+		t.Fatalf("Dispatch(login_captcha) = %v", err)
+	}
+	st := ctrl.Snapshot()
+	if l := st.Login; l == nil || l.Step != "done" || l.CaptchaImage != "" || l.Error != "" {
+		t.Fatalf("login = %+v, want the finished flow without the image", l)
+	}
+	f.mu.Lock()
+	answers := append([]string(nil), f.loginCalls...)
+	f.mu.Unlock()
+	if len(answers) == 0 || answers[len(answers)-1] != "K7M2" {
+		t.Fatalf("login calls = %v, want the captcha answer forwarded", answers)
 	}
 }
 
@@ -2844,6 +2889,7 @@ func TestAccountActionNamesAreAccepted(t *testing.T) {
 		ActionLoginStatus,
 		ActionLoginCancel,
 		ActionLoginComplete,
+		ActionLoginCaptcha,
 	}
 	if len(actionNames) < len(want) {
 		t.Fatalf("actionNames has %d entries, want at least %d", len(actionNames), len(want))

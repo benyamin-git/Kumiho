@@ -376,6 +376,8 @@ class LanguageTvScreenshotsTest : TvTestBase() {
         onSubmitEmail = {},
         onSubmitPassword = {},
         onSubmitCode = {},
+        onSubmitCaptcha = {},
+        onCaptchaBrowser = {},
         onRecheckEmailLink = {},
         onRequestVpn = {},
         onRequestNotifications = {},

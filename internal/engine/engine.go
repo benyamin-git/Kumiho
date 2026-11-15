@@ -75,6 +75,10 @@ func parseFirefoxVersion(ua string) string {
 	return m[1]
 }
 
+// passwordLoginTimeout bounds one password sign-in, including an image
+// CAPTCHA answered by a person.
+const passwordLoginTimeout = 10 * time.Minute
+
 type pendingLogin struct {
 	email              string
 	sessionToken       string
@@ -84,6 +88,27 @@ type pendingLogin struct {
 	method             string
 	step               string
 	targetID           string
+	// run owns the in-flight FxA call. A challenged login blocks inside the
+	// Fastly solver until a client submits the captcha answer.
+	run          *passwordRun
+	captcha      *captchaChallenge
+	captchaImage string
+	captchaTried bool
+}
+
+// passwordRun is one in-flight password sign-in. result carries the state the
+// goroutine reached; captcha carries one image the solver needs a person to
+// read. cancel stops both waits.
+type passwordRun struct {
+	result  chan api.LoginState
+	captcha chan *captchaChallenge
+	cancel  context.CancelFunc
+}
+
+// captchaChallenge is one image waiting for a person's answer.
+type captchaChallenge struct {
+	image  string
+	answer chan string
 }
 
 var (
@@ -969,9 +994,7 @@ func (c *Controller) LoginStart(method, email, accountID string) api.LoginState 
 	}
 	// Clearing the old password before replacing the pending state means an
 	// in-flight unblock/TOTP retry can never reuse a previous password.
-	if c.pending != nil {
-		c.pending.authPW = ""
-	}
+	c.cancelPendingLocked()
 	c.pending = &pendingLogin{
 		email:    email,
 		method:   "email",
@@ -995,36 +1018,190 @@ func loginMethod(method string) string {
 func invalidEmailRune(r rune) bool { return r < 0x20 || r == 0x7f || unicode.IsSpace(r) }
 
 // LoginPassword performs the FxA login and either completes it or moves to
-// the 2FA step.
+// the 2FA or CAPTCHA step. A challenged request is answered by the person in
+// the client; the daemon-owned run stays blocked inside the solver until
+// LoginCaptcha delivers their answer.
 func (c *Controller) LoginPassword(ctx context.Context, password string) api.LoginState {
 	c.mu.Lock()
 	pending := c.pending
 	gen := c.authGen
-	c.mu.Unlock()
 	if pending == nil || pending.email == "" {
+		c.mu.Unlock()
 		return api.LoginState{Step: "email", Method: "email", Error: "enter your email first"}
 	}
 	if password == "" {
-		return api.LoginState{Step: "password", Email: pending.email, Method: "email", Error: "password is required"}
+		email := pending.email
+		c.mu.Unlock()
+		return api.LoginState{Step: "password", Email: email, Method: "email", Error: "password is required"}
 	}
+	if pending.run != nil {
+		if pending.step != "captcha" {
+			email := pending.email
+			c.mu.Unlock()
+			return api.LoginState{Step: "password", Email: email, Method: "email", Error: "sign-in is already in progress"}
+		}
+		// A fresh password submit replaces the captcha attempt.
+		pending.run.cancel()
+		pending.run = nil
+		pending.captcha = nil
+		pending.captchaImage = ""
+		pending.captchaTried = false
+	}
+	// The run outlives the client call that starts it: its context drops the
+	// request's cancellation but keeps its values, and LoginCaptcha or
+	// LoginCancel (or the deadline) ends the wait.
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), passwordLoginTimeout)
+	run := &passwordRun{
+		result:  make(chan api.LoginState, 1),
+		captcha: make(chan *captchaChallenge),
+		cancel:  cancel,
+	}
+	pending.run = run
+	pending.step = "password"
+	pending.captcha = nil
+	pending.captchaImage = ""
+	pending.captchaTried = false
+	email := pending.email
+	c.mu.Unlock()
 
-	authPW := fxa.AuthPW(pending.email, password)
-	res, err := c.fxa.LoginWithAuthPW(ctx, pending.email, authPW)
+	go func() {
+		state := c.runPasswordLogin(runCtx, pending, run, gen, password)
+		cancel()
+		run.result <- state
+	}()
+	return c.awaitPasswordRun(ctx, pending, run, email)
+}
+
+// LoginCaptcha answers the image CAPTCHA a password sign-in is waiting on.
+// An empty answer asks for the browser flow instead, so a terminal client
+// that cannot show an image still has a way forward.
+func (c *Controller) LoginCaptcha(ctx context.Context, answer string) api.LoginState {
+	answer = strings.TrimSpace(answer)
+	c.mu.Lock()
+	pending := c.pending
+	if pending == nil || pending.email == "" || pending.run == nil ||
+		pending.step != "captcha" || pending.captcha == nil {
+		c.mu.Unlock()
+		return api.LoginState{Step: "email", Method: "email", Error: "sign-in was interrupted; start again"}
+	}
+	run, request, email := pending.run, pending.captcha, pending.email
+	if answer == "" {
+		run.cancel()
+		pending.run = nil
+		pending.captcha = nil
+		pending.captchaImage = ""
+		pending.captchaTried = false
+		c.mu.Unlock()
+		c.log.Logf(logging.Warn, "auth", "password sign-in for %s needs a captcha; switching to the browser", email)
+		state, _ := c.startBrowserFallback(pending)
+		return state
+	}
+	pending.captcha = nil
+	pending.captchaImage = ""
+	c.mu.Unlock()
+
+	request.answer <- answer
+	return c.awaitPasswordRun(ctx, pending, run, email)
+}
+
+// awaitPasswordRun waits for the run's final state or its next CAPTCHA. It
+// publishes a waiting CAPTCHA on the pending state so status polls can render
+// the same image.
+func (c *Controller) awaitPasswordRun(ctx context.Context, pending *pendingLogin, run *passwordRun, email string) api.LoginState {
+	for {
+		select {
+		case state := <-run.result:
+			c.mu.Lock()
+			if c.pending == pending && pending.run == run {
+				pending.run = nil
+				pending.captcha = nil
+				pending.captchaImage = ""
+			}
+			c.mu.Unlock()
+			return state
+		case request := <-run.captcha:
+			c.mu.Lock()
+			if c.pending != pending || pending.run != run {
+				c.mu.Unlock()
+				// The flow was replaced or canceled; let the solver unwind.
+				request.answer <- ""
+				continue
+			}
+			first := !pending.captchaTried
+			pending.step = "captcha"
+			pending.captcha = request
+			pending.captchaImage = request.image
+			pending.captchaTried = true
+			email = pending.email
+			c.mu.Unlock()
+			state := api.LoginState{Step: "captcha", Email: email, Method: "email", CaptchaImage: request.image}
+			if !first {
+				state.Error = "that captcha answer was not accepted; try again"
+			}
+			c.log.Logf(logging.Warn, "auth", "password sign-in for %s needs an image captcha", email)
+			c.notify()
+			return state
+		case <-ctx.Done():
+			c.mu.Lock()
+			if c.pending == pending && pending.run == run {
+				pending.run = nil
+				pending.captcha = nil
+				pending.captchaImage = ""
+			}
+			c.mu.Unlock()
+			run.cancel()
+			return api.LoginState{Step: "password", Email: email, Method: "email", Error: "sign-in timed out; try again"}
+		}
+	}
+}
+
+// runPasswordLogin is the daemon-owned FxA call. It runs off the request
+// goroutine so a CAPTCHA can pause it without blocking the control socket.
+func (c *Controller) runPasswordLogin(ctx context.Context, pending *pendingLogin, run *passwordRun, gen uint64, password string) api.LoginState {
+	ctx = fastly.WithCaptchaSolver(ctx, func(ctx context.Context, image string) (string, error) {
+		request := &captchaChallenge{image: image, answer: make(chan string, 1)}
+		select {
+		case run.captcha <- request:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		select {
+		case answer := <-request.answer:
+			if strings.TrimSpace(answer) == "" {
+				return "", context.Canceled
+			}
+			return answer, nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	})
+
+	email := pending.email
+	authPW := fxa.AuthPW(email, password)
+	res, err := c.fxa.LoginWithAuthPW(ctx, email, authPW)
 	if err != nil {
+		// A sign-out or a replaced flow cancels the request; report that
+		// fence instead of the transport error it produced.
+		c.mu.Lock()
+		changed := c.authGen != gen || c.pending != pending
+		c.mu.Unlock()
+		if changed {
+			return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
+		}
 		// A challenge is the one failure the browser can always clear. The
 		// password form is a fast path, not the only door: continue in the
 		// background-owned browser flow instead of dead-ending on Fastly.
 		if isChallengeError(err) {
 			state, started := c.startBrowserFallback(pending)
 			if started {
-				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; continuing in the browser", pending.email)
+				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; continuing in the browser", email)
 				return state
 			}
 			if state.Step == "done" || state.Step == "email" {
 				// The browser could not start; its refusal (account limit,
 				// active tunnel, bad email) is more useful than the generic
 				// challenge error.
-				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; browser fallback unavailable: %s", pending.email, state.Error)
+				c.log.Logf(logging.Warn, "auth", "password sign-in challenged for %s; browser fallback unavailable: %s", email, state.Error)
 				return state
 			}
 		}
@@ -1034,7 +1211,7 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 			c.mu.Lock()
 			if c.authGen != gen || c.pending != pending {
 				c.mu.Unlock()
-				return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
+				return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
 			}
 			pending.authPW = authPW
 			pending.verificationMethod = apiErr.VerificationMethod
@@ -1045,17 +1222,17 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 
 			state := api.LoginState{
 				Step:               "2fa",
-				Email:              pending.email,
+				Email:              email,
 				Method:             "unblock",
 				VerificationMethod: apiErr.VerificationMethod,
 				VerificationReason: apiErr.VerificationReason,
 			}
-			if sendErr := c.fxa.SendUnblockCode(ctx, pending.email); sendErr != nil {
-				c.log.Logf(logging.Warn, "auth", "could not send unblock code for %s: %v", pending.email, sendErr)
+			if sendErr := c.fxa.SendUnblockCode(ctx, email); sendErr != nil {
+				c.log.Logf(logging.Warn, "auth", "could not send unblock code for %s: %v", email, sendErr)
 				state.Error = "could not send the unblock code: " + friendlyLoginError(sendErr) +
 					"; enter a code if you already have one"
 			} else {
-				c.log.Logf(logging.Info, "auth", "unblock code sent to %s", pending.email)
+				c.log.Logf(logging.Info, "auth", "unblock code sent to %s", email)
 			}
 			return state
 		}
@@ -1064,8 +1241,8 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 			pending.authPW = ""
 		}
 		c.mu.Unlock()
-		c.log.Logf(logging.Warn, "auth", "login failed for %s: %v", pending.email, err)
-		return api.LoginState{Step: "password", Email: pending.email, Method: "email", Error: friendlyLoginError(err)}
+		c.log.Logf(logging.Warn, "auth", "login failed for %s: %v", email, err)
+		return api.LoginState{Step: "password", Email: email, Method: "email", Error: friendlyLoginError(err)}
 	}
 	if !res.Verified {
 		method := "2fa"
@@ -1075,7 +1252,7 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 		c.mu.Lock()
 		if c.authGen != gen || c.pending != pending {
 			c.mu.Unlock()
-			return api.LoginState{Step: "done", Email: pending.email, Error: errLoginSessionChanged.Error()}
+			return api.LoginState{Step: "done", Email: email, Error: errLoginSessionChanged.Error()}
 		}
 		pending.sessionToken = res.SessionToken
 		pending.verificationMethod = res.VerificationMethod
@@ -1083,16 +1260,16 @@ func (c *Controller) LoginPassword(ctx context.Context, password string) api.Log
 		pending.method = method
 		pending.step = "2fa"
 		c.mu.Unlock()
-		c.log.Logf(logging.Info, "auth", "verification required (%s) for %s", res.VerificationMethod, pending.email)
+		c.log.Logf(logging.Info, "auth", "verification required (%s) for %s", res.VerificationMethod, email)
 		return api.LoginState{
 			Step:               "2fa",
-			Email:              pending.email,
+			Email:              email,
 			Method:             method,
 			VerificationMethod: res.VerificationMethod,
 			VerificationReason: res.VerificationReason,
 		}
 	}
-	return c.completeLogin(ctx, pending.email, res.SessionToken, gen)
+	return c.completeLogin(ctx, email, res.SessionToken, gen)
 }
 
 // startBrowserFallback abandons a password attempt that hit the anti-bot edge
@@ -1112,8 +1289,11 @@ func (c *Controller) startBrowserFallback(pending *pendingLogin) (api.LoginState
 		return api.LoginState{}, false
 	}
 	email, targetID := pending.email, pending.targetID
-	pending.authPW = ""
-	c.pending = nil
+	if pending.run != nil {
+		pending.run.cancel()
+		pending.run = nil
+	}
+	c.cancelPendingLocked()
 	c.mu.Unlock()
 
 	state := c.LoginStart(MethodBrowser, email, targetID)
@@ -1247,12 +1427,12 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	if targetID != "" {
 		target := findAccountLocked(c.accounts, targetID)
 		if target == nil {
-			c.pending = nil
+			c.cancelPendingLocked()
 			c.mu.Unlock()
 			return api.LoginState{Step: "error", Email: email, Error: "account not found"}
 		}
 		if !strings.EqualFold(strings.TrimSpace(target.Email), strings.TrimSpace(email)) {
-			c.pending = nil
+			c.cancelPendingLocked()
 			c.mu.Unlock()
 			return api.LoginState{
 				Step:  "error",
@@ -1266,7 +1446,7 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	}
 	existing := emailAccount(c.accounts, email)
 	if c.tunnelActiveLocked() && (existing == nil || existing.ID != c.activeID) {
-		c.pending = nil
+		c.cancelPendingLocked()
 		c.mu.Unlock()
 		return api.LoginState{
 			Step:  "error",
@@ -1282,12 +1462,12 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	}
 	account, err := c.accounts.upsert(candidate)
 	if errors.Is(err, ErrAccountLimit) {
-		c.pending = nil
+		c.cancelPendingLocked()
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: email, Error: "account limit reached (5); remove one first"}
 	}
 	if err != nil {
-		c.pending = nil
+		c.cancelPendingLocked()
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: email, Error: "signed in, but saving the account failed: " + err.Error()}
 	}
@@ -1312,7 +1492,7 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting the account failed: " + err.Error()}
 	}
 	c.setActiveLocked(account)
-	c.pending = nil
+	c.cancelPendingLocked()
 	activeEmail := account.Email
 	c.mu.Unlock()
 
@@ -1418,7 +1598,7 @@ func (c *Controller) RemoveAccount(id string) error {
 		c.passPrepared = false
 	}
 	if c.pending != nil && c.pending.targetID == a.ID {
-		c.pending = nil
+		c.cancelPendingLocked()
 	}
 	err := c.saveAccountsLocked(true)
 	c.mu.Unlock()
@@ -1512,7 +1692,29 @@ func (c *Controller) pendingStateLocked() *api.LoginState {
 		Method:             c.pending.method,
 		VerificationMethod: c.pending.verificationMethod,
 		VerificationReason: c.pending.verificationReason,
+		CaptchaImage:       c.pending.captchaImage,
 	}
+}
+
+// cancelPendingLocked stops the pending password flow, including any
+// in-flight FxA call, and forgets it. Callers hold c.mu.
+func (c *Controller) cancelPendingLocked() {
+	if c.pending == nil {
+		return
+	}
+	if c.pending.run != nil {
+		c.pending.run.cancel()
+		c.pending.run = nil
+	}
+	c.pending.authPW = ""
+	c.pending = nil
+}
+
+// cancelPending stops and forgets any pending password flow.
+func (c *Controller) cancelPending() {
+	c.mu.Lock()
+	c.cancelPendingLocked()
+	c.mu.Unlock()
 }
 
 // Logout best-effort revokes every stored FxA refresh token, then always
@@ -1592,7 +1794,7 @@ func (c *Controller) clearSessionIf(gen uint64, requireMatch bool, reason string
 	c.authGen++
 	clearedGen := c.authGen
 	c.tokens = nil
-	c.pending = nil
+	c.cancelPendingLocked()
 	c.email = ""
 	c.accounts = nil
 	c.activeID = ""
@@ -1693,7 +1895,7 @@ func (c *Controller) dropActiveIf(gen uint64, requireMatch bool, reason string) 
 	c.accounts.Accounts = kept
 	c.setActiveLocked(mostRecentlyUsedAccount(c.accounts))
 	if c.pending != nil && c.pending.targetID == active.ID {
-		c.pending = nil
+		c.cancelPendingLocked()
 	}
 	err := c.saveAccountsLocked(true)
 	c.mu.Unlock()

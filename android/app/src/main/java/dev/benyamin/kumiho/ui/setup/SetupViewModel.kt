@@ -695,6 +695,7 @@ class SetupViewModel(
                 signIn = it.signIn.copy(
                     email = trimmed,
                     phase = SignInPhase.EMAIL,
+                    captchaImage = null,
                     busy = true,
                     error = null,
                     message = null,
@@ -732,6 +733,33 @@ class SetupViewModel(
             it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null))
         }
         viewModelScope.launch { runLogin { engine.login2fa(trimmed) } }
+    }
+
+    /**
+     * Sends the image CAPTCHA answer once; the answer is never stored. The
+     * engine replies with the next captcha round (and its error) or the next
+     * sign-in step.
+     */
+    fun submitCaptcha(answer: String) {
+        val trimmed = answer.trim()
+        if (trimmed.isEmpty()) {
+            setSignInMessage(SetupMessage.CAPTCHA_REQUIRED)
+            return
+        }
+        if (!signInIdle()) return
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null))
+        }
+        viewModelScope.launch { runLogin { engine.loginCaptcha(trimmed) } }
+    }
+
+    /** The image is unreadable: ask the engine for the browser flow. */
+    fun submitCaptchaBrowser() {
+        if (!signInIdle()) return
+        mutableState.update {
+            it.copy(signIn = it.signIn.copy(busy = true, error = null, message = null))
+        }
+        viewModelScope.launch { runLogin { engine.loginCaptcha("") } }
     }
 
     /**
@@ -792,6 +820,22 @@ class SetupViewModel(
                         signIn = it.signIn.copy(
                             phase = SignInPhase.PASSWORD,
                             email = login.email ?: it.signIn.email,
+                            captchaImage = null,
+                            busy = false,
+                            error = login.error,
+                            message = null,
+                        ),
+                    )
+                }
+            }
+            STEP_CAPTCHA -> {
+                stopPolling()
+                mutableState.update {
+                    it.copy(
+                        signIn = it.signIn.copy(
+                            phase = SignInPhase.CAPTCHA,
+                            email = login.email ?: it.signIn.email,
+                            captchaImage = login.captchaImage,
                             busy = false,
                             error = login.error,
                             message = null,
@@ -816,6 +860,7 @@ class SetupViewModel(
                             verificationMethod = method,
                             verificationReason = login.verificationReason
                                 ?: it.signIn.verificationReason,
+                            captchaImage = null,
                             busy = false,
                             error = if (pending) null else login.error,
                             message = null,
@@ -838,7 +883,12 @@ class SetupViewModel(
                 applyBrowser(login)
                 mutableState.update {
                     it.copy(
-                        signIn = it.signIn.copy(busy = false, error = null, message = null),
+                        signIn = it.signIn.copy(
+                            busy = false,
+                            captchaImage = null,
+                            error = null,
+                            message = null,
+                        ),
                     )
                 }
                 if (login.error == null) {
@@ -892,6 +942,7 @@ class SetupViewModel(
                 browserFallback = false,
                 signIn = it.signIn.copy(
                     phase = SignInPhase.AUTHENTICATED,
+                    captchaImage = null,
                     accountEmail = email ?: it.signIn.accountEmail
                     ?: it.signIn.email.takeIf { value -> value.isNotBlank() },
                     busy = false,
@@ -1069,6 +1120,7 @@ private const val PENDING_LINK_SENTINEL = "not confirmed yet"
 
 private const val STEP_EMAIL = "email"
 private const val STEP_PASSWORD = "password"
+private const val STEP_CAPTCHA = "captcha"
 private const val STEP_2FA = "2fa"
 private const val STEP_BROWSER = "browser"
 private const val STEP_DONE = "done"

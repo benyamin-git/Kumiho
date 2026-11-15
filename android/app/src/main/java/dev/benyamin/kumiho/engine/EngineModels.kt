@@ -242,6 +242,8 @@ data class LoginState(
     val method: String? = null,
     val url: String? = null,
     val loginId: String? = null,
+    /** The `data:image/…` challenge image on the `captcha` step. */
+    val captchaImage: String? = null,
 )
 
 /** One latency measurement; a null [rttMs] means the probe failed. */

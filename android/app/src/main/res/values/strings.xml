@@ -115,6 +115,12 @@
     <string name="sign_in_code_label">Verification code</string>
     <string name="sign_in_code_note">Enter the code Firefox Accounts sent you, then tap Verify. The field clears after each attempt.</string>
     <string name="sign_in_code_submit">Verify</string>
+    <string name="sign_in_captcha_title">Confirm you are human</string>
+    <string name="sign_in_captcha_note">Mozilla asked for this check before it accepts the password. Type the characters in the image, then tap Verify. A wrong answer shows a new image.</string>
+    <string name="sign_in_captcha_label">Characters in the image</string>
+    <string name="sign_in_captcha_submit">Verify</string>
+    <string name="sign_in_captcha_browser">Use the browser instead</string>
+    <string name="sign_in_captcha_image">Sign-in challenge image</string>
     <string name="sign_in_reason">Firefox Accounts asked for this verification: %1$s</string>
     <string name="sign_in_link_title">Check your email</string>
     <string name="sign_in_link_text">Firefox Accounts sent a confirmation link to %1$s. Open it, then come back here.</string>
@@ -128,6 +134,7 @@
     <string name="sign_in_email_required">Enter the email address of your Firefox Account.</string>
     <string name="sign_in_password_required">Enter your Firefox Account password.</string>
     <string name="sign_in_code_required">Enter the code from the email.</string>
+    <string name="sign_in_captcha_required">Type the characters shown in the image.</string>
     <string name="sign_in_unexpected_step">The engine answered with an unexpected sign-in step. Start again from the email address.</string>
     <string name="sign_in_browser_start_failed">Browser sign-in did not start. Start again from the email address.</string>
 

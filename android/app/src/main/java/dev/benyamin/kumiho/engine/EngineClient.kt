@@ -273,6 +273,13 @@ class EngineClient(
     suspend fun login2fa(code: String): LoginState =
         EngineJson.loginState(command("login_2fa", JSONObject().put("code", code)))
 
+    /**
+     * Answers the image CAPTCHA a password sign-in is waiting on. An empty
+     * answer asks the engine for the browser flow instead.
+     */
+    suspend fun loginCaptcha(answer: String): LoginState =
+        EngineJson.loginState(command("login_captcha", JSONObject().put("answer", answer)))
+
     suspend fun logout() {
         command("logout")
     }

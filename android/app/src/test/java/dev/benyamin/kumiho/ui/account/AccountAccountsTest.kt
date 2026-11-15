@@ -631,6 +631,7 @@ class AccountAccountsTest {
         var statusResult: suspend (String) -> LoginState = { error("sign-in flow not found") }
         var loginCompleteResult: suspend (String, String?) -> Unit = { _, _ -> }
         var passwordResult: LoginState = LoginState("done", "user@example.com", null, null, null)
+        var captchaResult: LoginState = LoginState("done", "user@example.com", null, null, null)
         var logoutFailure: Exception? = null
 
         var accountCalls = 0
@@ -642,6 +643,7 @@ class AccountAccountsTest {
         val removeCalls = mutableListOf<String>()
         val renameCalls = mutableListOf<Pair<String, String>>()
         val loginCancelCalls = mutableListOf<String>()
+        val captchaCalls = mutableListOf<String>()
 
         override suspend fun account(): Account {
             accountCalls++
@@ -694,6 +696,11 @@ class AccountAccountsTest {
 
         override suspend fun login2fa(code: String): LoginState =
             LoginState("done", "user@example.com", null, null, null)
+
+        override suspend fun loginCaptcha(answer: String): LoginState {
+            captchaCalls += answer
+            return captchaResult
+        }
 
         override suspend fun loginCancel(id: String) {
             loginCancelCalls += id

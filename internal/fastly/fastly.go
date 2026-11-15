@@ -33,6 +33,10 @@ import (
 const (
 	// solveBudget is the total wall-clock budget for one Solve call.
 	solveBudget = 60 * time.Second
+	// captchaSolveBudget is the budget when a person must answer an image
+	// CAPTCHA: reading and typing the answer takes longer than the automatic
+	// challenges.
+	captchaSolveBudget = 10 * time.Minute
 	// maxPostBackRounds caps how many times answers may be posted back.
 	maxPostBackRounds = 3
 	// maxBodyBytes bounds every response read so a hostile page cannot
@@ -59,6 +63,27 @@ var (
 	// a browser (captcha or an unknown type). It is wrapped with the type.
 	ErrUnsupported = errors.New("fastly: unsupported challenge type")
 )
+
+// CaptchaSolver shows an image CAPTCHA (a data URL) to a person and returns
+// their answer. The engine supplies one while a sign-in is waiting: the
+// callback blocks until a client submits the answer.
+type CaptchaSolver func(ctx context.Context, imageDataURL string) (string, error)
+
+type captchaSolverKey struct{}
+
+// WithCaptchaSolver attaches a person-facing CAPTCHA solver to ctx. Without
+// one, a captcha challenge fails with ErrUnsupported.
+func WithCaptchaSolver(ctx context.Context, solver CaptchaSolver) context.Context {
+	if solver == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, captchaSolverKey{}, solver)
+}
+
+func captchaSolverFrom(ctx context.Context) CaptchaSolver {
+	solver, _ := ctx.Value(captchaSolverKey{}).(CaptchaSolver)
+	return solver
+}
 
 var (
 	challengePrefixRE = regexp.MustCompile(`/_fs-ch-[A-Za-z0-9]+`)
@@ -127,7 +152,11 @@ func (s *Solver) Solve(ctx context.Context, challengedURL string) error {
 		return fmt.Errorf("fastly: challenged URL %q must be an absolute http or https URL with a host", challengedURL)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, solveBudget)
+	budget := solveBudget
+	if captchaSolverFrom(ctx) != nil {
+		budget = captchaSolveBudget
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	start := s.now()
 
@@ -144,7 +173,7 @@ func (s *Solver) Solve(ctx context.Context, challengedURL string) error {
 
 	for _, candidate := range candidates {
 		s.warnf("solving Fastly challenge on %s", candidate)
-		err := s.solveOnHost(ctx, candidate, start, cookieTargets)
+		err := s.solveOnHost(ctx, candidate, start, budget, cookieTargets)
 		if errors.Is(err, errNoChallengePage) {
 			s.warnf("%s served no challenge page", candidate)
 			continue
@@ -156,7 +185,7 @@ func (s *Solver) Solve(ctx context.Context, challengedURL string) error {
 
 // solveOnHost runs the challenge flow against one origin with an isolated
 // cookie jar.
-func (s *Solver) solveOnHost(ctx context.Context, candidate string, start time.Time, cookieTargets []string) error {
+func (s *Solver) solveOnHost(ctx context.Context, candidate string, start time.Time, budget time.Duration, cookieTargets []string) error {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return fmt.Errorf("fastly: create challenge cookie jar: %w", err)
@@ -191,7 +220,7 @@ func (s *Solver) solveOnHost(ctx context.Context, candidate string, start time.T
 
 	postBackURL := prefixURL + "/fst-post-back"
 	for round := 0; round < maxPostBackRounds; round++ {
-		if err := s.checkBudget(start); err != nil {
+		if err := s.checkBudget(start, budget); err != nil {
 			return err
 		}
 		s.warnf("challenge round %d/%d on %s", round+1, maxPostBackRounds, candidate)
@@ -350,8 +379,26 @@ func (s *Solver) answerChallenge(ctx context.Context, client *http.Client, prefi
 		return map[string]any{"ty": "pat", "auth": auth}, nil
 	case "clientmetrics":
 		return clientMetricsAnswer(), nil
+	case "captcha":
+		solver := captchaSolverFrom(ctx)
+		if solver == nil {
+			return nil, fmt.Errorf("%w %q (no captcha solver)", ErrUnsupported, ty)
+		}
+		image, _ := data["image_b64"].(string)
+		if !strings.HasPrefix(image, "data:image/") {
+			return nil, fmt.Errorf("fastly: unrecognized captcha challenge data")
+		}
+		answer, err := solver(ctx, image)
+		if err != nil {
+			return nil, fmt.Errorf("fastly: captcha: %w", err)
+		}
+		answer = strings.TrimSpace(answer)
+		if answer == "" {
+			return nil, fmt.Errorf("fastly: empty captcha answer")
+		}
+		return map[string]any{"ty": "captcha", "answer": answer}, nil
 	default:
-		return nil, fmt.Errorf("%w %q (captcha cannot be solved automatically)", ErrUnsupported, ty)
+		return nil, fmt.Errorf("%w %q", ErrUnsupported, ty)
 	}
 }
 
@@ -541,11 +588,11 @@ func (s *Solver) warnf(format string, args ...any) {
 	}
 }
 
-// checkBudget enforces the 60 s budget with the injectable clock, independently
+// checkBudget enforces the solve budget with the injectable clock, independently
 // of the context deadline.
-func (s *Solver) checkBudget(start time.Time) error {
-	if s.now().Sub(start) >= solveBudget {
-		return fmt.Errorf("fastly: challenge exceeded its %s budget: %w", solveBudget, context.DeadlineExceeded)
+func (s *Solver) checkBudget(start time.Time, budget time.Duration) error {
+	if s.now().Sub(start) >= budget {
+		return fmt.Errorf("fastly: challenge exceeded its %s budget: %w", budget, context.DeadlineExceeded)
 	}
 	return nil
 }

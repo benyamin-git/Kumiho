@@ -153,7 +153,10 @@ disabled **Continue** so it is always visible.
    success page is then the value to paste.
    The flow expires after ten minutes. The password choice stays native:
    email, password, then a verification code if Firefox Accounts asks for one.
-   For an email-link 2FA, the app waits and re-checks every three seconds while
+   If Mozilla asks for an image captcha instead, the challenge image appears
+   inline with an answer field and **Verify**; a wrong answer shows a new
+   image, and **Use the browser instead** switches the same attempt to the
+   browser flow. For an email-link 2FA, the app waits and re-checks every three seconds while
    the step is open; **Re-check** polls immediately. Errors appear inline and
    the form stays usable.
 3. **Permissions.** **Allow VPN** opens Android's VPN consent dialog;
@@ -768,9 +771,9 @@ the shortcuts are the only writes, and they open the system page for you.
 - **Android Private DNS** is diagnosed, not changed. Diagnostics reports the
   mode and the VPN link's DNS; Kumiho does not silently switch resolvers or
   fall back to plaintext DNS. See the troubleshooting section.
-- **Browser sign-in is available** for interactive captcha, TOTP and unblock
-  codes. The native password flow still cannot solve a captcha; it says so and
-  leaves the choice available.
+- **Browser sign-in is available** for interactive TOTP and unblock pages.
+  The native password flow shows Mozilla's image captcha inline and submits
+  the answer; an unreadable image can switch to the browser flow.
 
 ## Troubleshooting
 
@@ -879,15 +882,16 @@ tunneling and route exclusions.
 ### The sign-in fails with a captcha
 
 Firefox Accounts sometimes presents an interactive captcha. The native
-password flow solves the Fastly proof-of-work/PAT/clientmetrics challenges but
-cannot solve a captcha. When Mozilla challenges the password API, Kumiho
-continues the same sign-in in the full-screen **Mozilla account** page
-automatically; that page can complete the captcha and the app intercepts the
+password flow solves the Fastly proof-of-work/PAT/clientmetrics challenges
+itself and shows an image captcha inline when Mozilla insists on a human: type
+the characters, then tap **Verify**. A wrong answer returns a new image in the
+same attempt. If the image cannot be shown or read, tap **Use the browser
+instead**; Kumiho continues the same sign-in in the full-screen **Mozilla
+account** page, which can complete the challenge, and the app intercepts the
 HTTPS success redirect when it finishes. If the in-app page cannot be created,
 Kumiho opens the URL in a Custom Tab and reveals the **Redirect URL** field;
 copy the complete URL from the Firefox Accounts success page and paste it
-there. The browser-first **Continue in browser** button remains the primary
-path when you expect a captcha.
+there. The browser-first **Continue in browser** button remains available.
 
 ### Uninstalling and removing state
 
@@ -942,7 +946,7 @@ sign-off has happened.
 | Desktop / CLI ability | Android equivalent |
 |---|---|
 | Setup wizard | Four-step setup: consent, sign-in, permissions, Always-on |
-| FxA browser sign-in (captcha/TOTP/unblock) and password fallback | Full-screen in-app **Mozilla account** WebView with redirect interception, plus paste and native Compose password/2FA over the same engine |
+| FxA browser sign-in (captcha, TOTP, unblock) and password fallback | Full-screen in-app **Mozilla account** WebView with redirect interception, plus paste and native Compose password/2FA with an inline image captcha and a same-attempt browser fallback over the same engine |
 | Multiple accounts and labels | Settings → Account list/add/rename/remove/re-auth; rotation stays in Settings → Connection |
 | Logout | Settings → Account confirmation, `logout`, clears every account; the signed-out group offers browser and password sign-in |
 | Connect/disconnect, saved/REC selection | Dashboard power control and connect options |

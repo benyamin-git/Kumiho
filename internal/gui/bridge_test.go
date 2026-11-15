@@ -57,6 +57,8 @@ var frozenActions = []string{
 	"login_status",
 	"login_cancel",
 	"login_complete",
+	// Password sign-in image CAPTCHA.
+	"login_captcha",
 	// v0.11.0 blocked-region first run.
 	"region_check",
 	"prepare",
@@ -254,12 +256,12 @@ func TestDecodeActionRejects(t *testing.T) {
 }
 
 // TestFrozenActionVocabulary pins the list to the plan's 23 names, the three
-// controller-ruled additions, the twelve v0.6.0 account/sign-in actions, and
-// the three v0.9.0 region actions: same members, same count, and every one
-// decodes.
+// controller-ruled additions, the twelve v0.6.0 account/sign-in actions, the
+// three v0.9.0 region actions and the image-CAPTCHA reply: same members, same
+// count, and every one decodes.
 func TestFrozenActionVocabulary(t *testing.T) {
-	if len(frozenActions) != 43 {
-		t.Fatalf("frozenActions has %d entries, want 43", len(frozenActions))
+	if len(frozenActions) != 44 {
+		t.Fatalf("frozenActions has %d entries, want 44", len(frozenActions))
 	}
 	if len(actionNames) != len(frozenActions) {
 		t.Fatalf("actionNames has %d entries, want %d", len(actionNames), len(frozenActions))

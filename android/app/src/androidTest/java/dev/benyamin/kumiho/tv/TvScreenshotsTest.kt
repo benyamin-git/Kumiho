@@ -226,6 +226,8 @@ class TvScreenshotsTest : TvTestBase() {
         onSubmitEmail = {},
         onSubmitPassword = {},
         onSubmitCode = {},
+        onSubmitCaptcha = {},
+        onCaptchaBrowser = {},
         onRecheckEmailLink = {},
         onRequestVpn = {},
         onRequestNotifications = {},

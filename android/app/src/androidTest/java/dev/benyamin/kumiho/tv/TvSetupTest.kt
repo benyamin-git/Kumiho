@@ -73,6 +73,8 @@ class TvSetupTest {
                 onSubmitEmail = {},
                 onSubmitPassword = {},
                 onSubmitCode = {},
+                onSubmitCaptcha = {},
+                onCaptchaBrowser = {},
                 onRecheckEmailLink = {},
                 onRequestVpn = { onAction("vpn") },
                 onRequestNotifications = {},
