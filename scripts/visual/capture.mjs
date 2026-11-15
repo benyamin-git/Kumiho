@@ -314,7 +314,28 @@ const STATES = [
     waitAfter: "#onb-password",
   },
   {
-    // The 2FA page (the mock's 2fa@… rule).
+    // The inline image CAPTCHA a challenged password sign-in falls back to.
+    // The mock answers the literal password "captcha" with a deterministic
+    // image and accepts the answer K7M2 (see internal/gui/mock).
+    name: "login-captcha",
+    screen: "onboarding",
+    hint: "login",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_password", payload: { password: "captcha" } },
+    waitAfter: "#onb-captcha",
+  },
+  {
+    name: "login-captcha",
+    screen: "onboarding",
+    hint: "login",
+    theme: "light",
+    scenario: "signed-out",
+    prefs: { onboarded: false },
+    action: { name: "login_password", payload: { password: "captcha" } },
+    waitAfter: "#onb-captcha",
+  },
+  {
     name: "login-2fa",
     screen: "onboarding",
     hint: "login",
