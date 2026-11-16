@@ -334,7 +334,7 @@ Order and controls (the row tooltips are tabulated after the list):
     Locations.
 20. `Control-plane relay` — HTTPS-origin text input + `Apply`; applies
     immediately; empty means no relay.
-21. `Relay token` — write-only row; shows `set`/`not set`, `Set` opens a
+21. `Relay token` — optional write-only row; shows `set`/`not set`, `Set` opens a
     masked field and `Clear` deletes it; never reveals the value.
 22. `Test relay` — action button; runs one probe and reports the result
     without writing a setting.
@@ -364,7 +364,7 @@ when it applies):
 | `Keepalive profile` | `Keepalive ping timeout profile; next connect` |
 | `Allow locked locations` | `Show servers the Firefox version filter marks locked; applies immediately` |
 | `Control-plane relay` | `HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page; applies immediately` |
-| `Relay token` | `Shared secret for the control-plane relay; write-only, never shown; applies immediately` |
+| `Relay token` | `Optional shared secret for the control-plane relay; write-only, never shown; applies immediately` |
 | `Test relay` | `Send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page` |
 
 Details of the daemon rows:

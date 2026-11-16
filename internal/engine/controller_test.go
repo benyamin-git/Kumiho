@@ -1024,6 +1024,37 @@ func TestUseBypassDialerWrapsEveryControlPlaneClient(t *testing.T) {
 	}
 }
 
+// The FxA client must see the primary host's 451 so it can try Mozilla's
+// sibling before the relay. The other control-plane clients keep the ordinary
+// relay-first behavior.
+func TestUseBypassDialerFxaPassThrough(t *testing.T) {
+	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
+	ctrl.UseBypassDialer()
+
+	fxaTr, ok := ctrl.fxa.HTTP.Transport.(*relay.Transport)
+	if !ok {
+		t.Fatalf("fxa transport = %T, want *relay.Transport", ctrl.fxa.HTTP.Transport)
+	}
+	if !fxaTr.PassesThrough("api.accounts.firefox.com") {
+		t.Fatal("the FxA transport does not pass the primary host through")
+	}
+	if fxaTr.PassesThrough("oauth.accounts.firefox.com") {
+		t.Fatal("the FxA transport must relay the sibling host when it is also blocked")
+	}
+	for name, client := range map[string]*http.Client{
+		"http":     ctrl.httpClient,
+		"guardian": ctrl.guardian.HTTP,
+	} {
+		tr, ok := client.Transport.(*relay.Transport)
+		if !ok {
+			t.Fatalf("%s transport = %T, want *relay.Transport", name, client.Transport)
+		}
+		if tr.PassesThrough("api.accounts.firefox.com") {
+			t.Fatalf("%s transport unexpectedly passes the FxA host through", name)
+		}
+	}
+}
+
 func TestTLSSplitModeInvalidFallsBackToOff(t *testing.T) {
 	ctrl, _ := newTestController(t, func(w http.ResponseWriter, r *http.Request) {})
 	bogus := "bogus"
@@ -1386,6 +1417,75 @@ func TestChallengeSolveSettingConsultedPerCall(t *testing.T) {
 	}
 	if enabled == disabled {
 		t.Fatalf("enabled and disabled messages must differ, both %q", enabled)
+	}
+}
+
+// A region block on the primary auth host is handled by the FxA client's
+// sibling fallback before the relay. The relay wrapper must pass the 451
+// through for the primary host; otherwise the FxA client never sees it.
+func TestLoginFallsBackOnPrimary451BeforeRelay(t *testing.T) {
+	ctrl, _ := newTestController(t, loginOKHandler(t))
+	orig := ctrl.fxa.HTTP.Transport
+	if orig == nil {
+		orig = http.DefaultTransport
+	}
+	var loginHits, authHits, fallbackHits, relayHits atomic.Int32
+	base := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch strings.ToLower(req.URL.Hostname()) {
+		case "api.accounts.firefox.com":
+			if req.URL.Path == "/v1/account/login" {
+				loginHits.Add(1)
+				return &http.Response{
+					StatusCode: http.StatusUnavailableForLegalReasons,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("")),
+				}, nil
+			}
+			// ExchangeSession posts the authorization request to the primary
+			// host after the login succeeds; echo its PKCE state.
+			authHits.Add(1)
+			var body struct {
+				State string `json:"state"`
+			}
+			_ = json.NewDecoder(req.Body).Decode(&body)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(fmt.Sprintf(`{"code":"code-1","state":%q}`, body.State))),
+			}, nil
+		case "oauth.accounts.firefox.com":
+			fallbackHits.Add(1)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(fmt.Sprintf(`{"sessionToken":%q,"verified":true}`, testSessionHex()))),
+			}, nil
+		default:
+			return orig.RoundTrip(req)
+		}
+	})
+	tr := relay.NewTransport(base, func() relay.Config {
+		return relay.Config{URL: "https://relay.example"}
+	}, nil)
+	tr.SetPassThrough("api.accounts.firefox.com")
+	tr.SetUseHook(func() { relayHits.Add(1) })
+	ctrl.fxa.HTTP = &http.Client{Transport: tr, Jar: ctrl.jar, Timeout: 5 * time.Second}
+	ctrl.fxa.BaseURL = "https://api.accounts.firefox.com/v1"
+	ctrl.fxa.FallbackBaseURL = "https://oauth.accounts.firefox.com/v1"
+
+	if st := ctrl.LoginEmail("user@example.com"); st.Step != "password" {
+		t.Fatalf("login step = %+v", st)
+	}
+	st := ctrl.LoginPassword(context.Background(), "pw")
+	if st.Step != "done" || st.Error != "" {
+		t.Fatalf("login = %+v, want a completed sign-in through the sibling", st)
+	}
+	if loginHits.Load() != 1 || authHits.Load() != 1 || fallbackHits.Load() != 1 {
+		t.Fatalf("login/auth/fallback hits = %d/%d/%d, want 1/1/1",
+			loginHits.Load(), authHits.Load(), fallbackHits.Load())
+	}
+	if relayHits.Load() != 0 {
+		t.Fatalf("relay hits = %d, want 0 (the sibling answered first)", relayHits.Load())
 	}
 }
 

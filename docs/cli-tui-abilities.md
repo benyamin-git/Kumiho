@@ -280,8 +280,10 @@ Global CLI mechanics (apply to every subcommand):
 
 ## `kumiho guide`
 - Standalone (no daemon): prints the Blocked region instructions to stdout:
-  Option 1 (another VPN: sign in, prepare, turn it off, connect), Option 2
-  (the relay, URL/token/Test), the browser sign-in boundary and the six hosts.
+  Option 1 (try Prepare now with password sign-in and the automatic fallbacks),
+  Option 2 (another VPN: sign in, prepare, turn it off, connect), Option 3
+  (the relay, optional token/Test), the browser sign-in boundary and the six
+  hosts.
 - Exit 0. Any argument is rejected with exit 2.
 
 ## `kumiho relay test`
@@ -481,9 +483,9 @@ line shown under the list for the focused row, verbatim):
 | `keepalive_profile` | keepalive profile | enum cycles standard→slow | standard/slow | keepalive ping timeout profile; next connect |
 | `allow_locked` | allow locked | bool toggle | on/off | show servers the Firefox version filter marks locked; next locations refresh |
 | `relay_url` | relay URL | inline text edit | HTTPS origin; empty = none | HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page |
-| `relay_token` | relay token | masked inline edit, empty cancels | any non-empty token; `d` deletes it | write-only secret used only after HTTP 451; does not proxy the browser sign-in page |
+| `relay_token` | relay token | masked inline edit, empty cancels | any non-empty token; `d` deletes it | optional write-only secret used only after HTTP 451; does not proxy the browser sign-in page |
 | `relay_test` | test relay | action (`enter`/`space`) | — | send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page |
-| — | blocked region | action (`enter`/`space`) | — | open the reusable first-run guide (another VPN or relay, prepare, connect) |
+| — | blocked region | action (`enter`/`space`) | — | open the reusable first-run guide (try prepare first; another VPN or relay are fallbacks) |
 
 Display specials: empty `dns_upstream` → `(provider default)`, empty
 `edge_address` → `(resolve)`, empty `upstream_proxy` → `(direct)`, empty

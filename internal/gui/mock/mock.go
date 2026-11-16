@@ -387,13 +387,14 @@ func (m *Mock) RelayTest(ctx context.Context) (api.RelayTestResult, error) {
 
 // RegionCheck implements gui.Daemon with a deterministic blocked fixture:
 // the VPN and account API hosts answer 451, the browser page is blocked, and
-// the relay is configured only after the harness saves URL and token.
+// the relay is configured as soon as the harness saves a URL; the token is
+// optional.
 func (m *Mock) RegionCheck(ctx context.Context) (api.RegionCheckResult, error) {
 	if err := m.begin(ctx); err != nil {
 		return api.RegionCheckResult{}, err
 	}
 	m.mu.Lock()
-	relay := m.settings.RelayURL != "" && m.settings.RelayTokenSet
+	relay := m.settings.RelayURL != ""
 	m.mu.Unlock()
 	hosts := []api.RegionHostStatus{
 		{Host: "api.accounts.firefox.com", Status: api.RegionBlocked, Detail: "HTTP 451"},

@@ -146,8 +146,9 @@ them locally for any change under `android/`, `mobile/` or
   2026-11-05, the `v0.10.2` release on 2026-11-06, the `v0.10.3` release on
   2026-11-09, the `v0.11.0` and `v0.11.1` releases on 2026-11-10, the
   `v0.12.0` language and RTL release on 2026-11-11, the `v0.12.1` release on
-  2026-11-12, the `v0.13.0` release on 2026-11-12 and the `v1.0.0` release on
-  2026-11-13; each release workflow uploaded the desktop and Android assets.
+  2026-11-12, the `v0.13.0` release on 2026-11-12, the `v1.0.0` release on
+  2026-11-13 and the `v1.1.0` release on 2026-11-15; each release workflow
+  uploaded the desktop and Android assets.
   See [docs/android-testing.md](docs/android-testing.md).
 
 ## Architecture map
@@ -217,10 +218,14 @@ them locally for any change under `android/`, `mobile/` or
   `internal/engine/connect.go` dials the control plane through the local
   SOCKS5 listener while a session is connected, direct otherwise, then retries
   once through the relay on HTTP 451; a failed connect after a prepared pass
-  reports `bootstrap_required`. The reusable **Blocked region** guide is a TUI
-  modal, a GUI `#/blocked-region` route, and an Android app-scoped overlay
-  shared by phone and TV; `kumiho prepare [--json]` and `kumiho guide` are
-  additive CLI commands. Protocol v1 stays byte-compatible.
+  reports `bootstrap_required`. `region_check` reports the relay configured
+  when `relay_url` is set; the token is optional. The reusable **Blocked
+  region** guide leads with **Try Prepare now** (password sign-in and the
+  automatic FxA sibling/Guardian doubled-path fallbacks), then another VPN,
+  then the user's relay. It is a TUI modal, a GUI `#/blocked-region` route,
+  and an Android app-scoped overlay shared by phone and TV; `kumiho prepare
+  [--json]` and `kumiho guide` are additive CLI commands. Protocol v1 stays
+  byte-compatible.
 - **v0.12.0 language and RTL**: `internal/settings` owns the `language` key
   (`system`, `en` or `fa`, default `system`), shared by the Windows GUI and
   Android. GUI strings live in `internal/gui/web/static/i18n/{en,fa}.json`;
@@ -237,10 +242,16 @@ them locally for any change under `android/`, `mobile/` or
 - **v0.9.0 region truth**: `internal/relay` is an `http.RoundTripper` that
   sends a control-plane request through the user's Worker only after HTTP 451,
   with exactly one retry, the five-host allowlist and
-  `X-Kumiho-Relay-Token`; `relay.token` lives beside `tokens.json` (0600) and
-  is write-only across IPC. `internal/serverlist` evaluates the Firefox
-  version and a JEXL subset (`versionCompare`, `env.country`), fails open and
-  marks `locked` records; the engine hides them unless `allow_locked` is on.
+  `X-Kumiho-Relay-Token`. Guardian FPN requests first retry Mozilla's doubled
+  `/api/v1/fpn/` path; only a doubled 451 falls through to the relay. FxA
+  requests (login, refresh and code exchange) retry the sibling
+  `oauth.accounts.firefox.com` host on 451 before the relay; the FxA client's
+  transport passes the primary host's 451 through so the relay wrapper cannot
+  swallow it. A 451 is never handed to the challenge solver. `relay.token`
+  lives beside `tokens.json` (0600) and is write-only across IPC.
+  `internal/serverlist` evaluates the Firefox version and a JEXL subset
+  (`versionCompare`, `env.country`), fails open and marks `locked` records;
+  the engine hides them unless `allow_locked` is on.
   Real-edge ping opens a temporary CONNECT session per candidate (4 in flight,
   10 s each), caches RTTs for 30 minutes and closes each run with `ping_done`.
   Favorites and recents stay as engine state (`state.json`) and additive

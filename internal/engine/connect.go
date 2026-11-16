@@ -597,12 +597,13 @@ func (c *Controller) UseBypassDialer() {
 			c.log.Logf(logging.Info, "relay", format, args...)
 		}
 	}
-	newClient := func(timeout time.Duration) *http.Client {
+	newClient := func(timeout time.Duration, passThrough ...string) *http.Client {
 		base := &http.Transport{
 			DialContext:       dialContext,
 			ForceAttemptHTTP2: true,
 		}
 		tr := relay.NewTransport(base, c.relayConfig, relayLogf)
+		tr.SetPassThrough(passThrough...)
 		tr.SetUseHook(func() { c.relayUsed.Store(true) })
 		return &http.Client{
 			Timeout:   timeout,
@@ -610,7 +611,11 @@ func (c *Controller) UseBypassDialer() {
 		}
 	}
 	c.httpClient = newClient(20 * time.Second)
-	c.fxa.HTTP = newClient(30 * time.Second)
+	// The FxA client handles a primary-host 451 itself, by retrying Mozilla's
+	// sibling auth host before the relay. Pass the primary host through so the
+	// relay wrapper does not swallow the 451; the sibling request still falls
+	// back to the relay when both hosts are blocked.
+	c.fxa.HTTP = newClient(30*time.Second, "api.accounts.firefox.com")
 	c.guardian.HTTP = newClient(30 * time.Second)
 	// Re-attach the one shared jar to the rebuilt clients and re-point the
 	// solver at the rebuilt control-plane client, so a challenge solved

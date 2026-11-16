@@ -34,9 +34,6 @@ func TestRegionCheckClassification(t *testing.T) {
 	if err := ctrl.store.SetOverride("relay_url", "https://relay.example.test"); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctrl.store.SetRelayToken("relay-token"); err != nil {
-		t.Fatal(err)
-	}
 	ctrl.reloadRelayToken()
 
 	res := ctrl.RegionCheck(context.Background())

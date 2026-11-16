@@ -525,3 +525,30 @@ func TestExchangeCodeFallsBackToSiblingHost(t *testing.T) {
 		t.Fatalf("answering hits = %d, tokens = %+v", answeringHits, tokens)
 	}
 }
+
+func TestExchangeCodeFallsBackToSiblingHostOn451(t *testing.T) {
+	blocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnavailableForLegalReasons)
+	}))
+	defer blocked.Close()
+	var answeringHits int
+	answering := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		answeringHits++
+		fmt.Fprintf(w, `{"access_token":"access-token","refresh_token":"refresh-token","scope":%q,"expires_in":3600}`, Scope)
+	}))
+	defer answering.Close()
+
+	c := NewClient()
+	c.BaseURL = "http://127.0.0.1:1/v1"
+	c.FallbackBaseURL = ""
+	c.TokenEndpoint = blocked.URL + "/v1/token"
+	c.TokenFallbackEndpoint = answering.URL + "/v1/token"
+
+	tokens, err := c.ExchangeCode(context.Background(), "the-code", "the-verifier", OAuthRedirectURI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answeringHits != 1 || tokens.AccessToken != "access-token" {
+		t.Fatalf("answering hits = %d, tokens = %+v", answeringHits, tokens)
+	}
+}

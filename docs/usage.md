@@ -276,34 +276,44 @@ Replace the placeholder credentials with your own.
 
 ## Blocked regions and the first run
 
-A region that answers HTTP 451 has two working paths. The guide leads with
-**Option 1** because it needs no server:
+A region that answers HTTP 451 has three paths, in the order the guide
+presents them. **Try Prepare first**: Kumiho falls back automatically where
+Mozilla offers another route.
+
+**Option 1: Try Prepare now.** Sign in with a password
+(`kumiho login --password`); password sign-in works on a blocked network
+because Kumiho retries the sign-in and token calls on
+`oauth.accounts.firefox.com` when `api.accounts.firefox.com` answers 451.
+Browser sign-in still needs another VPN or another device. Then run
+`kumiho prepare`. It fetches the server list, the account profile and a
+Guardian pass in that order. The Guardian pass first retries Mozilla's own
+route with the doubled FPN path (`//api/v1/fpn/...`) before a configured relay
+is used. Only the pass is persisted, in `pass.json` beside `tokens.json` with
+mode 0600; the token is never printed or sent over IPC. If prepare reports the
+expiry, run `kumiho connect`. While the tunnel is up, every Mozilla
+control-plane request dials through Kumiho's own SOCKS5 listener first.
+Renewal at about five minutes keeps the session alive.
+
+**Option 2: I have another VPN.** If Prepare still reports HTTP 451:
 
 1. Turn on another VPN.
 2. Sign in: `kumiho login`.
-3. Prepare once: `kumiho prepare`. This fetches the server list, the account
-   profile and a Guardian pass in that order. Only the pass is persisted, in
-   `pass.json` beside `tokens.json` with mode 0600; the token is never printed
-   or sent over IPC.
+3. Prepare once: `kumiho prepare`.
 4. When prepare reports the expiry, turn the other VPN off.
-5. Connect: `kumiho connect`. While the tunnel is up, every Mozilla
-   control-plane request dials through Kumiho's own SOCKS5 listener first and
-   falls back to the relay only after a 451. Renewal at about five minutes
-   keeps the session alive, so the other VPN is needed again only if Kumiho
-   stays off past the pass lifetime (about ten minutes).
+5. Connect: `kumiho connect`.
 
-`kumiho guide` prints the same steps, and Enter on the TUI's region notice or
-Settings → Region → Blocked region opens the interactive version.
+The other VPN is needed again only if Kumiho stays off past the pass lifetime
+(about ten minutes).
 
-**Option 2** is the user-operated relay, useful for password sign-in when no
-other VPN is available. Set `relay_url` and, if the Worker requires it, the
-write-only `relay_token` under Settings → Region (or with
-`kumiho settings set`), then use **Test relay** / `kumiho relay test`. Without
-a relay the error tells you to configure one; with a failed relay it names the
-failure. The relay carries only blocked Mozilla control-plane requests, never
-VPN traffic, and it does not proxy `accounts.firefox.com`: browser sign-in
-still needs another VPN or another device. Deployment, the Worker allowlist,
-token header and trust boundary are in [relay.md](relay.md).
+**Option 3: Use your own relay.** Set `relay_url` under Settings → Region (or
+with `kumiho settings set relay_url`). The write-only `relay_token` is
+optional and only needed if the Worker requires it. Use **Test relay** /
+`kumiho relay test`. Without a relay the error points back to the guide; with
+a failed relay it names the failure. The relay carries only blocked Mozilla
+control-plane requests, never VPN traffic, and it does not proxy
+`accounts.firefox.com`: browser sign-in still needs another VPN or another
+device. Deployment, the Worker allowlist, token header and trust boundary are
+in [relay.md](relay.md).
 
 An edge 451 is different: the VPN data path still comes from your network, so
 neither another-VPN preparation nor the relay can help. Connect from a

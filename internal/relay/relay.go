@@ -101,12 +101,14 @@ func (e *BlockedError) Error() string {
 
 func (e *BlockedError) Unwrap() error { return e.RelayErr }
 
-// Transport is an http.RoundTripper that retries one 451 through the relay.
+// Transport is an http.RoundTripper that retries one 451 through Guardian's
+// doubled path or the relay.
 type Transport struct {
-	base  http.RoundTripper
-	cfg   func() Config
-	logFn func(string, ...any)
-	onUse func()
+	base        http.RoundTripper
+	cfg         func() Config
+	logFn       func(string, ...any)
+	onUse       func()
+	passThrough map[string]bool
 }
 
 // NewTransport wraps base. cfg is read on every request so a settings change
@@ -130,10 +132,70 @@ func (t *Transport) Unwrap() http.RoundTripper { return t.base }
 // inspecting request paths.
 func (t *Transport) SetUseHook(fn func()) { t.onUse = fn }
 
+// SetPassThrough marks hosts whose HTTP 451 answers are returned to the
+// caller instead of being retried. The engine uses this for the primary FxA
+// host so the FxA client can try Mozilla's sibling host first; the sibling
+// request then falls through to the relay if it is also blocked. Call before
+// the transport is used concurrently.
+func (t *Transport) SetPassThrough(hosts ...string) {
+	if len(hosts) == 0 {
+		t.passThrough = nil
+		return
+	}
+	m := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if host != "" {
+			m[host] = true
+		}
+	}
+	t.passThrough = m
+}
+
+// PassesThrough reports whether host is configured to return 451 answers
+// instead of retrying. Diagnostics and tests use it to verify wiring.
+func (t *Transport) PassesThrough(host string) bool {
+	if t == nil || len(t.passThrough) == 0 {
+		return false
+	}
+	return t.passThrough[strings.ToLower(strings.TrimSpace(host))]
+}
+
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req)
 	if err != nil || resp == nil || resp.StatusCode != http.StatusUnavailableForLegalReasons {
 		return resp, err
+	}
+
+	// The caller handles these hosts itself, with its own fallback. Returning
+	// the 451 keeps the original response body available for that path.
+	if req.URL != nil && t.PassesThrough(req.URL.Hostname()) {
+		return resp, nil
+	}
+
+	// Guardian's FPN route also answers with one extra leading slash. Try
+	// that before the personal relay, whether or not a relay is configured:
+	// Mozilla's own host is cheaper and needs no trust relationship. A 451
+	// from the doubled path falls through to the ordinary relay flow.
+	if isGuardianTarget(req.URL) {
+		if out, ok := doubledPathRequest(req); ok {
+			t.logf("HTTP 451 from %s; retrying the doubled Guardian path", req.URL.Host)
+			doubled, derr := t.base.RoundTrip(out)
+			if derr == nil && doubled != nil && doubled.StatusCode != http.StatusUnavailableForLegalReasons {
+				discardBody(resp.Body)
+				return doubled, nil
+			}
+			if doubled != nil {
+				discardBody(doubled.Body)
+			}
+			if derr != nil && req.Context().Err() != nil {
+				discardBody(resp.Body)
+				return nil, req.Context().Err()
+			}
+			if doubled != nil && derr == nil {
+				t.logf("doubled Guardian path for %s also returned HTTP 451", req.URL.Host)
+			}
+		}
 	}
 
 	cfg := t.cfg()
@@ -224,6 +286,45 @@ func (t *Transport) logf(format string, args ...any) {
 	if t.logFn != nil {
 		t.logFn(format, args...)
 	}
+}
+
+// isGuardianTarget reports a Guardian FPN request whose path can be retried
+// with a doubled leading slash. Guardian authenticates with a bearer token,
+// which does not cover the path, so the retry stays valid.
+func isGuardianTarget(u *url.URL) bool {
+	return u != nil &&
+		strings.EqualFold(u.Hostname(), "vpn.mozilla.org") &&
+		strings.HasPrefix(u.Path, "/api/v1/fpn/")
+}
+
+// doubledPathRequest clones req with one extra leading slash, preserving the
+// method, headers, query and a replayable body.
+func doubledPathRequest(req *http.Request) (*http.Request, bool) {
+	if req == nil || req.URL == nil ||
+		!strings.HasPrefix(req.URL.Path, "/") || strings.HasPrefix(req.URL.Path, "//") {
+		return nil, false
+	}
+	out := req.Clone(req.Context())
+	if req.Body != nil && req.Body != http.NoBody {
+		if req.GetBody == nil {
+			return nil, false
+		}
+		body, err := req.GetBody()
+		if err != nil || body == nil {
+			if body != nil {
+				_ = body.Close()
+			}
+			return nil, false
+		}
+		out.Body = body
+	}
+	u := *req.URL
+	u.Path = "/" + u.Path
+	if u.RawPath != "" {
+		u.RawPath = "/" + u.RawPath
+	}
+	out.URL = &u
+	return out, true
 }
 
 // relayURL maps a target URL to <relay-origin>/<target-host><target-path>.

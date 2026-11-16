@@ -143,12 +143,12 @@ default `system`) and the same DataStore mirror.
   **Kumiho app** group with its **Language** row and the themed catalog. Every
   group header carries a primary-tinted icon beside its title. It includes
   **Region**: a **Blocked region** guide action, then
-  `allow_locked`, the HTTPS `relay_url`, a
-  write-only `relay_token` with Set/Clear, and a **Test relay** action with
-  its inline result. Region help text states that the relay is used only
+  `allow_locked`, the HTTPS `relay_url`, an
+  optional write-only `relay_token` with Set/Clear, and a **Test relay** action
+  with its inline result. Region help text states that the relay is used only
   after HTTP 451 and does not proxy the browser sign-in page. The guide is
-  fully D-pad reachable: another VPN and Prepare first, relay URL/token/Test
-  second, and the prepared-pass countdown with Connect.
+  fully D-pad reachable: try Prepare first, another VPN second, relay
+  URL/optional token/Test third, and the prepared-pass countdown with Connect.
 - Proxy-only mode remains available but needs a local client; a TV usually
   has none, so the normal use is a full tunnel.
 - IPv6 is blackholed, non-DNS UDP is blocked, and DNS runs as DoH inside the

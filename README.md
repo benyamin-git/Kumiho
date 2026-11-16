@@ -23,12 +23,12 @@ the nearest server, and keeps the tunnel alive with an optional kill switch.
 
 | Platform | Download |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Linux-arm64.zip) |
-| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/Kumiho-v1.0.0-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Linux-arm64.zip) |
+| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Android-universal.apk) |
 
 Every file is listed in
-[SHA256SUMS-v1.0.0](https://github.com/benyamin-git/Kumiho/releases/download/v1.0.0/SHA256SUMS-v1.0.0).
+[SHA256SUMS-v1.1.0](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/SHA256SUMS-v1.1.0).
 Android is sideload-only: there is no Play Store or F-Droid build. v0.7.2 and
 earlier prereleases remain on the
 [releases page](https://github.com/benyamin-git/Kumiho/releases).
@@ -43,9 +43,9 @@ Captured in the Dark theme with sample data.
 | --- | --- |
 | ![Windows GUI dashboard: connected tunnel and session totals](screenshots/windows-gui/dashboard.png) | ![Windows GUI locations: a pinned Fastest row above flagged server rows with search and real-edge ping times](screenshots/windows-gui/locations.png) |
 
-![Windows GUI settings: the Region relay controls and the background service rows](screenshots/windows-gui/settings.png)
+![Windows GUI settings: the Region relay controls, the optional relay token and the blocked-region guide action](screenshots/windows-gui/settings.png)
 
-![Windows GUI Blocked region guide: host results, Option 1 another VPN, Option 2 relay and a prepared-pass countdown](screenshots/windows-gui/blocked-region.png)
+![Windows GUI Blocked region guide: host results, the prepared-pass handoff and the start of the Option 1 Prepare now guide](screenshots/windows-gui/blocked-region.png)
 
 ### Linux TUI
 
@@ -55,7 +55,7 @@ Captured in the Dark theme with sample data.
 
 ![Linux TUI settings: the Region relay rows with their region-only hint](screenshots/linux-tui/settings.png)
 
-![Linux TUI Blocked region guide: host results, the other-VPN steps and a prepared-pass countdown](screenshots/linux-tui/region.png)
+![Linux TUI Blocked region guide: host results, Option 1 Prepare now, Option 2 another VPN, Option 3 relay and a prepared-pass countdown](screenshots/linux-tui/region.png)
 
 ### Android phone
 
@@ -69,18 +69,15 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v1.0.0
+## What's new in v1.1.0
 
-- **Android self-update** — the phone and TV app checks GitHub at launch (at
-  most once every 24 hours) or from Settings, downloads the ABI-matched APK
-  only after you agree, verifies the release SHA-256 and the APK package and
-  version, then hands it to Android's installer. Accounts and settings are
-  kept.
-- **Quota UI removed, Settings headers inside cards** — the phone and TV
-  dashboards, Windows GUI, Android widget, CLI and TUI no longer show quota,
-  and the quota-poll setting is gone; Android phone Settings now draws each
-  section header inside its card. Engine quota fields and protocol v1 remain
-  unchanged for compatibility.
+- **Inline image CAPTCHA for password sign-in** — the Windows GUI and the
+  Android phone/TV app show Mozilla's image CAPTCHA inline and submit the
+  answer in place; the TUI and CLI keep the browser fallback.
+- **Password sign-in finishes through the OAuth form exchange** — after the
+  password and any code step, Kumiho redeems an authorization code at the
+  OAuth form endpoint instead of dead-ending at the hard-blocked legacy token
+  route. A remaining block continues the same account in the browser flow.
 
 See the [changelog](CHANGELOG.md) for details.
 
@@ -109,7 +106,7 @@ uninstall.
 
 ### Windows 11
 
-1. Download `Kumiho-v1.0.0-Windows-amd64.zip` and extract it.
+1. Download `Kumiho-v1.1.0-Windows-amd64.zip` and extract it.
 2. In **Administrator PowerShell**, run `.\install.ps1` (or double-click
    `install.cmd`).
 3. Start **Kumiho** from the Start Menu.
@@ -126,9 +123,9 @@ See the [Windows install guide](docs/install.md#windows-11) and the
 Download the APK for your device and open it. Allow installation from your
 file manager or browser when Android asks; Kumiho is sideload-only.
 
-- **Most phones and Android TV:** `Kumiho-v1.0.0-Android-arm64-v8a.apk`
-- **Older 32-bit phones:** `Kumiho-v1.0.0-Android-armeabi-v7a.apk`
-- **Not sure:** `Kumiho-v1.0.0-Android-universal.apk`
+- **Most phones and Android TV:** `Kumiho-v1.1.0-Android-arm64-v8a.apk`
+- **Older 32-bit phones:** `Kumiho-v1.1.0-Android-armeabi-v7a.apk`
+- **Not sure:** `Kumiho-v1.1.0-Android-universal.apk`
 
 The first launch walks through Firefox Accounts sign-in, VPN permission and
 battery/Always-on guidance. On Android TV the same APK opens the TV shell. See
@@ -144,10 +141,10 @@ the [Android guide](docs/android.md) and [Android TV guide](docs/android-tv.md).
   and the terminal clients continue that same sign-in in the browser instead
   of dead-ending.
 - **Blocked-region first run** — HTTP 451 is reported honestly, with a reusable
-  **Blocked region** guide that signs in through another VPN, prepares a pass
-  once, and then renews through Kumiho's own tunnel. The user-operated relay
-  remains the fallback and never carries VPN traffic or the browser sign-in
-  page. See [the relay guide](docs/relay.md).
+  **Blocked region** guide that tries Prepare first (automatic FxA sibling and
+  Guardian doubled-path fallbacks), then another VPN, then a user-operated
+  relay. The relay never carries VPN traffic or the browser sign-in page. See
+  [the relay guide](docs/relay.md).
 - **Real system tunnel** — TUN on Linux, Wintun on Windows and `VpnService` on
   Android; optional kill switch, split tunneling on Android, and a local SOCKS5
   proxy on every platform.

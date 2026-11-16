@@ -27,12 +27,21 @@ requests after the browser hands back the redirect URL.
 
 ## Relay vs. another VPN
 
-The relay is the guide's **Option 2**. The recommended first run is **Option
-1**: turn on another VPN, sign in, run `kumiho prepare` (or choose **Prepare**
-in any client), turn the other VPN off, and connect. Prepare stores a
-ten-minute pass, and after connect Kumiho renews its own control-plane
-requests through the tunnel; the relay is then needed only when a request
-still answers 451.
+The relay is the guide's **Option 3**. Kumiho tries its own fallbacks first:
+
+- **Option 1: Try Prepare now.** Password sign-in retries the sibling
+  `oauth.accounts.firefox.com` on HTTP 451, and Guardian requests retry
+  Mozilla's doubled `/api/v1/fpn/` path. The FxA transport passes the primary
+  host's 451 through the relay wrapper, so the sibling is tried before the
+  relay; only a sibling that is also blocked falls through to it. Browser
+  sign-in still needs another VPN or another device.
+- **Option 2: I have another VPN.** Turn it on, sign in, run `kumiho prepare`
+  (or choose **Prepare** in any client), turn the other VPN off, and connect.
+  Prepare stores a ten-minute pass, and after connect Kumiho renews its own
+  control-plane requests through the tunnel.
+- **Option 3: The relay.** Use it when Prepare still answers 451 and no other
+  VPN is available. It is then needed only for requests that still answer
+  451.
 
 Because the relay does not proxy the browser page, a blocked region cannot
 complete browser sign-in through the relay alone. Password sign-in uses the
@@ -84,11 +93,12 @@ Every client has the same fields under **Settings → Region**:
 
 - Allow locked locations (`allow_locked`)
 - Control-plane relay (`relay_url`)
-- Relay token (write-only, with Clear)
+- Relay token (optional, write-only, with Clear)
 - Test relay
 
 The help text in every client says the relay is used only after HTTP 451 and
-does not proxy the browser sign-in page.
+does not proxy the browser sign-in page. A relay URL alone counts as
+configured; the token is only needed when the Worker sets `RELAY_TOKEN`.
 
 ## Test it
 

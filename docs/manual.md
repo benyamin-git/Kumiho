@@ -115,17 +115,20 @@ is in [usage.md](usage.md).
 ## New in v0.11.0: the blocked-region first run
 
 If Mozilla blocks sign-in or the server list with HTTP 451, Kumiho now opens a
-**Blocked region** guide in every client. The recommended path is another VPN:
+**Blocked region** guide in every client. Try these paths in order:
 
-1. Turn on another VPN.
-2. Sign in.
-3. Choose **Prepare** (or run `kumiho prepare`). Kumiho fetches the server
-   list, your profile and a ten-minute Guardian pass; only the pass is stored.
-4. Turn the other VPN off when the pass is ready.
-5. Connect. Kumiho renews through its own tunnel.
+1. **Try Prepare now.** Sign in with a password (it works on blocked
+   networks), then choose **Prepare** (or run `kumiho prepare`). Kumiho retries
+   the FxA sibling host and Guardian's doubled FPN path automatically. If the
+   pass is ready, connect.
+2. **I have another VPN.** Turn it on, sign in, choose **Prepare**, turn the
+   other VPN off when the pass is ready, then connect.
+3. **Use your own relay.** Set its URL (the token is optional) and test it.
 
-The relay remains the fallback. Browser sign-in still needs another VPN or
-another device because the relay does not proxy the browser page. Full steps:
+Kumiho fetches the server list, your profile and a ten-minute Guardian pass;
+only the pass is stored. After connect, Kumiho renews through its own tunnel.
+Browser sign-in still needs another VPN or another device because the relay
+does not proxy the browser page. Full steps:
 [usage.md](usage.md#blocked-regions-and-the-first-run).
 
 ## New settings in v0.9.0
@@ -141,8 +144,9 @@ you are connecting from.
   deploy yourself. It is used only when Mozilla answers the account or server
   list with HTTP 451, never for the VPN connection itself. If the VPN server
   itself refuses your region, a relay cannot help.
-- **Relay token** — the password for that relay. It is stored write-only; you
-  can replace or clear it but never read it back.
+- **Relay token** — the optional password for that relay. It is stored
+  write-only; you can replace or clear it but never read it back. A relay URL
+  alone counts as configured.
 - **Test relay** — checks the address and token without connecting.
 
 The full steps and the free Cloudflare Worker template are in

@@ -15,7 +15,7 @@ installing, the first-run wizard, each screen, the tray, diagnostics and
 uninstalling.
 
 > **Reading the current UI.** This guide describes the app shipping with
-> v1.0.0. The older walk-era inventory in
+> v1.1.0. The older walk-era inventory in
 > [gui-feature-inventory.md](gui-feature-inventory.md) describes an earlier
 > native build and differs in places; where they disagree, the running app is
 > authoritative.
@@ -77,7 +77,7 @@ configured even though only the GUI renders Persian.
 
 ## Installing
 
-Download `Kumiho-v1.0.0-Windows-amd64.zip`, extract it, and run the
+Download `Kumiho-v1.1.0-Windows-amd64.zip`, extract it, and run the
 installer. For a double-click install use `install.cmd`; it self-elevates and
 passes your account to the installer. From an already-administrator PowerShell,
 run:
@@ -328,9 +328,9 @@ row returns to the admin `config.toml` (or built-in) default. The rows are:
 | Solve challenges | on/off; answers the Firefox Accounts and edge challenges automatically; applies immediately |
 | Keepalive profile | `standard`, `slow`; keepalive ping timeout profile; next connect |
 | Allow locked locations | on/off; reveals the server-list records marked locked; applies immediately |
-| Blocked region | opens the reusable guide: another VPN or the relay, then Prepare and Connect |
+| Blocked region | opens the reusable guide: try Prepare first, then another VPN or the relay |
 | Control-plane relay | HTTPS origin used only after HTTP 451; empty = none; applies immediately |
-| Relay token | write-only shared secret; **Set** opens a masked field, **Clear** deletes the stored `relay.token`; never displays its value |
+| Relay token | optional write-only shared secret; **Set** opens a masked field, **Clear** deletes the stored `relay.token`; never displays its value |
 | Test relay | one-shot probe; shows `Relay OK — N ms`, `Relay rejected the token`, `relay_url is not set` or `Relay unreachable: <detail>`; never writes a setting |
 
 The Region block's help text says the relay is used only after HTTP 451 and
@@ -340,8 +340,9 @@ beside `tokens.json` (mode 0600) and the GUI only ever receives
 `relay_token_set`.
 
 **Blocked region** opens the guide described in [usage.md](usage.md#blocked-regions-and-the-first-run):
-the six host results, Option 1 (another VPN) first, Option 2 (relay) second,
-a **Prepare** action, and a live pass countdown with **Connect**. The guide is
+the six host results, Option 1 (try Prepare now) first, Option 2 (another VPN)
+second, Option 3 (the relay) third, a **Prepare** action, and a live pass
+countdown with **Connect**. The guide is
 also reached from the dashboard notice after a region error and from the
 setup consent preflight. It is a route (`#/blocked-region`) outside the
 numbered wizard, so the wizard still has five steps.

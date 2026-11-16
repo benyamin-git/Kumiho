@@ -56,8 +56,8 @@ const (
 )
 
 const (
-	regionBlockedNoRelayMessage = "This region is blocking Mozilla's servers (HTTP 451). Set a control-plane relay in Settings → Region, or deploy the relay from docs/relay.md, then retry."
-	regionBlockedRelayFailed    = "Mozilla returned HTTP 451 and the configured relay failed: %s. Check the relay URL and token in Settings → Region."
+	regionBlockedNoRelayMessage = "This region is blocking Mozilla's servers (HTTP 451). Open Blocked region and try Prepare again; if it still fails, use another VPN or set a relay in Settings → Region."
+	regionBlockedRelayFailed    = "Mozilla returned HTTP 451 and the configured relay failed: %s. Check the relay URL in Settings → Region; the token is optional."
 	edgeBlockedMessage          = "The VPN edge refused this region (HTTP 451). A control-plane relay cannot fix the VPN data path; connect from a supported region."
 	bootstrapRequiredMessage    = "The prepared pass expired. Open Blocked region and prepare again."
 )

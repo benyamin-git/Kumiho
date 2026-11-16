@@ -115,7 +115,7 @@ func (m *Model) handleGuideKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.status.PassExpires <= time.Now().Unix() {
-			m.guideNotice = "No prepared pass yet. Turn on your other VPN and press p."
+			m.guideNotice = "No prepared pass yet. Press p to prepare."
 			return m, nil
 		}
 		m.guide = false
@@ -150,7 +150,19 @@ func (m *Model) renderGuide(b *strings.Builder) {
 		fmt.Fprintln(b)
 	}
 
-	fmt.Fprintln(b, titleStyle.Render("Option 1: I have another VPN (recommended)"))
+	fmt.Fprintln(b, titleStyle.Render("Option 1: Try Prepare now (recommended)"))
+	if !m.status.Authenticated {
+		fmt.Fprintln(b, "  1. Sign in:                 press l (password works on blocked networks)")
+	} else {
+		fmt.Fprintln(b, "  1. Signed in as "+m.status.Email)
+	}
+	fmt.Fprintln(b, "  2. Prepare:                 press p")
+	fmt.Fprintln(b, "  3. If the pass is ready, connect: press c or space")
+	fmt.Fprintln(b, "  4. If Prepare still reports HTTP 451, try Option 2 or 3.")
+	fmt.Fprintln(b, dimStyle.Render("  Browser sign-in still needs another VPN or another device."))
+	fmt.Fprintln(b)
+
+	fmt.Fprintln(b, titleStyle.Render("Option 2: I have another VPN"))
 	fmt.Fprintln(b, "  1. Turn on your other VPN.")
 	if !m.status.Authenticated {
 		fmt.Fprintln(b, "  2. Sign in:                 press l")
@@ -163,14 +175,13 @@ func (m *Model) renderGuide(b *strings.Builder) {
 	fmt.Fprintln(b, dimStyle.Render("  The other VPN is only needed again after 10 minutes off."))
 	fmt.Fprintln(b)
 
-	fmt.Fprintln(b, titleStyle.Render("Option 2: Use a relay"))
-	fmt.Fprintln(b, "  1. Deploy docs/relay.md, or use one you trust.")
-	fmt.Fprintln(b, "  2. Set the URL and token:   press s (Settings)")
-	fmt.Fprintln(b, "  3. Test it:                 Settings → test relay")
-	fmt.Fprintln(b, "  4. Sign in with a password, then press p.")
+	fmt.Fprintln(b, titleStyle.Render("Option 3: Use your own relay"))
+	fmt.Fprintln(b, "  1. Set the URL and optional token: press s (Settings)")
+	fmt.Fprintln(b, "  2. Test it:                 Settings → test relay")
+	fmt.Fprintln(b, "  3. Prepare, then connect:   press p, then c")
 	fmt.Fprintln(b, dimStyle.Render("  Only blocked Mozilla requests use the relay; VPN traffic does not."))
 	fmt.Fprintln(b)
-	fmt.Fprintln(b, dimStyle.Render("Browser sign-in still needs another VPN or another device; the relay does not proxy the browser page."))
+	fmt.Fprintln(b, dimStyle.Render("The relay does not proxy the browser sign-in page."))
 
 	if m.guideNotice != "" {
 		fmt.Fprintf(b, "\n%s\n", warnStyle.Render(m.guideNotice))
@@ -186,14 +197,14 @@ func (m *Model) guidePreparedCard(b *strings.Builder) bool {
 	}
 	remaining := time.Until(time.Unix(m.status.PassExpires, 0))
 	if remaining <= 0 {
-		fmt.Fprintln(b, warnStyle.Render("Prepared pass expired. Turn on your other VPN and press p."))
+		fmt.Fprintln(b, warnStyle.Render("Prepared pass expired. Press p to prepare again."))
 		return true
 	}
 	style := okStyle
 	if remaining < time.Minute {
 		style = warnStyle
 	}
-	fmt.Fprintln(b, style.Render(fmt.Sprintf("Pass ready — valid for %s. Turn off the other VPN and press c to connect.", shortClock(remaining))))
+	fmt.Fprintln(b, style.Render(fmt.Sprintf("Pass ready — valid for %s. If you used another VPN, turn it off and press c to connect.", shortClock(remaining))))
 	return true
 }
 

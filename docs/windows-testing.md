@@ -844,11 +844,12 @@ primary-tinted outline icon.
 > the steps above stay the v0.3.0 script.
 
 > **v0.9.0 Region group.** The `Background service` pane ends with
-> `Allow locked locations`, `Control-plane relay`, write-only `Relay token`
-> and **Test relay**. Toggle locked locations and confirm Locations reloads;
-> set a malformed URL and see the validation error; store a token, confirm
-> only `set`/`not set` is rendered, then **Clear** it. **Test relay** without a
-> URL shows `relay_url is not set`; a valid Worker shows `Relay OK — N ms`.
+> `Allow locked locations`, `Control-plane relay`, optional write-only `Relay
+> token` and **Test relay**. Toggle locked locations and confirm Locations
+> reloads; set a malformed URL and see the validation error; store a token,
+> confirm only `set`/`not set` is rendered, then **Clear** it. **Test relay**
+> without a URL shows `relay_url is not set`; a valid Worker shows `Relay OK —
+> N ms`.
 
 ### 16.6 Logs
 

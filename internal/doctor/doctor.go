@@ -559,7 +559,7 @@ func checkReachability() Check {
 			Name:        name,
 			Status:      Warn,
 			Detail:      "blocked by region: " + strings.Join(blocked, ", "),
-			Remediation: "This region blocks Mozilla's servers (HTTP 451). Run `kumiho guide` and prepare through another VPN or the relay.",
+			Remediation: "This region blocks Mozilla's servers (HTTP 451). Run `kumiho guide`; try Prepare first, then another VPN or the relay.",
 		}
 	}
 	return Check{Name: name, Status: OK, Detail: "reachable: " + strings.Join(reachable, ", ")}

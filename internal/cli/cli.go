@@ -24,7 +24,7 @@ Commands:
   connect       Connect the tunnel (--proxy-only keeps system routing untouched)
   disconnect    Tear the tunnel down
   prepare       Fetch the server list, profile and Guardian pass for first run
-  guide         Explain the Blocked region paths (another VPN or a relay)
+  guide         Explain the Blocked region paths (try Prepare first, then another VPN or a relay)
   cleanup       Remove stale routes/rules/nftables/DNS state (crash recovery)
   login         Sign in to Firefox Accounts through the daemon
   accounts      List and manage up to five accounts

@@ -194,6 +194,8 @@ Android TV, Windows GUI and the TUI.
     primaries and `SHA256SUMS-v0.13.0`.
   - Done 2026-11-13 (v1.0.0): both READMEs link the v1.0.0 versioned
     primaries and `SHA256SUMS-v1.0.0`.
+  - Done 2026-11-15 (v1.1.0): both READMEs link the v1.1.0 versioned
+    primaries and `SHA256SUMS-v1.1.0`.
 
 ## Release follow-ups
 
@@ -212,6 +214,11 @@ Android TV, Windows GUI and the TUI.
     timing-dependent.
   - Next: make the burst/ack barrier deterministic without weakening the
     cap-1 guarantee.
+
+- [x] **C10 — Regenerate the desktop captures for the reordered guide**
+  - Done 2026-11-16: the Windows GUI and Linux TUI captures now show the
+    **Try Prepare now** guide; the same run refreshed the dashboard and
+    settings captures.
 
 ## Decisions captured on 2026-10-29
 

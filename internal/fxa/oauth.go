@@ -136,9 +136,9 @@ func (c *Client) ExchangeSession(ctx context.Context, sessionToken string) (*Tok
 }
 
 // ExchangeCode trades an authorization code and PKCE verifier for tokens at
-// the OAuth token endpoint. A challenged or unreachable host moves to its
-// sibling before failing; a real OAuth error (for example an invalid code) is
-// final.
+// the OAuth token endpoint. A challenged, region-blocked or unreachable host
+// moves to its sibling before failing; a real OAuth error (for example an
+// invalid code) is final.
 func (c *Client) ExchangeCode(ctx context.Context, code, verifier, redirectURI string) (*Tokens, error) {
 	// The FxA OAuth token endpoint follows RFC 6749 and expects a form body.
 	// A JSON body is accepted by the auth server's /oauth/token route used by
@@ -168,7 +168,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code, verifier, redirectURI s
 			return tokens, nil
 		}
 		var chErr *ChallengeError
-		if !errors.As(err, &chErr) && !isTransportError(err) {
+		if !errors.As(err, &chErr) && !isTransportError(err) && !isRegionBlocked(err) {
 			return nil, err
 		}
 		if ctx.Err() != nil {

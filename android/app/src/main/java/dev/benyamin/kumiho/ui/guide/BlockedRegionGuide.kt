@@ -61,9 +61,12 @@ import kotlinx.coroutines.launch
  * not a wizard step: setup opens it after the consent preflight, Settings →
  * Region opens it, and the dashboard's region error notice opens it.
  *
- * Option 1 (another VPN) leads; the relay is the fallback and keeps the honest
- * boundary that it does not proxy the browser sign-in page. The prepared card
- * counts down the engine's persisted pass, so it survives a restart.
+ * Option 1 (Prepare now) leads because the engine can often reach Mozilla
+ * through a reachable sibling host and Guardian's doubled path without any
+ * outside help. Option 2 (another VPN) and Option 3 (the user's relay) are the
+ * fallbacks; the relay keeps the honest boundary that it does not proxy the
+ * browser sign-in page. The prepared card counts down the engine's persisted
+ * pass, so it survives a restart.
  */
 @Composable
 fun BlockedRegionGuide(
@@ -277,8 +280,6 @@ fun BlockedRegionGuide(
                             R.string.guide_option_one_step1,
                             R.string.guide_option_one_step2,
                             R.string.guide_option_one_step3,
-                            R.string.guide_option_one_step4,
-                            R.string.guide_option_one_step5,
                         ).forEachIndexed { index, res ->
                             Text(
                                 text = "${index + 1}. ${stringResource(res)}",
@@ -344,8 +345,34 @@ fun BlockedRegionGuide(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        listOf(
+                            R.string.guide_option_two_step1,
+                            R.string.guide_option_two_step2,
+                            R.string.guide_option_two_step3,
+                            R.string.guide_option_two_step4,
+                            R.string.guide_option_two_step5,
+                        ).forEachIndexed { index, res ->
+                            Text(
+                                text = "${index + 1}. ${stringResource(res)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Text(
-                            text = stringResource(R.string.guide_option_two_intro),
+                            text = stringResource(R.string.guide_option_two_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    GuideCard {
+                        Text(
+                            text = stringResource(R.string.guide_option_three),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = stringResource(R.string.guide_option_three_intro),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

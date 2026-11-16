@@ -19,7 +19,7 @@ func TestRegionNoticeEnterOpensGuide(t *testing.T) {
 		t.Fatal("Enter on the region notice did not open the guide")
 	}
 	view := m.View()
-	for _, want := range []string{"Blocked region", "Option 1: I have another VPN", "Option 2: Use a relay", "Pass ready"} {
+	for _, want := range []string{"Blocked region", "Option 1: Try Prepare now", "Option 2: I have another VPN", "Option 3: Use your own relay", "Pass ready"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("guide missing %q:\n%s", want, view)
 		}

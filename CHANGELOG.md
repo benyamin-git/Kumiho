@@ -8,6 +8,20 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- **Blocked-region fallbacks happen before another VPN.** FxA requests now
+  retry Mozilla's reachable sibling host (`oauth.accounts.firefox.com`) on
+  HTTP 451, and Guardian requests retry the doubled `/api/v1/fpn/` path before
+  a personal relay. The Blocked region guide leads with **Try Prepare now**;
+  another VPN and the user's relay are fallbacks, and the relay token is
+  labeled optional.
+
+### Fixed
+
+- **A relay URL alone counts as configured.** `region_check` no longer
+  requires the optional Worker token, matching `relay test` and the engine.
+
 ## [1.1.0] - 2026-11-15
 
 ### Added

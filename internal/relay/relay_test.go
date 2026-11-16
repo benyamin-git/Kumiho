@@ -142,6 +142,225 @@ func TestTransportRetries451ThroughRelay(t *testing.T) {
 	}
 }
 
+// A pass-through host keeps its 451 for the caller, which has its own
+// fallback. The body must stay open and no relay request may be made.
+func TestTransportPassThroughHost451(t *testing.T) {
+	blocked := &closeRecorder{Reader: strings.NewReader("blocked")}
+	base := &fakeTransport{fn: func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 451, Header: make(http.Header), Body: blocked}, nil
+	}}
+	tr := newTestTransport(base, Config{URL: "https://relay.example", Token: "tok"})
+	tr.SetPassThrough("api.accounts.firefox.com")
+	if !tr.PassesThrough("API.ACCOUNTS.FIREFOX.COM") {
+		t.Fatal("PassesThrough is not case-insensitive")
+	}
+	if tr.PassesThrough("oauth.accounts.firefox.com") {
+		t.Fatal("unexpected pass-through for the sibling host")
+	}
+	req := request(t, http.MethodPost, "https://api.accounts.firefox.com/v1/account/login", strings.NewReader("body"))
+
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 451 {
+		t.Fatalf("status = %d, want 451", resp.StatusCode)
+	}
+	if len(base.calls) != 1 {
+		t.Fatalf("base calls = %d, want 1 (no relay)", len(base.calls))
+	}
+	if blocked.closed {
+		t.Fatal("pass-through body was closed")
+	}
+}
+
+// The pass-through list applies only to its hosts: the sibling still relay
+// retries when it is also blocked.
+func TestTransportPassThroughOnlyConfiguredHost(t *testing.T) {
+	var relayReq *http.Request
+	base := &fakeTransport{}
+	base.fn = func(req *http.Request) (*http.Response, error) {
+		if req.URL.Hostname() == "relay.example" {
+			relayReq = req
+			return response(http.StatusOK, "ok"), nil
+		}
+		return response(http.StatusUnavailableForLegalReasons, "blocked"), nil
+	}
+	tr := newTestTransport(base, Config{URL: "https://relay.example", Token: "tok"})
+	tr.SetPassThrough("api.accounts.firefox.com")
+	req := request(t, http.MethodPost, "https://oauth.accounts.firefox.com/v1/token", strings.NewReader("body"))
+
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if relayReq == nil {
+		t.Fatal("sibling request was not relayed")
+	}
+	if got := relayReq.URL.String(); got != "https://relay.example/oauth.accounts.firefox.com/v1/token" {
+		t.Fatalf("relay URL = %q", got)
+	}
+}
+
+func TestTransportGuardianDoubledPathBeforeRelay(t *testing.T) {
+	first := &closeRecorder{Reader: strings.NewReader("blocked")}
+	var doubledReq *http.Request
+	var doubledBody string
+	base := &fakeTransport{}
+	base.fn = func(req *http.Request) (*http.Response, error) {
+		if len(base.calls) == 1 {
+			return &http.Response{StatusCode: 451, Header: make(http.Header), Body: first}, nil
+		}
+		doubledReq = req
+		if req.Body != nil {
+			body, _ := io.ReadAll(req.Body)
+			doubledBody = string(body)
+		}
+		return response(http.StatusOK, "ok"), nil
+	}
+	tr := newTestTransport(base, Config{URL: "https://relay.example", Token: "tok"})
+	req := request(t, http.MethodPost, "https://vpn.mozilla.org/api/v1/fpn/token?q=1", strings.NewReader("payload"))
+	req.Header.Set("Authorization", "Bearer abc")
+
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !first.closed {
+		t.Fatal("first response body was not closed")
+	}
+	if len(base.calls) != 2 {
+		t.Fatalf("base calls = %d, want 2 (doubled path only, no relay)", len(base.calls))
+	}
+	if doubledReq == nil {
+		t.Fatal("doubled request was not made")
+	}
+	wantURL := "https://vpn.mozilla.org//api/v1/fpn/token?q=1"
+	if got := doubledReq.URL.String(); got != wantURL {
+		t.Fatalf("doubled URL = %q, want %q", got, wantURL)
+	}
+	if doubledReq.Method != http.MethodPost {
+		t.Fatalf("doubled method = %s, want POST", doubledReq.Method)
+	}
+	if got := doubledReq.Header.Get("Authorization"); got != "Bearer abc" {
+		t.Fatalf("doubled authorization = %q, want Bearer abc", got)
+	}
+	if doubledBody != "payload" {
+		t.Fatalf("doubled body = %q, want payload", doubledBody)
+	}
+	if doubledReq.ContentLength != int64(len("payload")) {
+		t.Fatalf("doubled content length = %d, want %d", doubledReq.ContentLength, len("payload"))
+	}
+}
+
+func TestTransportGuardianDoubledPathThenRelay(t *testing.T) {
+	first := &closeRecorder{Reader: strings.NewReader("first")}
+	doubled := &closeRecorder{Reader: strings.NewReader("doubled")}
+	var relayReq *http.Request
+	base := &fakeTransport{}
+	base.fn = func(req *http.Request) (*http.Response, error) {
+		switch len(base.calls) {
+		case 1:
+			return &http.Response{StatusCode: 451, Header: make(http.Header), Body: first}, nil
+		case 2:
+			return &http.Response{StatusCode: 451, Header: make(http.Header), Body: doubled}, nil
+		default:
+			relayReq = req
+			return response(http.StatusOK, "ok"), nil
+		}
+	}
+	tr := newTestTransport(base, Config{URL: "https://relay.example", Token: "tok"})
+	req := request(t, http.MethodGet, "https://vpn.mozilla.org/api/v1/fpn/token", nil)
+
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !first.closed || !doubled.closed {
+		t.Fatalf("bodies closed = %v/%v, want true/true", first.closed, doubled.closed)
+	}
+	if len(base.calls) != 3 {
+		t.Fatalf("base calls = %d, want 3 (direct, doubled, relay)", len(base.calls))
+	}
+	if relayReq == nil {
+		t.Fatal("relay request was not made")
+	}
+	wantURL := "https://relay.example/vpn.mozilla.org/api/v1/fpn/token"
+	if got := relayReq.URL.String(); got != wantURL {
+		t.Fatalf("relay URL = %q, want %q", got, wantURL)
+	}
+}
+
+func TestTransportGuardianDoubledPathWithoutRelay(t *testing.T) {
+	first := &closeRecorder{Reader: strings.NewReader("blocked")}
+	base := &fakeTransport{}
+	base.fn = func(req *http.Request) (*http.Response, error) {
+		if len(base.calls) == 1 {
+			return &http.Response{StatusCode: 451, Header: make(http.Header), Body: first}, nil
+		}
+		return response(http.StatusOK, "ok"), nil
+	}
+	tr := newTestTransport(base, Config{})
+	req := request(t, http.MethodGet, "https://vpn.mozilla.org/api/v1/fpn/token", nil)
+
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !first.closed {
+		t.Fatal("first response body was not closed")
+	}
+	if len(base.calls) != 2 {
+		t.Fatalf("base calls = %d, want 2", len(base.calls))
+	}
+}
+
+func TestTransportGuardianDoubledPathAlso451WithoutRelay(t *testing.T) {
+	first := &closeRecorder{Reader: strings.NewReader("first")}
+	doubled := &closeRecorder{Reader: strings.NewReader("doubled")}
+	base := &fakeTransport{}
+	base.fn = func(req *http.Request) (*http.Response, error) {
+		if len(base.calls) == 1 {
+			return &http.Response{StatusCode: 451, Header: make(http.Header), Body: first}, nil
+		}
+		return &http.Response{StatusCode: 451, Header: make(http.Header), Body: doubled}, nil
+	}
+	tr := newTestTransport(base, Config{})
+	req := request(t, http.MethodGet, "https://vpn.mozilla.org/api/v1/fpn/token", nil)
+
+	_, err := tr.RoundTrip(req)
+	var be *BlockedError
+	if !errors.As(err, &be) {
+		t.Fatalf("error = %T %v, want *BlockedError", err, err)
+	}
+	if be.Status != 451 || be.RelayConfigured || be.RelayTried {
+		t.Fatalf("BlockedError = %+v", be)
+	}
+	if !first.closed || !doubled.closed {
+		t.Fatalf("bodies closed = %v/%v, want true/true", first.closed, doubled.closed)
+	}
+	if len(base.calls) != 2 {
+		t.Fatalf("base calls = %d, want 2", len(base.calls))
+	}
+}
+
 func TestTransportRelayAlso451(t *testing.T) {
 	first := &closeRecorder{Reader: strings.NewReader("first")}
 	second := &closeRecorder{Reader: strings.NewReader("second")}

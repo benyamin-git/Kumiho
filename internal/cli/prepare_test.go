@@ -66,7 +66,7 @@ func TestGuideOutputAndArgs(t *testing.T) {
 		t.Fatalf("runGuide = %d", code)
 	}
 	out := stdout.String()
-	for _, want := range []string{"Blocked region", "Option 1: I have another VPN", "Option 2: Use a relay", "Browser sign-in still needs"} {
+	for _, want := range []string{"Blocked region", "Option 1: Try Prepare now", "Option 2: I have another VPN", "Option 3: Use your own relay", "Password sign-in works on blocked networks"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("guide missing %q:\n%s", want, out)
 		}

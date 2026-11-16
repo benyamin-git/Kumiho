@@ -80,11 +80,11 @@ var settingItems = []settingItem{
 	{key: "relay_url", label: "relay URL", kind: settingText,
 		hint: "HTTPS origin used only after HTTP 451; does not proxy the browser sign-in page"},
 	{key: "relay_token", label: "relay token", kind: settingSecret,
-		hint: "write-only secret used only after HTTP 451; does not proxy the browser sign-in page"},
+		hint: "optional write-only secret used only after HTTP 451; does not proxy the browser sign-in page"},
 	{key: "relay_test", label: "test relay", kind: settingAction,
 		hint: "send one request through the relay; used only after HTTP 451; does not proxy the browser sign-in page"},
 	{key: "blocked_region", label: "blocked region", kind: settingAction,
-		hint: "open the first-run guide: another VPN or the relay, then prepare and connect"},
+		hint: "open the first-run guide: try prepare first; another VPN or the relay are fallbacks"},
 }
 
 // settingsState is the Settings screen state (PLAN.md §6).

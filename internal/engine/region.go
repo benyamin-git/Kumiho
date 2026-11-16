@@ -65,7 +65,7 @@ func (c *Controller) RegionCheck(ctx context.Context) api.RegionCheckResult {
 		}
 	}
 	cfg := c.relayConfig()
-	result.RelayConfigured = strings.TrimSpace(cfg.URL) != "" && strings.TrimSpace(cfg.Token) != ""
+	result.RelayConfigured = strings.TrimSpace(cfg.URL) != ""
 	return result
 }
 

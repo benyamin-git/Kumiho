@@ -1,12 +1,15 @@
 import { t, tp, formatNumber } from "../i18n.js";
 
 /* The Blocked region guide (v0.11.0): the reusable first-run screen that
- * explains the two ways through an HTTP 451 region. It is not a wizard step:
- * the onboarding consent preflight, Settings → Region and the dashboard error
+ * explains the ways through an HTTP 451 region. It is not a wizard step: the
+ * onboarding consent preflight, Settings → Region and the dashboard error
  * notice all navigate here, and the numbered wizard count stays four.
  *
- * Option 1 (another VPN) leads everywhere; the relay is the fallback and
- * keeps its honest boundary: it does not proxy the browser sign-in page.
+ * Option 1 (Prepare now) leads because the engine can often reach Mozilla
+ * through a reachable sibling host and Guardian's doubled path without any
+ * outside help. Option 2 (another VPN) and Option 3 (the user's relay) are the
+ * fallbacks; the relay keeps its honest boundary: it does not proxy the
+ * browser sign-in page.
  * The prepared card counts down the ten-minute pass from status.pass_expires
  * (an epoch, added for this screen) so the handoff survives a restart.
  */
@@ -78,15 +81,26 @@ function build(host) {
     t("region.option1.step2"),
     t("region.option1.step3"),
     t("region.option1.step4"),
-    t("region.option1.step5"),
   ]) oneList.append(el("li", null, text));
   one.append(oneList, el("p", "field__hint", t("region.option1.hint")));
 
   // ---------------------------------------------------------- option two
   const two = el("section", "card region__path");
   two.append(el("h2", "card__title", t("region.option2.title")));
-  const twoIntro = el("p", "region__summary",
-    t("region.option2.intro"));
+  const twoList = el("ol", "region__steps");
+  for (const text of [
+    t("region.option2.step1"),
+    t("region.option2.step2"),
+    t("region.option2.step3"),
+    t("region.option2.step4"),
+    t("region.option2.step5"),
+  ]) twoList.append(el("li", null, text));
+  two.append(twoList, el("p", "field__hint", t("region.option2.hint")));
+
+  // -------------------------------------------------------- option three
+  const three = el("section", "card region__path");
+  three.append(el("h2", "card__title", t("region.option3.title")));
+  const threeIntro = el("p", "region__summary", t("region.option3.intro"));
   const relayField = el("div", "field region__field");
   const relayLabel = el("label", "field__label", t("region.relay_url"));
   relayLabel.htmlFor = "region-relay-url";
@@ -128,8 +142,14 @@ function build(host) {
   testResult.setAttribute("aria-live", "polite");
   testRow.append(test, testResult);
 
-  two.append(twoIntro, relayField, tokenField, testRow, el("p", "field__hint", t("region.relay.hint")));
-  two.append(el("p", "field__hint", t("region.option2.browser_hint")));
+  const threeList = el("ol", "region__steps");
+  for (const text of [
+    t("region.option3.step1"),
+    t("region.option3.step2"),
+    t("region.option3.step3"),
+  ]) threeList.append(el("li", null, text));
+  three.append(threeIntro, threeList, relayField, tokenField, testRow, el("p", "field__hint", t("region.option3.hint")));
+  three.append(el("p", "field__hint", t("region.browser_note")));
 
   const status = el("p", "region__status");
   status.setAttribute("aria-live", "polite");
@@ -142,7 +162,7 @@ function build(host) {
   relayDetails.hidden = true;
   testRow.append(relayDetails);
 
-  root.append(check, handoff, one, two, status, details);
+  root.append(check, handoff, one, two, three, status, details);
   host.append(root);
 
   return {
@@ -234,8 +254,8 @@ export default {
         ui.handoffBody.textContent = t("region.handoff.expired");
         ui.handoffBody.dataset.tone = "warn";
       } else {
-        ui.handoff.hidden = true;
-        ui.handoffBody.textContent = "";
+        ui.handoff.hidden = !authed;
+        ui.handoffBody.textContent = authed ? t("region.handoff.idle") : "";
         delete ui.handoffBody.dataset.tone;
       }
     }

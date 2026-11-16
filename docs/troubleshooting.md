@@ -110,40 +110,46 @@ region** (CLI/TUI: Enter on the notice or Settings → Region; GUI: the same
 screen; Android phone/TV: setup, Settings → Region or the dashboard notice).
 It lists the six host results and leads with Option 1:
 
-1. Turn on another VPN (or use the relay).
-2. Sign in.
-3. Run `kumiho prepare` (or **Prepare**). It fetches the server list, the
-   profile and a Guardian pass; only the pass is persisted, in `pass.json`
-   beside `tokens.json` (0600, account-bound).
-4. Turn the other VPN off when the pass is reported ready.
-5. Connect. Kumiho renews through its own tunnel.
+1. Try **Prepare** first. Sign in with a password (`kumiho login --password`)
+   if the browser page is blocked. On a 451, Kumiho retries the sign-in and
+   token calls on `oauth.accounts.firefox.com`, and Guardian requests retry
+   Mozilla's doubled `/api/v1/fpn/` path. Only the pass is persisted, in
+   `pass.json` beside `tokens.json` (0600, account-bound).
+2. If Prepare still reports HTTP 451, turn on another VPN, sign in, prepare,
+   turn the other VPN off, then connect. Kumiho renews through its own tunnel.
+3. If no other VPN is available, set the relay URL (its token is optional) and
+   test it. Password sign-in works through the relay; browser sign-in does
+   not.
 
 A prepared pass lasts about ten minutes. Connect and redial reuse it while
 more than 60 seconds remain; a restart inside that window can connect again.
 After ten minutes off, repeat the guide.
 
 - **Control plane** (accounts, profile, Remote Settings, the server list) —
-  while connected, requests dial through Kumiho's SOCKS5 listener first; if a
-  request still answers 451 and a relay is configured, Kumiho retries it
-  exactly once through the relay. A user who prepared before but can no longer
-  fetch a pass gets `bootstrap_required` (open the guide); a first-time blocked
-  user gets `region_blocked`. With no relay and no other VPN, the error is
-  `This region is blocking Mozilla's servers (HTTP 451). Set a control-plane
-  relay in Settings → Region, or deploy the relay from docs/relay.md, then
-  retry.`
+  while connected, requests dial through Kumiho's SOCKS5 listener first. On a
+  451, FxA requests retry the sibling host and Guardian requests retry the
+  doubled FPN path. If the request still answers 451 and a relay is
+  configured, Kumiho retries it exactly once through the relay. A user who
+  prepared before but can no longer fetch a pass gets `bootstrap_required`
+  (open the guide); a first-time blocked user gets `region_blocked`. The
+  current error is `This region is blocking Mozilla's servers (HTTP 451).
+  Open Blocked region and try Prepare again; if it still fails, use another
+  VPN or set a relay in Settings → Region.`
 - **VPN edge** — the tunnel still originates from your network, so the error
   is `The VPN edge refused this region (HTTP 451). A control-plane relay
   cannot fix the VPN data path; connect from a supported region.` The
   watchdog parks the session instead of redialing.
 
 For the relay path, set **Settings → Region → Control-plane relay** to the
-Worker HTTPS origin and the write-only token, then use **Test relay** or
-`kumiho relay test`. `Relay rejected the token` means the Worker's
-`RELAY_TOKEN` and the stored token differ; `relay_url is not set` means the URL
-is empty; `Relay unreachable: <detail>` is DNS, TLS, Worker or upstream. The
-relay does not proxy `accounts.firefox.com`, so browser sign-in still needs
-another VPN or another device. Deployment, allowlist and trust boundaries are
-in [relay.md](relay.md).
+Worker HTTPS origin. The write-only token is optional and only needed when the
+Worker sets `RELAY_TOKEN`. Then use **Test relay** or `kumiho relay test`.
+`Relay rejected the token` means the Worker's `RELAY_TOKEN` and the stored
+token differ; `relay_url is not set` means the URL is empty; `Relay
+unreachable: <detail>` is DNS, TLS, Worker or upstream. A relay URL without a
+token counts as configured. The relay does not proxy
+`accounts.firefox.com`, so browser sign-in still needs another VPN or another
+device. Deployment, allowlist and trust boundaries are in
+[relay.md](relay.md).
 
 ## Fastest is disabled or Ping all finds nothing
 

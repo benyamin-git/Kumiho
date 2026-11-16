@@ -267,7 +267,7 @@ type RegionHostStatus struct {
 }
 
 // RegionCheckResult classifies every control-plane host without credentials.
-// RelayConfigured reports that both the relay URL and token are set.
+// RelayConfigured reports that a relay URL is set; the token is optional.
 type RegionCheckResult struct {
 	Hosts           []RegionHostStatus `json:"hosts"`
 	Blocked         []string           `json:"blocked,omitempty"`

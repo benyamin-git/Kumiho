@@ -214,6 +214,105 @@ func TestRefreshFallsBackToSiblingHost(t *testing.T) {
 	}
 }
 
+// A region block on the api host is not terminal: the oauth sibling serves
+// the same auth-server routes and is tried before the command fails.
+func TestLoginFallsBackToSiblingHostOn451(t *testing.T) {
+	var primaryHits, fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		primaryHits++
+		if r.URL.Path != "/v1/account/login" {
+			t.Errorf("primary path = %s, want /v1/account/login", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusUnavailableForLegalReasons)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		if r.URL.Path != "/v1/account/login" {
+			t.Errorf("fallback path = %s, want /v1/account/login", r.URL.Path)
+		}
+		fmt.Fprintf(w, `{"sessionToken":%q,"verified":true}`, testSessionTokenHex())
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	got, err := c.Login(context.Background(), "test@example.com", "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SessionToken != testSessionTokenHex() || !got.Verified {
+		t.Fatalf("login result = %+v", got)
+	}
+	if primaryHits != 1 || fallbackHits != 1 {
+		t.Fatalf("primary hits = %d, fallback hits = %d; want 1 and 1",
+			primaryHits, fallbackHits)
+	}
+}
+
+func TestRefreshFallsBackToSiblingHostOn451(t *testing.T) {
+	var fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnavailableForLegalReasons)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		fmt.Fprint(w, `{"access_token":"atok2","expires_in":7200}`)
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+
+	toks, err := c.Refresh(context.Background(), "old-refresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if toks.AccessToken != "atok2" {
+		t.Fatalf("tokens = %+v", toks)
+	}
+	if fallbackHits != 1 {
+		t.Fatalf("fallback hits = %d, want 1", fallbackHits)
+	}
+}
+
+// A 451 is not a challenge: when every host is blocked, the solver must not
+// run. Solving a region block cannot succeed and wastes the person's time.
+func TestRegionBlockedLoginDoesNotSolve(t *testing.T) {
+	var fallbackHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnavailableForLegalReasons)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fallbackHits++
+		w.WriteHeader(http.StatusUnavailableForLegalReasons)
+	}))
+	defer fallback.Close()
+
+	c := NewClient()
+	c.BaseURL = primary.URL + "/v1"
+	c.FallbackBaseURL = fallback.URL + "/v1"
+	solver := &fakeSolver{}
+	c.Solver = solver
+
+	_, err := c.Login(context.Background(), "test@example.com", "password")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusUnavailableForLegalReasons {
+		t.Fatalf("error = %v, want a 451 APIError", err)
+	}
+	if solver.calls != 0 {
+		t.Fatalf("solver calls = %d, want 0", solver.calls)
+	}
+	if fallbackHits != 1 {
+		t.Fatalf("fallback hits = %d, want 1", fallbackHits)
+	}
+}
+
 func TestRefreshPermanentRejection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

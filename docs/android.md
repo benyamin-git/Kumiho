@@ -6,15 +6,15 @@ process through a gomobile library; there is no daemon, no IPC socket and no
 separate service to install. A `VpnService` owns the tunnel and its
 foreground notification, and the UI is Jetpack Compose over that service.
 
-This guide describes the app as implemented for **v1.0.0**
-(`versionCode` 10000); the README carries the latest published release and
+This guide describes the app as implemented for **v1.1.0**
+(`versionCode` 10100); the README carries the latest published release and
 download links. Read the honesty note below before relying on it.
 
 > **Status.** The app and its unit/instrumented test suites are implemented and
 > green. Physical first-connect/DNS browsing/exit-IP acceptance passed on a
 > Galaxy S25 FE for v0.5.2; the remaining checklist items were explicitly
 > accepted by the user as exceptions, so this is a **partial acceptance**, not a
-> full pass. Physical acceptance for v0.6.0 through v1.0.0 is still pending.
+> full pass. Physical acceptance for v0.6.0 through v1.1.0 is still pending.
 > Each full GitHub release carries the three production-signed Android APKs
 > with `SHA256SUMS`. The signing key and GitHub Actions secret values remain
 > user-owned. Local builds are test builds, not published releases. The direct
@@ -65,16 +65,16 @@ three APKs and `SHA256SUMS`:
 
 | Asset | ABI | Use |
 |---|---|---|
-| `Kumiho-v1.0.0-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
-| `Kumiho-v1.0.0-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
-| `Kumiho-v1.0.0-Android-universal.apk` | both | One file if unsure |
+| `Kumiho-v1.1.0-Android-arm64-v8a.apk` | arm64-v8a | Most phones |
+| `Kumiho-v1.1.0-Android-armeabi-v7a.apk` | armeabi-v7a | Older 32-bit phones |
+| `Kumiho-v1.1.0-Android-universal.apk` | both | One file if unsure |
 
-The versioned names are the primary v1.0.0 assets. The release also keeps the
+The versioned names are the primary v1.1.0 assets. The release also keeps the
 stable aliases `Kumiho-Android-arm64-v8a.apk`,
 `Kumiho-Android-armeabi-v7a.apk` and `Kumiho-Android-universal.apk` for
 `/releases/latest` compatibility. Both sets are produced by
 `.github/workflows/release.yml` from the per-version builds made by
-`scripts/android-release.sh`, and `SHA256SUMS-v1.0.0` (identical to
+`scripts/android-release.sh`, and `SHA256SUMS-v1.1.0` (identical to
 `SHA256SUMS`) lists both. Download from the project's GitHub Releases and
 check the APK against the checksum file published with it. Never install an
 APK from an untrusted mirror.
@@ -423,13 +423,15 @@ user exclusion would otherwise cover it.
 | Blocked region | action: opens the reusable guide | — | on tap |
 | `allow_locked` | on/off | off | immediately; next Locations read |
 | `relay_url` | HTTPS origin, empty = none | empty | immediately |
-| `relay_token` | write-only secret | not set | immediately |
+| `relay_token` | optional write-only secret | not set | immediately |
 | `relay_test` | action, not a setting | — | on tap |
 
 **Blocked region** is the same screen the first run opens. It lists the six
-host results, leads with Option 1 (another VPN: sign in, **Prepare**, turn the
-other VPN off, **Connect**) and keeps the relay as Option 2 with inline URL,
-token and **Test relay** controls. **Prepare** fetches the server list, the
+host results, leads with Option 1 (try **Prepare** first: password sign-in and
+the automatic FxA sibling/Guardian doubled-path fallbacks), then Option 2
+(another VPN: sign in, **Prepare**, turn the other VPN off, **Connect**) and
+Option 3 (the relay) with inline URL, optional token and **Test relay**
+controls. **Prepare** fetches the server list, the
 profile and a Guardian pass; the pass is stored in `pass.json` beside
 `tokens.json` in the app-private no-backup state (0600, account-bound), and
 the handoff card counts it down. The pass lasts about ten minutes and survives
@@ -444,7 +446,8 @@ text says so.
 
 The token row never shows the value. **Set** opens a masked editor; once a
 token exists the row offers **Replace** and **Clear**, and **Clear** deletes it
-immediately. The engine stores `relay.token` beside `tokens.json` in the
+immediately. The token is optional; a relay URL alone counts as configured.
+The engine stores `relay.token` beside `tokens.json` in the
 app-private no-backup state with mode 0600, and the UI only receives
 `relay_token_set`. **Test** runs one control-plane probe and shows
 **Testing…**, **Relay OK — N ms**, **Relay rejected the token** or
@@ -913,7 +916,7 @@ daemon or your Firefox Account.
   without waiting for a timeout. There is no IPv6 leak, but there is also no
   IPv6 connectivity.
 - **English and Persian UI only.** The TUI, CLI and English docs stay in
-  English; no other language ships in v1.0.0.
+  English; no other language ships in v1.1.0.
 - **No launcher long-press shortcuts**; the home-screen widgets and Quick
   Settings tile are the fast paths.
 - **No silent or store-delivered updates.** Kumiho checks GitHub at launch and
@@ -934,7 +937,7 @@ daemon or your Firefox Account.
   VoIP and games may not work). DNS over the SOCKS5 proxy is the exception.
 - **Physical acceptance is a partial pass with user-accepted exceptions.**
   The signed Android releases are published, but physical acceptance for
-  v0.6.0 through v1.0.0 is still pending and the untested checklist items
+  v0.6.0 through v1.1.0 is still pending and the untested checklist items
   remain exceptions; see [android-testing.md](android-testing.md).
 
 ## Desktop parity

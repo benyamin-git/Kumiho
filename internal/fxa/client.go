@@ -19,7 +19,7 @@ const maxResponseBytes = 1 << 20
 // Client talks to the FxA auth server.
 type Client struct {
 	BaseURL         string
-	FallbackBaseURL string // tried after a BaseURL 406, before solving
+	FallbackBaseURL string // tried after a BaseURL 406 or 451, before solving
 	HTTP            *http.Client
 	Now             func() time.Time // injectable clock for tests
 	Rand            io.Reader        // injectable nonce source for tests
@@ -29,7 +29,7 @@ type Client struct {
 	// Browser OAuth endpoints; empty values fall back to the package defaults.
 	AuthorizationEndpoint string
 	TokenEndpoint         string
-	TokenFallbackEndpoint string // tried after a TokenEndpoint 406 or transport failure
+	TokenFallbackEndpoint string // tried after a TokenEndpoint 406, 451 or transport failure
 	ProfileEndpoint       string
 	DestroyEndpoint       string
 }
@@ -214,8 +214,9 @@ func (c *Client) RefreshWithClient(ctx context.Context, refreshToken, clientID s
 }
 
 // refreshToken posts a form grant to the standard token endpoint on each base
-// in order. A challenge or transport failure moves to the sibling host; a real
-// API answer (for example 401 for a dead refresh token) is final.
+// in order. A challenge, region block or transport failure moves to the
+// sibling host; a real API answer (for example 401 for a dead refresh token)
+// is final.
 func (c *Client) refreshToken(ctx context.Context, values url.Values) ([]byte, error) {
 	var lastErr error
 	for _, base := range c.baseURLs() {
@@ -224,7 +225,7 @@ func (c *Client) refreshToken(ctx context.Context, values url.Values) ([]byte, e
 			return raw, nil
 		}
 		var chErr *ChallengeError
-		if !errors.As(err, &chErr) && !isTransportError(err) {
+		if !errors.As(err, &chErr) && !isTransportError(err) && !isRegionBlocked(err) {
 			return nil, err
 		}
 		if ctx.Err() != nil {
@@ -283,7 +284,9 @@ const fallbackRetryDelay = 500 * time.Millisecond
 // The sibling FallbackBaseURL (when configured and distinct) is tried before
 // any solve: Fastly can hard-block one host and path while the other hostname
 // serves the same auth server, and a solve against a hard block cannot
-// succeed. Only when every host answers 406 does each one get a solve.
+// succeed. HTTP 451 moves to the sibling the same way; when every host is
+// region-blocked the 451 is returned without solving. Only when every host
+// answers 406 does each one get a solve.
 func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, payload any) ([]byte, error) {
 	bases := c.baseURLs()
 	if len(bases) == 1 {
@@ -293,15 +296,16 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 	var lastErr error
 
 	// First pass: probe every base without solving. An HTTP answer that is
-	// not a challenge is authoritative and ends the loop; a transport failure
-	// does not, because the sibling host may still answer.
+	// not a challenge or a region block is authoritative and ends the loop; a
+	// transport failure or 451 does not, because the sibling host may still
+	// answer.
 	for _, base := range bases {
 		raw, err := c.doJSONBase(ctx, base, method, path, sessionToken, payload, false, lastErr != nil)
 		if err == nil {
 			return raw, nil
 		}
 		var chErr *ChallengeError
-		if !errors.As(err, &chErr) && !isTransportError(err) {
+		if !errors.As(err, &chErr) && !isTransportError(err) && !isRegionBlocked(err) {
 			return nil, err
 		}
 		if ctx.Err() != nil {
@@ -309,7 +313,7 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 		}
 		lastErr = err
 	}
-	if c.Solver == nil {
+	if c.Solver == nil || isRegionBlocked(lastErr) {
 		return nil, lastErr
 	}
 
@@ -332,14 +336,14 @@ func (c *Client) doJSON(ctx context.Context, method, path, sessionToken string, 
 	return nil, lastErr
 }
 
-// doJSONBase issues one BaseURL-relative attempt. afterChallenge reports that
-// an earlier base already answered 406; in that case a transport-level failure
-// is retried once, because the edge can reset a connection right after
-// challenging the primary.
-func (c *Client) doJSONBase(ctx context.Context, base, method, path, sessionToken string, payload any, solve, afterChallenge bool) ([]byte, error) {
+// doJSONBase issues one BaseURL-relative attempt. afterFailure reports that an
+// earlier base already failed with a challenge, region block or transport
+// error; in that case a transport-level failure is retried once, because the
+// edge can reset a connection right after challenging the primary.
+func (c *Client) doJSONBase(ctx context.Context, base, method, path, sessionToken string, payload any, solve, afterFailure bool) ([]byte, error) {
 	endpoint := strings.TrimRight(base, "/") + path
 	raw, err := c.doRequest(ctx, method, endpoint, sessionToken, "", payload, solve)
-	if err == nil || !afterChallenge || ctx.Err() != nil || !isTransportError(err) {
+	if err == nil || !afterFailure || ctx.Err() != nil || !isTransportError(err) {
 		return raw, err
 	}
 	timer := time.NewTimer(fallbackRetryDelay)
@@ -357,6 +361,14 @@ func (c *Client) doJSONBase(ctx context.Context, base, method, path, sessionToke
 func isTransportError(err error) bool {
 	var urlErr *url.Error
 	return errors.As(err, &urlErr)
+}
+
+// isRegionBlocked reports a terminal HTTP 451 from an FxA host. The sibling
+// host may still serve the same route, so callers try it first; a 451 is not a
+// challenge and must never be handed to the solver.
+func isRegionBlocked(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnavailableForLegalReasons
 }
 
 // doEndpointJSON sends a request to a full endpoint, optionally authenticated
