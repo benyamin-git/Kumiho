@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-16
+
 ### Changed
 
 - **Blocked-region fallbacks happen before another VPN.** FxA requests now
@@ -1085,7 +1087,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/benyamin-git/kumiho/releases/tag/v1.1.1
 [1.1.0]: https://github.com/benyamin-git/kumiho/releases/tag/v1.1.0
 [1.0.0]: https://github.com/benyamin-git/kumiho/releases/tag/v1.0.0
 [0.13.0]: https://github.com/benyamin-git/kumiho/releases/tag/v0.13.0
