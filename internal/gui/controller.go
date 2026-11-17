@@ -1796,7 +1796,9 @@ func (c *Controller) ensureAccount(ctx context.Context) {
 			c.accountLoading = false
 			c.mu.Unlock()
 		}()
-		actx, cancel := context.WithTimeout(ctx, accountTimeout)
+		// The caller's context belongs to the action that requested the
+		// refresh; the snapshot must outlive it.
+		actx, cancel := context.WithTimeout(context.Background(), accountTimeout)
 		defer cancel()
 		info, err := c.d.Account(actx)
 		if err != nil {
