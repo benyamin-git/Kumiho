@@ -54,7 +54,7 @@ func runCleanup(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	tun := plat.TunDefaults()
-	nc.Cleanup(context.Background(), platform.NetConfigSpec{
+	err = nc.Cleanup(context.Background(), platform.NetConfigSpec{
 		TunName:      tun.Name,
 		TunAddr:      tun.Addr,
 		TunMTU:       cfg.MTU,
@@ -62,6 +62,10 @@ func runCleanup(args []string, stdout, stderr io.Writer) int {
 		AllowLAN:     cfg.AllowLAN,
 		ExcludeCIDRs: cfg.ExcludeCIDRs,
 	})
+	if err != nil {
+		fmt.Fprintf(stderr, "kumiho cleanup: %v\n", err)
+		return 1
+	}
 	if stale, ok := nc.(staleCleaner); ok {
 		stale.CleanupStale(context.Background())
 	}

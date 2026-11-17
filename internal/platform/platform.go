@@ -59,7 +59,10 @@ type TunDefaults struct{ Name, Addr string }
 // NetConfig applies and removes the OS network configuration for the tunnel.
 type NetConfig interface {
 	Apply(ctx context.Context, spec NetConfigSpec) error
-	Cleanup(ctx context.Context, spec NetConfigSpec) // never fails
+	// Cleanup removes the configuration and reports residue it could not
+	// remove. Missing rules are not an error; surviving rules, routes or
+	// nftables tables are.
+	Cleanup(ctx context.Context, spec NetConfigSpec) error
 }
 
 // NetConfigSpec is today's netcfg.Config in platform-neutral terms.

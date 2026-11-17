@@ -188,7 +188,7 @@ func (n *fakeNetConfig) Apply(_ context.Context, spec platform.NetConfigSpec) er
 	return err
 }
 
-func (n *fakeNetConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
+func (n *fakeNetConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) error {
 	n.mu.Lock()
 	n.cleanups++
 	n.last = spec
@@ -198,6 +198,7 @@ func (n *fakeNetConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) 
 	if hook != nil {
 		hook()
 	}
+	return nil
 }
 
 func (n *fakeNetConfig) counts() (applies, cleanups int) {
@@ -246,8 +247,8 @@ func (noLogProvider) NetConfig() platform.NetConfig { return noLogNetConfig{} }
 
 type noLogNetConfig struct{}
 
-func (noLogNetConfig) Apply(context.Context, platform.NetConfigSpec) error { return nil }
-func (noLogNetConfig) Cleanup(context.Context, platform.NetConfigSpec)     {}
+func (noLogNetConfig) Apply(context.Context, platform.NetConfigSpec) error   { return nil }
+func (noLogNetConfig) Cleanup(context.Context, platform.NetConfigSpec) error { return nil }
 
 var (
 	_ platform.Provider  = (*fakeProvider)(nil)

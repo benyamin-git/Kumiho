@@ -23,4 +23,4 @@ func (netConfig) Apply(context.Context, platform.NetConfigSpec) error { return n
 
 // Cleanup is a no-op: stopping the VpnService tears the interface, its
 // addresses, its routes and its DNS down with it.
-func (netConfig) Cleanup(context.Context, platform.NetConfigSpec) {}
+func (netConfig) Cleanup(context.Context, platform.NetConfigSpec) error { return nil }

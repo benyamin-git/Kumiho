@@ -95,6 +95,6 @@ func (netConfig) Apply(context.Context, platform.NetConfigSpec) error {
 }
 
 // Cleanup is a no-op (D14: proxy-only still works without network config).
-func (netConfig) Cleanup(context.Context, platform.NetConfigSpec) {}
+func (netConfig) Cleanup(context.Context, platform.NetConfigSpec) error { return nil }
 
 var _ platform.Provider = (*Provider)(nil)

@@ -280,3 +280,52 @@ func TestApplierRunWatchdogNamesStuckCommand(t *testing.T) {
 	close(release)
 	<-done
 }
+
+// Cleanup must distinguish "the rule was already absent" (normal) from "the
+// rule survived" (the user is told disconnected but has no network).
+func TestCleanupReportsResidue(t *testing.T) {
+	a := &Applier{
+		Logf: func(string, ...any) {},
+		Run: func(_ context.Context, _ string, args ...string) (string, error) {
+			switch strings.Join(args, " ") {
+			case "nft list table inet kumiho":
+				return "table inet kumiho { }", nil
+			case "ip rule show", "ip -6 rule show":
+				return "1100:\tfrom all fwmark 0x1/0xff lookup 1000", nil
+			case "ip route show table 1000", "ip route show table 1001",
+				"ip -6 route show table 1000", "ip -6 route show table 1001":
+				return "", nil
+			default:
+				return "", nil
+			}
+		},
+	}
+	err := a.Cleanup(context.Background(), goldenConfig())
+	if err == nil {
+		t.Fatal("Cleanup reported success with residue")
+	}
+	for _, want := range []string{"nft table inet kumiho still exists", "fwmark 0x1/0xff", "kumiho cleanup"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Cleanup error = %v, want %q", err, want)
+		}
+	}
+}
+
+func TestCleanupCleanReturnsNil(t *testing.T) {
+	a := &Applier{
+		Logf: func(string, ...any) {},
+		Run: func(_ context.Context, _ string, args ...string) (string, error) {
+			switch strings.Join(args, " ") {
+			case "nft list table inet kumiho":
+				return "", errors.New("No such file or directory")
+			case "ip rule show", "ip -6 rule show":
+				return "0:\tfrom all lookup local\n32766:\tfrom all lookup main", nil
+			default:
+				return "", nil
+			}
+		},
+	}
+	if err := a.Cleanup(context.Background(), goldenConfig()); err != nil {
+		t.Fatalf("Cleanup on a clean system = %v, want nil", err)
+	}
+}

@@ -245,12 +245,61 @@ func (a *Applier) Apply(ctx context.Context, cfg Config) error {
 	return nil
 }
 
-// Cleanup removes rules, routes, the nft table and resolved link config.
-// It never fails: leftover cleanup happens on every daemon start.
-func (a *Applier) Cleanup(ctx context.Context, cfg Config) {
+// Cleanup removes rules, routes, the nft table and resolved link config, then
+// verifies the end state. Missing artifacts are normal; a surviving rule,
+// route or nft table is returned so the caller can tell the user instead of
+// claiming a clean disconnect. Leftover cleanup still happens on every
+// daemon start.
+func (a *Applier) Cleanup(ctx context.Context, cfg Config) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cleanup(ctx, cfg)
+	return a.verifyClean(ctx, cfg)
+}
+
+// verifyClean checks the owned state after CleanupCommands. A verification
+// command that cannot run (no ip/nft binary, lack of privilege) is logged and
+// skipped: only observed residue fails.
+func (a *Applier) verifyClean(ctx context.Context, cfg Config) error {
+	cfg = cfg.normalize()
+	var residue []string
+	if out, err := a.run(ctx, "", "nft", "list", "table", "inet", "kumiho"); err == nil {
+		residue = append(residue, "nft table inet kumiho still exists")
+		_ = out
+	}
+
+	for _, family := range []string{"ip", "ip -6"} {
+		args := append(strings.Fields(family), "rule", "show")
+		out, err := a.run(ctx, "", args...)
+		if err != nil {
+			a.logf("cleanup verify: %s: %v", strings.Join(args, " "), err)
+			continue
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, "fwmark "+MarkKumiho+"/0xff") {
+				residue = append(residue, fmt.Sprintf("%s rule %q", family, strings.TrimSpace(line)))
+			}
+		}
+	}
+
+	for _, table := range []string{strconv.Itoa(RouteTable), strconv.Itoa(FallbackTable)} {
+		for _, family := range []string{"ip", "ip -6"} {
+			args := append(strings.Fields(family), "route", "show", "table", table)
+			out, err := a.run(ctx, "", args...)
+			if err != nil {
+				a.logf("cleanup verify: %s: %v", strings.Join(args, " "), err)
+				continue
+			}
+			if strings.TrimSpace(out) != "" {
+				residue = append(residue, fmt.Sprintf("%s routing table %s still has routes", family, table))
+			}
+		}
+	}
+
+	if len(residue) > 0 {
+		return fmt.Errorf("netcfg: cleanup left residue: %s (run 'kumiho cleanup' as root)", strings.Join(residue, "; "))
+	}
+	return nil
 }
 
 // cleanup is the unlocked body of Cleanup; callers hold a.mu.

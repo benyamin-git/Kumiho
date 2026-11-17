@@ -183,10 +183,11 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 // adapter and routes with it; the fixed GUID lets an adapter that does survive
 // be reused instead of accumulating. This only clears configuration residue,
 // and it is safe whether or not the session teardown already ran.
-func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
+func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) error {
 	n.netMu.Lock()
 	defer n.netMu.Unlock()
 	n.cleanup(spec)
+	return nil
 }
 
 // cleanup is the unlocked body of Cleanup; callers hold netMu.

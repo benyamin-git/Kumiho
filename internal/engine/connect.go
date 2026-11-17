@@ -326,6 +326,7 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 type tunnelResources struct {
 	mu        sync.Mutex
 	proxyOnly bool
+	log       *logging.Ring
 	nc        platform.NetConfig
 	ncfg      platform.NetConfigSpec
 	closed    bool
@@ -355,8 +356,13 @@ func (r *tunnelResources) Close() {
 	}
 	if nc != nil && !proxyOnly {
 		// Cleanup while the interface still exists, so `resolvectl revert`
-		// succeeds quietly instead of racing the device's removal.
-		nc.Cleanup(context.Background(), ncfg)
+		// succeeds quietly instead of racing the device's removal. Residue
+		// the platform could not remove is reported, not hidden.
+		if err := nc.Cleanup(context.Background(), ncfg); err != nil {
+			if r.log != nil {
+				r.log.Logf(logging.Warn, "tunnel", "%v", err)
+			}
+		}
 	}
 	if engine != nil {
 		engine.Stop() // closes the TUN device, which unblocks its reader
@@ -409,7 +415,7 @@ func (r *tunnelResources) devName() string {
 // path (PLAN.md §4.2).
 func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelResources, error) {
 	cfg := c.store.EffectiveConfig()
-	res := &tunnelResources{proxyOnly: proxyOnly}
+	res := &tunnelResources{proxyOnly: proxyOnly, log: c.log}
 	fail := func(err error) (*tunnelResources, error) {
 		// Log before teardown so a stuck teardown step can never hide the
 		// real cause (it did during M4 acceptance).
@@ -518,7 +524,9 @@ func (c *Controller) startTunnel(ctx context.Context, proxyOnly bool) (*tunnelRe
 // engine may have left behind (PLAN.md §4.3). Called once at startup, only
 // after the engine owns the control socket.
 func (c *Controller) CleanupStaleNetcfg() {
-	c.nc.Cleanup(context.Background(), c.netcfgConfig(c.plat.TunDefaults().Name))
+	if err := c.nc.Cleanup(context.Background(), c.netcfgConfig(c.plat.TunDefaults().Name)); err != nil {
+		c.log.Logf(logging.Warn, "tunnel", "stale cleanup: %v", err)
+	}
 }
 
 // netcfgConfig renders the current policy-routing configuration.

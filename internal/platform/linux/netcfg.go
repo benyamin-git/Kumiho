@@ -27,9 +27,9 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 	return n.applier.Apply(ctx, netcfgConfig(spec))
 }
 
-// Cleanup removes the network configuration; it never fails.
-func (n *netConfig) Cleanup(ctx context.Context, spec platform.NetConfigSpec) {
-	n.applier.Cleanup(ctx, netcfgConfig(spec))
+// Cleanup removes the network configuration and reports residue.
+func (n *netConfig) Cleanup(ctx context.Context, spec platform.NetConfigSpec) error {
+	return n.applier.Cleanup(ctx, netcfgConfig(spec))
 }
 
 func netcfgConfig(spec platform.NetConfigSpec) netcfg.Config {
