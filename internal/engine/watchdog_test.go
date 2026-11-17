@@ -76,6 +76,7 @@ func loginProxyOnly(t *testing.T, ctrl *Controller) {
 func TestWatchdogRedialsDeadSession(t *testing.T) {
 	compressWatchdog(t)
 	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
 	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
 	ctrl.serverListURL = serverListServer(t).URL
 	ctrl.exitCheckURL = ""
@@ -106,6 +107,7 @@ func TestWatchdogRedialsDeadSession(t *testing.T) {
 func TestWatchdogRotatesEdgeAfterTwoFailures(t *testing.T) {
 	compressWatchdog(t)
 	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
 	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
 	ctrl.serverListURL = altServerListServer(t).URL
 	ctrl.exitCheckURL = ""
@@ -151,6 +153,7 @@ func TestWatchdogRotatesEdgeAfterTwoFailures(t *testing.T) {
 func TestWatchdogFatalStopsTunnel(t *testing.T) {
 	compressWatchdog(t)
 	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
 
 	var passCalls atomic.Int32
 	guardSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +205,7 @@ func TestWatchdogFatalStopsTunnel(t *testing.T) {
 func TestWatchdogEdge451IsFatal(t *testing.T) {
 	compressWatchdog(t)
 	ctrl, _ := newTestController(t, loginOKHandler(t))
+	ctrl.bootstrap = []bootstrapResolver{fakeBootstrap{ip: "203.0.113.7"}}
 	ctrl.guardian.BaseURL = guardianPassServer(t, "pass-1", new(atomic.Int32)).URL
 	ctrl.serverListURL = serverListServer(t).URL
 	ctrl.exitCheckURL = ""
