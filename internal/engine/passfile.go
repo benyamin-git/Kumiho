@@ -57,11 +57,20 @@ func (c *Controller) savePassFile(pass *guardian.Pass, account string) error {
 // in-memory pass still works.
 func (c *Controller) persistPass(pass *guardian.Pass) {
 	c.mu.Lock()
+	if c.tokens == nil {
+		// The session was signed out while the pass was in flight; a bearer
+		// must never be published or written after that.
+		c.mu.Unlock()
+		return
+	}
 	account := c.email
 	c.pass = pass
 	c.passPrepared = true
+	// Writing under c.mu fences the file against a concurrent sign-out,
+	// which clears tokens and deletes the file under the same lock.
+	err := c.savePassFile(pass, account)
 	c.mu.Unlock()
-	if err := c.savePassFile(pass, account); err != nil {
+	if err != nil {
 		c.log.Logf(logging.Warn, "guardian", "could not save the prepared pass: %v", err)
 	}
 }

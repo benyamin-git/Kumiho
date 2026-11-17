@@ -155,13 +155,20 @@ func (c *Controller) Prepare(ctx context.Context) (api.PrepareResult, error) {
 		return api.PrepareResult{}, fmt.Errorf("fetch the Guardian pass: %w", err)
 	}
 	c.mu.Lock()
+	if c.tokens == nil {
+		c.mu.Unlock()
+		return api.PrepareResult{}, &api.RemoteError{Code: api.CodeNotAuthenticated, Message: "signed out while preparing"}
+	}
 	c.pass = pass
 	c.passPrepared = true
 	account := c.email
 	c.quota = quotaFromPass(pass)
+	// Write under c.mu so a concurrent sign-out cannot delete the file
+	// between the publish and the write.
+	saveErr := c.savePassFile(pass, account)
 	c.mu.Unlock()
-	if err := c.savePassFile(pass, account); err != nil {
-		return api.PrepareResult{}, fmt.Errorf("save the prepared pass: %w", err)
+	if saveErr != nil {
+		return api.PrepareResult{}, fmt.Errorf("save the prepared pass: %w", saveErr)
 	}
 	c.log.Logf(logging.Info, "guardian", "prepared pass for %s (expires %s)", email,
 		time.Unix(pass.ExpiresAt, 0).Format(time.RFC3339))
