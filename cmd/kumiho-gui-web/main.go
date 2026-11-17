@@ -4,19 +4,23 @@
 // shell (states out over SSE GET /events, actions in over POST /action, a
 // /dev panel to drive mock scenarios and failures).
 //
-// It binds 0.0.0.0:7407 strictly — the home dashboard's registered port
+// It binds 127.0.0.1:7407 by default — the home dashboard's registered port
 // (KUMIHO_GUI_WEB_PORT overrides; a busy port fails startup, never falls
-// back) — so the dashboard link works from phones and other LAN devices.
-// This is a development tool; the Windows shell (cmd/kumiho-gui) is the
-// product. Start it through scripts/dev-gui-web.sh, which owns the pidfile
-// and the log file.
+// back). KUMIHO_GUI_WEB_BIND opts into another address for LAN access; a
+// non-loopback bind then requires a per-run URL token, which the startup log
+// prints in the complete URL. This is a development tool; the Windows shell
+// (cmd/kumiho-gui) is the product. Start it through scripts/dev-gui-web.sh,
+// which owns the pidfile and the log file.
 package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -45,7 +49,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("harness: %v", err)
 	}
-	if err := run(port); err != nil {
+	bind, err := harnessBind(os.Getenv("KUMIHO_GUI_WEB_BIND"))
+	if err != nil {
+		log.Fatalf("harness: %v", err)
+	}
+	if err := run(port, bind); err != nil {
 		log.Fatalf("harness: %v", err)
 	}
 }
@@ -64,12 +72,40 @@ func harnessPort(override string) (int, error) {
 	return port, nil
 }
 
+// harnessBind resolves the listen address: loopback by default, or the
+// KUMIHO_GUI_WEB_BIND IP when set. A host name is refused: the token and
+// origin rules are built from the concrete address.
+func harnessBind(override string) (string, error) {
+	if override == "" {
+		return "127.0.0.1", nil
+	}
+	if net.ParseIP(override) == nil {
+		return "", fmt.Errorf("KUMIHO_GUI_WEB_BIND=%q is not an IP address", override)
+	}
+	return override, nil
+}
+
+// harnessToken returns the asset server's token policy for a bind address:
+// loopback needs none (only this machine can connect and a browser cannot
+// reach it from another origin), while any other address gets 128 bits of
+// crypto/rand so the LAN surface is not anonymous.
+func harnessToken(bind string) (string, error) {
+	if ip := net.ParseIP(bind); ip != nil && ip.IsLoopback() {
+		return "", nil
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate the harness token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
 // run composes the harness and serves until a signal arrives: prefs →
 // appearance → asset server + mock daemon + controller + bridge, then the
 // controller pump and the state push loop. Shutdown follows the shell's
 // order: the pumps stop on the signal context, then the server closes (which
 // drops the SSE connections) and the process exits cleanly.
-func run(port int) error {
+func run(port int, bind string) error {
 	p, err := prefs.Load()
 	if err != nil {
 		// A malformed gui.toml must not block the harness (the shell's
@@ -95,9 +131,14 @@ func run(port int) error {
 	})
 	svc := newDevService(ctrl)
 
+	token, err := harnessToken(bind)
+	if err != nil {
+		return err
+	}
 	server := web.New(web.StaticFS(), web.Options{
-		Addr: fmt.Sprintf("0.0.0.0:%d", port),
-		Dev:  true,
+		Addr:  net.JoinHostPort(bind, strconv.Itoa(port)),
+		Token: token,
+		Dev:   true,
 	})
 	harness, err := web.NewHarness(web.HarnessConfig{
 		Server: server,
@@ -153,7 +194,10 @@ func run(port int) error {
 	go harness.Run(ctx)
 
 	log.Printf("theme=%s accent=%s prefs=%s", th, accent, prefsPath())
-	log.Printf("serving the mock UI on http://0.0.0.0:%d/ (dev panel at /dev)", port)
+	log.Printf("serving the mock UI on %s (dev panel at /dev)", server.URL())
+	if token == "" {
+		log.Printf("bound to loopback; set KUMIHO_GUI_WEB_BIND=0.0.0.0 for LAN access (a token is then required)")
+	}
 	<-ctx.Done()
 	log.Printf("shutting down")
 	return nil

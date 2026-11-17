@@ -388,6 +388,31 @@ func writeSSE(w http.ResponseWriter, raw []byte) error {
 	return nil
 }
 
+// crossSiteRequest reports whether the browser labels a request as coming
+// from another site. A browser sends Origin on cross-origin POSTs and
+// Sec-Fetch-Site on every request; command-line clients (curl, tests) send
+// neither and are accepted. The loopback bind and the per-run token remain
+// the authority for those.
+func crossSiteRequest(r *http.Request) bool {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		return !strings.EqualFold(origin, "http://"+r.Host)
+	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
+		return site != "same-origin" && site != "none"
+	}
+	return false
+}
+
+// rejectCrossSite writes a 403 and reports true when the request must not
+// reach the harness's mutating surface.
+func rejectCrossSite(w http.ResponseWriter, r *http.Request) bool {
+	if !crossSiteRequest(r) {
+		return false
+	}
+	httpError(w, http.StatusForbidden, "cross-origin request rejected")
+	return true
+}
+
 // serveAction is POST /action: one action envelope in, {"ok":true} out as
 // soon as it is accepted. A malformed envelope or an unknown name is a 400
 // with the decode error. Host-side actions (prefs_set, open_external,
@@ -396,6 +421,9 @@ func writeSSE(w http.ResponseWriter, raw []byte) error {
 // connect and disconnect may take up to 90 s and must never block the
 // endpoint.
 func (h *Harness) serveAction(w http.ResponseWriter, r *http.Request) {
+	if rejectCrossSite(w, r) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		httpError(w, http.StatusMethodNotAllowed, "method not allowed")

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Dev helper: run the GUI web harness (real UI assets + mock daemon) on
-# 0.0.0.0:7407, with a pidfile and a file log. 7407 is this project's
+# 127.0.0.1:7407, with a pidfile and a file log. 7407 is this project's
 # registered port in the home dashboard; KUMIHO_GUI_WEB_PORT overrides it.
+# KUMIHO_GUI_WEB_BIND=0.0.0.0 opts into LAN access, which then requires the
+# per-run token printed in the log's "serving the mock UI on ..." line.
 #
 # The harness binds the port strictly: if something else already holds it,
 # startup fails instead of falling back to another port.
@@ -22,6 +24,7 @@ repo="$(dirname "$here")"
 
 bin="$repo/dist/kumiho-gui-web-linux-amd64"
 port="${KUMIHO_GUI_WEB_PORT:-7407}"
+bind="${KUMIHO_GUI_WEB_BIND:-127.0.0.1}"
 
 # shellcheck source=/dev/null
 source "$here/dev-env.sh" >/dev/null
@@ -83,8 +86,8 @@ start_harness() {
     exit 1
   fi
   mkdir -p "$run_dir"
-  nohup env KUMIHO_GUI_WEB_PORT="$port" KUMIHO_GUI_PREFS="$prefs" \
-    "$bin" >>"$log" 2>&1 &
+  nohup env KUMIHO_GUI_WEB_PORT="$port" KUMIHO_GUI_WEB_BIND="$bind" \
+    KUMIHO_GUI_PREFS="$prefs" "$bin" >>"$log" 2>&1 &
   echo "$!" >"$pidfile"
   sleep 0.5
   if ! running_pid >/dev/null; then
@@ -93,7 +96,7 @@ start_harness() {
     rm -f "$pidfile"
     exit 1
   fi
-  echo "kumiho web harness: http://0.0.0.0:$port/ (dev panel at /dev)"
+  echo "kumiho web harness: http://$bind:$port/ (dev panel at /dev)"
   echo "log: $log"
   tail -n 5 "$log" || true
 }

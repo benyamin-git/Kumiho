@@ -188,6 +188,28 @@ func postAction(t *testing.T, base, envelope string) response {
 	return do(t, http.MethodPost, base+"action", strings.NewReader(envelope))
 }
 
+// doHeaders sends one request with extra headers, for the origin tests.
+func doHeaders(t *testing.T, method, url string, body io.Reader, headers map[string]string) response {
+	t.Helper()
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		t.Fatalf("NewRequest(%s %s): %v", method, url, err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := testClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s %s: %v", method, url, err)
+	}
+	return response{status: resp.StatusCode, header: resp.Header, body: string(raw)}
+}
+
 // postDev POSTs one dev endpoint body.
 func postDev(t *testing.T, base, path, body string) response {
 	t.Helper()
@@ -646,6 +668,40 @@ func TestHarnessDevEndpoints(t *testing.T) {
 	}
 	if got := postDev(t, f.base(), "dev/scenario", `{`); got.status != http.StatusBadRequest {
 		t.Errorf("POST /dev/scenario malformed = %d; want 400", got.status)
+	}
+}
+
+func TestHarnessRejectsCrossSiteRequests(t *testing.T) {
+	f := startFixture(t, fixtureOptions{dev: true})
+	base := f.base()
+	origin := strings.TrimSuffix(base, "/")
+
+	// A browser cross-origin POST and a cross-site dev request are refused
+	// before they reach the controller; the page's own origin and command
+	// line clients (no browser headers) pass.
+	cases := []struct {
+		name    string
+		method  string
+		path    string
+		body    string
+		headers map[string]string
+		want    int
+	}{
+		{"action foreign origin", http.MethodPost, "action", `{"type":"action","name":"connect"}`, map[string]string{"Origin": "https://evil.example"}, http.StatusForbidden},
+		{"action same origin", http.MethodPost, "action", `{"type":"action","name":"connect"}`, map[string]string{"Origin": origin}, http.StatusOK},
+		{"action no headers", http.MethodPost, "action", `{"type":"action","name":"connect"}`, nil, http.StatusOK},
+		{"dev foreign origin", http.MethodPost, "dev/scenario", `{"scenario":"connected"}`, map[string]string{"Origin": "https://evil.example"}, http.StatusForbidden},
+		{"dev cross-site fetch", http.MethodPost, "dev/scenario", `{"scenario":"connected"}`, map[string]string{"Sec-Fetch-Site": "cross-site"}, http.StatusForbidden},
+		{"dev cross-site page", http.MethodGet, "dev", "", map[string]string{"Sec-Fetch-Site": "cross-site"}, http.StatusForbidden},
+		{"dev same origin", http.MethodPost, "dev/scenario", `{"scenario":"connected"}`, map[string]string{"Origin": origin, "Sec-Fetch-Site": "same-origin"}, http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := doHeaders(t, tc.method, base+tc.path, strings.NewReader(tc.body), tc.headers)
+			if got.status != tc.want {
+				t.Errorf("%s %s = %d (%s); want %d", tc.method, tc.path, got.status, got.body, tc.want)
+			}
+		})
 	}
 }
 

@@ -59,12 +59,14 @@ publishes them with `SHA256SUMS`.
 ## Windows GUI development
 
     make build-web
-    scripts/dev-gui-web.sh start   # http://<host>:7407/
+    scripts/dev-gui-web.sh start   # http://127.0.0.1:7407/
     scripts/dev-gui-web.sh stop
 
 The harness serves the real UI assets in a browser against the mock daemon. The
-`/dev` panel drives scenarios, latency and failures. It binds `0.0.0.0:7407`
-and is never part of a release.
+`/dev` panel drives scenarios, latency and failures. It binds `127.0.0.1:7407`
+by default; `KUMIHO_GUI_WEB_BIND=0.0.0.0` opts into LAN access, which then
+requires the per-run token printed in the startup URL. It is never part of a
+release.
 
 ## Screenshots
 

@@ -75,9 +75,11 @@ them locally for any change under `android/`, `mobile/` or
 - `scripts/dev-daemon.sh start|stop|log` — Linux dev daemon as root with a
   file log (production capabilities live in the systemd unit).
 - `scripts/dev-gui-web.sh start|stop|log` — Linux GUI web harness
-  (`make build-web`) on `0.0.0.0:7407` (dashboard-registered; override with
-  `KUMIHO_GUI_WEB_PORT`), serving the real UI assets in a browser against the
-  mock daemon; the `/dev` panel drives scenarios, latency and failures.
+  (`make build-web`) on `127.0.0.1:7407` (dashboard-registered; override the
+  port with `KUMIHO_GUI_WEB_PORT`, opt into LAN access with
+  `KUMIHO_GUI_WEB_BIND=0.0.0.0`, which requires the tokenized URL the log
+  prints), serving the real UI assets in a browser against the mock daemon;
+  the `/dev` panel drives scenarios, latency and failures.
 - `scripts/watchdog-retest.sh` — live watchdog heal check against a real edge
   (`ss -K`, needs root).
 - `scripts/android-setup.sh [--check] [--ci]` — install or verify JDK 17,
@@ -299,7 +301,8 @@ them locally for any change under `android/`, `mobile/` or
   management, Add account and the session-wide sign-out are the first Settings
   section (`js/account-section.js` plus `css/account-section.css`), and the
   page-level Refresh reloads the account projection. The harness binds
-  `0.0.0.0:7407` (dev only, never released).
+  `127.0.0.1:7407` by default (dev only, never released); a LAN bind is the
+  `KUMIHO_GUI_WEB_BIND` opt-in and requires the per-run token.
 - **Android app** (`mobile/`, `internal/platform/android/`, `android/`): the
   Go engine is embedded in the app process, not exposed over IPC. `mobile/`
   (module root, package `mobile`) is the gomobile facade: `Mobile.start`

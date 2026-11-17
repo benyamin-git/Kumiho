@@ -50,6 +50,9 @@ func (h *Harness) serveDev(w http.ResponseWriter, r *http.Request, p string) {
 		http.NotFound(w, r)
 		return
 	}
+	if rejectCrossSite(w, r) {
+		return
+	}
 	switch p {
 	case pathDev:
 		if r.Method != http.MethodGet {
