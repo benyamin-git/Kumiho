@@ -15,6 +15,10 @@
 # After the bind the script verifies the archive layout (classes.jar plus one
 # jni/<abi>/libgojni.so per target) and that the arm64 shared object is aligned
 # for 16 KB pages (p_align >= 0x4000), which Android 15+ devices require.
+#
+# The bind resolves the module graph from go.mod/go.sum, not the vendored tree,
+# so a cold machine needs the Go module cache (one network fetch) before the
+# first AAR build. The Go build and test gate stays fully vendored.
 set -euo pipefail
 
 usage() {
@@ -59,7 +63,7 @@ done
 # shellcheck source=./android-env.sh
 . "$repo_root/scripts/android-env.sh"
 
-for tool in gomobile go unzip; do
+for tool in go unzip; do
 	command -v "$tool" >/dev/null 2>&1 || {
 		echo "android-build-aar: $tool not found on PATH (run scripts/android-setup.sh)" >&2
 		exit 1
@@ -69,6 +73,30 @@ done
 	echo "android-build-aar: ANDROID_NDK_HOME is not a directory; run scripts/android-setup.sh" >&2
 	exit 1
 }
+
+# Build the pinned tools from go.mod instead of trusting whichever gomobile is
+# installed on PATH. The bind and gobind then come from the exact
+# golang.org/x/mobile revision that the module graph records, and a stale
+# `go install` cannot change what CI ships.
+toolbin="$(mktemp -d)"
+worktmp=""
+cleanup() {
+	rm -rf "$toolbin"
+	if [ -n "$worktmp" ]; then
+		rm -rf "$worktmp"
+	fi
+}
+trap cleanup EXIT
+
+echo "android-build-aar: building pinned gomobile from go.mod"
+(
+	cd "$repo_root"
+	GOFLAGS= go build -mod=readonly -o "$toolbin/gobind" golang.org/x/mobile/cmd/gobind
+	GOFLAGS= go build -mod=readonly -o "$toolbin/gomobile" golang.org/x/mobile/cmd/gomobile
+)
+export PATH="$toolbin:$PATH"
+gomobile_version="$(go version -m "$toolbin/gomobile" | awk '$1 == "mod" && $2 == "golang.org/x/mobile" { print $3 }')"
+echo "android-build-aar: gomobile $gomobile_version (built from go.mod)"
 
 # Same version injection as `make build`.
 VERSION="${VERSION:-$(git -C "$repo_root" describe --tags --always --dirty 2>/dev/null || echo dev)}"
@@ -152,10 +180,9 @@ if [ "$emulator" -eq 0 ]; then
 		echo "android-build-aar: llvm-readelf not found under $ANDROID_NDK_HOME" >&2
 		exit 1
 	}
-	tmp="$(mktemp -d)"
-	trap 'rm -rf "$tmp"' EXIT
-	unzip -q -o -j "$out" jni/arm64-v8a/libgojni.so -d "$tmp"
-	so="$tmp/libgojni.so"
+	worktmp="$(mktemp -d)"
+	unzip -q -o -j "$out" jni/arm64-v8a/libgojni.so -d "$worktmp"
+	so="$worktmp/libgojni.so"
 	aligns="$("$readelf_bin" -lW "$so" | awk '$1 == "LOAD" { print $NF }')"
 	echo "android-build-aar: arm64 LOAD p_align values: $(echo "$aligns" | tr '\n' ' ')"
 	for align in $aligns; do

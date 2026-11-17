@@ -40,7 +40,10 @@ run as root; it refuses unsupported architectures.
     make build          # dist/kumiho-linux-amd64
     make build-arm64    # dist/kumiho-linux-arm64
 
-Dependencies are vendored; no network access is needed.
+Dependencies are vendored; no network access is needed for the Go build. (The
+Android AAR is a separate toolchain step that resolves the pinned gomobile
+tools from the Go module cache; see
+[android-testing.md](android-testing.md).)
 
 ### Install from the checkout
 

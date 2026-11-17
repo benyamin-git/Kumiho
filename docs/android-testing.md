@@ -33,7 +33,7 @@ physical acceptance checklist. The user guide is [android.md](android.md).
 | NDK | `28.2.13676358` | `android/app/build.gradle.kts`, `scripts/android-env.sh` |
 | JDK | 17 | `scripts/android-env.sh` |
 | Gradle | wrapper 9.6.0 | `android/gradle/wrapper/gradle-wrapper.properties` |
-| gomobile | `golang.org/x/mobile/cmd/gomobile@v0.0.0-20261011034528-197770444867` | `scripts/android-setup.sh` |
+| gomobile | `golang.org/x/mobile/cmd/gomobile@v0.0.0-20261011034528-197770444867` | `go.mod` (built by `scripts/android-build-aar.sh`; setup may also install a copy) |
 
 The Go version is the repository's `go.mod` (1.27.1). The app, the AAR and the
 desktop binaries share one version: the Go build injects `internal/version`
@@ -43,7 +43,8 @@ and the Android build derives `versionName`/`versionCode` from
 ## Toolchain setup
 
 Everything installs outside the checkout, under `$HOME/Android` (SDK, NDK,
-JDK fallback) and `$HOME/go/bin` (gomobile). Nothing is committed.
+JDK fallback) and `$HOME/go/bin` (the setup-installed gomobile; the AAR build
+compiles its own pinned copy). Nothing is committed.
 
     bash scripts/android-setup.sh           # install anything missing
     bash scripts/android-setup.sh --check   # verify versions only, no installs
@@ -81,6 +82,9 @@ Go. From the repository root:
 Both targets call `scripts/android-build-aar.sh`, which:
 
 - sources `scripts/android-env.sh`;
+- builds `gobind` and `gomobile` from the `go.mod`-pinned
+  `golang.org/x/mobile` revision into a temporary directory and puts them first
+  on `PATH` (a cold machine needs the Go module cache, i.e. one network fetch);
 - runs `gomobile bind -target … -androidapi 26 -javapkg=dev.benyamin.kumiho.go
   -trimpath` with the same `VERSION`/`COMMIT`/`DATE` ldflags as the Makefile
   (all three can be overridden from the environment);

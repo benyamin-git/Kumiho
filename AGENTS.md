@@ -17,7 +17,10 @@ Wintun + named pipe), **Android 8.0+** (arm64-v8a/armeabi-v7a, sideloaded
 ## Commands
 
 Everything is cross-compiled with vendored dependencies; no network access is
-needed to build or test.
+needed to build or test the Go tree. The Android AAR bind is the exception: it
+builds the pinned gomobile and gobind tools from the Go module graph, so a cold
+machine needs the module cache once (see
+[docs/android-testing.md](docs/android-testing.md)).
 
     make build          # linux/amd64   -> dist/kumiho-linux-amd64
     make build-arm64    # linux/arm64   -> dist/kumiho-linux-arm64
@@ -88,7 +91,8 @@ them locally for any change under `android/`, `mobile/` or
   `scripts/android-env.sh` exports the same toolchain for a shell.
 - `scripts/android-build-aar.sh [--emulator]` — build the git-ignored gomobile
   AAR that Gradle links (`make android-aar` /
-  `make android-aar-emulator`).
+  `make android-aar-emulator`), compiling `gomobile`/`gobind` from the
+  `go.mod`-pinned revision first.
 - `scripts/android-verify-apk.sh <apk>` — release gate for badging, ABI,
   16 KB alignment, arm64 `p_align`, signature and universal size; accepts
   `KUMIHO_ALLOW_UNSIGNED=1` for an unsigned CI compile check.
@@ -402,10 +406,11 @@ them locally for any change under `android/`, `mobile/` or
   BSD license text (pruned from the vendored tree) and checksums; verify with
   `cd third_party/webview2-loader && sha256sum -c SHA256SUMS`.
 - The Android gomobile AAR is a **build output**, never committed
-  (`android/app/libs/*.aar` is ignored). It is rebuilt from the vendored Go
-  tree by `scripts/android-build-aar.sh`; `golang.org/x/mobile` is a pinned Go
-  tool dependency (`go.mod`/`vendor/`), and the emulator AAR (`x86_64`) is for
-  tests only — never ship it.
+  (`android/app/libs/*.aar` is ignored). It is rebuilt from the vendored engine
+  by `scripts/android-build-aar.sh`; `golang.org/x/mobile` is a pinned Go tool
+  dependency (`go.mod`/`vendor/` for `gobind`), and the AAR script compiles
+  `gomobile`/`gobind` from that same module-cache revision. The emulator AAR
+  (`x86_64`) is for tests only — never ship it.
 - Android app dependencies (AndroidX, Jetpack Compose, Kotlin, kotlinx
   coroutines) are Maven artifacts resolved by Gradle from Google/Maven
   Central, not vendored. The versions are pinned in
