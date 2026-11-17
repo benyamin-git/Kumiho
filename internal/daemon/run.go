@@ -210,7 +210,7 @@ func (h *control) handle(ctx context.Context, conn *ipc.Conn) error {
 		if err != nil {
 			return nil
 		}
-		h.dispatch(connCtx, conn, cs, env)
+		h.dispatch(connCtx, ctx, conn, cs, env)
 	}
 }
 
@@ -225,7 +225,46 @@ func controlErrorReply(err error) (code, msg string) {
 	return api.CodeInternal, err.Error()
 }
 
-func (h *control) dispatch(ctx context.Context, conn *ipc.Conn, cs *connState, env *ipc.Envelope) {
+// dispatch runs one request. Slow requests go to their own goroutine and use
+// the daemon context, so they neither block the next request on the connection
+// (status, logs, a disconnect) nor stop when the asking client disappears.
+func (h *control) dispatch(connCtx, daemonCtx context.Context, conn *ipc.Conn, cs *connState, env *ipc.Envelope) {
+	if isLongRequest(env.Type) {
+		go h.dispatchNow(daemonCtx, conn, cs, env)
+		return
+	}
+	h.dispatchNow(connCtx, conn, cs, env)
+}
+
+// isLongRequest lists the commands that can wait on the network or a slow
+// edge for seconds. Everything else stays inline to keep request order.
+func isLongRequest(typ string) bool {
+	switch typ {
+	case ipc.TypeLocations,
+		ipc.TypeFavoriteLocation,
+		ipc.TypeClearRecents,
+		ipc.TypeSelectLocation,
+		ipc.TypeLoginEmail,
+		ipc.TypeLoginPassword,
+		ipc.TypeLogin2FA,
+		ipc.TypeLoginCaptcha,
+		ipc.TypeLoginComplete,
+		ipc.TypeAccountsUse,
+		ipc.TypeAccountsRemove,
+		ipc.TypeLogout,
+		ipc.TypeSettingsSet,
+		ipc.TypeRelayTest,
+		ipc.TypeRegionCheck,
+		ipc.TypePrepare,
+		ipc.TypeAccount,
+		ipc.TypeConnect,
+		ipc.TypeDisconnect:
+		return true
+	}
+	return false
+}
+
+func (h *control) dispatchNow(ctx context.Context, conn *ipc.Conn, cs *connState, env *ipc.Envelope) {
 	replyErr := func(code, msg string) {
 		_ = conn.Reply(env.ID, ipc.TypeError, api.RemoteError{Code: code, Message: msg})
 	}

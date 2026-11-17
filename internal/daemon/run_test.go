@@ -335,3 +335,63 @@ func TestBroadcastStatusCoalesces(t *testing.T) {
 		t.Fatal("broadcast trigger missing")
 	}
 }
+
+type blockingLocationsAPI struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingLocationsAPI) LocationsView(ctx context.Context, _ bool) (api.LocationsResult, error) {
+	select {
+	case <-b.entered:
+	default:
+		close(b.entered)
+	}
+	select {
+	case <-b.release:
+		return api.LocationsResult{}, nil
+	case <-ctx.Done():
+		return api.LocationsResult{}, ctx.Err()
+	}
+}
+
+func (b *blockingLocationsAPI) SetFavorite(context.Context, settings.LocationRef, bool) ([]api.LocationRef, error) {
+	return nil, nil
+}
+
+func (b *blockingLocationsAPI) ClearRecents() error { return nil }
+
+// A slow command must not hold the connection's read loop: the same client
+// can still ask for status (or disconnect) while a refresh is in flight.
+func TestLongRequestDoesNotBlockConnection(t *testing.T) {
+	blocking := &blockingLocationsAPI{entered: make(chan struct{}), release: make(chan struct{})}
+	cl := startControl(t, &control{refs: blocking})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	slow := make(chan error, 1)
+	go func() {
+		_, err := cl.Call(ctx, ipc.TypeLocations, api.LocationsPayload{Refresh: true})
+		slow <- err
+	}()
+
+	select {
+	case <-blocking.entered:
+	case <-ctx.Done():
+		t.Fatal("locations handler never started")
+	}
+
+	if _, err := cl.Call(ctx, ipc.TypeHello, nil); err != nil {
+		t.Fatalf("hello while locations was blocked: %v", err)
+	}
+
+	close(blocking.release)
+	select {
+	case err := <-slow:
+		if err != nil {
+			t.Fatalf("slow locations: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("locations did not finish")
+	}
+}
