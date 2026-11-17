@@ -81,4 +81,13 @@ type WebView interface {
 	// f must be a function
 	// f must return either value and error or just error
 	Bind(name string, f interface{}) error
+
+	// SetMessageSourceFilter installs a predicate on the source URI of every
+	// web message before a binding runs. A rejected message is dropped
+	// without invoking the binding. nil accepts every source.
+	SetMessageSourceFilter(allow func(source string) bool)
+
+	// SetNavigationGuard installs a predicate on every top-level navigation.
+	// A rejected URI is cancelled; nil allows every navigation.
+	SetNavigationGuard(allow func(uri string) bool)
 }

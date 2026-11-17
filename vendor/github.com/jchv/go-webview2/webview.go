@@ -56,6 +56,9 @@ type webview struct {
 	m          sync.Mutex
 	bindings   map[string]interface{}
 	dispatchq  []func()
+
+	sourceFilter    func(string) bool
+	navigationGuard func(string) bool
 }
 
 type WindowOptions struct {
@@ -101,6 +104,7 @@ func NewWithOptions(options WebViewOptions) WebView {
 
 	chromium := edge.NewChromium()
 	chromium.MessageCallback = w.msgcb
+	chromium.NavigationStartingCallback = w.navigationStarting
 	chromium.DataPath = options.DataPath
 	chromium.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateAllow)
 
@@ -136,7 +140,14 @@ type rpcMessage struct {
 
 func jsString(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
 
-func (w *webview) msgcb(msg string) {
+func (w *webview) msgcb(source, msg string) {
+	w.m.Lock()
+	filter := w.sourceFilter
+	w.m.Unlock()
+	if filter != nil && !filter(source) {
+		log.Printf("webview2: dropped a message from %q", source)
+		return
+	}
 	d := rpcMessage{}
 	if err := json.Unmarshal([]byte(msg), &d); err != nil {
 		log.Printf("invalid RPC message: %v", err)
@@ -156,6 +167,40 @@ func (w *webview) msgcb(msg string) {
 		w.Dispatch(func() {
 			w.Eval("window._rpc[" + id + "].resolve(" + string(b) + "); window._rpc[" + id + "] = undefined")
 		})
+	}
+}
+
+// SetMessageSourceFilter installs the predicate msgcb applies to a message's
+// source document URI before any binding runs.
+func (w *webview) SetMessageSourceFilter(allow func(source string) bool) {
+	w.m.Lock()
+	w.sourceFilter = allow
+	w.m.Unlock()
+}
+
+// SetNavigationGuard installs the predicate applied to every top-level
+// navigation; a URI it rejects is cancelled.
+func (w *webview) SetNavigationGuard(allow func(uri string) bool) {
+	w.m.Lock()
+	w.navigationGuard = allow
+	w.m.Unlock()
+}
+
+// navigationStarting cancels navigations the guard rejects.
+func (w *webview) navigationStarting(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NavigationStartingEventArgs) {
+	w.m.Lock()
+	guard := w.navigationGuard
+	w.m.Unlock()
+	if guard == nil {
+		return
+	}
+	uri, err := args.GetUri()
+	if err != nil {
+		log.Printf("webview2: navigation guard: %v", err)
+		return
+	}
+	if !guard(uri) {
+		_ = args.PutCancel(true)
 	}
 }
 

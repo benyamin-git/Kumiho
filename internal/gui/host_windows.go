@@ -342,6 +342,19 @@ func (h *host) run() error {
 		showWindow(hwnd, windows.SW_HIDE)
 	}
 
+	// The bridge is reachable from any document the webview renders unless
+	// it is fenced twice: the navigation guard keeps a dropped file, a
+	// remote page or a data: URL out of this window, and the message-source
+	// filter rejects a message unless its document URL carries the per-run
+	// token. Popups do not inherit the binding, so they add no action
+	// surface.
+	base := h.server.URL()
+	w.SetMessageSourceFilter(func(source string) bool {
+		return messageSourceAllowed(source, base)
+	})
+	w.SetNavigationGuard(func(uri string) bool {
+		return navigationAllowed(uri, base)
+	})
 	if err := w.Bind("kumihoAction", h.handleAction); err != nil {
 		return fmt.Errorf("webview2 bind: %w", err)
 	}
