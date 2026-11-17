@@ -7,13 +7,13 @@
 KUMIHO_ANDROID_HOME="$HOME/Android"
 export ANDROID_HOME="${ANDROID_HOME:-$KUMIHO_ANDROID_HOME/Sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk/28.2.13676358}"
 
 # JDK 17: honor an explicit JAVA_HOME, else the system OpenJDK when present,
 # else the user-local Temurin JDK installed by android-setup.sh (for boxes
 # without a system JDK and without sudo, handled by the T1 controller ruling).
 JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
-if [ ! -d "$JAVA_HOME" ] && [ ! -x "$JAVA_HOME/bin/java" ] && [ -d "$KUMIHO_ANDROID_HOME/jdk-17" ]; then
+if { [ ! -d "$JAVA_HOME" ] || [ ! -x "$JAVA_HOME/bin/java" ]; } && [ -d "$KUMIHO_ANDROID_HOME/jdk-17" ]; then
 	JAVA_HOME="$KUMIHO_ANDROID_HOME/jdk-17"
 fi
 export JAVA_HOME
