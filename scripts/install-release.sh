@@ -74,8 +74,12 @@ trap 'rm -rf "$tmp"' EXIT
 if [ -z "$version" ]; then
 	curl -fsSL "$api" -o "$tmp/releases.json" ||
 		die "could not query GitHub releases; pass --version vX.Y.Z"
-	version="$(grep -m1 '"tag_name"' "$tmp/releases.json" |
-		sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+	# GitHub orders by creation, not semver: a back-ported patch appears
+	# first. Pick the highest tag instead of trusting the list order.
+	version="$(grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$tmp/releases.json" |
+		sed -E 's/.*"([^"]+)"$/\1/' |
+		grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' |
+		sort -V | tail -n 1)"
 	[ -n "$version" ] || die "could not resolve the newest release; pass --version vX.Y.Z"
 fi
 version="${version#v}"
@@ -87,15 +91,18 @@ legacy_asset="kumiho-$tag-linux-$arch.zip"
 base="https://github.com/$repo/releases/download/$tag"
 
 # Releases from v0.8.0 use stable, version-free asset names. Older releases
-# keep the versioned names, so try the stable name first and fall back.
+# keep the versioned names, so try the stable name first and fall back only
+# when it is genuinely missing (a transient failure must not become a 404).
 asset="$stable_asset"
 echo "install-release: downloading $asset"
-if ! curl -fsSL "$base/$asset" -o "$tmp/$asset"; then
+code="$(curl -sSL -o "$tmp/$asset" -w '%{http_code}' "$base/$asset" || true)"
+if [ "$code" = 404 ]; then
 	rm -f "$tmp/$asset"
 	asset="$legacy_asset"
 	echo "install-release: downloading $asset"
-	curl -fsSL "$base/$asset" -o "$tmp/$asset"
+	code="$(curl -sSL -o "$tmp/$asset" -w '%{http_code}' "$base/$asset" || true)"
 fi
+[ "$code" = 200 ] || die "download failed (HTTP ${code:-unknown}) for $asset"
 curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
 expected="$(awk -v name="$asset" '{ n = $2; sub(/^\*/, "", n); if (n == name) { print $1; exit } }' "$tmp/SHA256SUMS")"
