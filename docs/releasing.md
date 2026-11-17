@@ -96,6 +96,10 @@ link `SHA256SUMS-vX.Y.Z`.
   for compatibility, update the README **What's new** block and the Persian
   README to the just-published release, and switch both README download tables
   and their checksum link to the versioned `vX.Y.Z` assets.
+- [ ] Move the one-command installer URL to the new tag in `README.md`,
+  `README.fa.md`, `docs/install.md` and `scripts/install-release.sh` (its
+  usage header). The URL must never point at `main`: the script runs as root,
+  so a mutable branch would be a root-code channel.
 - [ ] If the app gained a new platform or major capability, update the About
   description and topics again after the release.
 

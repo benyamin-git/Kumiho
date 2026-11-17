@@ -2,15 +2,17 @@
 # One-command Linux installer: download the newest published Kumiho release,
 # verify it against the release SHA256SUMS, extract it and run its install.sh.
 #
-#   curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
-#   curl -fsSL .../scripts/install-release.sh | sudo bash -s -- --version v0.7.2
+# Pin the raw URL to a release tag, never main:
+#   curl -fsSL --proto '=https' --proto-redir '=https' \
+#     https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
+#   curl ... | sudo bash -s -- --version v1.1.1
 #
 # The release archive carries install.sh, the systemd unit and the polkit rule,
 # so the downloaded copy is the only file this script needs.
 set -euo pipefail
 
 repo="benyamin-git/Kumiho"
-api="https://api.github.com/repos/$repo/releases?per_page=20"
+api="https://api.github.com/repos/$repo/releases?per_page=100"
 version=""
 forward=()
 
@@ -28,8 +30,9 @@ Options:
 Any other arguments are passed to the bundled install.sh, for example
 `uninstall` or `uninstall --purge`.
 
-Typical use:
-  curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+Typical use (pin the tag, never main):
+  curl -fsSL --proto '=https' --proto-redir '=https' \
+    https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
 EOF
 }
 
@@ -72,7 +75,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 if [ -z "$version" ]; then
-	curl -fsSL "$api" -o "$tmp/releases.json" ||
+	curl -fsSL --proto '=https' --proto-redir '=https' "$api" -o "$tmp/releases.json" ||
 		die "could not query GitHub releases; pass --version vX.Y.Z"
 	# GitHub orders by creation, not semver: a back-ported patch appears
 	# first. Pick the highest tag instead of trusting the list order.
@@ -95,15 +98,15 @@ base="https://github.com/$repo/releases/download/$tag"
 # when it is genuinely missing (a transient failure must not become a 404).
 asset="$stable_asset"
 echo "install-release: downloading $asset"
-code="$(curl -sSL -o "$tmp/$asset" -w '%{http_code}' "$base/$asset" || true)"
+code="$(curl -sSL --proto '=https' --proto-redir '=https' -o "$tmp/$asset" -w '%{http_code}' "$base/$asset" || true)"
 if [ "$code" = 404 ]; then
 	rm -f "$tmp/$asset"
 	asset="$legacy_asset"
 	echo "install-release: downloading $asset"
-	code="$(curl -sSL -o "$tmp/$asset" -w '%{http_code}' "$base/$asset" || true)"
+	code="$(curl -sSL --proto '=https' --proto-redir '=https' -o "$tmp/$asset" -w '%{http_code}' "$base/$asset" || true)"
 fi
 [ "$code" = 200 ] || die "download failed (HTTP ${code:-unknown}) for $asset"
-curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
+curl -fsSL --proto '=https' --proto-redir '=https' "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
 expected="$(awk -v name="$asset" '{ n = $2; sub(/^\*/, "", n); if (n == name) { print $1; exit } }' "$tmp/SHA256SUMS")"
 [ -n "$expected" ] || die "SHA256SUMS has no entry for $asset"

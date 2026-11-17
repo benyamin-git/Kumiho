@@ -89,7 +89,7 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 یک فرمان روی Ubuntu 24.04 amd64 یا arm64. آخرین انتشار منتشرشده را دانلود
 می‌کند، `SHA256SUMS` را بررسی می‌کند و نصب‌کنندهٔ همراه را اجرا می‌کند:
 
-    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
 
 سپس وارد شوید و TUI را شروع کنید:
 

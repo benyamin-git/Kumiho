@@ -84,10 +84,11 @@ See the [changelog](CHANGELOG.md) for details.
 
 ### Linux
 
-One command on Ubuntu 24.04 amd64 or arm64. It downloads the newest published
-release, verifies the release `SHA256SUMS`, and runs the bundled installer:
+One command on Ubuntu 24.04 amd64 or arm64. The installer script URL is pinned
+to release `v1.1.1` and HTTPS-only; it downloads the newest published release,
+verifies the release `SHA256SUMS`, and runs the bundled installer:
 
-    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
 
 Then sign in and start the TUI:
 

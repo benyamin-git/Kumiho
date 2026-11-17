@@ -24,13 +24,13 @@ On Ubuntu 24.04 amd64 or arm64, this downloads the newest published release
 (prereleases included), verifies it against the release `SHA256SUMS`, and runs
 the bundled installer:
 
-    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
 
 Pass a tag to install a specific release, or run the uninstaller:
 
-    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash -s -- --version v0.7.2
-    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash -s -- uninstall
-    curl -fsSL https://raw.githubusercontent.com/benyamin-git/Kumiho/main/scripts/install-release.sh | sudo bash -s -- uninstall --purge
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash -s -- --version v1.1.1
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash -s -- uninstall
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash -s -- uninstall --purge
 
 The script needs `curl`, `unzip` and `sha256sum` (standard on Ubuntu) and must
 run as root; it refuses unsupported architectures.
