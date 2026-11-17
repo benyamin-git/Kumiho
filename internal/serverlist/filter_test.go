@@ -338,3 +338,24 @@ func TestParseWithOptionsCatchAllExcluded(t *testing.T) {
 		t.Fatalf("CatchAll Anycast was not excluded: %+v", got)
 	}
 }
+
+func TestFilterExpressionDepthLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		expr string
+	}{
+		{"parentheses", strings.Repeat("(", maxFilterDepth+1) + "true" + strings.Repeat(")", maxFilterDepth+1)},
+		{"unary", strings.Repeat("!", maxFilterDepth+1) + "true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := evalFilter(tc.expr, Context{}); err == nil {
+				t.Fatalf("%s expression parsed; want a depth error", tc.name)
+			}
+		})
+	}
+
+	ok := strings.Repeat("(", 8) + "true" + strings.Repeat(")", 8)
+	if got, err := evalFilter(ok, Context{}); err != nil || !got {
+		t.Fatalf("nested expression = %v, %v; want true, nil", got, err)
+	}
+}

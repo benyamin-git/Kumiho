@@ -333,10 +333,17 @@ func boolValue(b bool) value     { return value{kind: valueBool, b: b} }
 func stringValue(s string) value { return value{kind: valueString, s: s} }
 func intValue(n int) value       { return value{kind: valueInt, n: n} }
 
+// maxFilterDepth bounds parser recursion. Remote Settings supplies the
+// expression, so an attacker-controlled list must not be able to exhaust the
+// stack with nested parentheses or unary operators. Any parse error fails
+// open at the caller.
+const maxFilterDepth = 64
+
 type parser struct {
-	lx  *lexer
-	tok token
-	ctx Context
+	lx    *lexer
+	tok   token
+	ctx   Context
+	depth int
 }
 
 func newParser(expr string, ctx Context) (*parser, error) {
@@ -437,6 +444,11 @@ func isComparison(k tokenKind) bool {
 }
 
 func (p *parser) parseUnary() (value, error) {
+	if p.depth >= maxFilterDepth {
+		return value{}, fmt.Errorf("filter expression nests deeper than %d", maxFilterDepth)
+	}
+	p.depth++
+	defer func() { p.depth-- }()
 	if p.tok.kind == tokNot {
 		if err := p.advance(); err != nil {
 			return value{}, err
