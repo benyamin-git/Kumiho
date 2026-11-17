@@ -237,6 +237,18 @@ ensure_sdk_packages() {
 	done
 }
 
+# select_ndk makes the pinned NDK the one gomobile and Gradle use, even on a
+# runner that advertises a different default in ANDROID_NDK_HOME.
+select_ndk() {
+	local ndk="$ANDROID_HOME/ndk/$NDK_VER"
+	[ -d "$ndk" ] || fail "pinned NDK $NDK_VER is not installed under $ANDROID_HOME/ndk"
+	export ANDROID_NDK_HOME="$ndk"
+	if [ -n "${GITHUB_ENV:-}" ]; then
+		printf 'ANDROID_NDK_HOME=%s\n' "$ndk" >>"$GITHUB_ENV"
+	fi
+	ok "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+}
+
 ensure_gomobile() {
 	if ! command -v gomobile >/dev/null 2>&1; then
 		say "installing gomobile $GOMOBILE_REF"
@@ -318,6 +330,11 @@ check_mode() {
 		report 1 "sdkmanager: not found"
 		report 1 "sdk packages not checked without sdkmanager"
 	fi
+	if [ "${ANDROID_NDK_HOME:-}" = "$ANDROID_HOME/ndk/$NDK_VER" ]; then
+		report 0 "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
+	else
+		report 1 "ANDROID_NDK_HOME is ${ANDROID_NDK_HOME:-unset}, want $ANDROID_HOME/ndk/$NDK_VER"
+	fi
 	if command -v gomobile >/dev/null 2>&1; then
 		v=$(go version -m "$(command -v gomobile)" 2>/dev/null | awk '$1=="mod" && $2=="golang.org/x/mobile" {print $3}')
 		if [[ "$v" == *"$GOMOBILE_REV"* && -n "$v" ]]; then
@@ -357,6 +374,7 @@ fi
 ensure_jdk
 ensure_cmdline_tools
 ensure_sdk_packages
+select_ndk
 ensure_gomobile
 ensure_gradle
 
