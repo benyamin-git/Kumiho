@@ -836,6 +836,10 @@ func (c *Controller) fetchPass(ctx context.Context) (*guardian.Pass, error) {
 			return nil, fmt.Errorf("Guardian rejected the access token and refreshing failed: %w", rerr)
 		}
 		tokens = c.currentTokens()
+		if tokens == nil {
+			// Logout cleared the session while the refresh was in flight.
+			return nil, &api.RemoteError{Code: api.CodeNotAuthenticated, Message: "signed out while fetching the proxy pass"}
+		}
 		pass, err = c.guardian.FetchPass(ctx, tokens.AccessToken)
 		if err == nil {
 			return pass, nil
