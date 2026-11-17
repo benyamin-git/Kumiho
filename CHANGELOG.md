@@ -38,9 +38,8 @@ the Android app.
 - **Account changes are published only after they persist.** A failed account
   write restores the previous snapshot instead of leaving a half-applied
   switch; removing an account best-effort revokes its Firefox Accounts refresh
-  token; and
-  a sign-out during a Guardian pass refresh or a prepared-pass write cannot
-  restore the previous session.
+  token; and a sign-out during a Guardian pass refresh or a prepared-pass write
+  cannot restore the previous session.
 - **Connections cannot overlap or wedge.** Overlapping connect attempts are
   fenced by generation, CONNECT streams that die before the response are woken
   and reset, network apply/cleanup and tunnel teardown are serialized in the
@@ -1155,7 +1154,8 @@ Initial release: a working Linux client (Ubuntu 24.04 amd64/arm64).
 - systemd install (`install.sh`) with a polkit rule, `kumiho` group access
   and autoconnect on boot.
 
-[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/benyamin-git/kumiho/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/benyamin-git/kumiho/releases/tag/v1.2.0
 [1.1.1]: https://github.com/benyamin-git/kumiho/releases/tag/v1.1.1
 [1.1.0]: https://github.com/benyamin-git/kumiho/releases/tag/v1.1.0
 [1.0.0]: https://github.com/benyamin-git/kumiho/releases/tag/v1.0.0

@@ -24,13 +24,13 @@ On Ubuntu 24.04 amd64 or arm64, this downloads the newest published release
 (prereleases included), verifies it against the release `SHA256SUMS`, and runs
 the bundled installer:
 
-    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash
 
 Pass a tag to install a specific release, or run the uninstaller:
 
-    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash -s -- --version v1.1.1
-    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash -s -- uninstall
-    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash -s -- uninstall --purge
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash -s -- --version v1.2.0
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash -s -- uninstall
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash -s -- uninstall --purge
 
 The script needs `curl`, `unzip` and `sha256sum` (standard on Ubuntu) and must
 run as root; it refuses unsupported architectures.
@@ -89,7 +89,7 @@ home `/var/lib/kumiho`); a regular account named `kumiho` is always kept.
 
 ## Windows 11
 
-Download `Kumiho-v1.1.1-Windows-amd64.zip` from the releases page and
+Download `Kumiho-v1.2.0-Windows-amd64.zip` from the releases page and
 extract it, or build from a checkout with `make build-windows` (the installer
 then finds the binary in `dist\`). Run everything below in PowerShell **as
 Administrator**.

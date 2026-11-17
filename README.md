@@ -23,12 +23,12 @@ the nearest server, and keeps the tunnel alive with an optional kill switch.
 
 | Platform | Download |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Linux-arm64.zip) |
-| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/Kumiho-v1.2.0-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/Kumiho-v1.2.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/Kumiho-v1.2.0-Linux-arm64.zip) |
+| Android phone and TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/Kumiho-v1.2.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/Kumiho-v1.2.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/Kumiho-v1.2.0-Android-universal.apk) |
 
 Every file is listed in
-[SHA256SUMS-v1.1.1](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/SHA256SUMS-v1.1.1).
+[SHA256SUMS-v1.2.0](https://github.com/benyamin-git/Kumiho/releases/download/v1.2.0/SHA256SUMS-v1.2.0).
 Android is sideload-only: there is no Play Store or F-Droid build. v0.7.2 and
 earlier prereleases remain on the
 [releases page](https://github.com/benyamin-git/Kumiho/releases).
@@ -69,14 +69,16 @@ Captured in the Dark theme with sample data.
 | --- | --- | --- |
 | <img src="screenshots/android-tv/home.png" width="420" alt="Android TV home: ten-foot dashboard with remote focus"> | <img src="screenshots/android-tv/locations.png" width="420" alt="Android TV locations: remote-first server list"> | <img src="screenshots/android-tv/settings.png" width="420" alt="Android TV settings: card-based sections"> |
 
-## What's new in v1.1.1
+## What's new in v1.2.0
 
-- **Blocked-region fallbacks happen before another VPN** — Firefox Accounts
-  retries Mozilla's reachable sibling host and Guardian retries its doubled
-  path before a personal relay; the Blocked region guide leads with **Try
-  Prepare now**, and another VPN or the relay become fallbacks.
-- **A relay URL alone counts as configured** — `region_check` no longer
-  requires the optional Worker token, matching `relay test` and the engine.
+- **Android shutdown and sign-out are orderly** — tunnel teardown runs off the
+  main thread, WebView cookies are cleared before sign-out finishes, and the
+  doctor explains that Android relies on Always-on VPN with lockdown rather
+  than a separate Kumiho kill switch.
+- **Connections, accounts and installers are hardened** — failed account
+  writes roll back, dead CONNECT streams recover, remote text is stripped of
+  terminal escapes, the Windows GUI bridge checks its callers, and the
+  installer pins an immutable release and requires HTTPS.
 
 See the [changelog](CHANGELOG.md) for details.
 
@@ -85,10 +87,10 @@ See the [changelog](CHANGELOG.md) for details.
 ### Linux
 
 One command on Ubuntu 24.04 amd64 or arm64. The installer script URL is pinned
-to release `v1.1.1` and HTTPS-only; it downloads the newest published release,
+to release `v1.2.0` and HTTPS-only; it downloads the newest published release,
 verifies the release `SHA256SUMS`, and runs the bundled installer:
 
-    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
+    curl -fsSL --proto '=https' --proto-redir '=https' https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash
 
 Then sign in and start the TUI:
 
@@ -106,7 +108,7 @@ uninstall.
 
 ### Windows 11
 
-1. Download `Kumiho-v1.1.1-Windows-amd64.zip` and extract it.
+1. Download `Kumiho-v1.2.0-Windows-amd64.zip` and extract it.
 2. In **Administrator PowerShell**, run `.\install.ps1` (or double-click
    `install.cmd`).
 3. Start **Kumiho** from the Start Menu.
@@ -123,9 +125,9 @@ See the [Windows install guide](docs/install.md#windows-11) and the
 Download the APK for your device and open it. Allow installation from your
 file manager or browser when Android asks; Kumiho is sideload-only.
 
-- **Most phones and Android TV:** `Kumiho-v1.1.1-Android-arm64-v8a.apk`
-- **Older 32-bit phones:** `Kumiho-v1.1.1-Android-armeabi-v7a.apk`
-- **Not sure:** `Kumiho-v1.1.1-Android-universal.apk`
+- **Most phones and Android TV:** `Kumiho-v1.2.0-Android-arm64-v8a.apk`
+- **Older 32-bit phones:** `Kumiho-v1.2.0-Android-armeabi-v7a.apk`
+- **Not sure:** `Kumiho-v1.2.0-Android-universal.apk`
 
 The first launch walks through Firefox Accounts sign-in, VPN permission and
 battery/Always-on guidance. On Android TV the same APK opens the TV shell. See

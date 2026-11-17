@@ -87,8 +87,10 @@ them locally for any change under `android/`, `mobile/` or
   (`ss -K`, needs root).
 - `scripts/android-setup.sh [--check] [--ci]` — install or verify JDK 17,
   SDK 36 + 37.2, build-tools 36.0.0, NDK 28.2.13676358, the API 36 x86_64
-  system image, the pinned gomobile and the Gradle wrapper bootstrap.
-  `scripts/android-env.sh` exports the same toolchain for a shell.
+  system image, the pinned gomobile and the Gradle wrapper bootstrap. It
+  selects the pinned NDK for the build and, in CI, exports it through
+  `GITHUB_ENV`; `scripts/android-env.sh` exports the same toolchain for a
+  shell.
 - `scripts/android-build-aar.sh [--emulator]` — build the git-ignored gomobile
   AAR that Gradle links (`make android-aar` /
   `make android-aar-emulator`), compiling `gomobile`/`gobind` from the
@@ -153,7 +155,8 @@ them locally for any change under `android/`, `mobile/` or
   2026-11-09, the `v0.11.0` and `v0.11.1` releases on 2026-11-10, the
   `v0.12.0` language and RTL release on 2026-11-11, the `v0.12.1` release on
   2026-11-12, the `v0.13.0` release on 2026-11-12, the `v1.0.0` release on
-  2026-11-13 and the `v1.1.0` release on 2026-11-15; each release workflow
+  2026-11-13, the `v1.1.0` release on 2026-11-15, the `v1.1.1` release on
+  2026-11-16 and the `v1.2.0` release on 2026-11-17; each release workflow
   uploaded the desktop and Android assets.
   See [docs/android-testing.md](docs/android-testing.md).
 

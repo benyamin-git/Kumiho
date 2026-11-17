@@ -4,8 +4,8 @@
 #
 # Pin the raw URL to a release tag, never main:
 #   curl -fsSL --proto '=https' --proto-redir '=https' \
-#     https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
-#   curl ... | sudo bash -s -- --version v1.1.1
+#     https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash
+#   curl ... | sudo bash -s -- --version v1.2.0
 #
 # The release archive carries install.sh, the systemd unit and the polkit rule,
 # so the downloaded copy is the only file this script needs.
@@ -32,7 +32,7 @@ Any other arguments are passed to the bundled install.sh, for example
 
 Typical use (pin the tag, never main):
   curl -fsSL --proto '=https' --proto-redir '=https' \
-    https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.1.1/scripts/install-release.sh | sudo bash
+    https://raw.githubusercontent.com/benyamin-git/Kumiho/v1.2.0/scripts/install-release.sh | sudo bash
 EOF
 }
 
