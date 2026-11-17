@@ -547,6 +547,9 @@ func (c *Controller) publishRotation(gen uint64, chosen *rotationCandidate, quot
 	c.setActiveLocked(a)
 	c.quota = a.Quota
 	c.rotationNotice = notice
+	if oldID != a.ID {
+		c.discardCachedPassLocked()
+	}
 	if err := c.saveAccountsLocked(true); err != nil {
 		c.activeID, c.email, c.tokens = oldID, oldEmail, oldTokens
 		if c.accounts != nil {

@@ -348,6 +348,9 @@ func (c *Controller) finishBrowserSuccess(b *browserLogin, gen uint64, tokens *f
 	c.mu.Unlock()
 
 	if !strings.EqualFold(previousEmail, activeEmail) {
+		c.mu.Lock()
+		c.discardCachedPassLocked()
+		c.mu.Unlock()
 		c.deletePassFile()
 	}
 	c.log.Logf(logging.Info, "auth", "signed in as %s (browser)", activeEmail)

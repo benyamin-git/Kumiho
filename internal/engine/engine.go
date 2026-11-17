@@ -1724,6 +1724,9 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	c.mu.Unlock()
 
 	if !strings.EqualFold(previousEmail, activeEmail) {
+		c.mu.Lock()
+		c.discardCachedPassLocked()
+		c.mu.Unlock()
 		c.deletePassFile()
 	}
 	c.log.Logf(logging.Info, "auth", "signed in as %s", activeEmail)

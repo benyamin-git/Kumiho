@@ -151,6 +151,13 @@ func (c *Controller) mapPassError(err error) error {
 	return err
 }
 
+// discardCachedPassLocked drops the in-memory pass and its prepared flag so a
+// pass cannot cross an account switch; callers hold c.mu.
+func (c *Controller) discardCachedPassLocked() {
+	c.pass = nil
+	c.passPrepared = false
+}
+
 // cachedPass returns a usable pass without touching the network: the live
 // pass first, then the prepared file. A pass must have more than
 // passReuseWindow left.
