@@ -724,17 +724,37 @@ is reproducible on this machine.
 | E4 | `56e7601` | Prepared-pass writes are fenced by the session lock against sign-out. |
 | B3 | `219e5ab` | The release job verifies `SHA256SUMS`, embedded versions and versioned asset names. |
 
-Still open from this report, deliberately not touched here:
+Still open from this report:
 
-- **Android (A1, A2, M1, M2, M3 and the Android UI items):** the fix needs the
-  Gradle/emulator toolchain; this environment cannot run `make android-test`
-  or a connected suite, so a change would be unverified.
-- **G1:** the vendored `go-webview2` exposes no navigation/new-window event and
-  no external-drop setter; fixing it means extending or patching the vendored
-  wrapper, then verifying by hand on Windows 11.
-- **G2:** the harness binds `0.0.0.0:7407` because the home dashboard links to
-  it from other devices; a per-run token needs a dashboard-side change first.
-- **B1, B2:** pinning the root install to a tag and vendoring the gomobile
-  command are release-process/toolchain decisions, not local code fixes.
-- **N3, N4, I2, I4, P3, N5, E6, B6, B7, B10, B17, B18 and the remaining
-  minor/info items:** unaffected by the fixes above and left for a follow-up.
+- **B2 (partial):** the AAR bind still computes the module graph from
+  `go.mod`/`go.sum` (module cache, network on a cold runner) and
+  `cmd/gomobile` is not vendored. The tool is now built from the pinned
+  revision instead of a `PATH` gomobile, and the docs no longer claim the
+  Android build is hermetic; a `go mod vendor` drift guard would rewrite the
+  patched `vendor/github.com/jchv/go-webview2` (G1).
+- **Android UI minors (A3 and the rest) and the remaining minor/info items
+  (B6, B7, B10, B17, B18 and others):** left for a follow-up.
+
+### Deferred batch (2026-11-17)
+
+The findings deferred above were fixed on top of `b805562`; the full Go gate is
+green at `263138d` and after the final docs/script commit. Android app changes
+are verified by the `android` and `android-tv` CI jobs.
+
+| Finding | Commit | Fix |
+|---|---|---|
+| G1 | `62d4418` | Foreign navigation is cancelled and the action bridge only accepts messages from the tokenized asset URL; the vendor patch is documented. |
+| G2 | `67d32b6` | The harness binds loopback by default; a non-loopback bind requires a per-run token, and `/action`/`/dev/*` reject cross-site requests. |
+| B1 | `ae772da` | Install instructions pin the v1.1.1 tag and every download requires HTTPS. |
+| N3 | `7706daa` | Peer SETTINGS outside the RFC ranges fail the session; a zero frame chunk cannot spin. |
+| N4 | `35aaa4c` | Filter-expression nesting is capped at 64 and fails open. |
+| I2, I5 | `4116b01` | Per-write deadline closes a stalled client, status broadcasts coalesce, and inbound frames are capped at 8 MiB. |
+| I4 | `907a6b2` | Long commands run on the daemon context, so the connection stays readable and a disconnect can land. |
+| P3 | `c5f2ebb` | `NetConfig.Cleanup` returns residue; Linux verifies the nft table, fwmark rules and tables 1000/1001, and `kumiho cleanup` reports it. |
+| E6, E7 | `245131d` | Account mutations snapshot the store and roll back on a failed save; removing an account revokes its FxA refresh token. |
+| A1, M1 | `1684f09` | `Close` detaches teardown and `Start` waits for it; Kotlin `onDestroy` no longer calls `runBlocking`. |
+| A2 | `ee08ca4` | Cookie flush and the DOM-storage purge run in `removeAllCookies`' completion callback. |
+| M2, M3 | `263138d` | Bridge panics become an error (AcquireFD) or fail open (link check); the doctor warns that Android has no independent kill switch and the docs explain the fatal path. |
+| B2 | `dafe729` | The AAR build compiles `gomobile`/`gobind` from the `go.mod`-pinned revision and the hermeticity claims were corrected (partial). |
+
+`96ecc12` also made the region-blocked connect test hermetic.

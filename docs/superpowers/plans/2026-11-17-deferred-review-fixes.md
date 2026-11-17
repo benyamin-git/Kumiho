@@ -245,3 +245,40 @@ per docs/releasing.md. Do not run Gradle or the emulator in this thread.
 
 Final: update `.ai-state`, the review's §11 status table, and the README/docs
 claims affected by B1/B2. No push.
+
+## Execution status (2026-11-17)
+
+All twelve tasks are implemented. Fourteen commits sit on top of the plan
+commit `b805562`:
+
+| Task | Commit | Notes |
+|---|---|---|
+| 1 G1 | `62d4418` | vendored patch plus the bridge source/token guard |
+| 2 G2 | `67d32b6` | loopback default, token on a LAN bind, same-origin guard |
+| 3 B1 | `ae772da` | v1.1.1 tag pin, HTTPS-only, release checklist |
+| 4 E6/E7 | `245131d` | snapshot/rollback; removed account token revoked |
+| 5 N3 | `7706daa` | SETTINGS range validation plus the zero-chunk guard |
+| 6 N4 | `35aaa4c` | parser depth capped at 64 |
+| 7 I2/I5 | `4116b01` | 5 s write deadline, coalesced broadcast, 8 MiB inbound cap |
+| 8 I4 | `907a6b2` | long commands on the daemon context |
+| 9 P3 | `c5f2ebb` | `Cleanup` returns residue; the CLI reports it |
+| 10 A1/M1 | `1684f09` | detached Close; Kotlin `onDestroy` off the main thread |
+| 11 A2 | `ee08ca4` | flush and DOM purge in the removal callback |
+| 12 M2/M3 | `263138d` | bridge panics become an error/fail-open; honest lockdown warning and docs |
+| B2 | `dafe729` | AAR builds pinned `gomobile`/`gobind` from `go.mod`; docs corrected |
+
+`96ecc12` also made the region-blocked connect test hermetic.
+
+Verification: the full Go gate is green at `263138d` and after the B2
+docs/script change. Android Kotlin/Compose changes are verified by the
+`android` and `android-tv` CI jobs; this machine has no SDK/NDK.
+
+B2 remains partial by design: `gomobile bind` still computes the module graph
+from `go.mod`/`go.sum` (module cache, network on a cold runner), because vendor
+mode cannot answer `go list -m all`; `cmd/gomobile` is not vendored. The build
+script now compiles both tools from the pinned revision instead of trusting a
+`gomobile` on `PATH`, so the AAR cannot silently use a different version. A
+`go mod vendor` drift guard is not viable in the main tree: it rewrites the
+patched `vendor/github.com/jchv/go-webview2` (G1);
+`third_party/go-webview2/README.md` records the patch and the manual re-vendor
+step.
