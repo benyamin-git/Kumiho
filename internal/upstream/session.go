@@ -294,10 +294,10 @@ func (s *Session) OpenStream(ctx context.Context, host string, port int) (net.Co
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		s.removeStream(st)
+		_ = st.Close()
 		return nil, ctx.Err()
 	case <-timer.C:
-		s.removeStream(st)
+		_ = st.Close()
 		return nil, &ConnectTimeout{Authority: authority, Err: errors.New("no CONNECT response from the edge")}
 	case err := <-st.resp:
 		if err != nil {

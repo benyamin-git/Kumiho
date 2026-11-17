@@ -94,6 +94,12 @@ func (st *stream) appendError(err error) {
 		st.err = err
 	}
 	st.remoteDone = true
+	// A stream can die before the CONNECT response arrives; wake the pending
+	// OpenStream instead of letting it wait for its own timeout.
+	if !st.gotResp {
+		st.gotResp = true
+		st.resp <- err
+	}
 	st.cond.Broadcast()
 	st.mu.Unlock()
 }
