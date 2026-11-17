@@ -142,7 +142,32 @@ jobs:
               Kumiho-Android-universal.apk > SHA256SUMS
           )
           cp release-assets/SHA256SUMS "release-assets/SHA256SUMS-${GITHUB_REF_NAME}"
-          cmp release-assets/SHA256SUMS "release-assets/SHA256SUMS-${GITHUB_REF_NAME}"
+          # Every archive must verify against the checksum file that ships
+          # beside it, and every binary must carry this tag's version.
+          (
+            cd release-assets
+            sha256sum -c SHA256SUMS
+          )
+          smoke="$(mktemp -d)"
+          unzip -q "release-assets/Kumiho-${GITHUB_REF_NAME}-Linux-amd64.zip" -d "$smoke"
+          "$smoke/dist/kumiho-linux-amd64" version | grep -Fq "$GITHUB_REF_NAME" ||
+            { echo "linux binary does not report $GITHUB_REF_NAME" >&2; exit 1; }
+          for exe in dist/kumiho-windows-amd64.exe dist/kumiho-gui-windows-amd64.exe; do
+            grep -aqF "$GITHUB_REF_NAME" "$exe" ||
+              { echo "$exe does not embed $GITHUB_REF_NAME" >&2; exit 1; }
+          done
+          for name in \
+            "Kumiho-${GITHUB_REF_NAME}-Linux-amd64.zip" \
+            "Kumiho-${GITHUB_REF_NAME}-Linux-arm64.zip" \
+            "Kumiho-${GITHUB_REF_NAME}-Windows-amd64.zip" \
+            "Kumiho-${GITHUB_REF_NAME}-Android-arm64-v8a.apk" \
+            "Kumiho-${GITHUB_REF_NAME}-Android-armeabi-v7a.apk" \
+            "Kumiho-${GITHUB_REF_NAME}-Android-universal.apk"; do
+            case "$name" in
+              *"$GITHUB_REF_NAME"*) ;;
+              *) echo "release asset name lacks the tag: $name" >&2; exit 1 ;;
+            esac
+          done
           for name in \
             "Kumiho-${GITHUB_REF_NAME}-Linux-amd64.zip" \
             "Kumiho-${GITHUB_REF_NAME}-Linux-arm64.zip" \
