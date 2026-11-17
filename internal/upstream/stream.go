@@ -186,8 +186,13 @@ func (st *stream) Write(p []byte) (int, error) {
 			ctx, cancel = context.WithDeadline(ctx, deadline)
 		}
 
+		maxFrame := int64(st.sess.maxSendFrameSize())
+		if maxFrame <= 0 {
+			cancel()
+			return written, errors.New("upstream: peer frame size is not positive")
+		}
 		chunk := int64(len(p))
-		if maxFrame := int64(st.sess.maxSendFrameSize()); chunk > maxFrame {
+		if chunk > maxFrame {
 			chunk = maxFrame
 		}
 		if err := st.sess.connSendWindow.waitPositive(ctx); err != nil {

@@ -576,3 +576,60 @@ func TestOutboundFlowControl(t *testing.T) {
 	}
 	t.Fatalf("server received %d bytes, want %d", len(srv.streamReceived(ev.StreamID)), len(payload))
 }
+
+// A hostile or non-conforming peer must not be able to pin a writer with a
+// zero frame size or push the flow-control window out of range; both are
+// connection errors per RFC 9113 section 6.5.2.
+func TestApplySettingsRejectsInvalidValues(t *testing.T) {
+	settingsFrame := func(t *testing.T, id http2.SettingID, val uint32) *http2.SettingsFrame {
+		t.Helper()
+		var wire bytes.Buffer
+		fr := http2.NewFramer(&wire, &wire)
+		if err := fr.WriteSettings(http2.Setting{ID: id, Val: val}); err != nil {
+			t.Fatalf("write settings: %v", err)
+		}
+		frame, err := fr.ReadFrame()
+		if err != nil {
+			t.Fatalf("read settings: %v", err)
+		}
+		sf, ok := frame.(*http2.SettingsFrame)
+		if !ok {
+			t.Fatalf("frame = %T, want *http2.SettingsFrame", frame)
+		}
+		return sf
+	}
+
+	cases := []struct {
+		name    string
+		id      http2.SettingID
+		val     uint32
+		wantErr bool
+	}{
+		{"frame below minimum", http2.SettingMaxFrameSize, 16383, true},
+		{"frame above maximum", http2.SettingMaxFrameSize, 16777216, true},
+		{"frame zero", http2.SettingMaxFrameSize, 0, true},
+		{"frame minimum", http2.SettingMaxFrameSize, 16384, false},
+		{"frame maximum", http2.SettingMaxFrameSize, 16777215, false},
+		{"initial window maximum", http2.SettingInitialWindowSize, 1<<31 - 1, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Session{}
+			s.peerMaxFrameSize.Store(16384)
+			err := s.applySettings(settingsFrame(t, tc.id, tc.val))
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("applySettings(%v=%d) error = %v; wantErr %v", tc.id, tc.val, err, tc.wantErr)
+			}
+			if tc.id != http2.SettingMaxFrameSize {
+				return
+			}
+			want := uint32(16384)
+			if !tc.wantErr {
+				want = tc.val
+			}
+			if got := s.maxSendFrameSize(); got != want {
+				t.Fatalf("maxSendFrameSize() = %d, want %d", got, want)
+			}
+		})
+	}
+}

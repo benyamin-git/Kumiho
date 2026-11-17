@@ -529,7 +529,12 @@ func (s *Session) readLoop() {
 			if f.IsAck() {
 				continue
 			}
-			s.applySettings(f)
+			if err := s.applySettings(f); err != nil {
+				// RFC 9113 section 6.5.2 makes both an out-of-range frame
+				// size and an oversized initial window a connection error.
+				s.fail(err)
+				return
+			}
 			s.writeControl(func() error { return s.framer.WriteSettingsAck() })
 		case *http2.WindowUpdateFrame:
 			s.applyWindowUpdate(f)
@@ -562,26 +567,46 @@ func (s *Session) writeControl(fn func() error) {
 	_ = fn()
 }
 
-func (s *Session) applySettings(f *http2.SettingsFrame) {
+func (s *Session) applySettings(f *http2.SettingsFrame) error {
 	var newInitial int64
 	haveInitial := false
-	_ = f.ForeachSetting(func(setting http2.Setting) error {
+	var newFrameSize uint32
+	haveFrameSize := false
+	err := f.ForeachSetting(func(setting http2.Setting) error {
 		switch setting.ID {
 		case http2.SettingInitialWindowSize:
+			// RFC 9113 section 6.5.2: the peer may not raise the initial
+			// stream window above 2^31-1.
+			if setting.Val > 1<<31-1 {
+				return fmt.Errorf("upstream: peer initial window size %d exceeds 2^31-1", setting.Val)
+			}
 			newInitial = int64(setting.Val)
 			haveInitial = true
 		case http2.SettingMaxFrameSize:
-			s.peerMaxFrameSize.Store(setting.Val)
+			// RFC 9113 section 6.5.2: the allowed range is [2^14, 2^24-1].
+			// An unchecked zero would also make stream.Write's chunk zero
+			// and spin without I/O.
+			if setting.Val < 16384 || setting.Val > 16777215 {
+				return fmt.Errorf("upstream: peer max frame size %d is outside [16384, 16777215]", setting.Val)
+			}
+			newFrameSize = setting.Val
+			haveFrameSize = true
 		case http2.SettingMaxConcurrentStreams:
 			s.setMaxConcurrent(setting.Val)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if haveFrameSize {
+		s.peerMaxFrameSize.Store(newFrameSize)
+	}
 
 	s.mu.Lock()
 	if !haveInitial || newInitial == s.peerInitialWin {
 		s.mu.Unlock()
-		return
+		return nil
 	}
 	delta := newInitial - s.peerInitialWin
 	s.peerInitialWin = newInitial
@@ -593,6 +618,7 @@ func (s *Session) applySettings(f *http2.SettingsFrame) {
 	for _, st := range streams {
 		st.sendWindow.add(delta)
 	}
+	return nil
 }
 
 func (s *Session) setMaxConcurrent(v uint32) {
