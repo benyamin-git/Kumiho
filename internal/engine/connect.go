@@ -328,6 +328,7 @@ type tunnelResources struct {
 	proxyOnly bool
 	nc        platform.NetConfig
 	ncfg      platform.NetConfigSpec
+	closed    bool
 	tunName   string
 	dev       platform.Device
 	engine    *tun.Engine
@@ -345,6 +346,7 @@ func (r *tunnelResources) Close() {
 	dnsSrv, engine, dev, socksSrv := r.dns, r.engine, r.dev, r.socks
 	httpSrv := r.httpProxy
 	nc, ncfg, proxyOnly := r.nc, r.ncfg, r.proxyOnly
+	r.closed = true
 	r.dns, r.engine, r.dev, r.socks, r.httpProxy, r.nc = nil, nil, nil, nil, nil, nil
 	r.mu.Unlock()
 
@@ -375,18 +377,18 @@ func (r *tunnelResources) Close() {
 // Reapply re-renders the network configuration (used when the kill switch
 // is toggled while connected).
 func (r *tunnelResources) Reapply(ctx context.Context, cfg platform.NetConfigSpec) error {
+	// Hold the lock across Apply: Close sets closed and then runs Cleanup, so
+	// either this re-apply finishes first or it is refused, and a torn-down
+	// tunnel can never be re-applied afterwards.
 	r.mu.Lock()
-	nc := r.nc
-	r.mu.Unlock()
-	if nc == nil {
+	defer r.mu.Unlock()
+	if r.closed || r.nc == nil {
 		return errors.New("netcfg: tunnel is not active")
 	}
-	if err := nc.Apply(ctx, cfg); err != nil {
+	if err := r.nc.Apply(ctx, cfg); err != nil {
 		return err
 	}
-	r.mu.Lock()
 	r.ncfg = cfg
-	r.mu.Unlock()
 	return nil
 }
 
