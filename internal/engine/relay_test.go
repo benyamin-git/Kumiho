@@ -246,6 +246,9 @@ func TestConnectRegionBlockedNoRelay(t *testing.T) {
 	if st := ctrl.LoginPassword(ctx, "pw"); st.Step != "done" {
 		t.Fatalf("login = %+v", st)
 	}
+	// Connect re-reads the server list; keep the test hermetic instead of
+	// reaching the real Firefox endpoint.
+	ctrl.serverListURL = serverListServer(t).URL
 	countries, err := serverlist.Parse([]byte(testServerListJSON))
 	if err != nil {
 		t.Fatal(err)
