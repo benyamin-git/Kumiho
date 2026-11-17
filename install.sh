@@ -22,6 +22,7 @@ state_dir=/var/lib/kumiho
 service_user=kumiho
 
 mode=install
+mode_set=0
 purge=0
 binary=""
 
@@ -33,8 +34,8 @@ usage() {
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        install) mode=install ;;
-        uninstall) mode=uninstall ;;
+        install) [ "$mode_set" = 0 ] || die "choose one of install or uninstall"; mode=install; mode_set=1 ;;
+        uninstall) [ "$mode_set" = 0 ] || die "choose one of install or uninstall"; mode=uninstall; mode_set=1 ;;
         --purge) purge=1 ;;
         --binary)
             shift
@@ -51,6 +52,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(id -u)" -eq 0 ] || die "must run as root (try: sudo $0 $*)"
+[ "$purge" = 0 ] || [ "$mode" = uninstall ] || die "--purge only makes sense with uninstall"
 command -v systemctl >/dev/null || die "systemd is required"
 
 default_binary() {
@@ -159,6 +161,13 @@ EOF
 uninstall_all() {
     echo "==> stopping service"
     systemctl disable --now kumiho.service >/dev/null 2>&1 || true
+    if [ -x "$bin_dst" ]; then
+        echo "==> cleaning up network state"
+        # The service may have been killed before it could tear down its
+        # nftables/routing state; never remove the only tool that can.
+        "$bin_dst" cleanup >/dev/null ||
+            die "network cleanup failed; kept $bin_dst so it can be retried"
+    fi
     rm -f "$unit_dst" "$polkit_dst" "$bin_dst"
     systemctl daemon-reload 2>/dev/null || true
 
