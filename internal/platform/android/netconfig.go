@@ -12,8 +12,10 @@ import (
 // implementation would otherwise install: the tunnel addresses (10.8.0.2/32
 // and fd00::2/128), the routed DNS server (10.8.0.1, answered in userspace),
 // the routes and the split-tunnel include/exclude lists (API 33+ excludeRoute,
-// API 26-32 complement routes), and the kill switch is the OS Always-on VPN /
-// lockdown setting. The builder owns the interface until the service stops,
+// API 26-32 complement routes). The kill switch is the OS Always-on VPN /
+// lockdown setting: Kumiho installs no kill-switch rules of its own here, so
+// with lockdown off a tunnel that stops unexpectedly releases traffic to the
+// physical network. The builder owns the interface until the service stops,
 // so re-applying any of it from Go would fight it rather than help.
 type netConfig struct{}
 

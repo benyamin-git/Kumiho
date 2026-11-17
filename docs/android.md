@@ -612,6 +612,12 @@ or off, and there is no engine-side kill switch or autoconnect on Android.
 - Under lockdown, a disabled session, a failed connect or a sign-out leaves
   the phone without network access. That is the OS doing what lockdown says,
   not a Kumiho error.
+- **If the engine tears the tunnel down unexpectedly** (a fatal quota or token
+  state, or a crash), Kumiho installs no independent fallback rule of its own.
+  With lockdown off, traffic returns to the physical network while the service
+  is still running; the dashboard shows the fatal state and can retry. Enable
+  Always-on VPN **and** lockdown if traffic must stay blocked until the tunnel
+  returns. `kumiho doctor` reports lockdown off as a warning for this reason.
 - The dashboard and notification reflect OS restarts; a service restart does
   not create a second tunnel. Revoking the VPN permission (`onRevoke`) ends
   the session with the engine's `revoke`, removes the foreground notification

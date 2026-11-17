@@ -15,13 +15,6 @@ import (
 	"github.com/benyamin-git/kumiho/internal/settings"
 )
 
-// Bridge is the Kotlin side of the VpnService handshake. The gomobile
-// DeviceBridge interface satisfies it.
-type Bridge interface {
-	AcquireFD(mtu int) (int, error)
-	NetworkAvailable() bool
-}
-
 // Provider implements platform.Provider on Android (D13). The Kotlin
 // VpnService owns the interface: it applies addresses, routes, DNS and the
 // split tunnel, then hands the tunnel descriptor to the engine through the
@@ -83,7 +76,7 @@ func (p *Provider) OpenDevice(_ context.Context, spec platform.DeviceSpec) (plat
 		if p.bridge == nil {
 			return nil, errors.New("android: no device bridge: the VpnService permission and service are required for the full tunnel")
 		}
-		acquired, err := p.bridge.AcquireFD(spec.MTU)
+		acquired, err := acquireFD(p.bridge, spec.MTU)
 		if err != nil {
 			return nil, fmt.Errorf("android: acquire vpn descriptor: %w", err)
 		}
@@ -131,7 +124,7 @@ func (p *Provider) HasDefaultRoute() bool {
 	if p.bridge == nil {
 		return true
 	}
-	return p.bridge.NetworkAvailable()
+	return networkAvailable(p.bridge)
 }
 
 // BypassDialer returns a plain dialer: Kumiho excludes itself from its own

@@ -147,11 +147,19 @@ func alwaysOnCheck(f doctorFacts) doctor.Check {
 
 func lockdownCheck(f doctorFacts) doctor.Check {
 	const name = "lockdown"
-	detail := "Lockdown mode is off; Kumiho's own kill switch still blocks leaks"
 	if f.Lockdown {
-		detail = "Lockdown mode is on; Kumiho does not rely on it for the kill switch"
+		return doctor.Check{
+			Name:   name,
+			Status: doctor.OK,
+			Detail: "Lockdown mode is on; Android blocks traffic while Kumiho's tunnel is down",
+		}
 	}
-	return doctor.Check{Name: name, Status: doctor.OK, Detail: detail}
+	return doctor.Check{
+		Name:        name,
+		Status:      doctor.Warn,
+		Detail:      "Lockdown mode is off; Kumiho installs no kill switch of its own on Android, so a tunnel that stops unexpectedly falls back to the physical network",
+		Remediation: "Turn on Always-on VPN and Block connections without VPN in Settings > Network & internet > VPN > Kumiho.",
+	}
 }
 
 func notificationsCheck(f doctorFacts) doctor.Check {

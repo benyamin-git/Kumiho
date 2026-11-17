@@ -112,7 +112,7 @@ func TestDoctorReportMixesCrossPlatformAndAndroidChecks(t *testing.T) {
 	want := map[string]doctor.Status{
 		"vpn-permission":       doctor.OK,
 		"always-on":            doctor.OK,
-		"lockdown":             doctor.OK,
+		"lockdown":             doctor.Warn,
 		"notifications":        doctor.OK,
 		"battery-optimization": doctor.OK,
 		"network":              doctor.OK,
@@ -152,6 +152,12 @@ func TestDoctorAndroidCheckTable(t *testing.T) {
 			check:  "always-on",
 			status: doctor.Warn,
 			modify: func(f *doctorFacts) { f.AlwaysOn = false },
+		},
+		{
+			name:   "lockdown off warns",
+			check:  "lockdown",
+			status: doctor.Warn,
+			modify: func(f *doctorFacts) { f.Lockdown = false },
 		},
 		{
 			name:   "lockdown on is informational",
