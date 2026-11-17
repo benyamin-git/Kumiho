@@ -56,6 +56,9 @@ type netConfig struct {
 	// wfpMu guards wfp and the whole open/apply/clear/close sequence: the
 	// engine's settings path can re-apply while a connect or teardown runs.
 	wfpMu sync.Mutex
+	// netMu serializes the routing/DNS half. A teardown must never interleave
+	// with a half-applied configuration. Lock order: netMu, then wfpMu.
+	netMu sync.Mutex
 	// wfp is the open dynamic kill-switch session, or nil when the kill
 	// switch has never been engaged (or was torn down with the tunnel).
 	wfp wfpBlockerAPI
@@ -88,6 +91,8 @@ func (n *netConfig) win() winNet {
 // MTU, bypass routes, tunnel defaults and interface DNS. It starts from a
 // clean slate so crashes and reconnects are safe (PLAN.md §4.3).
 func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) error {
+	n.netMu.Lock()
+	defer n.netMu.Unlock()
 	spec = normalizeSpec(spec)
 	tunIP := net.ParseIP(spec.TunAddr)
 	if tunIP == nil {
@@ -100,7 +105,7 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 	}
 
 	// Idempotent crash recovery: stale artifacts must never stack up.
-	n.Cleanup(ctx, spec)
+	n.cleanup(spec)
 
 	addr := unicastRow(luid, tunIP, addressPrefixLength(tunIP))
 	if err := wn.createAddress(&addr); err != nil && !errors.Is(err, windows.ERROR_OBJECT_ALREADY_EXISTS) {
@@ -179,6 +184,13 @@ func (n *netConfig) Apply(ctx context.Context, spec platform.NetConfigSpec) erro
 // be reused instead of accumulating. This only clears configuration residue,
 // and it is safe whether or not the session teardown already ran.
 func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
+	n.netMu.Lock()
+	defer n.netMu.Unlock()
+	n.cleanup(spec)
+}
+
+// cleanup is the unlocked body of Cleanup; callers hold netMu.
+func (n *netConfig) cleanup(spec platform.NetConfigSpec) {
 	spec = normalizeSpec(spec)
 	wn := n.win()
 	tunnelLUID, err := wn.aliasToLUID(spec.TunName)
@@ -227,6 +239,8 @@ func (n *netConfig) Cleanup(_ context.Context, spec platform.NetConfigSpec) {
 // foxy0 adapter and the adapter device itself. `kumiho cleanup` calls it
 // after the normal Cleanup path; like Cleanup it never fails and only logs.
 func (n *netConfig) CleanupStale(_ context.Context) {
+	n.netMu.Lock()
+	defer n.netMu.Unlock()
 	spec := normalizeSpec(platform.NetConfigSpec{})
 	wn := n.win()
 	if luid, err := wn.aliasToLUID(spec.TunName); err == nil && luid != 0 {

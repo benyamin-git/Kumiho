@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -201,6 +202,10 @@ type Applier struct {
 	Run func(ctx context.Context, stdin string, args ...string) (string, error)
 	// DetectLAN returns on-link subnets to exclude (Linux implementation).
 	DetectLAN func() []string
+
+	// mu serializes Apply and Cleanup: a teardown must never interleave with
+	// a half-applied configuration.
+	mu sync.Mutex
 }
 
 func (a *Applier) logf(format string, args ...any) {
@@ -212,13 +217,15 @@ func (a *Applier) logf(format string, args ...any) {
 // Apply installs the configuration, starting from a clean slate so crashes
 // and reconnects are safe (PLAN.md §3.2/§4.3).
 func (a *Applier) Apply(ctx context.Context, cfg Config) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	cfg = cfg.normalize()
 	if a.DetectLAN != nil {
 		cfg.LANSubnets = a.DetectLAN()
 	}
 
 	// Idempotent crash recovery: stale artifacts must never stack up.
-	a.Cleanup(ctx, cfg)
+	a.cleanup(ctx, cfg)
 
 	if _, err := a.run(ctx, NFTConfig(cfg), "nft", "-f", "-"); err != nil {
 		return fmt.Errorf("netcfg: apply nftables: %w%s", err, permissionHint(err))
@@ -241,6 +248,13 @@ func (a *Applier) Apply(ctx context.Context, cfg Config) error {
 // Cleanup removes rules, routes, the nft table and resolved link config.
 // It never fails: leftover cleanup happens on every daemon start.
 func (a *Applier) Cleanup(ctx context.Context, cfg Config) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cleanup(ctx, cfg)
+}
+
+// cleanup is the unlocked body of Cleanup; callers hold a.mu.
+func (a *Applier) cleanup(ctx context.Context, cfg Config) {
 	cfg = cfg.normalize()
 	for _, cmd := range CleanupCommands(cfg) {
 		if out, err := a.run(ctx, "", cmd...); err != nil {
