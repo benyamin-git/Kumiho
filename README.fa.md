@@ -26,12 +26,12 @@ HTTP/2 CONNECT عبور می‌دهد. Android همان موتور Go را در 
 
 | پلتفرم | دانلود |
 | --- | --- |
-| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Windows-amd64.zip) |
-| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Linux-arm64.zip) |
-| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/Kumiho-v1.1.0-Android-universal.apk) |
+| Windows 11 (64-bit) | [![Windows x64 ZIP](https://img.shields.io/badge/ZIP-x64-0550ae?logo=windows&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Windows-amd64.zip) |
+| Linux (64-bit / ARM64) | [![Linux x64 ZIP](https://img.shields.io/badge/ZIP-x64-e36209?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Linux-amd64.zip) [![Linux ARM64 ZIP](https://img.shields.io/badge/ZIP-ARM64-f0883e?logo=linux&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Linux-arm64.zip) |
+| گوشی Android و Android TV | [![Android ARMv8 APK](https://img.shields.io/badge/APK-ARMv8-2da44e?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Android-arm64-v8a.apk) [![Android ARMv7 APK](https://img.shields.io/badge/APK-ARMv7-4ac26b?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Android-armeabi-v7a.apk) [![Android universal APK](https://img.shields.io/badge/APK-Universal-1a7f37?logo=android&logoColor=white)](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/Kumiho-v1.1.1-Android-universal.apk) |
 
 همهٔ فایل‌ها در
-[SHA256SUMS-v1.1.0](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.0/SHA256SUMS-v1.1.0)
+[SHA256SUMS-v1.1.1](https://github.com/benyamin-git/Kumiho/releases/download/v1.1.1/SHA256SUMS-v1.1.1)
 فهرست شده‌اند. Android فقط به‌صورت نصب دستی (sideload) عرضه می‌شود؛ نسخه‌ای در
 Play Store یا F-Droid وجود ندارد. نسخه‌های پیش‌انتشار v0.7.2 و پیش‌تر در
 [صفحهٔ انتشارها](https://github.com/benyamin-git/Kumiho/releases) باقی می‌مانند.
@@ -70,16 +70,15 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 | --- |
 | <img src="screenshots/fa/android-tv/home.png" width="420" alt="خانهٔ فارسی Android TV: داشبورد ده‌فوتی با فوکوس کنترل"> |
 
-## تازه‌های نسخهٔ 1.1.0
+## تازه‌های نسخهٔ 1.1.1
 
-- **کپچای تصویری درون‌خطی برای ورود با گذرواژه** — رابط گرافیکی Windows و
-  برنامهٔ Android (گوشی و TV) تصویر کپچای Mozilla را در همان صفحه نشان می‌دهند
-  و پاسخ را همان‌جا ارسال می‌کنند؛ TUI و CLI همان ورود را در مرورگر ادامه
-  می‌دهند.
-- **ورود با گذرواژه از مسیر تبادل فرم OAuth کامل می‌شود** — پس از گذرواژه و
-  هر مرحلهٔ کد، Kumiho کد مجوز را در نقطهٔ پایانی فرم OAuth مبادله می‌کند و
-  دیگر در مسیر قدیمی و مسدود توکن متوقف نمی‌شود. اگر مسدودسازی ادامه داشته
-  باشد، همان حساب در جریان مرورگر ادامه می‌یابد.
+- **راه‌های جایگزین منطقهٔ مسدود پیش از استفاده از VPN دیگر اجرا می‌شوند** —
+  Firefox Accounts ابتدا میزبان خواهر در دسترس Mozilla را امتحان می‌کند و
+  Guardian ابتدا مسیر دوتایی خود را؛ رلهٔ شخصی تنها پس از آن‌هاست. راهنمای
+  **منطقهٔ مسدود** با **همین حالا آماده کن** شروع می‌شود.
+- **تنها آدرس رله برای «پیکربندی‌شده» کافی است** — `region_check` دیگر
+  توکن اختیاری Worker را الزامی نمی‌داند و با `relay test` و موتور هم‌راستا
+  شده است.
 
 تغییرات کامل در [تاریخچهٔ تغییرات](CHANGELOG.md) آمده است.
 
@@ -107,7 +106,7 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 
 ### Windows 11
 
-1. فایل `Kumiho-v1.1.0-Windows-amd64.zip` را دانلود و استخراج کنید.
+1. فایل `Kumiho-v1.1.1-Windows-amd64.zip` را دانلود و استخراج کنید.
 2. در **PowerShell با دسترسی Administrator**، `.\install.ps1` را اجرا کنید (یا
    روی `install.cmd` دوبار کلیک کنید).
 3. **Kumiho** را از منوی Start اجرا کنید.
@@ -124,9 +123,9 @@ Android در تم روشن. تصاویر فارسی رابط، نسخهٔ راس
 APK مناسب دستگاه خود را دانلود و باز کنید. وقتی Android پرسید، نصب از
 فایل‌منیجر یا مرورگر را مجاز کنید؛ Kumiho فقط به‌صورت sideload عرضه می‌شود.
 
-- **بیشتر گوشی‌ها و Android TV:** `Kumiho-v1.1.0-Android-arm64-v8a.apk`
-- **گوشی‌های ۳۲بیتی قدیمی‌تر:** `Kumiho-v1.1.0-Android-armeabi-v7a.apk`
-- **اگر مطمئن نیستید:** `Kumiho-v1.1.0-Android-universal.apk`
+- **بیشتر گوشی‌ها و Android TV:** `Kumiho-v1.1.1-Android-arm64-v8a.apk`
+- **گوشی‌های ۳۲بیتی قدیمی‌تر:** `Kumiho-v1.1.1-Android-armeabi-v7a.apk`
+- **اگر مطمئن نیستید:** `Kumiho-v1.1.1-Android-universal.apk`
 
 اجرای نخست، ورود به حساب Firefox، مجوز VPN و راهنمای باتری/Always-on را طی
 می‌کند. روی Android TV همان APK پوستهٔ TV را باز می‌کند. [راهنمای Android](docs/android.md)

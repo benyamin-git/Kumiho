@@ -298,6 +298,13 @@ Two roles:
 
 Unix socket `/run/kumiho/control.sock`, mode `0660`, owner `kumiho:kumiho` (installer optionally adds the operator's user to group `kumiho`). Newline-delimited JSON, `{"v":1,"id":…,"type":…}` request/response plus unsolicited events.
 
+The wire surface is 46 commands and their events; the complete catalog lives in
+[docs/cli-tui-abilities.md](docs/cli-tui-abilities.md), and the constants are in
+`internal/ipc/ipc.go`. Beyond the table below it includes `login_start`,
+`login_status`, `login_complete`, `login_cancel`, the `accounts_*` family,
+`prepare`, `region_check`, `favorite_location`, `clear_recents`,
+`select_location`, `relay_test`, `log_snapshot` and the `ping_done` event.
+
 | C→S | Purpose |
 |---|---|
 | `hello` | version handshake |
