@@ -106,6 +106,8 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		return &api.RemoteError{Code: api.CodeNotAuthenticated, Message: "sign in first (kumiho login)"}
 	}
 	c.setStateLocked(StateConnecting)
+	c.connectGen++
+	gen := c.connectGen
 	c.mu.Unlock()
 	c.notify()
 
@@ -113,11 +115,11 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		if re := c.regionBlocked(err); re != nil {
 			err = re
 		}
-		c.connectFailed(err)
+		c.connectFailed(gen, err)
 		return err
 	}
 	if err := c.EnsureFreshToken(ctx); err != nil {
-		c.connectFailed(fmt.Errorf("refresh access token: %w", err))
+		c.connectFailed(gen, fmt.Errorf("refresh access token: %w", err))
 		if re := c.regionBlocked(err); re != nil {
 			return re
 		}
@@ -142,14 +144,14 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 			}
 		}
 		if err != nil {
-			c.connectFailed(err)
+			c.connectFailed(gen, err)
 			return err
 		}
 	}
 	if req.Fastest {
 		fastest, ferr := c.fastestCandidate(countries)
 		if ferr != nil {
-			c.connectFailed(ferr)
+			c.connectFailed(gen, ferr)
 			return ferr
 		}
 		req.LocationCode = fastest.CountryCode
@@ -158,7 +160,7 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	}
 	cand, err := resolveCandidate(countries, req, c.store.State())
 	if err != nil {
-		c.connectFailed(err)
+		c.connectFailed(gen, err)
 		return err
 	}
 
@@ -166,7 +168,7 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		pass, err = c.acquirePass(ctx)
 		if err != nil {
 			err = c.mapPassError(err)
-			c.connectFailed(err)
+			c.connectFailed(gen, err)
 			return err
 		}
 	}
@@ -215,14 +217,14 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	if isNilSession(sess) {
 		if isEdgeBlocked(lastErr) {
 			re := &api.RemoteError{Code: api.CodeRegionBlocked, Message: edgeBlockedMessage}
-			c.connectFailed(re)
+			c.connectFailed(gen, re)
 			return re
 		}
 		if lastErr == nil {
 			lastErr = errors.New("upstream: dial returned a nil session")
 		}
 		err = fmt.Errorf("connect %s: %w", cand.Address(), lastErr)
-		c.connectFailed(err)
+		c.connectFailed(gen, err)
 		return err
 	}
 	c.clearServerFailures(cand.Address())
@@ -241,8 +243,9 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 	// engine dial through it live, and a later watchdog redial swaps it in
 	// place (PLAN.md §4.2).
 	c.mu.Lock()
-	if c.state != StateConnecting {
-		// A disconnect landed while we were dialing; abandon the tunnel.
+	if !c.connectAttemptLiveLocked(gen) {
+		// A disconnect landed while we were dialing, or a newer attempt owns
+		// the state machine; abandon this session.
 		c.mu.Unlock()
 		_ = sess.Close()
 		return errors.New("connect was cancelled by a disconnect")
@@ -260,13 +263,13 @@ func (c *Controller) Connect(ctx context.Context, req api.ConnectPayload) error 
 		}
 		c.mu.Unlock()
 		_ = sess.Close()
-		c.connectFailed(err)
+		c.connectFailed(gen, err)
 		return err
 	}
 
 	stop := make(chan struct{})
 	c.mu.Lock()
-	if c.state != StateConnecting {
+	if !c.connectAttemptLiveLocked(gen) {
 		// A disconnect landed while the data path was starting.
 		c.mu.Unlock()
 		res.Close()
@@ -758,6 +761,7 @@ func (c *Controller) Shutdown() {
 // stopTunnel closes the data path and returns the state machine to IDLE.
 func (c *Controller) stopTunnel(reason string) {
 	c.mu.Lock()
+	c.connectGen++ // an attempt that is still dialing must not publish
 	sess, res := c.session, c.resources
 	stop := c.metricsStop
 	wasConnected := sess != nil
@@ -787,23 +791,34 @@ func (c *Controller) stopTunnel(reason string) {
 	c.notify()
 }
 
-func (c *Controller) connectFailed(err error) {
+func (c *Controller) connectFailed(gen uint64, err error) {
 	var fatal *fatalError
+	c.mu.Lock()
+	if c.connectGen != gen {
+		// A disconnect or a newer connect attempt superseded this one; it
+		// must not publish the failure into the newer attempt's state.
+		c.mu.Unlock()
+		return
+	}
 	if errors.As(err, &fatal) {
-		c.mu.Lock()
 		c.setStateLocked(StateFatal)
 		c.mu.Unlock()
 		c.log.Logf(logging.Error, "tunnel", "fatal: %v", err)
 		c.notify()
 		return
 	}
-	c.mu.Lock()
 	if c.state != StateUnauthenticated {
 		c.setStateLocked(StateIdle)
 	}
 	c.mu.Unlock()
 	c.log.Logf(logging.Warn, "tunnel", "connect failed: %v", err)
 	c.notify()
+}
+
+// connectAttemptLiveLocked reports whether an in-flight connect attempt may
+// still publish its session; callers hold c.mu.
+func (c *Controller) connectAttemptLiveLocked(gen uint64) bool {
+	return c.connectGen == gen && c.state == StateConnecting
 }
 
 // acquirePass fetches a Guardian proxy pass and persists it for reconnects

@@ -218,6 +218,11 @@ type Controller struct {
 	pending  *pendingLogin
 	onChange []func()
 
+	// connectGen fences an in-flight connect attempt from publishing into a
+	// later one. It is bumped when a connect starts and when a disconnect
+	// cancels, under mu.
+	connectGen uint64
+
 	locations    []serverlist.Country
 	locationsRaw []byte
 	locationsAt  time.Time
