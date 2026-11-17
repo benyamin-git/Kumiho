@@ -128,13 +128,18 @@ fun parseBrowserRedirect(raw: String): BrowserRedirect? {
  */
 @Suppress("UNUSED_PARAMETER")
 fun clearMozillaCookies(context: Context) {
-    CookieManager.getInstance().run {
-        removeAllCookies(null)
-        flush()
+    val cookies = CookieManager.getInstance()
+    // removeAllCookies is asynchronous: flush and the DOM-storage purge run
+    // in its completion callback, never before it, or the persisted jar can
+    // be written back with the authenticated accounts.firefox.com session
+    // still in it.
+    cookies.removeAllCookies {
+        cookies.flush()
+        // FxA also keeps session state in DOM storage (the WebView has it
+        // enabled for the login page), so cookies alone do not clear the
+        // browser session.
+        WebStorage.getInstance().deleteAllData()
     }
-    // FxA also keeps session state in DOM storage (the WebView has it enabled
-    // for the login page), so cookies alone do not clear the browser session.
-    WebStorage.getInstance().deleteAllData()
 }
 
 /** What the WebView should do with a navigation. */
