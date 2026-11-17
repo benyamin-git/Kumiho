@@ -261,3 +261,11 @@ func TestServiceSnapshotLiveShape(t *testing.T) {
 		t.Fatalf("snapshot = %+v, want a known state word", snap)
 	}
 }
+
+// TestScPathIsAbsolute pins the elevated helper resolution: sc.exe is never
+// launched as a bare name that PATH or the working directory could shadow.
+func TestScPathIsAbsolute(t *testing.T) {
+	if p := scPath(); !filepath.IsAbs(p) {
+		t.Fatalf("scPath = %q, want an absolute path", p)
+	}
+}

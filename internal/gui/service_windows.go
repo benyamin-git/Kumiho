@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"unsafe"
 
@@ -81,16 +80,16 @@ func serviceCommand(verb string) (int, error) {
 	return runElevated(scPath(), verb+" "+serviceName, "")
 }
 
-// scPath locates the system sc.exe; a PATH lookup is the fallback when
-// SystemRoot is unset (ShellExecuteEx searches PATH for a bare name).
+// scPath locates the system sc.exe through the Windows system directory.
+// The path is always absolute: ShellExecuteEx must never resolve an elevated
+// helper from PATH or the current directory.
 func scPath() string {
-	if root := os.Getenv("SystemRoot"); root != "" {
-		p := filepath.Join(root, "System32", "sc.exe")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
+	dir, err := windows.GetSystemDirectory()
+	if err != nil {
+		// Keep the elevated call absolute even when the query fails.
+		dir = `C:\Windows\System32`
 	}
-	return "sc.exe"
+	return filepath.Join(dir, "sc.exe")
 }
 
 // cleanupCommand runs `kumiho cleanup` elevated (D16), executing from the
@@ -104,16 +103,14 @@ func cleanupCommand() (int, error) {
 	return runElevated(exe, "cleanup", filepath.Dir(exe))
 }
 
-// kumihoExe locates the kumiho CLI: beside the running GUI first (the
-// release zip ships kumiho.exe and kumiho-gui.exe together), then PATH.
+// kumihoExe locates the kumiho CLI beside the running GUI: the release zip
+// ships kumiho.exe and kumiho-gui.exe together, and an elevated helper is
+// never resolved from PATH.
 func kumihoExe() (string, error) {
 	if exe, err := os.Executable(); err == nil {
 		if p, ok := kumihoExeBeside(filepath.Dir(exe)); ok {
 			return p, nil
 		}
-	}
-	if p, err := exec.LookPath("kumiho.exe"); err == nil {
-		return p, nil
 	}
 	return "", errors.New("kumiho.exe was not found next to the Kumiho app")
 }
