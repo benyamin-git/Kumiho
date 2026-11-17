@@ -162,10 +162,11 @@ func (r *Ring) SetSanitize(fn func(string) string) {
 
 // Log appends an entry, streams it to subscribers, and writes the sink line.
 func (r *Ring) Log(level Level, tag, msg string) {
-	msg = r.sanitize(msg)
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// The sanitizer is swapped at runtime with SetSanitize, so it is read
+	// under the same lock that guards the write.
+	msg = r.sanitize(msg)
 	if level < r.minLevel {
 		return
 	}
