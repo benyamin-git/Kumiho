@@ -136,10 +136,21 @@ func (c *Client) readLoop() {
 			}
 			continue
 		}
-		select {
-		case c.events <- &env:
-		default: // slow consumer: drop events rather than block the reader
-		}
+		c.deliverEvent(&env)
+	}
+}
+
+// deliverEvent forwards one unsolicited event without ever writing to a
+// channel that fail has closed.
+func (c *Client) deliverEvent(env *Envelope) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return
+	}
+	select {
+	case c.events <- env:
+	default: // slow consumer: drop events rather than block the reader
 	}
 }
 
@@ -152,8 +163,8 @@ func (c *Client) fail(err error) {
 			delete(c.pending, id)
 			close(ch)
 		}
-		c.mu.Unlock()
 		close(c.events)
+		c.mu.Unlock()
 	})
 }
 
