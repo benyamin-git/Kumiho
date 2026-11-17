@@ -1,7 +1,9 @@
 package gui
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +89,61 @@ func TestFavoriteLocationAndClearRecentsActions(t *testing.T) {
 		t.Fatalf("clear notice = %+v", n)
 	}
 	waitFor(t, "clear reload", func() bool { return f.count(func(d *fakeDaemon) int { return d.locationCalls }) >= 3 })
+}
+
+// gatedLocationsDaemon blocks the first Locations call so a test can issue a
+// forced reload while the initial fetch is still in flight.
+type gatedLocationsDaemon struct {
+	*fakeDaemon
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (d *gatedLocationsDaemon) Locations(ctx context.Context, refresh bool) (api.LocationsResult, error) {
+	d.once.Do(func() {
+		close(d.started)
+		<-d.release
+	})
+	return d.fakeDaemon.Locations(ctx, refresh)
+}
+
+// TestForcedLocationsReloadQueuesBehindInflightLoad covers the single-flight
+// guard: a forced reload that arrives while a fetch is in flight must run
+// after it instead of being dropped. Without the queue, a favorite or
+// clear-recents action can show a notice while leaving the list stale.
+func TestForcedLocationsReloadQueuesBehindInflightLoad(t *testing.T) {
+	f := newFakeDaemon()
+	f.set(func(d *fakeDaemon) {
+		d.locations = api.LocationsResult{Countries: []serverlist.Country{{Code: "DE", Name: "Germany"}}}
+	})
+	gated := &gatedLocationsDaemon{
+		fakeDaemon: f,
+		started:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	ctrl := NewController(gated, quietOptions())
+	startPoll(t, ctrl)
+
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(gated.release) }) }
+	t.Cleanup(release)
+	select {
+	case <-gated.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("initial locations load did not start")
+	}
+
+	if err := ctrl.Dispatch(Action{Name: ActionFavoriteLocation, Payload: []byte(`{"country_code":"DE","city_code":"ber","server":"de1.example:443","favorite":true}`)}); err != nil {
+		t.Fatalf("Dispatch(favorite_location) = %v", err)
+	}
+	if err := ctrl.Dispatch(Action{Name: ActionClearRecents}); err != nil {
+		t.Fatalf("Dispatch(clear_recents) = %v", err)
+	}
+	release()
+	waitFor(t, "queued locations reload", func() bool {
+		return f.count(func(d *fakeDaemon) int { return d.locationCalls }) >= 2
+	})
 }
 
 func TestFavoriteLocationErrorNotice(t *testing.T) {

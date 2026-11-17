@@ -305,11 +305,15 @@ type Controller struct {
 	allowLocked      bool
 	locationsLoaded  bool
 	locationsLoading bool
-	pingBusy         bool
-	pingDoneSeq      int
-	relayTest        *api.RelayTestResult
-	regionCheck      *api.RegionCheckResult
-	prepareResult    *api.PrepareResult
+	// locationsPending coalesces a forced reload requested while a fetch is
+	// in flight; the fetch's completion runs it.
+	locationsPending        bool
+	locationsPendingRefresh bool
+	pingBusy                bool
+	pingDoneSeq             int
+	relayTest               *api.RelayTestResult
+	regionCheck             *api.RegionCheckResult
+	prepareResult           *api.PrepareResult
 
 	// Settings snapshot.
 	settings        *api.SettingsView
@@ -1830,13 +1834,22 @@ func (c *Controller) ensureLocations(ctx context.Context) {
 // loadLocations fetches the server list in the background. refresh asks the
 // daemon to re-download it (the inventory's 30 s refresh); force loads even
 // when a list is already loaded (the refresh action's {"locations":true}).
-// The loading guard keeps one fetch in flight at a time either way. A failed
-// fetch keeps the loaded rows and writes the raw error to the locations
-// notice (inventory §Locations); a successful one replaces the list and
-// clears a stale error.
+// The loading guard keeps one fetch in flight at a time either way; a forced
+// reload that arrives during a fetch is coalesced and runs when it finishes.
+// A failed fetch keeps the loaded rows and writes the raw error to the
+// locations notice (inventory §Locations); a successful one replaces the list
+// and clears a stale error.
 func (c *Controller) loadLocations(ctx context.Context, refresh, force bool) {
 	c.mu.Lock()
-	if c.locationsLoading || (!force && c.locationsLoaded) {
+	if c.locationsLoading {
+		if force {
+			c.locationsPending = true
+			c.locationsPendingRefresh = c.locationsPendingRefresh || refresh
+		}
+		c.mu.Unlock()
+		return
+	}
+	if !force && c.locationsLoaded {
 		c.mu.Unlock()
 		return
 	}
@@ -1847,7 +1860,14 @@ func (c *Controller) loadLocations(ctx context.Context, refresh, force bool) {
 		defer func() {
 			c.mu.Lock()
 			c.locationsLoading = false
+			pending := c.locationsPending
+			pendingRefresh := c.locationsPendingRefresh
+			c.locationsPending = false
+			c.locationsPendingRefresh = false
 			c.mu.Unlock()
+			if pending {
+				c.loadLocations(context.Background(), pendingRefresh, true)
+			}
 		}()
 		actx, cancel := context.WithTimeout(ctx, locationsTimeout)
 		defer cancel()
