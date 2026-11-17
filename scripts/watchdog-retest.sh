@@ -9,6 +9,7 @@
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+fail=0
 # shellcheck source=/dev/null
 . scripts/dev-env.sh >/dev/null
 
@@ -64,11 +65,14 @@ if ! "$bin" connect; then
   echo "connect failed" >&2
   exit 1
 fi
-check_egress
+if ! check_egress; then
+  fail=1
+fi
 
 for i in 1 2; do
   if ! wait_socket; then
     echo "no edge socket to kill" >&2
+    fail=1
   fi
   ss -tn state established | grep 2499
   echo "== $(date +%T) kill #$i"
@@ -77,11 +81,13 @@ for i in 1 2; do
     echo "loss detected at $(date +%T)"
   else
     echo "loss not observed via status" >&2
+    fail=1
   fi
   if wait_connected; then
     echo "healed at $(date +%T)"
   else
     echo "NOT healed within 30 s" >&2
+    fail=1
   fi
   echo "log visibility samples:"
   for _ in 1 2 3 4 5; do
@@ -89,9 +95,12 @@ for i in 1 2; do
     sleep 1
   done
   "$bin" status | sed -n '1,3p'
-  check_egress
+  if ! check_egress; then
+    fail=1
+  fi
 done
 
 echo "== $(date +%T) watchdog log lines"
 ls -l --time-style=full-iso "$log"
 grep -E '\[watchdog\]|\[edge\]' "$log" | tail -n 8 || echo "(none)"
+exit "$fail"

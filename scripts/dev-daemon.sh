@@ -22,7 +22,9 @@ source "$here/dev-env.sh" >/dev/null
 bin="$repo/dist/kumiho-linux-amd64"
 log="$KUMIHO_RUNTIME_DIR/daemon.log"
 # The [m] keeps pkill/pgrep from matching this pattern's own command line.
-pattern='dist/kumiho-linux-a[m]d64 daemon'
+# The repo path anchors the pattern to this checkout: other worktrees run
+# their own daemons and must not be killed from here.
+pattern="$repo/dist/kumiho-linux-a[m]d64 daemon"
 
 stop_daemon() {
   sudo -v # prompt in the foreground (creds are then cached for sudo -b below)

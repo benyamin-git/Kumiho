@@ -89,6 +89,18 @@ else
   captures=/tmp/opencode/captures
 fi
 tui_tmp="${KUMIHO_TUI_CAPTURE_DIR:-/tmp/opencode/kumiho-tui-capture}"
+# The TUI capture directory is removed with rm -rf below, so it must be an
+# explicit absolute scratch path, never /, the home directory or the repo.
+case "$tui_tmp" in
+  / | "$HOME" | "$HOME"/ | "$repo" | "$repo"/)
+    echo "error: refusing to use $tui_tmp as the TUI capture directory" >&2
+    exit 2
+    ;;
+esac
+if [[ "$tui_tmp" != /* ]]; then
+  echo "error: KUMIHO_TUI_CAPTURE_DIR must be an absolute path" >&2
+  exit 2
+fi
 version="${KUMIHO_CAPTURE_VERSION:-v1.0.0}"
 commit="$(git rev-parse --short HEAD)"
 date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
