@@ -319,3 +319,19 @@ func TestDaemonFavoriteErrorReachesTheClient(t *testing.T) {
 		t.Fatalf("favorite error = %v", err)
 	}
 }
+
+// The engine's state-change callback must never wait: repeated triggers
+// collapse into one pending status push.
+func TestBroadcastStatusCoalesces(t *testing.T) {
+	h := &control{broadcast: make(chan struct{}, 1)}
+	h.broadcastStatus()
+	h.broadcastStatus()
+	if got := len(h.broadcast); got != 1 {
+		t.Fatalf("pending broadcasts = %d, want 1", got)
+	}
+	select {
+	case <-h.broadcast:
+	default:
+		t.Fatal("broadcast trigger missing")
+	}
+}

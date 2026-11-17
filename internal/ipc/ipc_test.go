@@ -1,12 +1,15 @@
 package ipc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -280,5 +283,46 @@ func TestServerCloseRemovesSocket(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("socket still present after Close: stat err = %v", err)
+	}
+}
+
+func TestConnReadRejectsOversizedFrame(t *testing.T) {
+	server, client := net.Pipe()
+	t.Cleanup(func() { _ = client.Close() })
+	c := newConn(server, nil, nil)
+	t.Cleanup(func() { _ = c.Close() })
+
+	go func() {
+		_, _ = client.Write(bytes.Repeat([]byte("x"), MaxFrameSize+1))
+		_ = client.Close()
+	}()
+
+	if _, err := c.Read(); err == nil || !strings.Contains(err.Error(), "frame exceeds") {
+		t.Fatalf("Read error = %v, want a frame-size error", err)
+	}
+}
+
+func TestConnWriteTimeoutClosesStalledClient(t *testing.T) {
+	server, client := net.Pipe()
+	t.Cleanup(func() { _ = client.Close() })
+	c := newConn(server, nil, nil)
+	c.writeTimeout = 50 * time.Millisecond
+
+	done := make(chan error, 1)
+	go func() { done <- c.Event(TypeStatus, api.Status{State: "IDLE"}) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Event to a stalled client succeeded")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Event did not respect the write deadline")
+	}
+
+	select {
+	case <-c.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed-out connection was not closed")
 	}
 }

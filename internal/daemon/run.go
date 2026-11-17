@@ -70,14 +70,16 @@ func Run(ctx context.Context) error {
 	defer cancel()
 
 	h := &control{
-		ctrl:     ctrl,
-		ring:     ring,
-		shutdown: cancel,
-		ping:     ctrl.PingHosts,
-		refs:     ctrl,
-		conns:    make(map[*ipc.Conn]struct{}),
+		ctrl:      ctrl,
+		ring:      ring,
+		shutdown:  cancel,
+		ping:      ctrl.PingHosts,
+		refs:      ctrl,
+		conns:     make(map[*ipc.Conn]struct{}),
+		broadcast: make(chan struct{}, 1),
 	}
 	ctrl.OnChange(h.broadcastStatus)
+	go h.broadcastLoop(runCtx)
 
 	// Renew a stale access token without blocking startup; a permanent
 	// rejection clears the session and broadcasts the change.
@@ -127,6 +129,10 @@ type control struct {
 
 	mu    sync.Mutex
 	conns map[*ipc.Conn]struct{}
+
+	// broadcast coalesces status pushes: an engine state change only wakes
+	// the sender, it never waits on a slow client.
+	broadcast chan struct{}
 }
 
 type connState struct {
@@ -148,7 +154,31 @@ func (h *control) removeConn(c *ipc.Conn) {
 	h.mu.Unlock()
 }
 
+// broadcastStatus requests one status push. It is safe to call from the
+// engine's state-change path: a full queue means a push is already pending,
+// and the pending push will carry the newer snapshot.
 func (h *control) broadcastStatus() {
+	select {
+	case h.broadcast <- struct{}{}:
+	default:
+	}
+}
+
+// broadcastLoop is the one goroutine that sends status events. Reads are
+// never blocked by a client that stopped reading (Conn's write deadline
+// closes such a client).
+func (h *control) broadcastLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-h.broadcast:
+			h.sendStatus()
+		}
+	}
+}
+
+func (h *control) sendStatus() {
 	st := h.ctrl.Snapshot()
 	h.mu.Lock()
 	conns := make([]*ipc.Conn, 0, len(h.conns))

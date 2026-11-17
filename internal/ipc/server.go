@@ -1,12 +1,26 @@
 package ipc
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
+	"time"
 )
+
+// MaxFrameSize bounds one request envelope on the control socket. A real
+// command is a few KiB; the ceiling stops a local client from making the
+// daemon allocate without limit.
+const MaxFrameSize = 8 << 20
+
+// defaultWriteTimeout bounds one reply or event. A client that stops reading
+// (a suspended TUI, a wedged GUI) is closed instead of pinning the daemon's
+// broadcast goroutine forever.
+const defaultWriteTimeout = 5 * time.Second
 
 // Server accepts control connections from a transport listener: a Unix
 // socket on Linux, a named pipe on Windows.
@@ -62,11 +76,12 @@ func (s *Server) Path() string {
 
 // Conn is one server-side client connection.
 type Conn struct {
-	nc        net.Conn
-	enc       *json.Encoder
-	dec       *json.Decoder
-	peerUID   func(net.Conn) (uint32, bool)
-	peerAdmin func(net.Conn) bool
+	nc           net.Conn
+	enc          *json.Encoder
+	br           *bufio.Reader
+	writeTimeout time.Duration
+	peerUID      func(net.Conn) (uint32, bool)
+	peerAdmin    func(net.Conn) bool
 
 	mu        sync.Mutex
 	done      chan struct{}
@@ -75,22 +90,51 @@ type Conn struct {
 
 func newConn(nc net.Conn, peerUID func(net.Conn) (uint32, bool), peerAdmin func(net.Conn) bool) *Conn {
 	return &Conn{
-		nc:        nc,
-		enc:       json.NewEncoder(nc),
-		dec:       json.NewDecoder(nc),
-		peerUID:   peerUID,
-		peerAdmin: peerAdmin,
-		done:      make(chan struct{}),
+		nc:           nc,
+		enc:          json.NewEncoder(nc),
+		br:           bufio.NewReaderSize(nc, 64<<10),
+		writeTimeout: defaultWriteTimeout,
+		peerUID:      peerUID,
+		peerAdmin:    peerAdmin,
+		done:         make(chan struct{}),
 	}
 }
 
-// Read waits for the next request.
+// Read waits for the next request. The protocol is newline-delimited JSON;
+// one frame larger than MaxFrameSize is a protocol error, not an allocation.
 func (c *Conn) Read() (*Envelope, error) {
+	line, err := readFrame(c.br, MaxFrameSize)
+	if err != nil {
+		return nil, err
+	}
 	var env Envelope
-	if err := c.dec.Decode(&env); err != nil {
+	if err := json.Unmarshal(line, &env); err != nil {
 		return nil, err
 	}
 	return &env, nil
+}
+
+// readFrame reads one newline-terminated frame, refusing to grow past max.
+func readFrame(br *bufio.Reader, max int) ([]byte, error) {
+	var frame []byte
+	for {
+		frag, err := br.ReadSlice('\n')
+		if len(frame)+len(frag) > max {
+			return nil, fmt.Errorf("ipc: frame exceeds %d bytes", max)
+		}
+		frame = append(frame, frag...)
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		// A final value without a trailing newline is still a frame.
+		if err == io.EOF && len(frame) > 0 {
+			return frame, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return frame, nil
+	}
 }
 
 // Reply sends a response correlated to a request ID.
@@ -144,5 +188,14 @@ func (c *Conn) IsAdmin() bool {
 func (c *Conn) write(env *Envelope) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.enc.Encode(env)
+	if c.writeTimeout > 0 {
+		_ = c.nc.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+	}
+	if err := c.enc.Encode(env); err != nil {
+		// The peer stopped reading or vanished. Close so the connection's
+		// read loop reaps it and the next broadcast skips it.
+		_ = c.Close()
+		return err
+	}
+	return nil
 }
