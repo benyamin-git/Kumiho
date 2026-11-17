@@ -185,7 +185,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.noticeRegion = false
 			return m, nil
 		}
-		m.status = msg.status
+		m.status = sanitizeStatus(msg.status)
 		m.haveStat = true
 		return m, nil
 	case regionCheckMsg:
@@ -215,7 +215,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ipc.TypeStatus:
 			var st api.Status
 			if err := msg.env.DecodePayload(&st); err == nil {
-				m.status = st
+				m.status = sanitizeStatus(st)
 				m.haveStat = true
 			}
 		case ipc.TypePingResult:
@@ -950,9 +950,9 @@ func (m *Model) renderDashboard(b *strings.Builder) {
 
 	if m.notice != "" {
 		if m.noticeWarn {
-			fmt.Fprintf(b, "\n%s\n", warnStyle.Render(m.notice))
+			fmt.Fprintf(b, "\n%s\n", warnStyle.Render(safeText(m.notice)))
 		} else {
-			fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.notice))
+			fmt.Fprintf(b, "\n%s\n", okStyle.Render(safeText(m.notice)))
 		}
 	}
 	fmt.Fprintln(b)
@@ -1025,10 +1025,10 @@ func (m *Model) renderLogin(b *strings.Builder) {
 		fmt.Fprintln(b, dimStyle.Render("contacting Mozilla Accounts..."))
 	}
 	if m.loginErr != "" {
-		fmt.Fprintf(b, "\n%s\n", errStyle.Render(m.loginErr))
+		fmt.Fprintf(b, "\n%s\n", errStyle.Render(safeText(m.loginErr)))
 	}
 	if m.loginNotice != "" {
-		fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.loginNotice))
+		fmt.Fprintf(b, "\n%s\n", okStyle.Render(safeText(m.loginNotice)))
 	}
 	fmt.Fprintln(b)
 	if m.step == "" || m.step == "method" {
@@ -1038,7 +1038,7 @@ func (m *Model) renderLogin(b *strings.Builder) {
 	}
 
 	if m.notice != "" {
-		fmt.Fprintf(b, "\n%s\n", okStyle.Render(m.notice))
+		fmt.Fprintf(b, "\n%s\n", okStyle.Render(safeText(m.notice)))
 	}
 }
 

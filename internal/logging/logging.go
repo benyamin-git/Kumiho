@@ -164,6 +164,10 @@ func (r *Ring) SetSanitize(fn func(string) string) {
 func (r *Ring) Log(level Level, tag, msg string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Remote text (error bodies, server names) can carry terminal control
+	// sequences; strip them before redaction so every sink and client sees
+	// plain single-line text.
+	msg = SanitizeLogLine(msg)
 	// The sanitizer is swapped at runtime with SetSanitize, so it is read
 	// under the same lock that guards the write.
 	msg = r.sanitize(msg)

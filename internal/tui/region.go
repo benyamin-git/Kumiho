@@ -184,7 +184,7 @@ func (m *Model) renderGuide(b *strings.Builder) {
 	fmt.Fprintln(b, dimStyle.Render("The relay does not proxy the browser sign-in page."))
 
 	if m.guideNotice != "" {
-		fmt.Fprintf(b, "\n%s\n", warnStyle.Render(m.guideNotice))
+		fmt.Fprintf(b, "\n%s\n", warnStyle.Render(safeText(m.guideNotice)))
 	}
 	fmt.Fprintln(b)
 	fmt.Fprintln(b, dimStyle.Render("r recheck • p prepare • c connect • s settings • l sign in • esc close"))

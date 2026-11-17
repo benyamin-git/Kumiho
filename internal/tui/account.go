@@ -486,14 +486,14 @@ func (m *Model) renderAccount(b *strings.Builder) {
 		errText = ac.view.Error
 	}
 	if errText != "" {
-		fmt.Fprintf(b, "\n%s\n", errStyle.Render(errText))
+		fmt.Fprintf(b, "\n%s\n", errStyle.Render(safeText(errText)))
 	}
 	notice := ac.notice
 	if notice == "" {
 		notice = ac.view.Notice
 	}
 	if notice != "" {
-		fmt.Fprintf(b, "\n%s\n", okStyle.Render(notice))
+		fmt.Fprintf(b, "\n%s\n", okStyle.Render(safeText(notice)))
 	}
 
 	fmt.Fprintln(b)
@@ -510,9 +510,9 @@ func accountRow(account api.AccountSummary, selected bool) string {
 	if account.Active {
 		active = "*"
 	}
-	name := account.Email
+	name := safeText(account.Email)
 	if account.Label != "" && !strings.EqualFold(account.Label, account.Email) {
-		name = fmt.Sprintf("%s (%s)", account.Email, account.Label)
+		name = fmt.Sprintf("%s (%s)", safeText(account.Email), safeText(account.Label))
 	}
 	method := account.Method
 	if method == "" {
@@ -528,16 +528,16 @@ func accountRow(account api.AccountSummary, selected bool) string {
 func renderEntitlementCard(b *strings.Builder, info api.AccountInfo) {
 	if info.Email == "" {
 		if info.Error != "" {
-			fmt.Fprintf(b, "%s %s\n", dimStyle.Render("entitlement:"), warnStyle.Render("unknown ("+info.Error+")"))
+			fmt.Fprintf(b, "%s %s\n", dimStyle.Render("entitlement:"), warnStyle.Render("unknown ("+safeText(info.Error)+")"))
 		}
 		return
 	}
-	fmt.Fprintf(b, "email:         %s\n", info.Email)
+	fmt.Fprintf(b, "email:         %s\n", safeText(info.Email))
 	if info.UID != "" {
-		fmt.Fprintf(b, "uid:           %s\n", info.UID)
+		fmt.Fprintf(b, "uid:           %s\n", safeText(info.UID))
 	}
 	if info.Error != "" {
-		fmt.Fprintf(b, "subscribed:    %s\n", warnStyle.Render("unknown ("+info.Error+")"))
+		fmt.Fprintf(b, "subscribed:    %s\n", warnStyle.Render("unknown ("+safeText(info.Error)+")"))
 	} else {
 		fmt.Fprintf(b, "subscribed:    %s\n", yesNo(info.Subscribed))
 	}
@@ -574,11 +574,11 @@ func renderAccountPrompt(b *strings.Builder, ac *accountState) {
 func removeConfirmCopy(target api.AccountSummary, total int) string {
 	switch {
 	case target.Active && total > 1:
-		return fmt.Sprintf("remove active account %s? the next account will be used (y/N)", target.Email)
+		return fmt.Sprintf("remove active account %s? the next account will be used (y/N)", safeText(target.Email))
 	case total <= 1:
-		return fmt.Sprintf("remove %s? this removes your last account and clears the local session (y/N)", target.Email)
+		return fmt.Sprintf("remove %s? this removes your last account and clears the local session (y/N)", safeText(target.Email))
 	default:
-		return fmt.Sprintf("remove %s? (y/N)", target.Email)
+		return fmt.Sprintf("remove %s? (y/N)", safeText(target.Email))
 	}
 }
 

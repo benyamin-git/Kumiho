@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/benyamin-git/kumiho/internal/logging"
 	"github.com/benyamin-git/kumiho/internal/version"
 )
 
@@ -39,7 +40,22 @@ Commands:
 // Run executes the CLI with args (typically os.Args[1:]) and returns the
 // process exit code.
 func Run(args []string) int {
-	return run(args, os.Stdout, os.Stderr)
+	// Remote text (error bodies, server names) must not drive the terminal.
+	return run(args, cleanWriter{os.Stdout}, cleanWriter{os.Stderr})
+}
+
+// cleanWriter strips terminal control sequences from everything the CLI
+// prints, including daemon replies that carry remote text.
+type cleanWriter struct{ w io.Writer }
+
+func (c cleanWriter) Write(p []byte) (int, error) {
+	clean := logging.SanitizeControl(string(p))
+	if clean != "" {
+		if _, err := io.WriteString(c.w, clean); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
 }
 
 func run(args []string, stdout, stderr io.Writer) int {

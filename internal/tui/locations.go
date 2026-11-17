@@ -156,14 +156,14 @@ func (m *Model) allLocationRows() []locRow {
 			continue
 		}
 		countryCode := strings.ToUpper(strings.TrimSpace(c.Code))
-		countryName := strings.TrimSpace(c.Name)
+		countryName := safeText(strings.TrimSpace(c.Name))
 		if countryName == "" {
 			countryName = countryCode
 		}
 		recommended := strings.EqualFold(countryCode, serverlist.RecommendedCode)
 		for _, city := range c.Cities {
 			cityCode := strings.ToUpper(strings.TrimSpace(city.Code))
-			cityName := strings.TrimSpace(city.Name)
+			cityName := safeText(strings.TrimSpace(city.Name))
 			for _, s := range city.Servers {
 				if s.Quarantined {
 					continue
@@ -201,7 +201,7 @@ func (m *Model) allLocationRows() []locRow {
 					countryName: countryName,
 					cityCode:    cityCode,
 					cityName:    cityName,
-					hostname:    strings.TrimSpace(s.Hostname),
+					hostname:    safeText(strings.TrimSpace(s.Hostname)),
 					host:        host,
 					port:        port,
 					address:     address,
