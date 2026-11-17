@@ -8,6 +8,74 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-17
+
+Reliability and hardening across the daemon, desktop clients, installers and
+the Android app.
+
+### Changed
+
+- **Android kill-switch guidance is accurate.** The doctor now warns that
+  Android has no independent kill switch, and
+  [docs/android.md](docs/android.md) explains that **Always-on VPN** with
+  **Block connections without VPN** is what keeps traffic blocked when a
+  tunnel stops unexpectedly. The Windows and Linux kill switches are
+  unchanged.
+- **Release builds are pinned and checked.** The Android AAR builds
+  `gomobile` and `gobind` from the revision pinned in `go.mod`, so a stale
+  global toolchain cannot change a release. The release workflow verifies
+  every staged archive against its checksum and confirms the embedded version
+  before it creates the draft.
+- **Android setup picks the JDK for the host architecture.** The setup script
+  no longer assumes an x86_64 build host.
+
+### Fixed
+
+- **Android sign-out and shutdown finish cleanly.** Tunnel teardown runs off
+  the main thread instead of freezing the UI, WebView cookies are cleared
+  before sign-out completes, and a bridge failure during connect is reported
+  as a normal error instead of crashing the process.
+- **Account changes are published only after they persist.** A failed account
+  write restores the previous snapshot instead of leaving a half-applied
+  switch; removing an account best-effort revokes its Firefox Accounts refresh
+  token; and
+  a sign-out during a Guardian pass refresh or a prepared-pass write cannot
+  restore the previous session.
+- **Connections cannot overlap or wedge.** Overlapping connect attempts are
+  fenced by generation, CONNECT streams that die before the response are woken
+  and reset, network apply/cleanup and tunnel teardown are serialized in the
+  right order, and the Linux cleanup verifies that the nftables table, fwmark
+  rules and routing tables are gone instead of reporting a clean stop.
+- **The daemon stays responsive.** Long commands run off the connection loop,
+  writes are bounded, status broadcasts coalesce, the IPC client no longer
+  sends on a closed event channel, and the log sanitizer reads under the ring
+  lock.
+- **Locations reloads are no longer dropped.** A forced reload that arrives
+  while the initial or a previous locations fetch is still running now runs
+  when that fetch finishes, instead of leaving the list stale behind an
+  action notice.
+- **The Windows GUI account refresh outlives its caller.** A background
+  refresh no longer inherits the short-lived context of the action that
+  started it, so the account page still receives its snapshot.
+
+### Security
+
+- **Remote text cannot inject terminal control sequences.** The TUI and CLI
+  strip escapes from remote-provided text before rendering or logging it.
+- **The Windows GUI bridge authenticates its callers.** Actions are accepted
+  only from the app's tokenized page and foreign navigation is cancelled. The
+  dev harness binds loopback by default and requires a per-run token for a
+  non-loopback bind, with same-origin checks on actions and `/dev` requests.
+- **Hostile peers and server lists are bounded.** The HTTP/2 client rejects
+  invalid peer SETTINGS, and the filter-expression parser caps nesting at 64.
+- **Privileged installers and scripts fail safely.** The documented install
+  pins an immutable release tag and requires HTTPS for every download;
+  `--purge` refuses to run without `uninstall`; uninstall cleans up before it
+  removes its tools; elevated helpers resolve only from trusted absolute
+  paths; teardown paths stay scoped to the checkout; and the one-command
+  installer resolves the newest release by version and falls back only on a
+  404.
+
 ## [1.1.1] - 2026-11-16
 
 ### Changed
