@@ -704,6 +704,78 @@ func TestUseAccountSwitchesAndRefusesWhileConnected(t *testing.T) {
 	}
 }
 
+// breakAccountsSave replaces accounts.json with a directory so the atomic
+// write cannot land. The controller keeps the store it loaded; the next save
+// fails, which is exactly what the rollback tests need.
+func breakAccountsSave(t *testing.T, paths settings.Paths) {
+	t.Helper()
+	path := accountsPath(paths)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("remove accounts file: %v", err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatalf("replace accounts file with a directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(path) })
+}
+
+func TestUseAccountRollsBackWhenSaveFails(t *testing.T) {
+	ctrl, paths := newTestController(t, multiLoginHandler(t))
+	loginAs(t, ctrl, "first@example.com")
+	firstID := ctrl.Accounts().Active
+	loginAs(t, ctrl, "second@example.com")
+	before := ctrl.Accounts()
+	beforeState := ctrl.Snapshot()
+
+	breakAccountsSave(t, paths)
+	if err := ctrl.UseAccount(firstID); err == nil {
+		t.Fatal("UseAccount succeeded with an unwritable accounts store")
+	}
+
+	after := ctrl.Accounts()
+	if after.Active != before.Active || len(after.Accounts) != len(before.Accounts) {
+		t.Fatalf("accounts changed after a failed save: active %q -> %q, rows %d -> %d",
+			before.Active, after.Active, len(before.Accounts), len(after.Accounts))
+	}
+	if st := ctrl.Snapshot(); st.Email != beforeState.Email || st.ActiveAccount != beforeState.ActiveAccount {
+		t.Fatalf("snapshot changed after a failed save: %+v", st)
+	}
+	ctrl.mu.Lock()
+	active := ctrl.activeAccountLocked()
+	ctrl.mu.Unlock()
+	if active == nil || active.Email != "second@example.com" {
+		t.Fatalf("in-memory active account = %+v, want second@example.com", active)
+	}
+}
+
+func TestCompleteLoginRollsBackWhenSaveFails(t *testing.T) {
+	ctrl, paths := newTestController(t, multiLoginHandler(t))
+	loginAs(t, ctrl, "first@example.com")
+	before := ctrl.Accounts()
+
+	breakAccountsSave(t, paths)
+	if ls := ctrl.LoginEmail("second@example.com"); ls.Step != "password" {
+		t.Fatalf("login_email = %+v", ls)
+	}
+	ls := ctrl.LoginPassword(context.Background(), "pw")
+	if ls.Step != "done" || !strings.Contains(ls.Error, "persisting the account failed") {
+		t.Fatalf("login = %+v, want a persistence error", ls)
+	}
+
+	after := ctrl.Accounts()
+	if len(after.Accounts) != len(before.Accounts) {
+		t.Fatalf("account rows after a failed save = %d, want %d", len(after.Accounts), len(before.Accounts))
+	}
+	for _, a := range after.Accounts {
+		if a.Email == "second@example.com" {
+			t.Fatalf("failed login left its row behind: %+v", after.Accounts)
+		}
+	}
+	if after.Active != before.Active {
+		t.Fatalf("active account after a failed save = %q, want %q", after.Active, before.Active)
+	}
+}
+
 func TestRemoveActiveSelectsMostRecent(t *testing.T) {
 	ctrl, paths := newTestController(t, multiLoginHandler(t))
 	for _, email := range []string{"a@example.com", "b@example.com", "c@example.com"} {

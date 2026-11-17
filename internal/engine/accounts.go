@@ -89,6 +89,34 @@ func cloneTokens(t *fxa.Tokens) *fxa.Tokens {
 	return &c
 }
 
+// cloneAccountsFile deep-copies the account store so a mutation can be
+// prepared and persisted without publishing a half-applied state. A failed
+// save restores the clone, exactly like publishRotation's rollback.
+func cloneAccountsFile(f *accountsFile) *accountsFile {
+	if f == nil {
+		return nil
+	}
+	c := *f
+	c.Accounts = make([]*Account, len(f.Accounts))
+	for i, a := range f.Accounts {
+		if a == nil {
+			continue
+		}
+		account := *a
+		account.FxA = cloneTokens(a.FxA)
+		if a.Browser != nil {
+			browser := *a.Browser
+			account.Browser = &browser
+		}
+		if a.Quota != nil {
+			quota := *a.Quota
+			account.Quota = &quota
+		}
+		c.Accounts[i] = &account
+	}
+	return &c
+}
+
 // legacyBrowserRemovalNotice is the one-time notice shown after accounts left
 // behind by the superseded opaque browser flow are removed.
 const legacyBrowserRemovalNotice = "Old browser sign-in removed. Add your Firefox account again."

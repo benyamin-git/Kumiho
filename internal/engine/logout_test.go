@@ -157,6 +157,58 @@ func TestLogoutRevokesBestEffort(t *testing.T) {
 	})
 }
 
+func TestRemoveAccountRevokesRefreshToken(t *testing.T) {
+	var mu sync.Mutex
+	var received []string
+	destroy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/destroy" {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode destroy body: %v", err)
+			return
+		}
+		mu.Lock()
+		received = append(received, body.RefreshToken)
+		mu.Unlock()
+		fmt.Fprint(w, `{}`)
+	}))
+	t.Cleanup(destroy.Close)
+
+	ctrl, _ := newTestController(t, multiLoginHandler(t))
+	loginAs(t, ctrl, "one@example.com")
+	loginAs(t, ctrl, "two@example.com")
+	ctrl.fxa.DestroyEndpoint = destroy.URL + "/destroy"
+
+	view := ctrl.Accounts()
+	var removeID string
+	for _, a := range view.Accounts {
+		if a.Email == "one@example.com" {
+			removeID = a.ID
+		}
+	}
+	if removeID == "" {
+		t.Fatalf("accounts = %+v", view)
+	}
+	if err := ctrl.RemoveAccount(removeID); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	got := append([]string(nil), received...)
+	mu.Unlock()
+	if len(got) != 1 || got[0] != "refresh-1" {
+		t.Fatalf("destroyed refresh tokens = %v, want [refresh-1]", got)
+	}
+	if n := len(ctrl.Accounts().Accounts); n != 1 {
+		t.Fatalf("accounts after removal = %d, want 1", n)
+	}
+}
+
 func assertLogoutClearedLocally(t *testing.T, ctrl *Controller, paths settings.Paths) {
 	t.Helper()
 	st := ctrl.Snapshot()

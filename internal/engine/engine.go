@@ -1676,6 +1676,14 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	if c.accounts == nil {
 		c.accounts = &accountsFile{Version: 2}
 	}
+	// Everything below mutates the store and the session fields. Keep a
+	// snapshot so a failed save leaves no half-applied account behind.
+	previousAccounts := cloneAccountsFile(c.accounts)
+	previousActive := c.activeID
+	previousEmail := c.email
+	previousTokens := c.tokens
+	previousState, previousSince, previousAuthGen := c.state, c.since, c.authGen
+	previousPass, previousPassPrepared := c.pass, c.passPrepared
 	existing := emailAccount(c.accounts, email)
 	if c.tunnelActiveLocked() && (existing == nil || existing.ID != c.activeID) {
 		c.cancelPendingLocked()
@@ -1713,13 +1721,13 @@ func (c *Controller) completeLogin(ctx context.Context, email, sessionToken stri
 	// Save the account and rollback token copy before publishing the new
 	// session fields. c.mu is held throughout, so no client can observe the
 	// temporary active ID.
-	previousActive := c.activeID
-	previousEmail := c.email
 	c.activeID = account.ID
 	account.LastUsedAt = time.Now()
 	if err := c.saveAccountsLocked(true); err != nil {
-		c.activeID = previousActive
-		c.accounts.Active = previousActive
+		c.accounts = previousAccounts
+		c.activeID, c.email, c.tokens = previousActive, previousEmail, previousTokens
+		c.state, c.since, c.authGen = previousState, previousSince, previousAuthGen
+		c.pass, c.passPrepared = previousPass, previousPassPrepared
 		c.mu.Unlock()
 		return api.LoginState{Step: "done", Email: email, Error: "signed in, but persisting the account failed: " + err.Error()}
 	}
@@ -1783,14 +1791,23 @@ func (c *Controller) UseAccount(id string) error {
 		c.mu.Unlock()
 		return badRequestError("disconnect first; switching accounts needs the tunnel off")
 	}
+	previousStore := cloneAccountsFile(c.accounts)
+	previousActiveID, previousEmail, previousTokens := c.activeID, c.email, c.tokens
+	previousState, previousSince, previousAuthGen := c.state, c.since, c.authGen
+	previousPass, previousPassPrepared := c.pass, c.passPrepared
 	c.setActiveLocked(a)
 	c.pass = nil
 	c.passPrepared = false
 	err := c.saveAccountsLocked(true)
-	c.mu.Unlock()
 	if err != nil {
+		c.accounts = previousStore
+		c.activeID, c.email, c.tokens = previousActiveID, previousEmail, previousTokens
+		c.state, c.since, c.authGen = previousState, previousSince, previousAuthGen
+		c.pass, c.passPrepared = previousPass, previousPassPrepared
+		c.mu.Unlock()
 		return err
 	}
+	c.mu.Unlock()
 	c.deletePassFile()
 	c.notify()
 	return nil
@@ -1815,12 +1832,18 @@ func (c *Controller) RemoveAccount(id string) error {
 		c.mu.Unlock()
 		return badRequestError("disconnect first; removing the active account needs the tunnel off")
 	}
+	removedTokens := a.Tokens()
 	if len(c.accounts.Accounts) == 1 {
 		c.mu.Unlock()
 		c.clearSession("account removed")
+		c.revokeAccountTokens(removedTokens)
 		return nil
 	}
-	kept := c.accounts.Accounts[:0]
+	previousStore := cloneAccountsFile(c.accounts)
+	previousActiveID, previousEmail, previousTokens := c.activeID, c.email, c.tokens
+	previousState, previousSince, previousAuthGen := c.state, c.since, c.authGen
+	previousPass, previousPassPrepared := c.pass, c.passPrepared
+	kept := make([]*Account, 0, len(c.accounts.Accounts)-1)
 	for _, existing := range c.accounts.Accounts {
 		if existing.ID != a.ID {
 			kept = append(kept, existing)
@@ -1832,17 +1855,23 @@ func (c *Controller) RemoveAccount(id string) error {
 		c.pass = nil
 		c.passPrepared = false
 	}
+	err := c.saveAccountsLocked(true)
+	if err != nil {
+		c.accounts = previousStore
+		c.activeID, c.email, c.tokens = previousActiveID, previousEmail, previousTokens
+		c.state, c.since, c.authGen = previousState, previousSince, previousAuthGen
+		c.pass, c.passPrepared = previousPass, previousPassPrepared
+		c.mu.Unlock()
+		return err
+	}
 	if c.pending != nil && c.pending.targetID == a.ID {
 		c.cancelPendingLocked()
 	}
-	err := c.saveAccountsLocked(true)
 	c.mu.Unlock()
-	if err != nil {
-		return err
-	}
 	if activeRemoved {
 		c.deletePassFile()
 	}
+	c.revokeAccountTokens(removedTokens)
 	c.notify()
 	return nil
 }
@@ -1865,8 +1894,12 @@ func (c *Controller) UpdateAccount(id, label string) error {
 		c.mu.Unlock()
 		return badRequestError(err.Error())
 	}
+	previousLabel := a.Label
 	a.Label = normalized
 	err = c.saveAccountsLocked(false)
+	if err != nil {
+		a.Label = previousLabel
+	}
 	c.mu.Unlock()
 	if err != nil {
 		return err
@@ -1959,6 +1992,19 @@ func (c *Controller) Logout() error {
 	c.revokeRefreshTokens()
 	c.clearSession("user logout")
 	return nil
+}
+
+// revokeAccountTokens best-effort destroys one removed account's refresh
+// token. Local removal never depends on the result.
+func (c *Controller) revokeAccountTokens(t *fxa.Tokens) {
+	if t == nil || strings.TrimSpace(t.RefreshToken) == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.fxa.Destroy(ctx, t.RefreshToken); err != nil {
+		c.log.Logf(logging.Warn, "auth", "could not revoke the removed account's refresh token: %v", err)
+	}
 }
 
 // revokeRefreshTokens calls the FxA destroy endpoint for every distinct
