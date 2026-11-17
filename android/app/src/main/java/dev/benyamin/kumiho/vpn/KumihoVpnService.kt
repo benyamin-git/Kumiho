@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -214,12 +213,16 @@ class KumihoVpnService : VpnService() {
         foreground = false
         stopTicker()
         VpnStatusCache.clear()
-        // Close the Go session before cancelling the scope: the engine shuts
-        // the tunnel down and the adopted fd stays Go's to close.
-        try {
-            runBlocking { engine.close() }
-        } catch (_: Exception) {
-            // Shutdown is best-effort; the process is going away.
+        // Close the Go session without blocking the main thread: the facade
+        // detaches teardown (tunnel rules, log sink), and Close only needs to
+        // retire the current facade. The scope is cancelled below, so the
+        // shutdown runs in its own process-lifetime scope.
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            try {
+                engine.close()
+            } catch (_: Exception) {
+                // Shutdown is best-effort; the process is going away.
+            }
         }
         scope.cancel()
         if (!ready.isCompleted) ready.cancel()

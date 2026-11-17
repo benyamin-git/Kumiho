@@ -13,13 +13,15 @@ import (
 // errNotStarted is returned by Command before Start and after Close.
 var errNotStarted = errors.New("kumiho mobile: the engine is not started")
 
-// There is exactly one facade per process. Command holds the read lock for the
-// whole dispatch, so a command and Close never overlap; Close takes the write
-// lock, cancels the root context and shuts the engine down. Start after Close
-// builds a fresh facade.
+// There is exactly one facade per process. Command only snapshots the
+// pointer: a long engine call must not hold a lock that Close needs (the
+// Android main thread calls Close during onDestroy). Close clears the pointer
+// and detaches the teardown; Start waits for that teardown before building a
+// fresh facade.
 var (
-	mu      sync.RWMutex
-	current *facade
+	lifeMu   sync.Mutex
+	current  *facade
+	teardown chan struct{}
 )
 
 // Start opens the engine for the app-private paths JSON, wires the Kotlin
@@ -27,17 +29,35 @@ var (
 // returns an "already started" error and leaves the live session alone; call
 // Close first to replace it. Start never autoconnects.
 func Start(pathsJSON string, bridge DeviceBridge, listener Listener) error {
-	mu.Lock()
-	defer mu.Unlock()
+	lifeMu.Lock()
 	if current != nil {
+		lifeMu.Unlock()
 		return errors.New("kumiho mobile: already started; close the engine first")
 	}
+	previous := teardown
+	lifeMu.Unlock()
+	if previous != nil {
+		// A close is still releasing the previous engine (tunnel rules, log
+		// file). Opening a second controller over the same state would race it.
+		<-previous
+	}
+
 	f, err := newFacade(pathsJSON, bridge, listener)
 	if err != nil {
 		return err
 	}
+
+	lifeMu.Lock()
+	if current != nil {
+		// Two Starts raced while the teardown completed; keep the winner.
+		lifeMu.Unlock()
+		f.shutdown()
+		return errors.New("kumiho mobile: already started; close the engine first")
+	}
 	current = f
+	teardown = nil
 	f.start()
+	lifeMu.Unlock()
 	return nil
 }
 
@@ -46,31 +66,39 @@ func Start(pathsJSON string, bridge DeviceBridge, listener Listener) error {
 // error is reserved for facade failures: not started, a malformed request or
 // a panic.
 func Command(requestJSON string) (string, error) {
-	mu.RLock()
-	defer mu.RUnlock()
+	lifeMu.Lock()
 	f := current
+	lifeMu.Unlock()
 	if f == nil {
 		return "", errNotStarted
 	}
 	return f.command(requestJSON)
 }
 
-// Close shuts the engine down: it cancels the root context, stops the tunnel
-// and the pumps, and closes the log file. Close is idempotent, and a later
-// Start creates a fresh facade.
+// Close retires the engine: it cancels the root context, then tears the
+// tunnel, the pumps and the log file down on a background goroutine so an
+// Android main-thread caller never waits for netcfg. Close is idempotent, and
+// a later Start waits for that teardown before creating a fresh facade.
 func Close() error {
-	mu.Lock()
+	lifeMu.Lock()
 	f := current
 	current = nil
-	if f != nil {
+	if f == nil {
+		lifeMu.Unlock()
+		return nil
+	}
+	done := make(chan struct{})
+	teardown = done
+	lifeMu.Unlock()
+
+	// Teardown can wait on the tunnel and the log sink. Never make the
+	// caller (Android's main thread, in onDestroy) wait for it; Start is the
+	// only caller that needs the completion, and it waits on teardown.
+	go func() {
+		defer close(done)
 		f.shutdown()
-	}
-	mu.Unlock()
-	if f != nil {
-		// Wait outside the lock: a listener callback that re-enters Command
-		// must get the "not started" error instead of deadlocking on mu.
 		f.wg.Wait()
-	}
+	}()
 	return nil
 }
 

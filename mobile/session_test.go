@@ -230,6 +230,25 @@ func TestStartTwiceIsAnError(t *testing.T) {
 	}
 }
 
+// Close detaches teardown so onDestroy never blocks the Android main thread;
+// Start is the only caller that waits for it, and it must still succeed.
+func TestStartAfterCloseWaitsForTeardown(t *testing.T) {
+	p := testPaths(t)
+	startTest(t, p, nil, newTestListener())
+	if err := Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := Start(p.json(t), nil, newTestListener()); err != nil {
+		t.Fatalf("Start after Close: %v", err)
+	}
+	if _, err := Command(`{"type":"status"}`); err != nil {
+		t.Fatalf("Command after restart: %v", err)
+	}
+	if err := Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+}
+
 func TestCloseIsIdempotent(t *testing.T) {
 	p := testPaths(t)
 	startTest(t, p, nil, newTestListener())

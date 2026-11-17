@@ -521,9 +521,9 @@ func TestPanicRecovery(t *testing.T) {
 	l := newTestListener()
 	startTest(t, testPaths(t), nil, l)
 
-	mu.RLock()
+	lifeMu.Lock()
 	f := current
-	mu.RUnlock()
+	lifeMu.Unlock()
 	if f == nil {
 		t.Fatal("no facade after Start")
 	}
